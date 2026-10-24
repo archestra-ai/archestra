@@ -24,7 +24,7 @@ Added latency is the time spent in Archestra, excluding that request's upstream 
 <!-- proxy-benchmark-results:start -->
 | Runner resources | Concurrent HTTP requests | Median added latency | P95 added latency | P99 added latency |
 | --- | ---: | ---: | ---: | ---: |
-| 4 vCPU / ~16 GiB RAM | 50 | 125.46 ms | 145.87 ms | 151.51 ms |
+| 4 vCPU / ~16 GiB RAM | 50 | 111.89 ms | 140.65 ms | 147.34 ms |
 <!-- proxy-benchmark-results:end -->
 
 The measurement includes authentication, routing and awaited request persistence. It subtracts the upstream call duration within each request before calculating percentiles; it does not subtract separate percentile values.

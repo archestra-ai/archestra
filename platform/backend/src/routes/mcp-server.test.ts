@@ -1,5 +1,6 @@
 import { OAUTH_TOKEN_TYPE, PLAYWRIGHT_MCP_CATALOG_ID } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
+import type { FastifyRequest } from "fastify";
 import { vi } from "vitest";
 import { hasPermission, userHasPermission } from "@/auth/utils";
 import db, { schema } from "@/database";
@@ -18,6 +19,10 @@ import {
 import McpServerUserModel from "@/models/mcp-server-user";
 import { secretManager } from "@/secrets-manager";
 import {
+  getMcpOAuthCallerBinding,
+  issueMcpOAuthCredentialGrant,
+} from "@/services/mcp-oauth-credential-grant";
+import {
   afterEach,
   beforeEach,
   describe,
@@ -25,9 +30,12 @@ import {
   mustExist,
   test,
 } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { grantEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
 import { ApiError } from "@/types";
+
+setupTestCacheManager();
 
 const {
   connectAndGetToolsMock,
@@ -167,6 +175,11 @@ describe("mcp server inspect route", () => {
           organizationId: string;
         }
       ).organizationId = organizationId;
+      request.authMethod = "session";
+      request.sessionInfo = {
+        id: "test-mcp-session",
+        createdAt: new Date(),
+      };
     });
 
     const { default: mcpServerRoutes } = await import("./mcp-server");
@@ -668,6 +681,145 @@ describe("mcp server inspect route", () => {
       catalogItem: expect.objectContaining({ id: catalog.id }),
       secrets: { access_token: "session-access-token" },
     });
+  });
+
+  test("install does not reuse a caller-supplied secret from another connection", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const existingSecret = await secretManager().createSecret(
+      { access_token: "fake-existing-token" },
+      "existing-connection-secret",
+    );
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "remote",
+      serverUrl: "http://127.0.0.1:30082/mcp",
+    });
+    connectAndGetToolsMock.mockResolvedValue([
+      { name: "ping", inputSchema: { type: "object", properties: {} } },
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "new-connection",
+        catalogId: catalog.id,
+        scope: "personal",
+        secretId: existingSecret.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(connectAndGetToolsMock).not.toHaveBeenCalled();
+    expect(
+      (await secretManager().getSecret(existingSecret.id))?.secret,
+    ).toEqual({ access_token: "fake-existing-token" });
+  });
+
+  test("OAuth callback credentials can be installed and rotated once by their caller", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "remote",
+      serverUrl: "http://127.0.0.1:30082/mcp",
+      oauthConfig: {
+        name: "OAuth MCP",
+        server_url: "http://127.0.0.1:30082/mcp",
+        grant_type: "authorization_code",
+        client_id: "test-oauth-client",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: ["read"],
+        default_scopes: ["read"],
+        supports_resource_metadata: false,
+      },
+    });
+    connectAndGetToolsMock.mockResolvedValue([
+      { name: "ping", inputSchema: { type: "object", properties: {} } },
+    ]);
+    const callerBinding = getMcpOAuthCallerBinding({
+      user,
+      organizationId,
+      authMethod: "session",
+      sessionInfo: { id: "test-mcp-session" },
+    } as FastifyRequest);
+    const initialSecret = await secretManager().createSecret(
+      { access_token: "fake-first-token" },
+      "oauth-first-token",
+    );
+    await issueMcpOAuthCredentialGrant({
+      secretId: initialSecret.id,
+      catalogId: catalog.id,
+      callerBinding,
+    });
+
+    const install = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: catalog.name,
+        catalogId: catalog.id,
+        secretId: initialSecret.id,
+      },
+    });
+    expect(install.statusCode, install.body).toBe(200);
+    const serverId = install.json().id;
+    expect(install.json().secretId).toBe(initialSecret.id);
+
+    const rotatedSecret = await secretManager().createSecret(
+      { access_token: "fake-rotated-token" },
+      "oauth-rotated-token",
+    );
+    await issueMcpOAuthCredentialGrant({
+      secretId: rotatedSecret.id,
+      catalogId: catalog.id,
+      serverId,
+      callerBinding,
+    });
+    const reauth = await app.inject({
+      method: "PATCH",
+      url: `/api/mcp_server/${serverId}/reauthenticate`,
+      payload: { secretId: rotatedSecret.id },
+    });
+    expect(reauth.statusCode, reauth.body).toBe(200);
+    expect(reauth.json().secretId).toBe(rotatedSecret.id);
+    expect(await secretManager().getSecret(initialSecret.id)).toBeNull();
+
+    const replay = await app.inject({
+      method: "PATCH",
+      url: `/api/mcp_server/${serverId}/reauthenticate`,
+      payload: { secretId: rotatedSecret.id },
+    });
+    expect(replay.statusCode).toBe(400);
+    expect((await McpServerModel.findById(serverId))?.secretId).toBe(
+      rotatedSecret.id,
+    );
+
+    const otherSessionSecret = await secretManager().createSecret(
+      { access_token: "fake-other-session-token" },
+      "oauth-other-session-token",
+    );
+    await issueMcpOAuthCredentialGrant({
+      secretId: otherSessionSecret.id,
+      catalogId: catalog.id,
+      serverId,
+      callerBinding: getMcpOAuthCallerBinding({
+        user,
+        organizationId,
+        authMethod: "session",
+        sessionInfo: { id: "other-session" },
+      } as FastifyRequest),
+    });
+    const foreignSession = await app.inject({
+      method: "PATCH",
+      url: `/api/mcp_server/${serverId}/reauthenticate`,
+      payload: { secretId: otherSessionSecret.id },
+    });
+    expect(foreignSession.statusCode).toBe(400);
+    expect((await McpServerModel.findById(serverId))?.secretId).toBe(
+      rotatedSecret.id,
+    );
   });
 
   test("installs a remote MCP server with static additional headers from the catalog", async ({
@@ -1391,6 +1543,68 @@ describe("mcp server inspect route", () => {
     // work cannot leak into the next test in the file, where its async
     // write could fire after the test database is gone.
     await drainPendingReinstall(mcpServer.id);
+  });
+
+  test("reinstall cannot overwrite a credential still used by another connection", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeUser,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Remote Connection",
+      serverType: "remote",
+      serverUrl: "http://localhost:30082/mcp",
+      userConfig: {
+        header_x_api_key: {
+          type: "string",
+          title: "x-api-key",
+          description: "Connection credential",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: true,
+          headerName: "x-api-key",
+        },
+      },
+    });
+    const otherOwner = await makeUser();
+    const target = await makeMcpServer({
+      ownerId: otherOwner.id,
+      catalogId: catalog.id,
+    });
+    const current = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    const shared = await secretManager().createSecret(
+      { header_x_api_key: "original-value" },
+      "shared-credential",
+    );
+    await db
+      .update(schema.mcpServersTable)
+      .set({ secretId: shared.id, serverType: "remote" })
+      .where(eq(schema.mcpServersTable.id, current.id));
+    await db
+      .update(schema.mcpServersTable)
+      .set({ secretId: shared.id, serverType: "remote" })
+      .where(eq(schema.mcpServersTable.id, target.id));
+    await McpServerUserModel.assignUserToMcpServer(current.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${current.id}/reinstall`,
+      payload: {
+        userConfigValues: { header_x_api_key: "replacement-value" },
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect((await secretManager().getSecret(shared.id))?.secret).toMatchObject({
+      header_x_api_key: "original-value",
+    });
+    expect((await McpServerModel.findById(target.id))?.secretId).toBe(
+      shared.id,
+    );
   });
 
   // A partial reinstall (user fills only a newly-added required header) must
@@ -5006,6 +5220,43 @@ describe("mcp server core route coverage", () => {
   });
 
   describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
+    test("does not attach another connection's secret", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "remote",
+        serverUrl: "http://127.0.0.1:30082/mcp",
+      });
+      const ownServer = await makeMcpServer({
+        ownerId: user.id,
+        catalogId: catalog.id,
+        scope: "personal",
+      });
+      const ownSecret = await secretManager().createSecret(
+        { access_token: "fake-own-token" },
+        "own-connection-secret",
+      );
+      const otherSecret = await secretManager().createSecret(
+        { access_token: "fake-other-token" },
+        "other-connection-secret",
+      );
+      await McpServerModel.update(ownServer.id, { secretId: ownSecret.id });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/mcp_server/${ownServer.id}/reauthenticate`,
+        payload: { secretId: otherSecret.id },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect((await McpServerModel.findById(ownServer.id))?.secretId).toBe(
+        ownSecret.id,
+      );
+      expect(await secretManager().getSecret(ownSecret.id)).not.toBeNull();
+      expect(await secretManager().getSecret(otherSecret.id)).not.toBeNull();
+    });
     test("rejects a request with no credential fields (400)", async () => {
       const response = await app.inject({
         method: "PATCH",

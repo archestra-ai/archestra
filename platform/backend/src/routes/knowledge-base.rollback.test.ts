@@ -4982,6 +4982,33 @@ describe("knowledge base permission configuration", () => {
       });
     });
 
+    test("DELETE /api/connectors/:id rejects read-only connector access", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create(
+        {
+          organizationId,
+          name: "Read-only connector",
+          connectorType: "jira",
+          config: {
+            type: "jira",
+            jiraBaseUrl: "https://jira.example.com",
+            isCloud: true,
+            projectKey: "TEST",
+          },
+        },
+        accessGrants({ users: [user.id], preset: "view" }),
+      );
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/api/connectors/${connector.id}`,
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(
+        await KnowledgeBaseConnectorModel.findById(connector.id),
+      ).not.toBeNull();
+    });
+
     test("connector visibility inherits from a parent team without crossing sibling branches", async ({
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,

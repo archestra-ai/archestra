@@ -5,7 +5,6 @@ import {
   RouteId,
 } from "@archestra/shared";
 import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js";
-import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { CacheKey, cacheManager } from "@/cache-manager";
@@ -14,6 +13,10 @@ import logger from "@/logging";
 import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { loadOAuthCatalogForCaller } from "@/services/mcp-oauth-access";
+import {
+  getMcpOAuthCallerBinding,
+  issueMcpOAuthCredentialGrant,
+} from "@/services/mcp-oauth-credential-grant";
 import {
   createMcpOAuthFetch,
   type McpOAuthContext,
@@ -671,29 +674,6 @@ function getOAuthStateCacheKey(
   return `${CacheKey.OAuthState}-v2-${callerBinding}-${state}`;
 }
 
-function getOAuthCallerBinding(request: FastifyRequest): string {
-  const { user, organizationId, authMethod, sessionInfo } = request;
-  if (
-    !user?.id ||
-    !organizationId ||
-    !authMethod ||
-    (authMethod === "session" && !sessionInfo?.id)
-  ) {
-    throw new ApiError(401, "Unauthenticated");
-  }
-  // Keep this tuple's order stable across replicas and deployments.
-  return createHash("sha256")
-    .update(
-      JSON.stringify([
-        organizationId,
-        user.id,
-        authMethod,
-        authMethod === "session" ? sessionInfo?.id : null,
-      ]),
-    )
-    .digest("hex");
-}
-
 /**
  * Store OAuth state in cache
  */
@@ -1018,7 +998,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { catalogId, serverId } = request.body;
       const { organizationId } = request;
       try {
-        const callerBinding = getOAuthCallerBinding(request);
+        const callerBinding = getMcpOAuthCallerBinding(request);
         const { catalogItem, configurationFingerprint } =
           await loadOAuthCatalogForCaller({ request, catalogId, serverId });
 
@@ -1414,7 +1394,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Retrieve OAuth state (also deletes it to prevent replay attacks)
       const oauthState = await getAndDeleteOAuthState(
         state,
-        getOAuthCallerBinding(request),
+        getMcpOAuthCallerBinding(request),
       );
       if (!oauthState) {
         throw new ApiError(400, "Invalid or expired OAuth state");
@@ -1636,6 +1616,18 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         `${catalogItem.name}-oauth`,
         isByosEnabled(), // forceDB: store in DB when BYOS is enabled
       );
+
+      try {
+        await issueMcpOAuthCredentialGrant({
+          secretId: secret.id,
+          catalogId: oauthState.catalogId,
+          serverId: oauthState.serverId,
+          callerBinding: oauthState.callerBinding,
+        });
+      } catch (error) {
+        await secretManager().deleteSecret(secret.id);
+        throw error;
+      }
 
       return reply.send({
         success: true,

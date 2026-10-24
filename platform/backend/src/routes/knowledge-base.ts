@@ -2179,6 +2179,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               id,
               organizationId,
               userId: user.id,
+              action: "delete",
             }).catch(() => null);
             if (connector) found.set(id, connector);
           }
@@ -2214,6 +2215,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id,
         organizationId,
         userId: user.id,
+        action: "delete",
       });
 
       // Soft-delete via the shared service: cancels queued syncs (they no longer
@@ -3580,7 +3582,7 @@ async function findConnectorOrThrow(params: {
   id: string;
   organizationId: string;
   userId: string;
-  action?: "read" | "update";
+  action?: "read" | "update" | "delete";
 }) {
   const connector = await KnowledgeBaseConnectorModel.findById(params.id);
   if (!connector || connector.organizationId !== params.organizationId) {
@@ -3597,10 +3599,15 @@ async function findConnectorOrThrow(params: {
           access,
           connector,
         )
-      : knowledgeSourceAccessControlService.canAccessConnector(
-          access,
-          connector,
-        );
+      : params.action === "delete"
+        ? knowledgeSourceAccessControlService.canDeleteConnector(
+            access,
+            connector,
+          )
+        : knowledgeSourceAccessControlService.canAccessConnector(
+            access,
+            connector,
+          );
   if (!permitted) {
     throw new ApiError(404, "Connector not found");
   }

@@ -40,12 +40,13 @@ RUN chmod +x /usr/local/bin/uv
 RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 COPY pyproject.toml requirements.lock /tmp/python-deps/
+# Resolve wheels for the target stage's interpreter on both supported architectures.
 RUN uv pip sync \
    --no-cache \
    --require-hashes \
    --python-version 3.12 \
-   --python-platform x86_64-unknown-linux-musl \
-   /tmp/python-deps/requirements.lock
+   /tmp/python-deps/requirements.lock && \
+   python -c "import mcp; import pydantic_core"
 
 # Node.js stage
 FROM ${NODE_IMAGE} AS node-builder
@@ -66,8 +67,9 @@ FROM ${NODE_IMAGE} AS node-builder
 #     5.0.11 fixes CVE-2026-102276 and CVE-2026-102278 and keeps
 #     `balanced-match: ^4.0.2` (satisfied by the bundled 4.0.4)
 #     and declares `node: 20 || >=22`.
-#   undici CVE-2026-19534 (uncaught exception) requires 6.28.1 rather than
-#     the bundled 6.27.0. The replacement stays on the Node 18-compatible 6.x line.
+#   undici CVE-2026-19534 and CVE-2026-109869 (uncaught exceptions) require
+#     6.29.1 rather than the bundled 6.27.0. The replacement stays on the
+#     Node 18-compatible 6.x line and has cleared the seven-day age window.
 #   ip-address  CVE-2026-69192 (improper input validation, affects <=10.3.0). The
 #     bundle ships 10.2.0 via socks 2.8.9, which asks ^10.1.1; 10.3.1 is in range and
 #     declares `node: >= 12`. The package.json override next to this file only governs
@@ -91,11 +93,11 @@ RUN npm install -g npm@11.18.0 && \
     tar -xzf brace-expansion-5.0.11.tgz && \
     mv package brace-expansion && \
     rm brace-expansion-5.0.11.tgz && \
-    npm pack undici@6.28.1 && \
+    npm pack undici@6.29.1 && \
     rm -rf undici && \
-    tar -xzf undici-6.28.1.tgz && \
+    tar -xzf undici-6.29.1.tgz && \
     mv package undici && \
-    rm undici-6.28.1.tgz && \
+    rm undici-6.29.1.tgz && \
     npm pack ip-address@10.3.1 && \
     rm -rf ip-address && \
     tar -xzf ip-address-10.3.1.tgz && \

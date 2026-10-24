@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 5
-lastUpdated: 2026-10-23
+lastUpdated: 2026-10-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -1242,6 +1242,11 @@ These variables connect an Outlook mailbox so people can [email agents](/docs/ag
 ## ChatOps
 
 The Microsoft Teams, Slack, and Telegram variables apply only on first startup, when no channel settings exist yet. After that, change a channel in **Settings → Messaging Channels**.
+
+- **`ARCHESTRA_CHATOPS_WEBHOOK_BASE_URL`** - Public base URL for Slack events, interactive actions, and slash commands when the web app is private.
+  - Default: the ngrok tunnel URL, or the frontend URL when no tunnel is active.
+  - Values: an HTTP(S) base URL, for example `https://hooks.example.com`.
+  - Used when creating or retargeting Slack apps. Existing app URLs require a separate update. Browser OAuth redirects keep using the frontend or tunnel URL.
 
 - **`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED`** - Sends a welcome message to users who are created automatically when they first message an agent.
   - Default: `true`

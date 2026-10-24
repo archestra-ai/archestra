@@ -86,7 +86,7 @@ class SlackAppFactory {
     installMode: "oauth" | "manual";
   }> {
     const token = await this.getAccessToken(params.userId);
-    const base = this.publicBaseUrl();
+    const base = this.webhookBaseUrl();
     const webhookBase = `${base}/api/webhooks/chatops/slack/agents/${params.agentId}`;
     const oauth = this.canInstallWithOAuth();
     const manifest = JSON.parse(
@@ -162,7 +162,7 @@ class SlackAppFactory {
     installMode: "oauth" | "manual";
   }> {
     const token = await this.getAccessToken(params.userId);
-    const webhookBase = `${this.publicBaseUrl()}/api/webhooks/chatops/slack`;
+    const webhookBase = `${this.webhookBaseUrl()}/api/webhooks/chatops/slack`;
     const oauth = this.canInstallWithOAuth();
     const manifest = JSON.parse(
       buildSlackManifest({
@@ -457,7 +457,7 @@ class SlackAppFactory {
     };
     if (manifest.features) delete manifest.features.slash_commands;
     if (params.connectionMode === "webhook" && manifest.settings) {
-      const webhookBase = `${this.publicBaseUrl()}/api/webhooks/chatops/slack/agents/${params.agentId}`;
+      const webhookBase = `${this.webhookBaseUrl()}/api/webhooks/chatops/slack/agents/${params.agentId}`;
       manifest.settings.event_subscriptions = {
         ...manifest.settings.event_subscriptions,
         request_url: webhookBase,
@@ -757,7 +757,12 @@ class SlackAppFactory {
     return token;
   }
 
-  /** The URL Slack reaches this server at, as the setup wizard shows it. */
+  /** Provider delivery is independent of the browser's OAuth redirect. */
+  private webhookBaseUrl(): string {
+    return config.chatops.webhookBaseUrl ?? this.publicBaseUrl();
+  }
+
+  /** The browser-facing origin used for Slack's OAuth redirect. */
   private publicBaseUrl(): string {
     const ngrokDomain = ngrokTunnelManager.getPublicDomain();
     if (ngrokDomain) {

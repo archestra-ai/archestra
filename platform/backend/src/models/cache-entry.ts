@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import db, { type Transaction } from "@/database";
-import { PreparedQuery } from "@/database/prepared-query";
 
 class CacheEntryModel {
   /** Lock even an absent scope, so deletion cannot let a stale writer recreate it. */
@@ -46,7 +45,14 @@ class CacheEntryModel {
     keys: string[],
   ): Promise<Array<{ key: string; value: string }>> {
     if (keys.length === 0) return [];
-    return CacheEntryModel.byKeys.get().execute({ keys });
+    const result = await db.execute<{ key: string; value: string }>(sql`
+      SELECT key, value FROM keyv_cache
+      WHERE key IN (${sql.join(
+        keys.map((key) => sql`${key}`),
+        sql`, `,
+      )})
+    `);
+    return result.rows;
   }
 
   async set(key: string, value: string): Promise<void> {
@@ -68,14 +74,6 @@ class CacheEntryModel {
     `);
     return result.rows;
   }
-
-  private static readonly byKeys = new PreparedQuery((database) =>
-    database
-      .select({ key: sql<string>`key`, value: sql<string>`value` })
-      .from(sql`keyv_cache`)
-      .where(sql`key = ANY(${sql.placeholder("keys")}::text[])`)
-      .prepare("archestra_cache_entries_by_keys"),
-  );
 }
 
 export default CacheEntryModel;

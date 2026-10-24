@@ -158,7 +158,6 @@ import {
   validateVirtualApiKey,
   virtualKeyRateLimiter,
 } from "./llm-proxy-auth";
-import { proxyConfigCache } from "./proxy-config-cache";
 import {
   type AccumulatedToolCall,
   applyInputTokenFallback,
@@ -177,6 +176,7 @@ import {
   withProviderToolCallIds,
   withSessionContext,
 } from "./llm-proxy-helpers";
+import { proxyConfigCache } from "./proxy-config-cache";
 import { StreamKeepAlive } from "./stream-keepalive";
 import {
   openUpstreamWithRetry,

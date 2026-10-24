@@ -1,3 +1,4 @@
+import type { PGlite } from "@electric-sql/pglite";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
@@ -10,12 +11,14 @@ import { PROXY_CONFIG_CHANNEL } from "./proxy-config-cache";
 describe("proxy configuration change notifications", () => {
   async function listen() {
     const tables: string[] = [];
-    const unlisten = await db.$client.listen(PROXY_CONFIG_CHANNEL, (payload) =>
+    // Backend tests run on PGlite, which delivers notifications in-process.
+    const client = db.$client as unknown as PGlite;
+    const unlisten = await client.listen(PROXY_CONFIG_CHANNEL, (payload) =>
       tables.push(JSON.parse(payload).message),
     );
     /** Notifications are delivered in commit order; write a marker and wait. */
     const flush = async () => {
-      await db.$client.query(
+      await client.query(
         `select pg_notify('${PROXY_CONFIG_CHANNEL}', '{"origin":"database","message":"fence"}')`,
       );
       await expect.poll(() => tables.at(-1)).toBe("fence");

@@ -27,6 +27,7 @@ jobs:
       contents: read # Required to checkout scan policy and image sources.
     outputs:
       scan: ${{ steps.policy.outputs.scan }}
+      matrix: ${{ steps.policy.outputs.matrix }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -47,24 +48,7 @@ jobs:
       contents: read # Required to checkout scan policy and image sources.
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - image: platform
-            context: ./platform
-            dockerfile: ./platform/Dockerfile
-            target: ""
-          - image: platform-slim
-            context: ./platform
-            dockerfile: ./platform/Dockerfile
-            target: unified-slim
-          - image: mcp-server-base
-            context: ./platform/docker_images/mcp_server
-            dockerfile: ./platform/docker_images/mcp_server/Dockerfile
-            target: ""
-          - image: p4-shim
-            context: ./platform/docker_images/p4_shim
-            dockerfile: ./platform/docker_images/p4_shim/Dockerfile
-            target: ""
+      matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}
     steps:
       - name: Reclaim disk space (background)
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &

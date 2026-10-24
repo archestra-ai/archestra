@@ -149,6 +149,7 @@ import {
   assertPlatformAuthenticated,
   attemptJwksAuth,
   isJwtLike,
+  readPassthroughAuthenticationSnapshot,
   resolveAgent,
   validateLlmOAuthAccessToken,
   validatePassthroughVirtualKey,
@@ -603,8 +604,33 @@ export async function handleLLMProxy<
     `[${providerName}Proxy] handleLLMProxy: request received`,
   );
 
-  // Resolve agent
-  const resolvedAgent = await resolveAgent(agentId);
+  let oauthTokenCandidate: string | undefined;
+  if (passthroughVirtualKeyToken && !authOverride) {
+    try {
+      const candidate = normalizeVirtualKeyCandidate(
+        provider.extractApiKey(headers),
+      );
+      if (candidate && !hasArchestraTokenPrefix(candidate))
+        oauthTokenCandidate = candidate;
+    } catch {
+      // Optional prefetch; normal extraction below retains its error ordering.
+    }
+  }
+  // Recently validated credentials already skip the failure-bucket read. Fetch
+  // their gateway and owner in one fresh statement; authorization is still
+  // checked below, after rate limiting. Cold and explicit-agent paths are unchanged.
+  const authenticationSnapshot =
+    !agentId &&
+    passthroughVirtualKeyToken &&
+    !authOverride &&
+    virtualKeyRateLimiter.hasRecentValidation(passthroughVirtualKeyToken)
+      ? await readPassthroughAuthenticationSnapshot({
+          tokenValue: passthroughVirtualKeyToken,
+          oauthTokenCandidate,
+        })
+      : undefined;
+  const resolvedAgent =
+    authenticationSnapshot?.agent ?? (await resolveAgent(agentId));
   const resolvedAgentId = resolvedAgent.id;
   // Pre-call reads shared within this request only; never stored or reused.
   logger.debug(
@@ -642,21 +668,11 @@ export async function handleLLMProxy<
       credential: passthroughVirtualKeyToken,
     });
     try {
-      let oauthTokenCandidate: string | undefined;
-      try {
-        const candidate = normalizeVirtualKeyCandidate(
-          provider.extractApiKey(headers),
-        );
-        if (candidate && !hasArchestraTokenPrefix(candidate))
-          oauthTokenCandidate = candidate;
-      } catch {
-        // Prefetch is optional. Normal extraction below still reports errors
-        // after passthrough/JWKS validation, in its existing order.
-      }
       const passthroughResult = await validatePassthroughVirtualKey({
         tokenValue: passthroughVirtualKeyToken,
         agent: resolvedAgent,
         oauthTokenCandidate,
+        authenticationSnapshot,
       });
       await virtualKeyRateLimiter.recordSuccess({
         credential: passthroughVirtualKeyToken,

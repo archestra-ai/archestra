@@ -2,11 +2,11 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
 } from "@archestra/shared";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import { vi } from "vitest";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
-import db from "@/database";
+import db, { schema } from "@/database";
 import {
   AgentLabelModel,
   AgentModel,
@@ -21,10 +21,12 @@ import { accessGrants, afterEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { recordQueries } from "@/test/query-counter";
 import { ApiError } from "@/types";
+import { drainBackgroundWork } from "@/utils/background-work";
 import {
   assertConsistentUserCredentials,
   assertPlatformAuthenticated,
   attemptJwksAuth,
+  readPassthroughAuthenticationSnapshot,
   resolveAgent,
   VirtualKeyRateLimiter,
   validateLlmOAuthAccessToken,
@@ -1420,6 +1422,146 @@ async function mustRead(
 // =========================================================================
 
 describe("validatePassthroughVirtualKey", () => {
+  test("combined authentication reads preserve gateway data and see membership and key revocation", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const member = await makeMember(owner.id, org.id);
+    await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    const { value, virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "Synthetic combined lookup",
+      keyType: "passthrough",
+      authorId: owner.id,
+    });
+    const agent = await resolveAgent(undefined);
+    const expected = await validatePassthroughVirtualKey({
+      tokenValue: value,
+      agent,
+    });
+    await drainBackgroundWork();
+    const combined = await recordQueries(() =>
+      readPassthroughAuthenticationSnapshot({ tokenValue: value }),
+    );
+    expect(combined.statements).toHaveLength(1);
+    const snapshot = combined.result;
+    expect(snapshot).toBeDefined();
+    if (!snapshot) throw new Error("Expected the deployment proxy lookup");
+    expect(snapshot.agent).toEqual(agent);
+    expect(snapshot.agent.createdAt).toBeInstanceOf(Date);
+    const validation = await recordQueries(() =>
+      validatePassthroughVirtualKey({
+        tokenValue: value,
+        agent: snapshot.agent,
+        authenticationSnapshot: snapshot,
+      }),
+    );
+    expect(validation.result).toEqual(expected);
+    expect(validation.statements).toHaveLength(0);
+
+    await db
+      .delete(schema.membersTable)
+      .where(eq(schema.membersTable.id, member.id));
+    const afterRemoval = await readPassthroughAuthenticationSnapshot({
+      tokenValue: value,
+    });
+    await expect(
+      validatePassthroughVirtualKey({
+        tokenValue: value,
+        agent,
+        authenticationSnapshot: afterRemoval,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    await VirtualApiKeyModel.delete(virtualKey.id);
+    expect(
+      await readPassthroughAuthenticationSnapshot({ tokenValue: value }),
+    ).toBeUndefined();
+    await expect(
+      validatePassthroughVirtualKey({ tokenValue: value, agent }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  test("combined authentication snapshots still verify token bytes, scope and expiry", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, org.id);
+    await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    const { value, virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "Synthetic scoped lookup",
+      keyType: "passthrough",
+      authorId: owner.id,
+    });
+    const snapshot = await readPassthroughAuthenticationSnapshot({
+      tokenValue: value,
+      oauthTokenCandidate: "provider-one",
+    });
+    if (!snapshot) throw new Error("Expected the deployment proxy lookup");
+    const agent = snapshot.agent;
+    const parameters = {
+      tokenValue: value,
+      agent,
+      oauthTokenCandidate: "provider-one",
+      authenticationSnapshot: snapshot,
+    };
+    await validatePassthroughVirtualKey(parameters);
+    await drainBackgroundWork();
+    const wrongToken = value.slice(0, -1) + (value.endsWith("a") ? "b" : "a");
+    await expect(
+      validatePassthroughVirtualKey({ ...parameters, tokenValue: wrongToken }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+    const otherBearer = await recordQueries(() =>
+      validatePassthroughVirtualKey({
+        ...parameters,
+        oauthTokenCandidate: "provider-two",
+      }),
+    );
+    expect(otherBearer.statements).toHaveLength(1);
+    expect(otherBearer.result.nonOAuthTokenHash).toBe(
+      OAuthAccessTokenModel.hashTokenForLookup("provider-two"),
+    );
+    const foreign = await makeOrganization();
+    const foreignAgent = await makeAgent({
+      organizationId: foreign.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    await expect(
+      validatePassthroughVirtualKey({ ...parameters, agent: foreignAgent }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    await db
+      .update(schema.virtualApiKeysTable)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(schema.virtualApiKeysTable.id, virtualKey.id));
+    const expired = await readPassthroughAuthenticationSnapshot({
+      tokenValue: value,
+    });
+    await expect(
+      validatePassthroughVirtualKey({
+        tokenValue: value,
+        agent,
+        authenticationSnapshot: expired,
+      }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+  });
+
   test("negative OAuth lookups apply only to that token and are refreshed on the next request", async ({
     makeOrganization,
     makeUser,

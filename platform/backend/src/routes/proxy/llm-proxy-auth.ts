@@ -327,10 +327,26 @@ export async function validateVirtualApiKey(params: {
  * Throws ApiError on validation failure (401 invalid/expired, 400 wrong key
  * type, 403 no proxy access).
  */
+/** Prefetch fresh rows only; the caller must still rate-limit and validate. */
+export async function readPassthroughAuthenticationSnapshot(params: {
+  tokenValue: string;
+  oauthTokenCandidate?: string;
+}) {
+  return VirtualApiKeyModel.readDeploymentProxyAndTokenOwner(
+    params.tokenValue,
+    params.oauthTokenCandidate
+      ? OAuthAccessTokenModel.hashTokenForLookup(params.oauthTokenCandidate)
+      : undefined,
+  );
+}
+
 export async function validatePassthroughVirtualKey(params: {
   tokenValue: string;
   agent: GatewayAgent;
   oauthTokenCandidate?: string;
+  authenticationSnapshot?: Awaited<
+    ReturnType<typeof readPassthroughAuthenticationSnapshot>
+  >;
 }): Promise<PassthroughVirtualKeyResult> {
   const { tokenValue, agent } = params;
 
@@ -340,6 +356,11 @@ export async function validatePassthroughVirtualKey(params: {
   const resolved = await VirtualApiKeyModel.validateTokenWithOwner(
     tokenValue,
     oauthTokenHash,
+    params.authenticationSnapshot?.agent.id === agent.id &&
+      params.authenticationSnapshot.agent.organizationId ===
+        agent.organizationId
+      ? params.authenticationSnapshot
+      : undefined,
   );
   if (!resolved) {
     throw new ApiError(401, "Invalid passthrough virtual key");
@@ -827,13 +848,18 @@ export class VirtualKeyRateLimiter {
     this.cache = cache;
   }
 
+  /** Rate-limit bookkeeping only; this never proves current authorization. */
+  hasRecentValidation(credential: string): boolean {
+    return this.locallyValidated.has(localKey(credential));
+  }
+
   /**
    * Reads both buckets and the credential's validation mark in one statement,
    * unless this process validated the credential recently.
    */
   async check(params: { ip: string; credential?: string }): Promise<void> {
     const { ip, credential } = params;
-    if (credential && this.locallyValidated.has(localKey(credential))) return;
+    if (credential && this.hasRecentValidation(credential)) return;
     const now = Date.now();
     const credentialKey = this.credentialKey(ip, credential);
     const ipKey = this.ipKey(ip);

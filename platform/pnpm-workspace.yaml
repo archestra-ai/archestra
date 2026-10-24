@@ -133,14 +133,13 @@ overrides:
   axios: '>=1.20.0 <2'
   minimatch: '>=10.2.3'
   rollup: '>=4.59.0'
-  # CVE-2026-9697 (HIGH, improper certificate validation) fixed in 7.28.0, then
-  # CVE-2026-13697 (HIGH, affects >=7.0.0) fixed in 7.29.0. 7.29.0 was published
-  # 2026-07-24 and is past the 7-day window, so the release-age exclusion this
-  # pin needed is gone and a floor is safe again — minimumReleaseAge holds the
-  # line against an unvetted newer release on its own. Bounded to <8 so the
-  # floor can't carry the backend's upstream dispatcher onto undici 8.x, which
-  # is a major-version change and not this pin's business.
-  undici: '>=7.29.1 <8'
+  # CVE-2026-9697 and CVE-2026-13697: certificate validation/DoS fixes.
+  # CVE-2026-109869: an early close after excessive content encodings can
+  # crash fetch. 7.30.1 includes the fix and is past the seven-day window.
+  # Preserve the backend dispatcher's v7 API.
+  undici: '>=7.30.1 <8'
+  # CVE-2026-109461: MSAL's authorization-code endpoint origin validation.
+  '@microsoft/agents-hosting>@azure/msal-node': 7.1.0
   # CVE-2026-83605 through CVE-2026-83619: XML injection/DoS fixes.
   # Preserve the consumers' release lines.
   '@xmldom/xmldom': 0.9.12

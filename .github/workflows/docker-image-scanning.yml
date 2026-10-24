@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
+          fetch-depth: ${{ github.event_name == 'merge_group' && '0' || 1 }}
       - name: Classify event
         id: policy
         run: python3 .github/scripts/release-image-policy.py classify
@@ -75,7 +75,8 @@ jobs:
           target: ${{ matrix.target }}
           platforms: linux/${{ matrix.arch }}
           push: "false"
-          load: "true"
+          outputs: type=oci,dest=${{ env.CANDIDATE_DIR }}/image.oci.tar,oci-artifact=false
+          provenance: "mode=min"
           tags: ${{ env.IMAGE_REFERENCE }}
           version: ${{ steps.inputs.outputs.version }}
           previous-image: ${{ steps.inputs.outputs.previous-image }}
@@ -86,8 +87,11 @@ jobs:
           cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/${{ matrix.image == 'platform-slim' && 'platform' || matrix.image }}:buildcache-${{ matrix.arch }}
       - name: Seal candidate bytes for scanning
         run: |
-          docker save --output "$CANDIDATE_DIR/image.tar" "$IMAGE_REFERENCE"
+          skopeo copy --override-os linux --override-arch "$IMAGE_ARCH" \
+            "oci-archive:$CANDIDATE_DIR/image.oci.tar" "docker-archive:$CANDIDATE_DIR/image.scan.tar:$IMAGE_REFERENCE"
+          docker load --input "$CANDIDATE_DIR/image.scan.tar"
           python3 .github/scripts/release-candidate.py seal
+          rm "$CANDIDATE_DIR/image.scan.tar"
       - name: Verify candidate bytes
         id: image
         run: python3 .github/scripts/release-candidate.py verify
@@ -109,7 +113,7 @@ jobs:
         with:
           name: release-candidate-${{ matrix.image }}-${{ matrix.arch }}-${{ github.run_attempt }}
           path: |
-            ${{ env.CANDIDATE_DIR }}/image.tar
+            ${{ env.CANDIDATE_DIR }}/image.oci.tar
             ${{ env.CANDIDATE_DIR }}/build.json
           if-no-files-found: error
           retention-days: 1
@@ -135,7 +139,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
+          fetch-depth: ${{ (needs.classify.outputs.scan == 'true' || github.event_name == 'merge_group') && '0' || 1 }}
       - name: Download complete scan evidence
         if: ${{ needs.classify.outputs.scan == 'true' && needs.scan-release-images.result == 'success' }}
         uses: $/.github/actions/github-download-artifact
@@ -224,6 +228,8 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
+      - name: Setup fixture builder
+        uses: $/.github/actions/setup-docker-builder
       - name: Build harmless scratch-image archives
         env:
           FIXTURE_DIR: ${{ runner.temp }}/handoff-fixture

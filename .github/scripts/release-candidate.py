@@ -7,6 +7,7 @@ or permission to replace the independent release-publication scans.
 
 import datetime as dt
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -64,6 +65,13 @@ def identity():
             "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"], "repository": os.environ["GITHUB_REPOSITORY"]}
 
 
+def oci_module():
+    spec = importlib.util.spec_from_file_location("release_oci", Path(__file__).with_name("release-oci.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def inspect_image(reference, image_id, arch):
     data = json.loads(command("docker", "image", "inspect", reference))[0]
     if (not DIGEST.fullmatch(image_id) or data["Id"] != image_id
@@ -78,6 +86,7 @@ def verify_record(record, expected, now=None):
     created = dt.datetime.fromisoformat(record["created_at"])
     if not dt.timedelta(0) <= now - created <= dt.timedelta(hours=24):
         raise ValueError("Candidate evidence expired or is from the future")
+    oci_module().validate_metadata(record.get("oci"), record.get("image_id"))
     for key in ("image_id", "archive_digest"):
         if not DIGEST.fullmatch(record.get(key, "")):
             raise ValueError("Candidate evidence requires immutable byte identities")
@@ -125,12 +134,13 @@ def main():
         record = json.loads((directory / "build.json").read_text())
         image_id = command("docker", "image", "inspect", os.environ["IMAGE_REFERENCE"], "--format", "{{.Id}}")
         inspect_image(os.environ["IMAGE_REFERENCE"], image_id, arch)
-        record.update(image_id=image_id, archive_digest=file_digest(directory / "image.tar"))
+        record.update(image_id=image_id, archive_digest=file_digest(directory / "image.oci.tar"),
+                      oci=oci_module().inspect(directory / "image.oci.tar", image_id, arch))
         (directory / "build.json").write_text(json.dumps(record))
     elif mode in ("verify", "scanned"):
         record = json.loads((directory / "build.json").read_text())
         verify_record(record, {**identity(), "image": image, "arch": arch})
-        if record["archive_digest"] != file_digest(directory / "image.tar"):
+        if record["archive_digest"] != file_digest(directory / "image.oci.tar"):
             raise ValueError("Candidate archive changed in transit")
         inspect_image(record["image_id"], record["image_id"], arch)
         if mode == "verify":

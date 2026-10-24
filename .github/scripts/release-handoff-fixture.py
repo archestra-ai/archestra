@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tarfile
 
 
 def module(name):
@@ -29,12 +30,18 @@ def main():
         proof = {"fixture": True, "head_sha": os.environ["FIXTURE_HEAD_SHA"], "images": {}}
         for arch in ("amd64", "arm64"):
             reference = f"handoff-fixture:{os.environ['GITHUB_RUN_ID']}-{arch}"
-            subprocess.run(["docker", "build", "--network", "none", "--platform", f"linux/{arch}",
+            subprocess.run(["docker", "buildx", "build", "--network", "none", "--platform", f"linux/{arch}",
+                            "--provenance", "mode=min", "--output", f"type=oci,dest={directory / (arch + '.oci.tar')},oci-artifact=false",
                             "--tag", reference, str(context)], check=True)
-            subprocess.run(["docker", "save", "--output", str(directory / f"{arch}.tar"), reference], check=True)
+            subprocess.run(["skopeo", "copy", "--override-os", "linux", "--override-arch", arch,
+                            "oci-archive:" + str(directory / f"{arch}.oci.tar"),
+                            "docker-archive:" + str(directory / f"{arch}.scan.tar") + ":" + reference], check=True)
+            subprocess.run(["docker", "load", "--input", str(directory / f"{arch}.scan.tar")], check=True)
+            (directory / f"{arch}.scan.tar").unlink()
             image_id = handoff.command("docker", "image", "inspect", reference, "--format", "{{.Id}}")
             module("release-candidate").inspect_image(reference, image_id, arch)
-            proof["images"][arch] = {"image_id": image_id, "digest": handoff.digest(directory / f"{arch}.tar")}
+            proof["images"][arch] = {"image_id": image_id, "oci_digest": handoff.digest(directory / f"{arch}.oci.tar"),
+                                     "oci": module("release-oci").inspect(directory / f"{arch}.oci.tar", image_id, arch)}
         (directory / "fixture.json").write_text(json.dumps(proof))
     elif mode == "relay":
         repository = os.environ["GITHUB_REPOSITORY"]
@@ -49,7 +56,7 @@ def main():
         archive = directory.with_suffix(".zip")
         try:
             handoff.download(repository, artifact, archive)
-            handoff.unpack(archive, directory, ["fixture.json", "amd64.tar", "arm64.tar"], 10 * 1024**2)
+            handoff.unpack(archive, directory, ["fixture.json", "amd64.oci.tar", "arm64.oci.tar"], 10 * 1024**2)
         finally:
             archive.unlink(missing_ok=True)
         proof = json.loads((directory / "fixture.json").read_text())
@@ -61,13 +68,29 @@ def main():
         if proof.get("fixture") is not True or proof["head_sha"] != os.environ["GITHUB_SHA"]:
             raise ValueError("Fixture source mismatch")
         for arch in ("amd64", "arm64"):
-            archive = directory / f"{arch}.tar"
-            if handoff.digest(archive) != proof["images"][arch]["digest"]:
-                raise ValueError("Fixture payload changed during handoff")
-            subprocess.run(["docker", "load", "--input", str(archive)], check=True)
             image_id = proof["images"][arch]["image_id"]
-            module("release-candidate").inspect_image(image_id, image_id, arch)
-        print("Both scratch-image configs and rootfs archives survived the cross-run and same-run handoff.")
+            reference = f"handoff-fixture:loaded-{arch}"
+            subprocess.run(["skopeo", "copy", "--override-os", "linux", "--override-arch", arch,
+                            "oci-archive:" + str(directory / f"{arch}.oci.tar"),
+                            "docker-archive:" + str(directory / f"{arch}.scan.tar") + ":" + reference], check=True)
+            subprocess.run(["docker", "load", "--input", str(directory / f"{arch}.scan.tar")], check=True)
+            (directory / f"{arch}.scan.tar").unlink()
+            module("release-candidate").inspect_image(reference, image_id, arch)
+            oci = directory / f"{arch}.oci.tar"
+            if handoff.digest(oci) != proof["images"][arch]["oci_digest"]:
+                raise ValueError("OCI fixture payload changed")
+            expected = module("release-oci").inspect(oci, image_id, arch)
+            if expected != proof["images"][arch]["oci"]:
+                raise ValueError("Original fixture provenance changed")
+            layout = directory / f"{arch}-layout"
+            subprocess.run(["skopeo", "copy", "--all", "--preserve-digests", "oci-archive:" + str(oci),
+                            f"oci:{layout}:fixture"], check=True)
+            copied = directory / f"{arch}-copied.oci.tar"
+            with tarfile.open(copied, "w") as output:
+                output.add(layout, arcname=".")
+            if module("release-oci").inspect(copied, image_id, arch) != expected:
+                raise ValueError("OCI transport changed runtime or provenance manifests")
+        print("Both scratch-image configs, rootfs archives and original provenance survived the handoff and OCI transport.")
     else:
         raise ValueError("Unknown fixture operation")
 

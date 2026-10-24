@@ -45,7 +45,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: ${{ inputs.handoff-fixture && 1 || '0' }}
           persist-credentials: false
 
       # Recheck after merge against current release refs, before creating a release.

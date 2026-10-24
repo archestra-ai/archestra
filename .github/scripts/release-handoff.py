@@ -194,16 +194,16 @@ def relay(selection, image, arch, directory, fetch=download):
     archive = directory.with_suffix(".zip")
     try:
         fetch(selection["repository"], record["artifact"], archive)
-        unpack(archive, directory, ["build.json", "image.tar"])
+        unpack(archive, directory, ["build.json", "image.oci.tar"])
         build = json.loads((directory / "build.json").read_text())
         expected = {key: value for key, value in record.items() if key not in ("scan_result", "artifact")}
-        if build != expected or digest(directory / "image.tar") != record["archive_digest"]:
+        if build != expected or digest(directory / "image.oci.tar") != record["archive_digest"]:
             raise ValueError("Candidate bytes/metadata differ from the successful scan")
     finally:
         archive.unlink(missing_ok=True)
 
 
-def verify_loaded(selection, image, arch, directory):
+def verify_archive(selection, image, arch, directory):
     if (selection.get("schema") != 1 or selection["repository"] != os.environ["GITHUB_REPOSITORY"]
             or command("git", "rev-parse", "HEAD") != selection["release_sha"]
             or command("git", "rev-parse", "HEAD^{tree}") != selection["release_tree"]
@@ -213,7 +213,7 @@ def verify_loaded(selection, image, arch, directory):
     build = json.loads((directory / "build.json").read_text())
     if build != {key: value for key, value in record.items() if key not in ("scan_result", "artifact")}:
         raise ValueError("Relayed candidate metadata changed")
-    if digest(directory / "image.tar") != record["archive_digest"]:
+    if digest(directory / "image.oci.tar") != record["archive_digest"]:
         raise ValueError("Relayed candidate bytes changed")
     candidate = load_module("release-candidate")
     candidate.verify_record(record, {key: selection["index"][key] for key in (
@@ -222,34 +222,45 @@ def verify_loaded(selection, image, arch, directory):
         raise ValueError("Relayed candidate is not successful production scan evidence")
     if any(record.get(key) != value for key, value in candidate.build_inputs(image, arch).items()):
         raise ValueError("Release build inputs changed after scanning")
-    subprocess.run(["docker", "load", "--input", str(directory / "image.tar")], check=True)
-    candidate.inspect_image(record["image_id"], record["image_id"], arch)
+    proof = load_module("release-oci").inspect(directory / "image.oci.tar", record["image_id"], arch)
+    if proof != record["oci"]:
+        raise ValueError("Relayed OCI runtime or provenance changed")
     return record
 
 
 def push(record, image, arch):
-    if not re.fullmatch(r"(?:docker.io/archestra|europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public)/[a-z0-9-]+", image):
+    if not re.fullmatch(r"(?:docker\.io/archestra|europe-west1-docker\.pkg\.dev/friendly-path-465518-r6/archestra-public)/[a-z0-9-]+", image):
         raise ValueError("Unexpected release image destination")
     suffix = f"{int(os.environ['GITHUB_RUN_ID'])}-{int(os.environ['GITHUB_RUN_ATTEMPT'])}-{arch}"
     incoming = f"{image}:candidate-{suffix}"
-    subprocess.run(["docker", "tag", record["image_id"], incoming], check=True)
-    subprocess.run(["docker", "push", incoming], check=True)
-    refs = json.loads(command("docker", "image", "inspect", incoming, "--format", "{{json .RepoDigests}}"))
-    # Docker normalizes Docker Hub repository names by omitting docker.io/.
-    if image.startswith("docker.io/"):
-        refs = ["docker.io/" + ref if ref.startswith(image.removeprefix("docker.io/") + "@") else ref for ref in refs]
-    refs = sorted({ref for ref in refs if re.fullmatch(re.escape(image) + r"@sha256:[0-9a-f]{64}", ref)})
-    if len(refs) != 1:
-        raise ValueError("Cannot bind pushed image to exactly one registry digest")
-    manifest = json.loads(command("docker", "buildx", "imagetools", "inspect", refs[0], "--raw"))
-    if manifest["config"]["digest"] != record["image_id"]:
-        raise ValueError("Registry image config differs from the scanned image")
-    # Preserve the existing single-platform-index publication scan interface.
-    index_tag = f"{image}:candidate-index-{suffix}"
-    subprocess.run(["docker", "buildx", "imagetools", "create", "--prefer-index=true", "--tag", index_tag, refs[0]], check=True)
-    result = json.loads(command("docker", "buildx", "imagetools", "inspect", index_tag, "--format", "{{json .Manifest}}"))["digest"]
+    directory = Path(os.environ["CANDIDATE_DIR"])
+    digest_file = directory / "promoted-digest"
+    config = Path(os.environ.get("DOCKER_CONFIG", str(Path.home() / ".docker"))) / "config.json"
+    subprocess.run(["skopeo", "copy", "--all", "--preserve-digests", "--authfile", str(config),
+                    "--digestfile", str(digest_file), "oci-archive:" + str(directory / "image.oci.tar"),
+                    "docker://" + incoming], check=True)
+    result = digest_file.read_text().strip()
     if not DIGEST.fullmatch(result):
-        raise ValueError("Missing promoted architecture index digest")
+        raise ValueError("Missing promoted OCI digest")
+    root = f"{image}@{result}"
+    leaves = set()
+    def verify(reference, depth=0):
+        if depth > 8:
+            raise ValueError("Nested registry index exceeds limit")
+        value = json.loads(command("docker", "buildx", "imagetools", "inspect", reference, "--raw"))
+        if "manifests" in value:
+            for child in value["manifests"]:
+                if not DIGEST.fullmatch(child["digest"]):
+                    raise ValueError("Invalid registry OCI descriptor")
+                verify(f"{image}@{child['digest']}", depth + 1)
+        else:
+            manifest_digest = reference.split("@", 1)[1]
+            leaves.add(manifest_digest)
+            if manifest_digest == record["oci"]["runtime_manifest"] and value["config"]["digest"] != record["image_id"]:
+                raise ValueError("Registry image config differs from the scanned image")
+    verify(root)
+    if leaves != {record["oci"]["runtime_manifest"], *record["oci"]["attestations"]}:
+        raise ValueError("Registry runtime or original provenance manifests differ from the scanned archive")
     return result
 
 
@@ -272,7 +283,7 @@ def main():
         if mode == "relay":
             relay(selection, image, arch, directory)
         elif mode == "promote":
-            record = verify_loaded(selection, image, arch, directory)
+            record = verify_archive(selection, image, arch, directory)
             result = push(record, os.environ["IMAGE_DESTINATION"], arch)
             with open(os.environ["GITHUB_OUTPUT"], "a") as output:
                 output.write(f"digest={result}\n")

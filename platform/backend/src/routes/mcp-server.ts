@@ -69,6 +69,7 @@ import {
   assertScopedLifecycleAuthorization,
   findMcpServerInOrganization,
 } from "@/services/mcp-installation-access";
+import { consumeMcpOAuthCredentialGrant } from "@/services/mcp-oauth-credential-grant";
 import {
   autoReinstallServer,
   reloadToolsForServer,
@@ -401,7 +402,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ body, user, headers, organizationId }, reply) => {
+    async (request, reply) => {
+      const { body, user, headers, organizationId } = request;
       let {
         agentIds,
         secretId,
@@ -411,9 +413,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         environmentValues,
         ...restDataFromRequestBody
       } = body;
-      if (secretId) {
-        throw new ApiError(400, "Credential references cannot be supplied");
-      }
       const serverData: typeof restDataFromRequestBody & {
         serverType: InternalMcpCatalogServerType;
       } = {
@@ -625,6 +624,19 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // secret/deployment work, so a blocked install has no side effects beyond
         // the pending flag.
         await assertInstallAllowedOrBlock({ catalogItem, organizationId });
+      }
+
+      if (
+        secretId &&
+        (!catalogItem?.oauthConfig ||
+          !(await consumeMcpOAuthCredentialGrant({
+            request,
+            secretId,
+            catalogId: catalogItem.id,
+          })) ||
+          (await McpServerModel.hasSecretReference(secretId)))
+      ) {
+        throw new ApiError(400, "Credential references cannot be supplied");
       }
 
       // For REMOTE servers: create secrets and validate connection
@@ -1403,8 +1415,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async (
-      {
+    async (request, reply) => {
+      const {
         params: { id },
         body: {
           secretId: providedSecretId,
@@ -1416,9 +1428,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         user,
         headers,
         organizationId,
-      },
-      reply,
-    ) => {
+      } = request;
       // Validate that at least one credential field is provided
       if (
         !providedSecretId &&
@@ -1458,10 +1468,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
         action: "re-authenticate",
       });
-      if (providedSecretId) {
-        throw new ApiError(400, "Credential references cannot be supplied");
-      }
-
       const catalogItem = mcpServer.catalogId
         ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
         : null;
@@ -1487,6 +1493,20 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // which would leave the pod on stale credentials while reporting success.
       if (catalogItem) {
         await assertInstallAllowedOrBlock({ catalogItem, organizationId });
+      }
+
+      if (
+        providedSecretId &&
+        (!catalogItem?.oauthConfig ||
+          !(await consumeMcpOAuthCredentialGrant({
+            request,
+            secretId: providedSecretId,
+            catalogId: catalogItem.id,
+            serverId: id,
+          })) ||
+          (await McpServerModel.hasSecretReference(providedSecretId)))
+      ) {
+        throw new ApiError(400, "Credential references cannot be supplied");
       }
 
       // Resolve the new secret ID: either provided directly, or create from raw credentials

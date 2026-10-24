@@ -43,9 +43,16 @@ class ReleasePolicyTests(unittest.TestCase):
         publish_matrix = publisher.split("      matrix:\n", 1)[1].split("    permissions:", 1)[0]
         published = set(re.findall(r"^\s+- (agent-[a-z0-9-]+)$", publish_matrix, re.M))
         self.assertTrue(published)
-        self.assertEqual(set(by_image), published | {
-            "platform", "platform-slim", "mcp-server-base", "p4-shim", "sandbox-base"})
-        for name in published:
+        # Follow the release callers and their wrappers so a newly published
+        # companion image cannot silently escape the preflight inventory.
+        release = (ROOT / ".github/workflows/release-please.yml").read_text()
+        for job in re.findall(r"^  [\w-]+:\n(.*?)(?=^  [\w-]+:|\Z)", release, re.M | re.S):
+            call = re.search(r"uses: [.$]/\.github/workflows/([\w-]+\.yml)", job)
+            if call:
+                wrapper = (ROOT / ".github/workflows" / call[1]).read_text()
+                published.update(re.findall(r"^\s+image_name: ([a-z0-9-]+)\s*$", job + wrapper, re.M))
+        self.assertEqual(set(by_image), published | {"platform-slim"})
+        for name in (image for image in published if image.startswith("agent-")):
             self.assertEqual(by_image[name]["target"], name)
             self.assertEqual(by_image[name]["context"], "./platform")
         self.assertEqual(by_image["platform-slim"]["target"], "unified-slim")

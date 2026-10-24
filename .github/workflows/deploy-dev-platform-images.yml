@@ -115,9 +115,8 @@ jobs:
       # so a dev build handed to a tester runs natively on Apple Silicon (arm64).
       # Release images (build-dockerhub-image.yml) are always multi-arch.
       amd64_only: ${{ github.event_name == 'push' }}
-      # Match the measured 16-CPU x64 image builder used by E2E. Retain the
-      # existing native ARM runner until its release cache path is validated.
-      amd64_runner: ubicloud-standard-16-ubuntu-2404
+      # Match the 16-CPU Blacksmith E2E builder; use native Blacksmith ARM.
+      amd64_runner: blacksmith-16vcpu-ubuntu-2404
       arm64_runner: blacksmith-32vcpu-ubuntu-2404-arm
       # PRs consume publisher caches read-only instead of spending over a minute
       # rewriting mode=max. Push and manual multi-arch builds still refresh them.

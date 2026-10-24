@@ -47,6 +47,7 @@ import {
 } from "./limit-entity-scope";
 import LlmThroughputModel from "./llm-throughput";
 import ModelModel from "./model";
+import type { ProxyRequestState } from "./proxy-request-context";
 
 type LimitsCleanupOptionsEntities = {
   [K in Exclude<LimitEntityType, "team" | "virtual_key">]?: string;
@@ -1422,6 +1423,8 @@ export class LimitValidationService {
     /** The agent row this request already read. */
     agent?: { environmentId: string | null; organizationId?: string };
     teamSource?: AgentTeamSource;
+    /** Fresh rows from this request's scoped metadata query. */
+    snapshot?: Pick<ProxyRequestState, "scope" | "agentTeamIds" | "limitState">;
     /** LLM OAuth client the request authenticated as, for its spend cap. */
     llmOauthClientId?: string;
     /**
@@ -1440,13 +1443,28 @@ export class LimitValidationService {
         `[LimitValidation] Starting limit check for agent: ${agentId}`,
       );
 
+      const scope = params.snapshot?.scope;
+      const snapshot =
+        scope &&
+        params.agent?.organizationId === scope.organizationId &&
+        params.agent?.environmentId === scope.environmentId &&
+        scope.agentId === agentId &&
+        scope.userId === params.userId &&
+        scope.billingTeamId === params.billingTeamId &&
+        scope.virtualKeyId === virtualKeyId &&
+        scope.passthroughVirtualKeyId === passthroughVirtualKeyId &&
+        scope.llmOauthClientId === llmOauthClientId
+          ? params.snapshot
+          : undefined;
+
       // Get the teams to cleanup and check team and organization limits: the
       // credential's billing team when it has one, otherwise the agent's teams.
       const agentTeamIds = params.billingTeamId
         ? [params.billingTeamId]
-        : params.teamSource
-          ? await params.teamSource.agentTeamIds(agentId)
-          : await AgentTeamModel.getTeamsForAgent(agentId);
+        : (snapshot?.agentTeamIds ??
+          (params.teamSource
+            ? await params.teamSource.agentTeamIds(agentId)
+            : await AgentTeamModel.getTeamsForAgent(agentId)));
       logger.debug(
         `[LimitValidation] Agent ${agentId} belongs to teams: ${agentTeamIds.join(", ")}`,
       );
@@ -1553,10 +1571,11 @@ export class LimitValidationService {
         });
       }
       let { limits: scopedLimits, defaultUserLimit } =
-        await LimitModel.findProxyLimitState(entities, {
+        snapshot?.limitState ??
+        (await LimitModel.findProxyLimitState(entities, {
           organizationId,
           environmentId,
-        });
+        }));
       if (scopedLimits.some((limit) => limit.cleanupDue)) {
         await LimitModel.cleanupLimitsIfNeeded({ entities });
         // Cleanup changes usage: validation must read its committed result.
@@ -2091,7 +2110,7 @@ function llmOauthClientInOrganization(organizationId: string): SQL {
     AND ${schema.oauthClientsTable.metadata}->>'organizationId' = ${organizationId})`;
 }
 
-function scopedCleanupDueCondition(): SQL<boolean> {
+export function scopedCleanupDueCondition(): SQL<boolean> {
   return and(
     sql`${schema.limitsTable.limitType} NOT IN ('requests', 'tokens', 'requests_per_minute', 'tokens_per_minute')`,
     sql`${schema.limitsTable.cleanupInterval} <> 'minute'`,

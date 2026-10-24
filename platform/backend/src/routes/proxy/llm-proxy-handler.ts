@@ -42,7 +42,6 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { RequestLookups } from "@/auth/request-lookups";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
@@ -57,7 +56,6 @@ import {
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import {
-  AgentTeamModel,
   AppModel,
   InteractionModel,
   LimitValidationService,
@@ -607,7 +605,6 @@ export async function handleLLMProxy<
   const resolvedAgent = await resolveAgent(agentId);
   const resolvedAgentId = resolvedAgent.id;
   // Pre-call reads shared within this request only; never stored or reused.
-  const lookups = new RequestLookups();
   logger.debug(
     { resolvedAgentId, agentName: resolvedAgent.name, wasExplicit: !!agentId },
     `[${providerName}Proxy] Agent resolved`,
@@ -1093,10 +1090,15 @@ export async function handleLLMProxy<
   const actualModel = stripClaudeContextVariantSuffix(
     requestAdapter.getModel(),
   );
-  const requestContext = await ProxyRequestContextModel.read({
+  const requestContext = await ProxyRequestContextModel.readForProxy({
     organizationId: resolvedAgent.organizationId,
     provider: providerName,
     modelId: actualModel,
+    agentId: resolvedAgent.id,
+    environmentId: resolvedAgent.environmentId,
+    limitVirtualKeyId: virtualKeyId,
+    passthroughVirtualKeyId,
+    llmOauthClientId: authenticatedApp?.id,
     userId,
     billingTeamId,
     virtualKeyId:
@@ -1181,7 +1183,7 @@ export async function handleLLMProxy<
         llmOauthClientId: authenticatedApp?.id,
         billingTeamId,
         agent: resolvedAgent,
-        teamSource: lookups,
+        snapshot: requestContext,
       });
 
     if (limitViolation) {
@@ -1323,10 +1325,7 @@ export async function handleLLMProxy<
     };
 
     // Fetch the agent's teams (with labels) once for trace span team attributes.
-    const teams = await AgentTeamModel.getTeamLabelInfoForAgent(
-      resolvedAgentId,
-      lookups,
-    );
+    const teams = requestContext.agentTeams;
 
     const userTeams = requestContext.userTeams;
 

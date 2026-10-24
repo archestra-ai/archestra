@@ -302,6 +302,21 @@ jobs:
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache-amd64
 
+      # Preserve the exact image pair even when later browser tests fail. The
+      # nightly scanner consumes these immutable refs, not overall E2E success.
+      - name: Record Platform byte scan inputs
+        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        run: python3 .github/scripts/platform-byte-scan-inputs.py record
+
+      - name: Retain Platform byte scan inputs
+        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        uses: $/.github/actions/github-upload-artifact
+        with:
+          name: platform-byte-scan-inputs
+          path: ${{ runner.temp }}/platform-byte-scan-inputs.json
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Authenticate to Google Artifact Registry
         if: ${{ !matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
         uses: ./.github/actions/auth-to-gar

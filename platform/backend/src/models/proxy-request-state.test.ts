@@ -5,6 +5,7 @@ import AgentTeamModel from "./agent-team";
 import EnvironmentModel from "./environment";
 import EnvironmentDefaultUserLimitModel from "./environment-default-user-limit";
 import LimitModel, { LimitValidationService } from "./limit";
+import LlmThroughputModel from "./llm-throughput";
 import ModelModel from "./model";
 import ProxyRequestContextModel from "./proxy-request-context";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
@@ -230,4 +231,54 @@ test("scoped snapshots enforce spend, reject reuse for a different agent and rer
     usage.reduce((total, row) => total + row.currentUsageTokensIn, 0),
   ).toBe(0);
   expect((await read(agent.id)).limitState.limits[0].cleanupDue).toBe(false);
+});
+
+test("the request state carries its entities' throughput rules, and admission enforces them", async ({
+  makeOrganization,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const other = await makeOrganization();
+  const agent = await makeAgent({ organizationId: org.id });
+  const rule = await LimitModel.create({
+    entityType: "organization",
+    entityId: org.id,
+    limitType: "requests",
+    cleanupInterval: "calendar_day",
+    limitValue: 1,
+  });
+  await LimitModel.create({
+    entityType: "organization",
+    entityId: other.id,
+    limitType: "requests",
+    cleanupInterval: "calendar_day",
+    limitValue: 1,
+  });
+  // A spend budget is not a throughput rule.
+  await LimitModel.create({
+    entityType: "organization",
+    entityId: org.id,
+    limitType: "token_cost",
+    cleanupInterval: "24h",
+    limitValue: 5,
+  });
+
+  const state = await ProxyRequestContextModel.readForProxy({
+    organizationId: org.id,
+    provider: "openai",
+    modelId: "m",
+    agentId: agent.id,
+    environmentId: agent.environmentId ?? null,
+  });
+  expect(state.throughputRules.map((r) => r.id)).toEqual([rule.id]);
+
+  const scope = {
+    entities: [{ entityType: "organization" as const, entityId: org.id }],
+    model: "m",
+    rules: state.throughputRules,
+  };
+  await LlmThroughputModel.admit(scope);
+  await expect(LlmThroughputModel.admit(scope)).resolves.toMatchObject({
+    denied: { entityType: "organization", limitType: "requests" },
+  });
 });

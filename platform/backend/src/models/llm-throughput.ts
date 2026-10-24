@@ -48,8 +48,11 @@ class LlmThroughputModel {
     entities: Array<{ entityType: LimitEntityType; entityId: string }>;
     model: string;
     subscription?: boolean;
+    /** These entities' rules, already read fresh by this request. */
+    rules?: Limit[];
   }): Promise<ThroughputAdmission> {
-    const rules = await LlmThroughputModel.findRules(params.entities);
+    const rules =
+      params.rules ?? (await LlmThroughputModel.findRules(params.entities));
     if (!rules.some((rule) => matchesModel(rule, params.model)))
       return { reservation: null };
     return CacheEntryModel.withLocks(
@@ -412,6 +415,11 @@ function isSharedRule(rule: Limit) {
     (rule.limitType === "token_cost" && rule.cleanupInterval === "minute")
   );
 }
+/** Rules that {@link LlmThroughputModel.admit} enforces. */
+export function throughputRuleCondition() {
+  return sharedRuleCondition();
+}
+
 function sharedRuleCondition() {
   return or(
     inArray(schema.limitsTable.limitType, THROUGHPUT_TYPES),

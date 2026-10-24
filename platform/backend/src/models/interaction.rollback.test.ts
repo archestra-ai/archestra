@@ -287,7 +287,13 @@ describe("InteractionModel", () => {
         profileId,
         userId: user.id,
         request,
-        response: { id: "r", object: "chat.completion", choices: [] },
+        response: {
+          id: "r",
+          object: "chat.completion",
+          created: 0,
+          model: "gpt-4",
+          choices: [],
+        },
         type: "openai:chatCompletions",
         model: "gpt-4",
         inputTokens: 3,
@@ -297,7 +303,13 @@ describe("InteractionModel", () => {
         id: ids[1],
         profileId,
         request,
-        response: { id: "r", object: "chat.completion", choices: [] },
+        response: {
+          id: "r",
+          object: "chat.completion",
+          created: 0,
+          model: "gpt-4",
+          choices: [],
+        },
         type: "openai:chatCompletions",
       });
 

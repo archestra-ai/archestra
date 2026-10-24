@@ -1785,6 +1785,7 @@ export async function handleLLMProxy<
         model: actualModel,
         provider: providerName,
         subscription: billingMode === "subscription",
+        rules: requestContext.throughputRules,
       }),
       usageAccountingMode: config.llmProxy.usageAccountingMode,
       providerApiKeyId: perKeyChatApiKeyId,

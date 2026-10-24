@@ -290,6 +290,7 @@ COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
 COPY archestra-rs/vendor/dagger-sdk-0.21.9 ./archestra-rs/vendor/dagger-sdk-0.21.9
 COPY archestra-rs/napi-loader ./archestra-rs/napi-loader
 COPY archestra-rs/sandbox-core ./archestra-rs/sandbox-core
+COPY sandbox_base/install-node.sh ./sandbox_base/install-node.sh
 COPY archestra-rs/sandbox-rs ./archestra-rs/sandbox-rs
 COPY archestra-rs/app-runtime-core ./archestra-rs/app-runtime-core
 COPY archestra-rs/app-runtime-rs ./archestra-rs/app-runtime-rs

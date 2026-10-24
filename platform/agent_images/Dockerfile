@@ -2,16 +2,80 @@
 # Archestra loop and every native CLI share one hardened execution base.
 FROM node:24-bookworm-slim AS agent-base
 
+ARG TARGETARCH
+ARG GH_VERSION=2.103.2
+
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
-      build-essential ca-certificates curl git gh jq less openssh-client \
-      procps python3 python3-pip python3-venv ripgrep tmux \
+      build-essential ca-certificates curl git jq less openssh-client \
+      procps python3 python3-venv ripgrep tmux \
  && rm -rf /var/lib/apt/lists/*
+
+# Debian Bookworm still ships gh 2.23.0, built with Go 1.19.6. Install the
+# official release built with patched Go, checking each architecture's archive.
+RUN set -eu; \
+    case "${TARGETARCH}" in \
+      amd64) checksum=62ccf747115ddc61237efffdde66a3c8f70ba249433dc64f70801089b59c59c8 ;; \
+      arm64) checksum=4c3e99a50bd8b181a3fe9d69b25dd978bac768148d88f01507c6b4d1ef61a443 ;; \
+      *) echo "Unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    archive="/tmp/gh_${GH_VERSION}_linux_${TARGETARCH}.tar.gz"; \
+    curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${TARGETARCH}.tar.gz" -o "${archive}"; \
+    echo "${checksum}  ${archive}" | sha256sum -c -; \
+    tar -xzf "${archive}" -C /tmp "gh_${GH_VERSION}_linux_${TARGETARCH}/bin/gh"; \
+    install -m 0755 "/tmp/gh_${GH_VERSION}_linux_${TARGETARCH}/bin/gh" /usr/local/bin/gh; \
+    rm -rf "${archive}" "/tmp/gh_${GH_VERSION}_linux_${TARGETARCH}"; \
+    gh --version
+
+# python3-venv on Bookworm bootstraps setuptools from a bundled 66.1.1 wheel.
+# Replace that wheel so newly created environments start with a fixed version.
+RUN curl -fsSL \
+      "https://files.pythonhosted.org/packages/a3/dc/17031897dae0efacfea57dfd3a82fdd2a2aeb58e0ff71b77b87e44edc772/setuptools-80.9.0-py3-none-any.whl" \
+      -o /usr/share/python-wheels/setuptools-80.9.0-py3-none-any.whl \
+ && echo "062d34222ad13e0cc312a4c02d73f059e86a4acbfbdea8f8f76b28c99f306922  /usr/share/python-wheels/setuptools-80.9.0-py3-none-any.whl" | sha256sum -c - \
+ && rm /usr/share/python-wheels/setuptools-66.1.1-py3-none-any.whl \
+ && python3 -m venv /tmp/agent-python-check \
+ && /tmp/agent-python-check/bin/python -c "import setuptools; assert setuptools.__version__ == '80.9.0'" \
+ && rm -rf /tmp/agent-python-check
+
+# Keep system pip available to agents without Debian's vulnerable setuptools
+# package, which python3-pip would pull back into the image.
+RUN curl -fsSL \
+      "https://files.pythonhosted.org/packages/44/3c/d717024885424591d5376220b5e836c2d5293ce2011523c9de23ff7bf068/pip-25.3-py3-none-any.whl" \
+      -o /tmp/pip-25.3-py3-none-any.whl \
+ && echo "9655943313a94722b7774661c21049070f6bbb0a1516bf02f7c8d5d9201514cd  /tmp/pip-25.3-py3-none-any.whl" | sha256sum -c - \
+ && mkdir -p /usr/local/lib/python3.11/dist-packages \
+ && python3 -m zipfile -e /tmp/pip-25.3-py3-none-any.whl /usr/local/lib/python3.11/dist-packages \
+ && rm /tmp/pip-25.3-py3-none-any.whl \
+ && printf '%s\n' '#!/bin/sh' 'exec python3 -m pip "$@"' > /usr/local/bin/pip \
+ && chmod 0755 /usr/local/bin/pip \
+ && ln -s pip /usr/local/bin/pip3 \
+ && python3 -m pip --version
 
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME/bin:$PNPM_HOME:$PATH
-ENV COREPACK_DEFAULT_TO_LATEST=0
-RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
+RUN corepack disable \
+ && npm install --global --ignore-scripts pnpm@11.28.7 \
+ && rm -rf /usr/local/lib/node_modules/corepack \
+ && pnpm --version
+
+# npm in the Node base carries older vendored Undici and brace-expansion copies.
+# pnpm has its own fixed copies; patch npm's separate bundle by verified tarballs.
+RUN set -eu; \
+    for spec in \
+      'undici:6.29.1:29c4b8e0b2d86cb8795571c1959012ce057a14ecfd34858335f47c31e770a04f' \
+      'brace-expansion:5.0.12:ef8448ec78f20b692f04fa6d01f39b5ab34c66404bea3429f5a39c6c9e0be8b4'; do \
+      name="${spec%%:*}"; version_and_hash="${spec#*:}"; \
+      version="${version_and_hash%%:*}"; checksum="${version_and_hash#*:}"; \
+      directory="$(mktemp -d)"; archive="${directory}/${name}-${version}.tgz"; \
+      curl -fsSL "https://registry.npmjs.org/${name}/-/${name}-${version}.tgz" -o "${archive}"; \
+      echo "${checksum}  ${archive}" | sha256sum -c -; \
+      tar -xzf "${archive}" -C "${directory}"; \
+      rm -rf "/usr/local/lib/node_modules/npm/node_modules/${name}"; \
+      mv "${directory}/package" "/usr/local/lib/node_modules/npm/node_modules/${name}"; \
+      rm -rf "${directory}"; \
+    done; \
+    node -e "const p='/usr/local/lib/node_modules/npm/node_modules/'; if (require(p+'undici/package.json').version !== '6.29.1' || require(p+'brace-expansion/package.json').version !== '5.0.12') process.exit(1)"
 
 WORKDIR /opt/archestra
 COPY pnpm-workspace.yaml pnpm-lock.yaml ./

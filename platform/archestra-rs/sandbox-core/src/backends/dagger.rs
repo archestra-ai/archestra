@@ -51,15 +51,16 @@ pub const DEFAULT_APT_PACKAGES: &[&str] = &[
     "jq",
     "ca-certificates",
     "build-essential",
-    "nodejs",
-    "npm",
-    // Debian's nodejs and curl decode Brotli through the shared libbrotli1. The
-    // base image already ships it, so it must be named here to be upgraded to
-    // the bookworm-security build (CVE-2026-111497).
+    // curl decodes Brotli through the shared library. Keep the base copy on
+    // Bookworm's patched release.
     "libbrotli1",
     "unzip",
     "zip",
+    "xz-utils",
 ];
+
+// Use the same pinned Node/npm installation in the baked image and fallback.
+const NODE_RUNTIME_SETUP: &str = include_str!("../../../../sandbox_base/install-node.sh");
 
 /// venv pre-baked into the warm base, owned by the sandbox user; reused by every
 /// `python3` command so per-call uv installs are layered on (fast) instead of
@@ -620,14 +621,14 @@ fn warm_base_root_setup(prebuilt: bool) -> String {
         true => format!(
             "test -f {SANDBOX_BASE_MARKER} || (echo 'error: ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT=true but {SANDBOX_BASE_MARKER} is absent; the runtime image is not the baked sandbox base' >&2; exit 1)"
         ),
-        // apt packages + sandbox dirs + ownership + pip shim. the shim redirects
+        // apt packages, patched Node/npm, sandbox dirs, ownership, and pip shim. The shim redirects
         // any `pip` invocation to uv so the model is never tempted to install into
         // ~/.local (which the venv python won't see). `uv pip` is unaffected
         // because it's a subcommand of `uv`, not a separate binary.
         false => {
             let apt_packages = DEFAULT_APT_PACKAGES.join(" ");
             format!(
-                "apt-get update -qq && apt-get install -y --no-install-recommends {apt_packages} && rm -rf /var/lib/apt/lists/* && mkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && chown -R 1000:1000 {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && {PIP_SHIM_SETUP}"
+                "set -eu\napt-get update -qq && apt-get upgrade -y && apt-get install -y --no-install-recommends {apt_packages} && rm -rf /var/lib/apt/lists/*\n{NODE_RUNTIME_SETUP}\nmkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && chown -R 1000:1000 {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && {PIP_SHIM_SETUP}"
             )
         }
     }
@@ -1632,6 +1633,7 @@ mod tests {
         for pkg in DEFAULT_APT_PACKAGES {
             assert!(cmd.contains(pkg), "missing apt package: {pkg}");
         }
+        assert!(cmd.contains(NODE_RUNTIME_SETUP));
         assert!(cmd.contains(&format!(
             "mkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT}"
         )));

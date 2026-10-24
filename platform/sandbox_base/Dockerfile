@@ -10,16 +10,21 @@
 # Debian mirror.
 FROM ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim@sha256:d935373e69f9507199c29006b5eaec59893cbd606f6fb7a185da0c2c83f716e9
 
+COPY install-node.sh /tmp/install-node.sh
+
 # root setup: toolbelt + sandbox dirs + ownership + the pip->uv shim (so the
 # model is never tempted to `pip install` into a location the venv won't see).
 # libbrotli1 is listed so apt upgrades the copy the base image ships: Debian's
-# nodejs and curl decode Brotli through it. The floor fails the build if the
+# curl decodes Brotli through it. The floor fails the build if the
 # CVE-2026-111497 fix is missing.
 RUN apt-get update -qq \
+ && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends \
-      bash coreutils curl git jq ca-certificates build-essential nodejs npm libbrotli1 unzip zip \
+      bash coreutils curl git jq ca-certificates build-essential libbrotli1 unzip zip xz-utils \
  && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge 1.0.9-2+deb12u1 \
  && rm -rf /var/lib/apt/lists/* \
+ && sh /tmp/install-node.sh \
+ && rm /tmp/install-node.sh \
  && mkdir -p /home/sandbox /skills \
  && chown -R 1000:1000 /home/sandbox /skills \
  && rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.12 \

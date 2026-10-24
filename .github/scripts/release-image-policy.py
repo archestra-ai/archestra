@@ -12,6 +12,45 @@ import sys
 SHA = re.compile(r"[0-9a-f]{40}")
 
 
+AGENT_PUBLISHER = ".github/workflows/build-agent-catalog-images.yml"
+AGENT_DOCKERFILE = "./platform/agent_images/Dockerfile"
+
+
+def published_agent_targets(root):
+    """release/1.3 has no shared agent catalog file; its publisher matrix is the inventory."""
+    publisher = (root / AGENT_PUBLISHER).read_text()
+    section = re.search(r"^      matrix:\n        image:\n((?:          - .*\n)+)", publisher, re.M)
+    if not section:
+        raise ValueError("Missing published agent inventory")
+    return [line.split("- ", 1)[1].strip() for line in section[1].splitlines()]
+
+
+def candidate_matrix(root):
+    """Scan every maintained catalog target, including this branch's inventory."""
+    images = [
+        {"image": "platform", "context": "./platform", "dockerfile": "./platform/Dockerfile", "target": ""},
+        {"image": "platform-slim", "context": "./platform", "dockerfile": "./platform/Dockerfile", "target": "unified-slim"},
+    ]
+    for image, directory in (("mcp-server-base", "mcp_server_docker_image"), ("p4-shim", "p4_shim_docker_image"),
+                             ("sandbox-base", "sandbox_base")):
+        context = f"./platform/{directory}"
+        images.append({"image": image, "context": context, "dockerfile": f"{context}/Dockerfile", "target": ""})
+    targets = published_agent_targets(root)
+    if (not all(re.fullmatch(r"agent-[a-z0-9-]+", target) for target in targets)
+            or len(targets) != len(set(targets))):
+        raise ValueError("Invalid or duplicate agent image targets")
+    dockerfile = root / AGENT_DOCKERFILE
+    stages = set(re.findall(r"^FROM\s+.+\s+AS\s+(\S+)\s*$", dockerfile.read_text(), re.M | re.I))
+    for target in targets:
+        if target not in stages:
+            raise ValueError(f"Published agent target has no Dockerfile stage: {target}")
+        images.append({"image": target, "context": "./platform", "dockerfile": AGENT_DOCKERFILE, "target": target})
+    for image in images:
+        if not (root / image["dockerfile"]).is_file():
+            raise ValueError(f"Missing image Dockerfile: {image['dockerfile']}")
+    return {"include": images}
+
+
 def requires_scan(event_name, event, repository):
     if event_name in ("merge_group", "workflow_dispatch"):
         return False
@@ -66,8 +105,10 @@ def main():
     event_name, repository = os.environ["GITHUB_EVENT_NAME"], os.environ["GITHUB_REPOSITORY"]
     if mode == "classify":
         decision = requires_scan(event_name, event, repository)
+        matrix = candidate_matrix(Path(__file__).resolve().parents[2])
         with open(os.environ["GITHUB_OUTPUT"], "a") as output:
             output.write(f"scan={str(decision).lower()}\n")
+            output.write(f"matrix={json.dumps(matrix, separators=(',', ':'))}\n")
     elif mode == "gate":
         required = requires_scan(event_name, event, repository)
         current = None

@@ -116,7 +116,7 @@ jobs:
             local-tag-prefix: archestra-platform
             use-build-action: true
           - name: MCP Server Base
-            runner: ubuntu-latest
+            runner: blacksmith-16vcpu-ubuntu-2404
             context: ./platform/docker_images/mcp_server
             dockerfile: ./platform/docker_images/mcp_server/Dockerfile
             artifact-name: mcp-server-base-docker-image
@@ -1530,7 +1530,7 @@ jobs:
   platform-rust-napi-musl-smoke:
     name: Platform Rust NAPI musl Smoke
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
-    runs-on: ubicloud-standard-16-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     timeout-minutes: 30
     permissions:
       contents: read
@@ -1685,7 +1685,7 @@ jobs:
 
       - name: Write test summary
         if: always()
-        uses: daun/playwright-report-summary@31ed947ec7a623d18a66cfd20ef546dc66ef8063 # v4.1.0
+        uses: daun/playwright-report-summary@5359ae22f265fd2dfdb7744a0cc6614c5c3abde6 # v4.1.1
         with:
           report-file: platform/e2e-tests/results.json
           job-summary: true

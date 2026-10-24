@@ -1,7 +1,7 @@
 name: Docker Image Scanning
 
-# Keep required contexts present on every PR/queue SHA. Only Release Please
-# PRs and version-changing queue groups build candidates on both architectures.
+# Keep required contexts present on every PR/queue SHA. Release Please PRs
+# classify without building; version-changing queue groups scan both architectures.
 # Publication independently scans its bytes; see ../release-image-security.md.
 on:
   pull_request:
@@ -43,7 +43,8 @@ jobs:
     name: Scan release candidate (${{ matrix.image }}, ${{ matrix.arch }})
     needs: [classify]
     if: ${{ needs.classify.outputs.scan == 'true' }}
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    # Build every architecture on native Blacksmith runners in parallel.
+    runs-on: ${{ matrix.arch == 'arm64' && 'blacksmith-32vcpu-ubuntu-2404-arm' || 'blacksmith-16vcpu-ubuntu-2404' }}
     timeout-minutes: 45
     permissions:
       contents: read
@@ -70,6 +71,7 @@ jobs:
       - name: Build candidate locally
         uses: $/.github/actions/build-docker-image
         with:
+          builder-cache-key: ${{ format('{0}-release-scan-{1}-{2}-v1', github.repository, matrix.image, matrix.arch) }}
           context: ${{ matrix.context }}
           dockerfile: ${{ matrix.dockerfile }}
           target: ${{ matrix.target }}
@@ -133,7 +135,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read # Required to checkout scan policy and image sources.
-      pull-requests: read # Recheck the current release PR head and base after scanning.
+      pull-requests: read # Recheck the queue release PR head and target after scanning.
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -147,7 +149,7 @@ jobs:
           pattern: release-evidence-*-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-evidence
           merge-multiple: true
-      - name: Require a complete scan for the current release PR revision
+      - name: Require complete queue scan evidence or explicit PR skip
         env:
           CLASSIFY_RESULT: ${{ needs.classify.result }}
           SCAN_REQUIRED: ${{ needs.classify.outputs.scan }}
@@ -167,7 +169,8 @@ jobs:
           retention-days: 1
 
   # Compatibility bridge for current main/release rulesets. These jobs depend on
-  # the fail-closed gate, so a skipped/failed scan cannot turn a release PR green.
+  # the gate: PRs classify successfully, while version-changing queue groups
+  # require complete scan evidence before any required context turns green.
   required-contexts:
     name: Docker Image Scanning (${{ matrix.name }})
     needs: [release-image-security]
@@ -219,7 +222,7 @@ jobs:
   handoff-fixture:
     name: Build non-publishing handoff fixture
     if: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'ci/release-gate-parity-') && github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read
     steps:

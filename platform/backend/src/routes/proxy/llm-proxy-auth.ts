@@ -137,6 +137,8 @@ export interface PassthroughVirtualKeyResult {
   passthroughVirtualKeyId: string;
   /** Team the key's spend is charged to, when it has one. */
   billingTeamId?: string;
+  /** Fresh negative OAuth lookup for this exact request's provider token. */
+  nonOAuthTokenHash?: string;
 }
 
 type ResolvedVirtualApiKey = NonNullable<
@@ -328,10 +330,17 @@ export async function validateVirtualApiKey(params: {
 export async function validatePassthroughVirtualKey(params: {
   tokenValue: string;
   agent: GatewayAgent;
+  oauthTokenCandidate?: string;
 }): Promise<PassthroughVirtualKeyResult> {
   const { tokenValue, agent } = params;
 
-  const resolved = await VirtualApiKeyModel.validateTokenWithOwner(tokenValue);
+  const oauthTokenHash = params.oauthTokenCandidate
+    ? OAuthAccessTokenModel.hashTokenForLookup(params.oauthTokenCandidate)
+    : undefined;
+  const resolved = await VirtualApiKeyModel.validateTokenWithOwner(
+    tokenValue,
+    oauthTokenHash,
+  );
   if (!resolved) {
     throw new ApiError(401, "Invalid passthrough virtual key");
   }
@@ -397,6 +406,9 @@ export async function validatePassthroughVirtualKey(params: {
     user,
     passthroughVirtualKeyId: virtualKey.id,
     billingTeamId: virtualKey.billingTeamId ?? undefined,
+    ...(resolved.oauthTokenAbsent && oauthTokenHash
+      ? { nonOAuthTokenHash: oauthTokenHash }
+      : {}),
   };
 }
 
@@ -448,10 +460,12 @@ export async function validateLlmOAuthAccessToken(params: {
    */
   requestedModel?: string | null;
   providerKeySelection?: ProviderKeySelection;
+  /** A request-local negative lookup; never bypasses positive-token checks. */
+  nonOAuthTokenHash?: string;
 }): Promise<LlmOAuthAccessTokenValidationResult | null> {
-  const accessToken = await OAuthAccessTokenModel.getByTokenHash(
-    OAuthAccessTokenModel.hashTokenForLookup(params.tokenValue),
-  );
+  const tokenHash = OAuthAccessTokenModel.hashTokenForLookup(params.tokenValue);
+  if (params.nonOAuthTokenHash === tokenHash) return null;
+  const accessToken = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
   if (!accessToken) {
     return null;
   }

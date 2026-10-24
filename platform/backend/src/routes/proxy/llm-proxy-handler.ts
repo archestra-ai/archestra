@@ -53,6 +53,7 @@ import {
   ENCRYPTED_CHAT_KEY_HEADER,
   parseEncryptedChatDekHeader,
 } from "@/content-encryption/encrypted-chat";
+import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import {
@@ -512,6 +513,7 @@ export async function handleLLMProxy<
   let attributionLabels: AttributionLabels | undefined;
   // Authenticated user identities, tracked per source for the consistency check.
   let passthroughUserId: string | undefined;
+  let nonOAuthTokenHash: string | undefined;
   let jwksUserId: string | undefined;
   let oauthUserId: string | undefined;
   let regularVirtualKeyUserId: string | undefined;
@@ -640,15 +642,28 @@ export async function handleLLMProxy<
       credential: passthroughVirtualKeyToken,
     });
     try {
+      let oauthTokenCandidate: string | undefined;
+      try {
+        const candidate = normalizeVirtualKeyCandidate(
+          provider.extractApiKey(headers),
+        );
+        if (candidate && !hasArchestraTokenPrefix(candidate))
+          oauthTokenCandidate = candidate;
+      } catch {
+        // Prefetch is optional. Normal extraction below still reports errors
+        // after passthrough/JWKS validation, in its existing order.
+      }
       const passthroughResult = await validatePassthroughVirtualKey({
         tokenValue: passthroughVirtualKeyToken,
         agent: resolvedAgent,
+        oauthTokenCandidate,
       });
       await virtualKeyRateLimiter.recordSuccess({
         credential: passthroughVirtualKeyToken,
       });
       passthroughVirtualKeyId = passthroughResult.passthroughVirtualKeyId;
       passthroughUserId = passthroughResult.userId;
+      nonOAuthTokenHash = passthroughResult.nonOAuthTokenHash;
       billingTeamId ??= passthroughResult.billingTeamId;
       // Authenticated identity → overrides the unauthenticated X-Archestra-User-Id.
       userId = passthroughResult.userId;
@@ -780,6 +795,7 @@ export async function handleLLMProxy<
   ) {
     const oauthResult = await validateLlmOAuthAccessToken({
       tokenValue: rawApiKey,
+      nonOAuthTokenHash,
       expectedProvider: providerName,
       agent: resolvedAgent,
       requestedModel: requestAdapter.getModel(),
@@ -1099,6 +1115,7 @@ export async function handleLLMProxy<
     limitVirtualKeyId: virtualKeyId,
     passthroughVirtualKeyId,
     llmOauthClientId: authenticatedApp?.id,
+    includeRuntime: hasProxyPlugins && enterpriseTier.isOpenappaActive(),
     userId,
     billingTeamId,
     virtualKeyId:
@@ -1409,6 +1426,7 @@ export async function handleLLMProxy<
         installerSetupBypass,
         ingress: appaIngress,
         toolIdentity,
+        runtimeSnapshot: requestContext.runtimeSnapshot,
       });
       pluginContext = {
         requestId: request.id,

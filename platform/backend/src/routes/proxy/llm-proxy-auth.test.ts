@@ -13,11 +13,13 @@ import {
   LlmProviderApiKeyModelLinkModel,
   MemberModel,
   ModelModel,
+  OAuthAccessTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { accessGrants, afterEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
+import { recordQueries } from "@/test/query-counter";
 import { ApiError } from "@/types";
 import {
   assertConsistentUserCredentials,
@@ -25,6 +27,7 @@ import {
   attemptJwksAuth,
   resolveAgent,
   VirtualKeyRateLimiter,
+  validateLlmOAuthAccessToken,
   validatePassthroughVirtualKey,
   validateVirtualApiKey,
 } from "./llm-proxy-auth";
@@ -1417,6 +1420,146 @@ async function mustRead(
 // =========================================================================
 
 describe("validatePassthroughVirtualKey", () => {
+  test("negative OAuth lookups apply only to that token and are refreshed on the next request", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, org.id);
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "Synthetic passthrough",
+      keyType: "passthrough",
+      authorId: owner.id,
+    });
+    const token = "synthetic-provider-token";
+    const validate = () =>
+      validatePassthroughVirtualKey({
+        tokenValue: value,
+        agent: proxy,
+        oauthTokenCandidate: token,
+      });
+    const first = await validate();
+    expect(first.nonOAuthTokenHash).toBe(
+      OAuthAccessTokenModel.hashTokenForLookup(token),
+    );
+    const negative = await recordQueries(() =>
+      validateLlmOAuthAccessToken({
+        tokenValue: token,
+        expectedProvider: "openai",
+        agent: proxy,
+        nonOAuthTokenHash: first.nonOAuthTokenHash,
+      }),
+    );
+    expect(negative.result).toBeNull();
+    expect(negative.statements).toHaveLength(0);
+    const other = await recordQueries(() =>
+      validateLlmOAuthAccessToken({
+        tokenValue: "another-provider-token",
+        expectedProvider: "openai",
+        agent: proxy,
+        nonOAuthTokenHash: first.nonOAuthTokenHash,
+      }),
+    );
+    expect(other.result).toBeNull();
+    expect(other.statements).toHaveLength(1);
+
+    const client = await makeOAuthClient({ userId: owner.id });
+    await makeOAuthAccessToken(client.clientId, owner.id, {
+      token: OAuthAccessTokenModel.hashTokenForLookup(token),
+      scopes: [],
+    });
+    const next = await validate();
+    expect(next.nonOAuthTokenHash).toBeUndefined();
+    await expect(
+      validateLlmOAuthAccessToken({
+        tokenValue: token,
+        expectedProvider: "openai",
+        agent: proxy,
+        nonOAuthTokenHash: next.nonOAuthTokenHash,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    // A negative result for another bearer cannot bypass a present token.
+    await expect(
+      validateLlmOAuthAccessToken({
+        tokenValue: token,
+        expectedProvider: "openai",
+        agent: proxy,
+        nonOAuthTokenHash: OAuthAccessTokenModel.hashTokenForLookup(
+          "another-provider-token",
+        ),
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  test("present OAuth tokens retain expiry, refresh revocation and scope checks", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+    makeOAuthRefreshToken,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, org.id);
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "Synthetic passthrough",
+      keyType: "passthrough",
+      authorId: owner.id,
+    });
+    const client = await makeOAuthClient({ userId: owner.id });
+    const refresh = await makeOAuthRefreshToken(client.clientId, owner.id, {
+      revoked: new Date(),
+    });
+    for (const [token, overrides, statusCode] of [
+      [
+        "expired-synthetic-token",
+        { expiresAt: new Date(Date.now() - 60_000), scopes: [] },
+        401,
+      ],
+      ["revoked-synthetic-token", { refreshId: refresh.id, scopes: [] }, 401],
+      ["unscoped-synthetic-token", { scopes: [] }, 403],
+    ] as const) {
+      await makeOAuthAccessToken(client.clientId, owner.id, {
+        ...overrides,
+        scopes: [],
+        token: OAuthAccessTokenModel.hashTokenForLookup(token),
+      });
+      const identity = await validatePassthroughVirtualKey({
+        tokenValue: value,
+        agent: proxy,
+        oauthTokenCandidate: token,
+      });
+      expect(identity.nonOAuthTokenHash).toBeUndefined();
+      await expect(
+        validateLlmOAuthAccessToken({
+          tokenValue: token,
+          expectedProvider: "openai",
+          agent: proxy,
+          nonOAuthTokenHash: identity.nonOAuthTokenHash,
+        }),
+      ).rejects.toMatchObject({ statusCode });
+    }
+  });
+
   test("default proxy access observes membership removal and key deletion on the next request", async ({
     makeOrganization,
     makeUser,

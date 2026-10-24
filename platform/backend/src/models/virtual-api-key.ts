@@ -24,6 +24,7 @@ import db, { schema, withDbTransaction } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
 import type { PaginatedResult } from "@/database/utils/pagination";
 import { createPaginatedResult } from "@/database/utils/pagination";
+import { qualified } from "@/database/utils/qualified-column";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import type {
@@ -1027,11 +1028,15 @@ class VirtualApiKeyModel {
   }
 
   /** Read a passthrough credential and its current owner's membership together. */
-  static async validateTokenWithOwner(tokenValue: string) {
+  static async validateTokenWithOwner(
+    tokenValue: string,
+    oauthTokenHash?: string,
+  ) {
     const candidates = await VirtualApiKeyModel.byTokenStartWithOwner
       .get()
       .execute({
         tokenStart: getTokenStart(tokenValue),
+        oauthTokenHash: oauthTokenHash ?? null,
       });
     return VirtualApiKeyModel.validateCandidates(tokenValue, candidates);
   }
@@ -1384,6 +1389,12 @@ class VirtualApiKeyModel {
       return database
         .select({
           virtualKey: getTableColumns(keys),
+          // Only a negative result is reused. Present OAuth tokens still take
+          // their existing fresh lookup and full validation path.
+          oauthTokenAbsent: sql<boolean>`CASE WHEN ${sql.placeholder("oauthTokenHash")}::text IS NOT NULL THEN
+            NOT EXISTS (SELECT 1 FROM ${schema.oauthAccessTokensTable}
+              WHERE ${qualified(schema.oauthAccessTokensTable.token)} = ${sql.placeholder("oauthTokenHash")})
+            ELSE false END`,
           user: { id: users.id, email: users.email, name: users.name },
           membership: {
             id: membership.id,

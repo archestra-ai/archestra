@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
+import type { FastifyRequest } from "fastify";
 import { type Mock, vi } from "vitest";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { secretManager } from "@/secrets-manager";
+import { consumeMcpOAuthCredentialGrant } from "@/services/mcp-oauth-credential-grant";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useRouteTestApp } from "@/test/route-test-app";
@@ -866,11 +868,13 @@ describe("OAuth helper functions", () => {
 describe("OAuth routes", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
+  let userId: string;
   const originalFetch = globalThis.fetch;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     organizationId = (await makeOrganization()).id;
     const user = await makeUser();
+    userId = user.id;
     await makeMember(user.id, organizationId);
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -1053,6 +1057,19 @@ describe("OAuth routes", () => {
       accessToken: "new-access-token",
       refreshToken: "new-refresh-token",
     });
+    const grantRequest = {
+      user: { id: userId },
+      organizationId,
+      authMethod: "session",
+      sessionInfo: { id: "test-oauth-session" },
+    } as FastifyRequest;
+    const grant = {
+      request: grantRequest,
+      secretId: callbackResponse.json().secretId,
+      catalogId: catalog.id,
+    };
+    expect(await consumeMcpOAuthCredentialGrant(grant)).toBe(true);
+    expect(await consumeMcpOAuthCredentialGrant(grant)).toBe(false);
 
     const tokenRequest = fetchMock.mock.calls.find(
       ([input]) => String(input) === "https://login.example.com/oauth/token",

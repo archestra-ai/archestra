@@ -96,11 +96,6 @@ describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
       { access_token: "stale", refresh_token: "stale-refresh" },
       "reauth-old-secret",
     );
-    const newSecret = await secretManager().createSecret(
-      { access_token: "fresh", refresh_token: "fresh-refresh" },
-      "reauth-new-secret",
-    );
-
     const server = await McpServerModel.create({
       name: "reauth-clears-server",
       catalogId: catalog.id,
@@ -119,16 +114,65 @@ describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
     const response = await app.inject({
       method: "PATCH",
       url: `/api/mcp_server/${server.id}/reauthenticate`,
-      payload: { secretId: newSecret.id },
+      payload: { accessToken: "fresh" },
     });
 
     expect(response.statusCode).toBe(200);
     const row = await McpServerModel.findById(server.id);
-    expect(row?.secretId).toBe(newSecret.id);
+    expect(row?.secretId).toBeTruthy();
+    expect(
+      (await secretManager().getSecret(row?.secretId ?? ""))?.secret,
+    ).toMatchObject({ access_token: "fresh" });
     expect(row?.oauthRefreshError).toBeNull();
     expect(row?.oauthRefreshErrorMessage).toBeNull();
     expect(row?.oauthRefreshErrorDescription).toBeNull();
     expect(row?.oauthRefreshFailedAt).toBeNull();
+  });
+
+  test("rotating a connection preserves a secret still used by another connection", async ({
+    makeInternalMcpCatalog,
+    makeUser,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "remote",
+      serverUrl: "http://127.0.0.1:30082/mcp",
+    });
+    const otherUser = await makeUser({ email: "other-owner@example.com" });
+    const sharedSecret = await secretManager().createSecret(
+      { access_token: "fake-shared-token" },
+      "shared-connection-secret",
+    );
+    const otherServer = await McpServerModel.create({
+      name: "other-connection",
+      catalogId: catalog.id,
+      secretId: sharedSecret.id,
+      serverType: "remote",
+      scope: "org",
+      ownerId: otherUser.id,
+    });
+    const ownServer = await McpServerModel.create({
+      name: "own-connection",
+      catalogId: catalog.id,
+      secretId: sharedSecret.id,
+      serverType: "remote",
+      scope: "personal",
+      ownerId: user.id,
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/mcp_server/${ownServer.id}/reauthenticate`,
+      payload: { accessToken: "fake-replacement-token" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect((await McpServerModel.findById(otherServer.id))?.secretId).toBe(
+      sharedSecret.id,
+    );
+    expect((await secretManager().getSecret(sharedSecret.id))?.secret).toEqual({
+      access_token: "fake-shared-token",
+    });
   });
 
   test("team administration does not authorize changing a connection's credentials", async ({
@@ -139,10 +183,6 @@ describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
     const team = await makeTeam(organizationId, user.id);
     await makeTeamMember(team.id, user.id, { role: "admin" });
     const server = await makeMcpServer({ scope: "team", teamId: team.id });
-    const replacement = await secretManager().createSecret(
-      { token: "replacement" },
-      "team-reauth-denied",
-    );
     userHasPermissionMock.mockResolvedValue(false);
     hasPermissionMock.mockImplementation(async (permissions) => ({
       success: permissions.mcpServerInstallation?.includes("create") ?? false,
@@ -151,7 +191,7 @@ describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
     const response = await app.inject({
       method: "PATCH",
       url: `/api/mcp_server/${server.id}/reauthenticate`,
-      payload: { secretId: replacement.id },
+      payload: { accessToken: "replacement" },
     });
     expect(response.statusCode, response.body).toBe(403);
     expect((await McpServerModel.findById(server.id))?.secretId).toBe(
@@ -172,10 +212,6 @@ describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
       serverType: "local",
       localConfig: { dockerImage: "ghcr.io/evil/x:1" },
     });
-    const newSecret = await secretManager().createSecret(
-      { token: "new" },
-      "reauth-gate-new",
-    );
     const server = await makeMcpServer({
       catalogId: catalog.id,
       scope: "personal",
@@ -186,7 +222,7 @@ describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
     const response = await app.inject({
       method: "PATCH",
       url: `/api/mcp_server/${server.id}/reauthenticate`,
-      payload: { secretId: newSecret.id },
+      payload: { accessToken: "new" },
     });
 
     // Blocked before any mutation: no secret swap, no pod restart, no false 200.

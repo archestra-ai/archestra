@@ -67,7 +67,9 @@ overrides:
   form-data@>=4: '>=4.0.6'
   form-data@<4: '>=3.0.5 <4'
   '@hono/node-server': 1.19.14
-  body-parser: 2.2.1
+  # GHSA-v422-hmwv-36x6: size enforcement; CVE-2026-111181: process crash
+  # from trailing bytes after a compressed body. Preserve the v2 API.
+  body-parser: '>=2.4.0 <3'
   # GHSA-cmwh-pvxp-8882 (fixed 3.4.11) and GHSA-c2j3-45gr-mqc4 (fixed 3.4.12).
   # Pinned exact so dompurify stays deduped to one version.
   dompurify: 3.4.13
@@ -230,6 +232,9 @@ minimumReleaseAgeExclude:
   # 2026-09-30 and clears the 7-day window on 2026-10-07. Remove on/after that
   # date and relax the override to a '>=1.2.2' floor.
   - source-map-js
+  # CVE-2026-111181: exact urgent fix published 2026-10-22 11:39:38 UTC.
+  # Remove after 2026-10-29 11:39:38 UTC when the 7-day window clears.
+  - body-parser@2.4.0
 
 # OpenTelemetry instrumentation requires these packages hoisted to root.
 # @hookform/resolvers/zod statically imports `zod/v4/core` but does not declare

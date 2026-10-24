@@ -15,6 +15,36 @@ import {
 
 type TraceTeam = Pick<Team, "id" | "name"> & { labels: LabelWithDetails[] };
 
+type RuntimeCandidate = {
+  virtualKeyId: string;
+  run: Pick<
+    typeof schema.agentRunsTable.$inferSelect,
+    | "organizationId"
+    | "agentId"
+    | "actorKind"
+    | "actorId"
+    | "actorUserId"
+    | "taskId"
+    | "workloadName"
+  >;
+  workspace: Pick<
+    typeof schema.agentWorkspacesTable.$inferSelect,
+    | "id"
+    | "organizationId"
+    | "agentId"
+    | "actorKind"
+    | "actorId"
+    | "workloadName"
+    | "state"
+  > | null;
+};
+
+export type RuntimeIdentitySnapshot = {
+  organizationId: string;
+  virtualKeyIds: string[];
+  candidates: RuntimeCandidate[];
+};
+
 /**
  * Fresh proxy metadata and pre-request budget state in one round trip. Nothing
  * survives the request; cleanup rereads usage and quota admission stays fresh.
@@ -47,14 +77,24 @@ export default class ProxyRequestContextModel {
       limitVirtualKeyId?: string;
       passthroughVirtualKeyId?: string;
       llmOauthClientId?: string;
+      includeRuntime?: boolean;
     },
   ) {
+    const runtimeVirtualKeyIds = [
+      ...new Set(
+        [params.limitVirtualKeyId, params.passthroughVirtualKeyId].filter(
+          (id): id is string => !!id,
+        ),
+      ),
+    ];
     const [row] = await ProxyRequestContextModel.proxyQuery.get().execute({
       ...params,
       userId: params.userId ?? null,
       billingTeamId: params.billingTeamId ?? null,
       virtualKeyId: params.virtualKeyId ?? null,
       oauthClientId: params.oauthClientId ?? null,
+      includeRuntime: params.includeRuntime === true,
+      runtimeVirtualKeyIds,
       ...limitEntityParameters({
         agent: params.agentId,
         organization: params.organizationId,
@@ -68,9 +108,17 @@ export default class ProxyRequestContextModel {
       }),
     });
     if (!row) throw new Error("Proxy request snapshot returned no row");
-    const { limitRows, defaultUserLimitRow, ...context } = row;
+    const { limitRows, defaultUserLimitRow, runtimeCandidates, ...context } =
+      row;
     return {
       ...context,
+      runtimeSnapshot: params.includeRuntime
+        ? ({
+            organizationId: params.organizationId,
+            virtualKeyIds: runtimeVirtualKeyIds,
+            candidates: runtimeCandidates,
+          } satisfies RuntimeIdentitySnapshot)
+        : undefined,
       scope: {
         agentId: params.agentId,
         organizationId: params.organizationId,
@@ -136,6 +184,7 @@ export default class ProxyRequestContextModel {
       UNION ALL SELECT ${billingTeamId}::text WHERE ${billingTeamId}::text IS NOT NULL
     )`;
     return buildContextQuery(database.with(teamIds), {
+      runtimeCandidates: runtimeCandidatesSelection(),
       agentTeamIds: sql<
         string[]
       >`(SELECT coalesce(jsonb_agg(${teamId} ORDER BY ${teamPosition}, ${teamId}), '[]'::jsonb) FROM ${teamIds})`,
@@ -171,6 +220,41 @@ const limitRowCodec = new JsonRowCodec(schema.limitsTable);
 const defaultRowCodec = new JsonRowCodec(
   schema.environmentDefaultUserLimitsTable,
 );
+
+function runtimeCandidatesSelection() {
+  const runs = schema.agentRunsTable;
+  const workspaces = schema.agentWorkspacesTable;
+  // Keep two runs per credential before applying any organization or actor
+  // checks. Filtering first could turn an ambiguous binding into a valid one.
+  return sql<
+    RuntimeCandidate[]
+  >`CASE WHEN ${sql.placeholder("includeRuntime")}::boolean THEN (
+    SELECT coalesce(jsonb_agg(jsonb_build_object(
+      'virtualKeyId', requested_runtime_key.id,
+      'run', jsonb_build_object(
+        'organizationId', runtime_run.organization_id,
+        'agentId', runtime_run.agent_id, 'actorKind', runtime_run.actor_kind,
+        'actorId', runtime_run.actor_id, 'actorUserId', runtime_run.actor_user_id,
+        'taskId', runtime_run.task_id, 'workloadName', runtime_run.workload_name
+      ),
+      'workspace', CASE WHEN runtime_workspace.id IS NULL THEN NULL ELSE jsonb_build_object(
+        'id', runtime_workspace.id, 'organizationId', runtime_workspace.organization_id,
+        'agentId', runtime_workspace.agent_id, 'actorKind', runtime_workspace.actor_kind,
+        'actorId', runtime_workspace.actor_id, 'workloadName', runtime_workspace.workload_name,
+        'state', runtime_workspace.state
+      ) END
+    )), '[]'::jsonb)
+    FROM unnest(${sql.placeholder("runtimeVirtualKeyIds")}::text[]) AS requested_runtime_key(id)
+    CROSS JOIN LATERAL (
+      SELECT organization_id, agent_id, actor_kind, actor_id, actor_user_id, task_id, workload_name
+      FROM ${runs} WHERE ${qualified(runs.virtualApiKeyId)} = requested_runtime_key.id::uuid LIMIT 2
+    ) AS runtime_run
+    LEFT JOIN LATERAL (
+      SELECT id, organization_id, agent_id, actor_kind, actor_id, workload_name, state
+      FROM ${workspaces} WHERE ${qualified(workspaces.workloadName)} = runtime_run.workload_name LIMIT 1
+    ) AS runtime_workspace ON true
+  ) ELSE '[]'::jsonb END`;
+}
 
 function buildContextQuery<T extends SelectedFields>(
   database: Pick<ReturnType<typeof getDb>, "select">,

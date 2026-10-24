@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import config from "@/config";
+import db, { schema } from "@/database";
 import {
   A2AContextModel,
   A2ATaskModel,
@@ -7,7 +9,9 @@ import {
   AgentWorkspaceModel,
   VirtualApiKeyModel,
 } from "@/models";
+import ProxyRequestContextModel from "@/models/proxy-request-context";
 import { describe, expect, test } from "@/test";
+import { recordQueries } from "@/test/query-counter";
 import type { AgentRunActorKind } from "@/types/agent-runtime";
 import {
   issueRuntimeBinding,
@@ -77,6 +81,215 @@ async function persistWorkspace(params: {
 }
 
 describe("runtime OpenAPPA identity", () => {
+  test("fresh request snapshots preserve user bindings, conflicts and unbound keys without more reads", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const other = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const otherAgent = await makeAgent({ organizationId: other.id });
+    const user = await makeUser();
+    const first = await persistWorkspace({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      actorUserId: user.id,
+    });
+    const sibling = await persistWorkspace({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      actorUserId: user.id,
+    });
+    const foreign = await persistWorkspace({
+      organizationId: other.id,
+      agentId: otherAgent.id,
+      actorKind: "organization",
+      actorId: other.id,
+    });
+    const loose = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "Unbound test key",
+      scope: "org",
+    });
+    const read = (
+      keys: Array<string | undefined>,
+      organizationId = org.id,
+      includeRuntime = true,
+    ) => {
+      const ids = [...new Set(keys.filter((id): id is string => !!id))];
+      return ProxyRequestContextModel.readForProxy({
+        organizationId,
+        agentId: agent.id,
+        environmentId: null,
+        provider: "openai",
+        modelId: "synthetic-runtime-snapshot",
+        limitVirtualKeyId: ids[0],
+        passthroughVirtualKeyId: ids[1],
+        includeRuntime,
+      });
+    };
+    for (const keys of [
+      [],
+      [first.virtualKeyId],
+      [undefined, first.virtualKeyId, first.virtualKeyId],
+      [sibling.virtualKeyId, first.virtualKeyId],
+      [loose.virtualKey.id],
+      [foreign.virtualKeyId],
+      [first.virtualKeyId, foreign.virtualKeyId],
+      [first.virtualKeyId, loose.virtualKey.id],
+    ]) {
+      const params = { organizationId: org.id, virtualKeyIds: keys };
+      const expected = await resolveRuntimeIdentityByVirtualKeys(params);
+      const state = await read(keys);
+      const measured = await recordQueries(() =>
+        resolveRuntimeIdentityByVirtualKeys({
+          ...params,
+          snapshot: state.runtimeSnapshot,
+        }),
+      );
+      expect(measured.result).toEqual(expected);
+      expect(measured.statements).toHaveLength(0);
+    }
+    const state = await read([first.virtualKeyId]);
+    expect(state.runtimeSnapshot?.candidates[0].run.actorUserId).toBe(user.id);
+    // A snapshot for another credential or organization cannot suppress the
+    // authoritative lookup, including a bound credential and a denied scope.
+    const different = await recordQueries(() =>
+      resolveRuntimeIdentityByVirtualKeys({
+        organizationId: org.id,
+        virtualKeyIds: [sibling.virtualKeyId],
+        snapshot: state.runtimeSnapshot,
+      }),
+    );
+    expect(different.result).toMatchObject({
+      status: "bound",
+      identity: { workspaceId: sibling.workspace.id },
+    });
+    expect(different.statements.length).toBeGreaterThan(0);
+    const crossOrg = await recordQueries(() =>
+      resolveRuntimeIdentityByVirtualKeys({
+        organizationId: other.id,
+        virtualKeyIds: [first.virtualKeyId],
+        snapshot: state.runtimeSnapshot,
+      }),
+    );
+    expect(crossOrg.result).toEqual({ status: "unbound" });
+    expect(crossOrg.statements.length).toBeGreaterThan(0);
+    expect(
+      (await read([first.virtualKeyId], org.id, false)).runtimeSnapshot,
+    ).toBeUndefined();
+  });
+
+  test("snapshots keep ambiguous cross-organization bindings closed and see workspace changes and revocation", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const other = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const bound = await persistWorkspace({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorKind: "organization",
+      actorId: org.id,
+    });
+    const read = async () =>
+      (
+        await ProxyRequestContextModel.readForProxy({
+          organizationId: org.id,
+          agentId: agent.id,
+          environmentId: null,
+          provider: "openai",
+          modelId: "synthetic-runtime-snapshot",
+          passthroughVirtualKeyId: bound.virtualKeyId,
+          includeRuntime: true,
+        })
+      ).runtimeSnapshot;
+    const params = {
+      organizationId: org.id,
+      virtualKeyIds: [bound.virtualKeyId],
+    };
+    const checkUnbound = async () => {
+      expect(await resolveRuntimeIdentityByVirtualKeys(params)).toEqual({
+        status: "unbound",
+      });
+      expect(
+        await resolveRuntimeIdentityByVirtualKeys({
+          ...params,
+          snapshot: await read(),
+        }),
+      ).toEqual({ status: "unbound" });
+    };
+    expect(
+      await resolveRuntimeIdentityByVirtualKeys({
+        ...params,
+        snapshot: await read(),
+      }),
+    ).toMatchObject({ status: "bound" });
+    await db
+      .update(schema.agentWorkspacesTable)
+      .set({ state: "deleting" })
+      .where(eq(schema.agentWorkspacesTable.id, bound.workspace.id));
+    await checkUnbound();
+    await db
+      .update(schema.agentWorkspacesTable)
+      .set({ state: "active", actorId: "another-actor" })
+      .where(eq(schema.agentWorkspacesTable.id, bound.workspace.id));
+    await checkUnbound();
+    await db
+      .update(schema.agentWorkspacesTable)
+      .set({ actorId: org.id, organizationId: other.id })
+      .where(eq(schema.agentWorkspacesTable.id, bound.workspace.id));
+    await checkUnbound();
+    await db
+      .update(schema.agentWorkspacesTable)
+      .set({ organizationId: org.id })
+      .where(eq(schema.agentWorkspacesTable.id, bound.workspace.id));
+    const task = await A2ATaskModel.create({
+      contextId: (
+        await A2AContextModel.create({
+          actorKind: "organization",
+          actorId: other.id,
+        })
+      ).id,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    const duplicate = await AgentRunModel.create({
+      organizationId: other.id,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "organization",
+      actorId: other.id,
+      workloadName: bound.workspace.workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      virtualApiKeyId: bound.virtualKeyId,
+    });
+    expect((await read())?.candidates).toHaveLength(2);
+    await checkUnbound();
+    await db
+      .delete(schema.agentRunsTable)
+      .where(eq(schema.agentRunsTable.id, duplicate.id));
+    expect(
+      await resolveRuntimeIdentityByVirtualKeys({
+        ...params,
+        snapshot: await read(),
+      }),
+    ).toMatchObject({ status: "bound" });
+    await db
+      .update(schema.agentRunsTable)
+      .set({ virtualApiKeyId: null })
+      .where(eq(schema.agentRunsTable.id, bound.run.id));
+    await checkUnbound();
+    expect((await read())?.candidates).toEqual([]);
+  });
+
   test("application workspace bindings cannot be used by another application or task", async ({
     makeOrganization,
     makeAgent,

@@ -200,7 +200,13 @@ class GateIntegrationTests(unittest.TestCase):
             (directory / "current.json").write_text(json.dumps(pr))
             (directory / "event.json").write_text(json.dumps({"pull_request": pr}))
             gh = directory / "gh"
-            gh.write_text(f'#!/bin/sh\ncat "{directory}/current.json"\n')
+            gh.write_text("#!/usr/bin/env python3\n" +
+                "import json, os, sys\n" +
+                f"pr=json.load(open({str(directory / 'current.json')!r}))\n" +
+                "path=sys.argv[2]\n" +
+                "value=({'object':{'sha':os.environ['GITHUB_SHA']}} if '/git/ref/' in path else\n" +
+                "       {'tree':{'sha':os.environ['API_TREE']}} if '/git/commits/' in path else\n" +
+                "       [pr] if '/pulls?' in path else pr)\nprint(json.dumps(value))\n")
             gh.chmod(0o755)
             evidence = directory / "evidence"
             evidence.mkdir()
@@ -213,19 +219,35 @@ class GateIntegrationTests(unittest.TestCase):
                 "GITHUB_SHA": sha, "GITHUB_RUN_ID": "12", "GITHUB_RUN_ATTEMPT": "2",
                 "GITHUB_REPOSITORY": IDENTITY["repository"], "GITHUB_EVENT_NAME": "pull_request",
                 "GITHUB_EVENT_PATH": str(directory / "event.json"), "EVIDENCE_DIR": str(evidence),
+                "CANDIDATE_INDEX": str(directory / "release-candidate-index.json"),
+                "API_TREE": tree,
                 "CLASSIFY_RESULT": "success", "SCAN_REQUIRED": "true", "SCAN_RESULT": "success"}
             def gate(overrides=None):
                 return subprocess.run(["python3", str(policy_path), "gate"], cwd=directory,
                                       env=env | (overrides or {}), capture_output=True, text=True, timeout=10)
-            result = gate()
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            for scan in ("failure", "skipped", "cancelled", "", "neutral"):
-                self.assertNotEqual(gate({"SCAN_RESULT": scan}).returncode, 0)
-            self.assertNotEqual(gate({"GITHUB_RUN_ATTEMPT": "3"}).returncode, 0)
-            next(evidence.iterdir()).unlink()
-            result = gate()
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("Incomplete scan inventory", result.stderr)
+            for event_name in ("pull_request", "merge_group"):
+                payload = {"pull_request": pr} if event_name == "pull_request" else {"merge_group": {
+                    "head_sha": sha, "base_sha": base, "base_ref": "refs/heads/main",
+                    "head_ref": "refs/heads/gh-readonly-queue/main/pr-42-test"}}
+                (directory / "event.json").write_text(json.dumps(payload))
+                env["GITHUB_EVENT_NAME"] = event_name
+                result = gate()
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                index = json.loads((directory / "release-candidate-index.json").read_text())
+                self.assertEqual(index["source_tree"], tree)
+                self.assertEqual(len(index["records"]), len(policy.candidate_matrix(ROOT)["include"]) * 2)
+                for scan in ("failure", "skipped", "cancelled", "", "neutral"):
+                    self.assertNotEqual(gate({"SCAN_RESULT": scan}).returncode, 0)
+                self.assertNotEqual(gate({"GITHUB_RUN_ATTEMPT": "3"}).returncode, 0)
+                if event_name == "merge_group":
+                    self.assertIn("Mixed queue group", gate({"API_TREE": "f" * 40}).stderr)
+                missing = next(evidence.iterdir())
+                original = missing.read_text()
+                missing.unlink()
+                result = gate()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Incomplete scan inventory", result.stderr)
+                missing.write_text(original)
 
 
 if __name__ == "__main__":

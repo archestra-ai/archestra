@@ -1,4 +1,5 @@
 name: Release Please
+run-name: ${{ inputs.handoff-fixture && 'Non-publishing image handoff fixture' || 'Release Please' }}
 
 on:
   push:
@@ -6,6 +7,15 @@ on:
       - main
       - "release/*"
   workflow_dispatch:
+    inputs:
+      handoff-fixture:
+        description: "Run only the non-publishing artifact handoff rehearsal"
+        type: boolean
+        default: false
+      fixture-artifact-id:
+        description: "Tiny scratch-image fixture artifact from this branch's PR workflow"
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -17,7 +27,7 @@ concurrency:
 jobs:
   release-please:
     name: Release Please
-    if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') }}
+    if: ${{ inputs.handoff-fixture || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write # Required to update manifests and release metadata in the repository.
@@ -25,6 +35,7 @@ jobs:
       issues: write # Required for release-please issue comments and labels.
       id-token: write # Required for Workload Identity Federation in downstream release jobs.
     outputs:
+      handoff_fixture: ${{ inputs.handoff-fixture }}
       platform_should_publish: ${{ steps.resolve-release.outputs.should_publish }}
       platform_version: ${{ steps.resolve-release.outputs.version }}
       platform_tag_name: ${{ steps.resolve-release.outputs.tag_name }}
@@ -39,6 +50,7 @@ jobs:
 
       # Recheck after merge against current release refs, before creating a release.
       - name: Check migration upgrade paths across release tracks
+        if: ${{ !inputs.handoff-fixture }}
         working-directory: ./platform
         env:
           BASE_BRANCH: ${{ github.ref_name }}
@@ -48,10 +60,13 @@ jobs:
         id: generate-token
         uses: ./.github/actions/github-app-token
         with:
+          permission-actions: ${{ inputs.handoff-fixture && 'read' || '' }}
+          permission-contents: ${{ inputs.handoff-fixture && 'read' || '' }}
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
       - name: Validate branch release policy
+        if: ${{ !inputs.handoff-fixture }}
         id: policy
         env:
           BRANCH: ${{ github.ref_name }}
@@ -93,6 +108,7 @@ jobs:
       # Splitting lets us create the git tag for the draft release BEFORE the PR build, so
       # the version calculation is always anchored to the real latest release.
       - name: Create releases for merged release PRs
+        if: ${{ !inputs.handoff-fixture }}
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release-please
         with:
@@ -116,6 +132,7 @@ jobs:
       # versions). Resolve a just-created release or an interrupted matching draft before
       # creating that tag ourselves, pinned to the release commit.
       - name: Resolve release to publish or recover
+        if: ${{ !inputs.handoff-fixture }}
         id: resolve-release
         env:
           ACTION_RELEASE_CREATED: ${{ steps.release-please.outputs['platform--release_created'] }}
@@ -170,8 +187,99 @@ jobs:
             echo "release_sha=${RELEASE_SHA}"
           } >> "${GITHUB_OUTPUT}"
 
+      - name: Select the exact scanned queue artifacts
+        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          RELEASE_SHA: ${{ steps.resolve-release.outputs.release_sha }}
+          RELEASE_BRANCH: ${{ github.ref_name }}
+          EXPECTED_VERSION: ${{ steps.resolve-release.outputs.version }}
+          SELECTION_FILE: ${{ runner.temp }}/release-candidate-selection.json
+        run: python3 .github/scripts/release-handoff.py select
+
+      - name: Relay scanned platform archives
+        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
+        uses: ./.github/actions/relay-release-candidate
+        with:
+          image_name: platform
+          selection: ${{ runner.temp }}/release-candidate-selection.json
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: Relay scanned mcp-server-base archives
+        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
+        uses: ./.github/actions/relay-release-candidate
+        with:
+          image_name: mcp-server-base
+          selection: ${{ runner.temp }}/release-candidate-selection.json
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: Relay scanned p4-shim archives
+        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
+        uses: ./.github/actions/relay-release-candidate
+        with:
+          image_name: p4-shim
+          selection: ${{ runner.temp }}/release-candidate-selection.json
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: Relay scanned sandbox-base archives
+        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
+        uses: ./.github/actions/relay-release-candidate
+        with:
+          image_name: sandbox-base
+          selection: ${{ runner.temp }}/release-candidate-selection.json
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: Relay scanned agent-claude-code archives
+        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
+        uses: ./.github/actions/relay-release-candidate
+        with:
+          image_name: agent-claude-code
+          selection: ${{ runner.temp }}/release-candidate-selection.json
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: Relay scanned agent-codex archives
+        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
+        uses: ./.github/actions/relay-release-candidate
+        with:
+          image_name: agent-codex
+          selection: ${{ runner.temp }}/release-candidate-selection.json
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: Relay scanned agent-opencode archives
+        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
+        uses: ./.github/actions/relay-release-candidate
+        with:
+          image_name: agent-opencode
+          selection: ${{ runner.temp }}/release-candidate-selection.json
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: Relay scanned agent-hermes archives
+        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
+        uses: ./.github/actions/relay-release-candidate
+        with:
+          image_name: agent-hermes
+          selection: ${{ runner.temp }}/release-candidate-selection.json
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: Relay scanned agent-openclaw archives
+        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
+        uses: ./.github/actions/relay-release-candidate
+        with:
+          image_name: agent-openclaw
+          selection: ${{ runner.temp }}/release-candidate-selection.json
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: Retain verified candidate selection for publishers
+        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: release-candidate-selection-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-candidate-selection.json
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Create git tag for draft release
-        if: ${{ steps.resolve-release.outputs.should_publish == 'true' }}
+        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
@@ -190,7 +298,7 @@ jobs:
           fi
 
       - name: Resolve previous release on this branch
-        if: ${{ steps.resolve-release.outputs.should_publish == 'true' }}
+        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
         id: previous-release
         env:
           RELEASE_SHA: ${{ steps.resolve-release.outputs.release_sha }}
@@ -203,10 +311,10 @@ jobs:
           echo "Previous release: ${PREVIOUS_TAG:-none}"
 
       - name: Create or update the next release PR
+        if: ${{ !inputs.handoff-fixture && (steps.policy.outputs.create_pr == 'true') }}
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         # Native rolling PRs on each branch. Pause only for consumed cutover overrides,
         # which must be cleared after the seed/final release has built successfully.
-        if: ${{ steps.policy.outputs.create_pr == 'true' }}
         id: release-please-pr
         with:
           token: ${{ steps.generate-token.outputs.token }}
@@ -216,6 +324,7 @@ jobs:
           skip-github-release: true
 
       - name: Log release-please outputs
+        if: ${{ !inputs.handoff-fixture }}
         # HACK to get toJson to sorta print the output to the console without failing this job
         continue-on-error: true
         env:
@@ -224,6 +333,22 @@ jobs:
         run: |
           echo "$RELEASE_OUTPUTS"
           echo "$PR_OUTPUTS"
+      - name: Verify non-publishing cross-run fixture with the existing App
+        if: ${{ inputs.handoff-fixture }}
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          FIXTURE_ARTIFACT_ID: ${{ inputs.fixture-artifact-id }}
+          FIXTURE_DIR: ${{ runner.temp }}/handoff-fixture-relay
+        run: python3 .github/scripts/release-handoff-fixture.py relay
+
+      - name: Relay non-publishing fixture to a tokenless consumer
+        if: ${{ inputs.handoff-fixture }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: handoff-fixture-relay-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/handoff-fixture-relay/*
+          if-no-files-found: error
+          retention-days: 1
 
   build-and-push-mcp-server-docker-image:
     name: Build and push MCP Server Docker image
@@ -414,7 +539,7 @@ jobs:
       - name: Download saved image references
         uses: ./.github/actions/github-download-artifact
         with:
-          pattern: release-image-*
+          pattern: release-image-*-${{ github.run_attempt }}
           path: release-images
           merge-multiple: true
 
@@ -553,3 +678,26 @@ jobs:
           <${RUN_URL}|View failed CI run>"
           jq -n --arg text "$TEXT" '{text: $text}' \
             | curl -sSf -X POST -H 'Content-type: application/json' --data @- "${SLACK_WEBHOOK_URL}"
+
+  verify-handoff-fixture:
+    name: Verify non-publishing artifact handoff
+    needs: [release-please]
+    if: ${{ needs.release-please.outputs.handoff_fixture == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout fixture policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Download same-run fixture without the App token
+        uses: ./.github/actions/github-download-artifact
+        with:
+          name: handoff-fixture-relay-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/handoff-fixture-loaded
+      - name: Verify both architecture image identities without publishing
+        env:
+          FIXTURE_DIR: ${{ runner.temp }}/handoff-fixture-loaded
+        run: python3 .github/scripts/release-handoff-fixture.py load

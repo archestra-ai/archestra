@@ -18,27 +18,48 @@ ARG TARGETARCH
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
       build-essential ca-certificates curl ffmpeg fonts-dejavu-core git jq less libssl3 openssh-client \
-      procps python3 python3-pip python3-venv ripgrep tmux \
+      procps python3 python3-venv ripgrep tmux \
  && rm -rf /var/lib/apt/lists/*
 
 # Keep the real CLI at /usr/bin/gh: /usr/local/bin/gh is the managed credential
 # reader, including when Git invokes its credential helper. Debian's old CLI
 # queries retired Projects fields during PR edits.
 RUN case "$TARGETARCH" in \
-      amd64) checksum=e4d4bb4498e8d007abe545b6568926793ace1b6447da598294a610018cb164be ;; \
-      arm64) checksum=ea4e7a581a32ccad6cc7923cb1576ac5859ba4b9a16ab22eb8f8a96e78e2e961 ;; \
+      amd64) checksum=62ccf747115ddc61237efffdde66a3c8f70ba249433dc64f70801089b59c59c8 ;; \
+      arm64) checksum=4c3e99a50bd8b181a3fe9d69b25dd978bac768148d88f01507c6b4d1ef61a443 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && curl -fsSL --retry 3 \
-      "https://github.com/cli/cli/releases/download/v2.100.0/gh_2.100.0_linux_${TARGETARCH}.tar.gz" \
+      "https://github.com/cli/cli/releases/download/v2.103.2/gh_2.103.2_linux_${TARGETARCH}.tar.gz" \
       -o /tmp/gh.tar.gz \
  && echo "$checksum  /tmp/gh.tar.gz" | sha256sum -c - \
- && tar -xzOf /tmp/gh.tar.gz "gh_2.100.0_linux_${TARGETARCH}/bin/gh" > /usr/bin/gh \
+ && tar -xzOf /tmp/gh.tar.gz "gh_2.103.2_linux_${TARGETARCH}/bin/gh" > /usr/bin/gh \
  && chmod 0755 /usr/bin/gh \
  && rm /tmp/gh.tar.gz
 
 COPY --from=uv /uv /uvx /usr/local/bin/
 COPY --from=nitpicker-build /usr/local/cargo/bin/nitpicker /usr/local/bin/nitpicker
+
+# Bookworm seeds new venvs from an old setuptools wheel. Keep the bootstrap
+# wheel and system pip on fixed, checksum-verified versions.
+RUN curl -fsSL \
+      "https://files.pythonhosted.org/packages/a3/dc/17031897dae0efacfea57dfd3a82fdd2a2aeb58e0ff71b77b87e44edc772/setuptools-80.9.0-py3-none-any.whl" \
+      -o /usr/share/python-wheels/setuptools-80.9.0-py3-none-any.whl \
+ && echo "062d34222ad13e0cc312a4c02d73f059e86a4acbfbdea8f8f76b28c99f306922  /usr/share/python-wheels/setuptools-80.9.0-py3-none-any.whl" | sha256sum -c - \
+ && rm /usr/share/python-wheels/setuptools-66.1.1-py3-none-any.whl \
+ && curl -fsSL \
+      "https://files.pythonhosted.org/packages/44/3c/d717024885424591d5376220b5e836c2d5293ce2011523c9de23ff7bf068/pip-25.3-py3-none-any.whl" \
+      -o /tmp/pip-25.3-py3-none-any.whl \
+ && echo "9655943313a94722b7774661c21049070f6bbb0a1516bf02f7c8d5d9201514cd  /tmp/pip-25.3-py3-none-any.whl" | sha256sum -c - \
+ && mkdir -p /usr/local/lib/python3.11/dist-packages \
+ && python3 -m zipfile -e /tmp/pip-25.3-py3-none-any.whl /usr/local/lib/python3.11/dist-packages \
+ && rm /tmp/pip-25.3-py3-none-any.whl \
+ && printf '%s\n' '#!/bin/sh' 'exec python3 -m pip "$@"' > /usr/local/bin/pip \
+ && chmod 0755 /usr/local/bin/pip \
+ && ln -s pip /usr/local/bin/pip3 \
+ && python3 -m venv /tmp/agent-python-check \
+ && /tmp/agent-python-check/bin/python -c "import setuptools; assert setuptools.__version__ == '80.9.0'" \
+ && rm -rf /tmp/agent-python-check
 
 # Tool environments and browsers stay outside HOME so a workspace mount cannot
 # hide them. Skills are loaded at run time; no workflow or credentials ship here.
@@ -54,18 +75,20 @@ RUN uv venv --python /usr/bin/python3 /opt/agent-tools \
 
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME/bin:$PNPM_HOME:$PATH
-ENV COREPACK_DEFAULT_TO_LATEST=0
-RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
-
-# npm's separately bundled Undici is not covered by application lockfiles.
-# 6.29.1 fixes CVE-2026-109869 and has cleared the seven-day release-age window.
-# Fetch the replacement before removing the copy npm itself uses to fetch it.
-RUN cd /usr/local/lib/node_modules/npm/node_modules \
- && npm pack undici@6.29.1 \
- && rm -rf undici \
- && tar -xzf undici-6.29.1.tgz \
- && mv package undici \
- && rm undici-6.29.1.tgz
+RUN corepack disable \
+ && rm -rf /usr/local/lib/node_modules/corepack /usr/local/lib/node_modules/npm \
+ && curl -fsSL https://registry.npmjs.org/npm/-/npm-11.21.1.tgz -o /tmp/npm.tgz \
+ && echo 'dd77c48eb845f4856c2cdba347cfb52bd877a2655a1ea48ff0c4796e3df9dd7b  /tmp/npm.tgz' | sha256sum -c - \
+ && mkdir -p /usr/local/lib/node_modules/npm \
+ && tar -xzf /tmp/npm.tgz --strip-components=1 -C /usr/local/lib/node_modules/npm \
+ && curl -fsSL https://registry.npmjs.org/undici/-/undici-6.29.1.tgz -o /tmp/undici.tgz \
+ && echo '29c4b8e0b2d86cb8795571c1959012ce057a14ecfd34858335f47c31e770a04f  /tmp/undici.tgz' | sha256sum -c - \
+ && rm -rf /usr/local/lib/node_modules/npm/node_modules/undici \
+ && mkdir -p /usr/local/lib/node_modules/npm/node_modules/undici \
+ && tar -xzf /tmp/undici.tgz --strip-components=1 -C /usr/local/lib/node_modules/npm/node_modules/undici \
+ && rm /tmp/npm.tgz /tmp/undici.tgz \
+ && npm install --global --ignore-scripts pnpm@11.28.7 \
+ && node --version && npm --version && pnpm --version
 
 COPY docker_images/agent/bin /usr/local/bin
 # The backend sends this program to the workspace inline, so the image needs no
@@ -144,8 +167,15 @@ RUN --network=none \
 
 FROM agent-base AS agent-hermes
 USER root
+# Hermes 0.19.0 pins vulnerable versions; override its transitive packages
+# until upstream publishes a fixed release. The startup tests below exercise
+# the resulting runtime, including gateway discovery.
 RUN python3 -m venv /opt/hermes \
  && /opt/hermes/bin/pip install --no-cache-dir 'hermes-agent[mcp]==0.19.0' \
+ && /opt/hermes/bin/pip install --no-cache-dir \
+      Pillow==13.0.0 PyJWT==2.14.0 certifi==2026.10.19 \
+      cryptography==50.0.0 mcp==1.28.1 starlette==1.3.1 \
+      jaraco-context==6.1.0 wheel==0.46.2 \
  && HERMES_SITE_PACKAGES=$(/opt/hermes/bin/python -c 'import site; print(site.getsitepackages()[0])') \
  && printf '%s\n' docker > "${HERMES_SITE_PACKAGES}/.install_method" \
  && ln -s /opt/hermes/bin/hermes /usr/local/bin/hermes \
@@ -165,7 +195,9 @@ RUN --network=none \
 
 FROM agent-base AS agent-openclaw
 USER root
-RUN pnpm add --global openclaw@2026.7.1-2 \
+COPY docker_images/agent/openclaw /opt/agent-openclaw
+RUN pnpm --dir /opt/agent-openclaw install --frozen-lockfile \
+ && ln -s /opt/agent-openclaw/node_modules/.bin/openclaw /usr/local/bin/openclaw \
  && openclaw --version \
  && chown -R 1000:1000 /home/node
 RUN --network=none \

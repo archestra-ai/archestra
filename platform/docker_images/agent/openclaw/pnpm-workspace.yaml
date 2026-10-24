@@ -1,0 +1,15 @@
+ignoreScripts: true
+minimumReleaseAge: 10080
+minimumReleaseAgeExclude:
+  - "@modelcontextprotocol/sdk"
+  - brace-expansion
+  - tar
+  - undici
+  - zod
+overrides:
+  "@modelcontextprotocol/sdk@<1.32.0": 1.32.0
+  "brace-expansion@>=5.0.0 <5.0.12": 5.0.12
+  "tar@>=7.0.0 <7.5.21": 7.5.21
+  "undici@>=6.0.0 <6.29.1": 6.29.1
+  "undici@>=8.0.0 <8.12.2": 8.12.2
+  "zod@>=4.0.0 <4.6.6": 4.6.6

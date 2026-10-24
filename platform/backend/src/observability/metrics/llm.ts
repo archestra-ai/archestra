@@ -16,7 +16,9 @@ import type {
 import type { GoogleGenAI } from "@google/genai";
 import client from "prom-client";
 import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
+import { LRUCacheManager } from "@/in-memory-lru-cache";
 import logger from "@/logging";
+import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { getUsageTokens as getAnthropicUsage } from "@/routes/proxy/adapters/anthropic";
 import { getUsageTokens as getCohereUsage } from "@/routes/proxy/adapters/cohere";
 import { getUsageTokens as getGeminiUsage } from "@/routes/proxy/adapters/gemini";
@@ -517,7 +519,12 @@ export function reportLLMCost({
     return;
   } else if (!cost) {
     // Zero is a valid settled cost (for example a free model or no tokens).
-    if (cost !== 0) logger.warn("Cost not specified when reporting");
+    // An unpriced model lacks a cost on every request: say so once per model.
+    const unpriced = `${provider}:${model}`;
+    if (cost !== 0 && !unpricedModelsWarned.has(unpriced)) {
+      unpricedModelsWarned.set(unpriced, true);
+      logger.warn({ provider, model }, "Cost not specified when reporting");
+    }
     return;
   }
   llmCostTotal.inc({
@@ -1139,3 +1146,7 @@ function observeGeminiError(
     exemplarLabels: getExemplarLabels(),
   });
 }
+
+const unpricedModelsWarned = registerProcessLocalCache(
+  new LRUCacheManager<true>({ maxSize: 1_000, defaultTtl: 60 * 60 * 1000 }),
+);

@@ -788,7 +788,7 @@ describe("reportLLMCost", () => {
     initializeMetrics([]);
   });
 
-  test("zero settled cost is quiet while missing cost still warns", () => {
+  test("zero settled cost is quiet while missing cost warns once per model", () => {
     const params = {
       provider: "openai" as const,
       profile: testAgent,
@@ -800,9 +800,14 @@ describe("reportLLMCost", () => {
     expect(counterInc).not.toHaveBeenCalled();
     expect(logger.warn).not.toHaveBeenCalled();
     reportLLMCost({ ...params, cost: undefined });
+    reportLLMCost({ ...params, cost: undefined });
+    expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith(
+      { provider: "openai", model: "gpt-4" },
       "Cost not specified when reporting",
     );
+    reportLLMCost({ ...params, model: "gpt-5", cost: undefined });
+    expect(logger.warn).toHaveBeenCalledTimes(2);
     expect(counterInc).not.toHaveBeenCalled();
   });
 

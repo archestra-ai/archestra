@@ -4,10 +4,8 @@ import { usePathname } from "next/navigation";
 import {
   type CSSProperties,
   startTransition,
-  useCallback,
   useEffect,
   useState,
-  useSyncExternalStore,
 } from "react";
 import {
   MOBILE_HEADER_ACTIONS_CONTAINER_ID,
@@ -40,6 +38,7 @@ import {
 } from "@/lib/config/connectivity";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsAppLoading } from "@/lib/hooks/use-is-app-loading";
+import { useSidebarOpenState } from "@/lib/hooks/use-sidebar-open";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { useOrganization } from "@/lib/organization.query";
 import { useIsShellSeeded, useShellReady } from "@/lib/shell-deferral";
@@ -61,6 +60,7 @@ import {
 
 interface AppShellProps {
   children: React.ReactNode;
+  initialSidebarOpen?: boolean | null;
 }
 
 /**
@@ -85,7 +85,10 @@ function useTwoFactorEnrollmentRedirect(enabled: boolean): boolean {
   return shouldRedirect;
 }
 
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({
+  children,
+  initialSidebarOpen = null,
+}: AppShellProps) {
   const pathname = usePathname();
   const isBrowserPreview = pathname.startsWith("/chat/browser-preview/");
   const isAuthPage = pathname.startsWith("/auth/");
@@ -106,7 +109,7 @@ export function AppShell({ children }: AppShellProps) {
   const isChat = pathname === "/chat" || pathname.startsWith("/chat/");
   const isProjectDetail = /^\/projects\/[^/]+/.test(pathname);
   const isViewportLocked = isChat || isProjectDetail;
-  const [sidebarOpen, setSidebarOpen] = useSidebarOpenState();
+  const [sidebarOpen, setSidebarOpen] = useSidebarOpenState(initialSidebarOpen);
   const sidebarWidth = useSidebarWidthState();
   // Every signed-in user sees the active banner.
   // The banner waits for the page's first data (see useShellReady).
@@ -153,6 +156,11 @@ export function AppShell({ children }: AppShellProps) {
       </>
     );
   }
+
+  // Without a cookie (an older browser preference or blocked cookies), resolve
+  // local storage before drawing the shell at the wrong width. Once remembered,
+  // later documents render their actual state directly into the server HTML.
+  if (sidebarOpen === null) return null;
 
   // Authenticated shell. It renders as soon as we know the visitor is signed
   // in — the permission check that decides the sidebar's default width no
@@ -342,48 +350,6 @@ function NavAwareSidebarCircleToggle() {
       <SidebarCircleToggle loading={loading} showDot={showCollapsedToggleDot} />
     </>
   );
-}
-
-/**
- * Whether the sidebar is open: the person's own last choice, remembered in
- * this browser, and open until they make one.
- */
-function useSidebarOpenState(): [boolean, (open: boolean) => void] {
-  const [choice, setChoice] = useState<boolean | null>(null);
-  const remembered = useSyncExternalStore(
-    subscribeToStorage,
-    readRememberedSidebarOpen,
-    () => null,
-  );
-
-  const open = choice ?? remembered ?? true;
-  const setOpen = useCallback((next: boolean) => {
-    setChoice(next);
-    try {
-      window.localStorage.setItem(SIDEBAR_OPEN_STORAGE_KEY, String(next));
-    } catch {
-      // Storage can be unavailable (private mode); the choice still holds
-      // for this page.
-    }
-  }, []);
-
-  return [open, setOpen];
-}
-
-const SIDEBAR_OPEN_STORAGE_KEY = "archestra-sidebar-open";
-
-function readRememberedSidebarOpen(): boolean | null {
-  try {
-    const stored = window.localStorage.getItem(SIDEBAR_OPEN_STORAGE_KEY);
-    return stored === "true" ? true : stored === "false" ? false : null;
-  } catch {
-    return null;
-  }
-}
-
-function subscribeToStorage(onChange: () => void) {
-  window.addEventListener("storage", onChange);
-  return () => window.removeEventListener("storage", onChange);
 }
 
 // Visually hidden until focused; the first tab stop on every authenticated

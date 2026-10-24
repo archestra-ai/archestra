@@ -1,12 +1,12 @@
 ---
 title: Performance & Latency
-description: Latency added by the LLM proxy, measured with external HTTP requests
+description: Latency added by the LLM proxy and the MCP gateway, measured with external HTTP requests
 order: 5
-lastUpdated: 2026-10-23
+lastUpdated: 2026-10-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json.
-Release benchmark CI updates only the marked results table. Do not hand-edit
+Release benchmark CI updates only the marked results tables. Do not hand-edit
 its numbers or add run dates to this page's prose. Tested revisions, dates,
 host settings and raw measurements belong in the benchmark artifacts.
 -->
@@ -28,6 +28,19 @@ Added latency is the time spent in Archestra, excluding that request's upstream 
 <!-- proxy-benchmark-results:end -->
 
 The measurement includes authentication, routing and awaited request persistence. It subtracts the upstream call duration within each request before calculating percentiles; it does not subtract separate percentile values.
+
+## MCP Gateway Results
+
+A tool call through the MCP gateway gets its user's access checks and a call log entry before the MCP server's answer reaches the client. The table shows the time that adds, excluding the MCP server's own response time.
+
+<!-- mcp-gateway-benchmark-results:start -->
+| Runner resources | Concurrent tool calls | Median added latency | P95 added latency | P99 added latency |
+| --- | ---: | ---: | ---: | ---: |
+| 4 vCPU / ~16 GiB RAM | 50 | 525.53 ms | 733.18 ms | 860.53 ms |
+<!-- mcp-gateway-benchmark-results:end -->
+
+- Each call is a `tools/call` request to a gateway with one assigned tool, authenticated with a user token, against a mock MCP server on the same runner.
+- The measurement covers authentication, tool lookup, access checks and the awaited call log write.
 
 <span id="environment"></span>
 <span id="method"></span>

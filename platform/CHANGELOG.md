@@ -1,5 +1,67 @@
 # Changelog
 
+## [1.5.0-rc.7](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.6...platform-v1.5.0-rc.7) (2026-10-24)
+
+
+### Features
+
+* **agent-runtime:** add the Grok Build catalog harness ([#9537](https://github.com/archestra-ai/archestra/issues/9537)) ([5f5717b](https://github.com/archestra-ai/archestra/commit/5f5717bc49ca313351cb7451514a72bdf36a9dfd))
+* **agent-runtime:** classify failed runs with a stable failure code ([#9519](https://github.com/archestra-ai/archestra/issues/9519)) ([65eb157](https://github.com/archestra-ai/archestra/commit/65eb1573a4f6cf600945a014e91133b9a8a4593b))
+* **bench:** add disabled distributed native guardrails comparisons ([#9512](https://github.com/archestra-ai/archestra/issues/9512)) ([e58dce4](https://github.com/archestra-ai/archestra/commit/e58dce468796001becfa76f981c625bb27414014))
+* **deploy:** move staging and demo behind the VPN ([#9607](https://github.com/archestra-ai/archestra/issues/9607)) ([a073c23](https://github.com/archestra-ai/archestra/commit/a073c2361dc61d5a364e7fd954852360fe7bde0b))
+* **llm:** enforce scoped spend token and request limits ([#9549](https://github.com/archestra-ai/archestra/issues/9549)) ([25954f7](https://github.com/archestra-ai/archestra/commit/25954f7107b7c13129acaa931f01d6f4eb50be9d))
+* **pi:** add native coding agent connections and guardrails ([#9551](https://github.com/archestra-ai/archestra/issues/9551)) ([c91317a](https://github.com/archestra-ai/archestra/commit/c91317a01b1bf32a5df8798a38a1d08b6a829473))
+* **schedules:** compact execution history and show agent schedules ([#9561](https://github.com/archestra-ai/archestra/issues/9561)) ([4d66460](https://github.com/archestra-ai/archestra/commit/4d6646024660d88a860d8125c8a3c8d715e1e6e4))
+
+
+### Bug Fixes
+
+* **agent-runtime:** reduce space above the run notice ([#9554](https://github.com/archestra-ai/archestra/issues/9554)) ([f4d72ba](https://github.com/archestra-ai/archestra/commit/f4d72ba06ec1b1a2aaed6529219cc9259e4635fc))
+* **agent-runtime:** serialize concurrent recording replacements ([#9591](https://github.com/archestra-ai/archestra/issues/9591)) ([3436462](https://github.com/archestra-ai/archestra/commit/34364629b1b4fac9ac940e18eb898d5810721d9f))
+* **agent:** replace vulnerable runtime dependencies ([#9617](https://github.com/archestra-ai/archestra/issues/9617)) ([b59e059](https://github.com/archestra-ai/archestra/commit/b59e0590fd2435efe8a1bd3322077d03dcc413a3))
+* **chat:** show a guarded tool call as one peel with its Guardrails steps ([#9042](https://github.com/archestra-ai/archestra/issues/9042)) ([8a69351](https://github.com/archestra-ai/archestra/commit/8a693511d331de2e61c649aef661ee683e615c54))
+* **connect:** keep OpenCode and Kilo's own providers and filter their models ([#9521](https://github.com/archestra-ai/archestra/issues/9521)) ([081e1f4](https://github.com/archestra-ai/archestra/commit/081e1f4db60a31f9b1b072d21e62d62b495bab88))
+* **connect:** send the passthrough key on passthrough routes added after setup ([#9534](https://github.com/archestra-ai/archestra/issues/9534)) ([11f8190](https://github.com/archestra-ai/archestra/commit/11f8190f48d881ad6d0adeca95e91396f793ca6f))
+* **deps:** move tokio to 1.53.3 for RUSTSEC-2026-0386 ([e76a811](https://github.com/archestra-ai/archestra/commit/e76a811dfad3b750fcb852183595f9ae0577f044))
+* **deps:** move undici to 7.30.1 and msal-node to 7.1.0 ([#9590](https://github.com/archestra-ai/archestra/issues/9590)) ([896d97c](https://github.com/archestra-ai/archestra/commit/896d97c1e8f7dbdfdcd457ddd0521950122137e2))
+* **deps:** patch compressed body parsing in release images ([#9574](https://github.com/archestra-ai/archestra/issues/9574)) ([3c61112](https://github.com/archestra-ai/archestra/commit/3c611120e6ed9660ddf0617221a14e8238af0832))
+* **deps:** require patched Zod in Platform ([#9563](https://github.com/archestra-ai/archestra/issues/9563)) ([e6e02bf](https://github.com/archestra-ai/archestra/commit/e6e02bfd29294c0ad7f9d52a4351eb440d8cbb08))
+* **docker:** move the platform image to Node 24.22.1 ([#9525](https://github.com/archestra-ai/archestra/issues/9525)) ([870b7e6](https://github.com/archestra-ai/archestra/commit/870b7e683733f098319564f9791bb86d82857d1f))
+* **docker:** patch npm HTTP client in agent catalog images ([#9606](https://github.com/archestra-ai/archestra/issues/9606)) ([f5bf98e](https://github.com/archestra-ai/archestra/commit/f5bf98e0b24b498ed6861052e1ba6bc2fb1e1ad7))
+* **docker:** repair MCP Python wheels and npm HTTP dependency ([#9600](https://github.com/archestra-ai/archestra/issues/9600)) ([ed65293](https://github.com/archestra-ai/archestra/commit/ed65293111d23fb65b47340589824b4a789cf9b8))
+* **docker:** require Node.js and Brotli fixes for CVE-2026-111497 ([#9577](https://github.com/archestra-ai/archestra/issues/9577)) ([591e18f](https://github.com/archestra-ai/archestra/commit/591e18f779f9afa5668a437b7ff2129ba85ef0ab))
+* **docker:** require patched Brotli in the sandbox base for CVE-2026-111497 ([#9595](https://github.com/archestra-ai/archestra/issues/9595)) ([613c68b](https://github.com/archestra-ai/archestra/commit/613c68b8b696ffc020fafadb317e6964559bc6d7))
+* **docker:** require patched MCP runtime Node package ([#9567](https://github.com/archestra-ai/archestra/issues/9567)) ([02141c4](https://github.com/archestra-ai/archestra/commit/02141c461f34aa05693382ad281e0a65009178b2))
+* **docker:** require patched Zod in the MCP image ([#9562](https://github.com/archestra-ai/archestra/issues/9562)) ([e0e0dd7](https://github.com/archestra-ai/archestra/commit/e0e0dd774ea331a6358dbba88980410c523f471d))
+* **docker:** take Node.js 24.22.1 for the MCP image from the official build ([#9583](https://github.com/archestra-ai/archestra/issues/9583)) ([d1086fd](https://github.com/archestra-ai/archestra/commit/d1086fd8557fac616cbc90545d9f31eb6f9187a5))
+* enforce authorization on identity and connector operations ([#9597](https://github.com/archestra-ai/archestra/issues/9597)) ([ba33d67](https://github.com/archestra-ai/archestra/commit/ba33d6700d4d9d05896e9a4000742363903d4947))
+* **gemini:** discover and route Nano Banana image models ([#9558](https://github.com/archestra-ai/archestra/issues/9558)) ([b45262e](https://github.com/archestra-ai/archestra/commit/b45262e0cc9c8c9e98ebd8af80e8562593e6d8bb))
+* **helm:** restore independent web and worker scheduling ([#9530](https://github.com/archestra-ai/archestra/issues/9530)) ([efa1641](https://github.com/archestra-ai/archestra/commit/efa164169a74803618eef957081de7efc25e1595))
+* **kimi:** default to Kimi K3.1 Pro instead of the retired K2 preview ([#9570](https://github.com/archestra-ai/archestra/issues/9570)) ([834a4c3](https://github.com/archestra-ai/archestra/commit/834a4c31d9677774a10397426af92ace8fc61440))
+* **knowledge-base:** parse small PDFs on Node 24.22.1 ([#9581](https://github.com/archestra-ai/archestra/issues/9581)) ([0bc5a92](https://github.com/archestra-ai/archestra/commit/0bc5a92478f40d615abef3e0c117aa95204b43de))
+* **metrics:** keep exemplar labels within the OpenMetrics limit ([#9511](https://github.com/archestra-ai/archestra/issues/9511)) ([683b303](https://github.com/archestra-ai/archestra/commit/683b303b78157995803db5cc3b4ea10f48096a2e))
+* **ms-teams:** generate the Teams app manifest on schema 1.30 and list /sign-out ([#9532](https://github.com/archestra-ai/archestra/issues/9532)) ([03b6081](https://github.com/archestra-ai/archestra/commit/03b6081c2ec1657c9c1d58aa42b6634c695775a5))
+* **oauth:** validate discovered metadata identities ([#9555](https://github.com/archestra-ai/archestra/issues/9555)) ([ea98c0d](https://github.com/archestra-ai/archestra/commit/ea98c0de60f20204b8b7b97e86be2f86bd804fc2))
+* **openappa:** decouple diagnostic forwarding from analytics with explicit opt-in ([#9495](https://github.com/archestra-ai/archestra/issues/9495)) ([09bdbfe](https://github.com/archestra-ai/archestra/commit/09bdbfe79fb69cca4eaad402ad1fe58cd2aa06ef))
+* **proxy:** serve Responses on the xAI route ([#9524](https://github.com/archestra-ai/archestra/issues/9524)) ([04bee8b](https://github.com/archestra-ai/archestra/commit/04bee8b1d28a4502369612bb7fdaab2920095914))
+* remove vulnerable legacy Zod from SDK dependencies ([#9579](https://github.com/archestra-ai/archestra/issues/9579)) ([6d3e502](https://github.com/archestra-ai/archestra/commit/6d3e502ca3931c1ba01914519c8706fd13cc01a5))
+* **runtime:** await backend discovery before starting tasks ([#9543](https://github.com/archestra-ai/archestra/issues/9543)) ([dc5cc4b](https://github.com/archestra-ai/archestra/commit/dc5cc4b3428cb8cef2564288268853fd5b453276))
+* **sandbox:** replace vulnerable runtime bootstrap dependencies ([#9614](https://github.com/archestra-ai/archestra/issues/9614)) ([68bd37a](https://github.com/archestra-ai/archestra/commit/68bd37a2424960fc3bd783659a9c759bdae6c89f))
+
+
+### Performance Improvements
+
+* **proxy:** batch request state and reuse interaction insert plans ([#9610](https://github.com/archestra-ai/archestra/issues/9610)) ([5d2c76b](https://github.com/archestra-ai/archestra/commit/5d2c76b6d78b667909ae21c8d41124434d27409a))
+* **proxy:** reduce gateway and caller database work ([#9604](https://github.com/archestra-ai/archestra/issues/9604)) ([9ea2d54](https://github.com/archestra-ai/archestra/commit/9ea2d5491d9f394b7da098fb0c9f9f6bd3ab1f11))
+* **proxy:** reduce overhead and automate release benchmarks ([#9545](https://github.com/archestra-ai/archestra/issues/9545)) ([a6d3481](https://github.com/archestra-ai/archestra/commit/a6d3481e396c47163ea6f749bfa7f671e3d385a8))
+
+
+### Miscellaneous Chores
+
+* **deps:** ignore the ctutils mask advisory until its fix clears the release-age rule ([#9520](https://github.com/archestra-ai/archestra/issues/9520)) ([2c8c5f0](https://github.com/archestra-ai/archestra/commit/2c8c5f043597183523fc2240afc7e7569ddfd403))
+* update client versions ([#9518](https://github.com/archestra-ai/archestra/issues/9518)) ([0cdf95b](https://github.com/archestra-ai/archestra/commit/0cdf95b1484f81843c09f431fa0c4575d8585234))
+* update client versions ([#9605](https://github.com/archestra-ai/archestra/issues/9605)) ([43160bc](https://github.com/archestra-ai/archestra/commit/43160bc3db6ef1b8020008f3a4ad8be72a5fdeee))
+
 ## [1.5.0-rc.6](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.5...platform-v1.5.0-rc.6) (2026-10-22)
 
 

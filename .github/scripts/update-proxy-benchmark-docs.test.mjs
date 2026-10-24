@@ -14,6 +14,10 @@ Introduction.
 old table
 <!-- proxy-benchmark-results:end -->
 Timing boundaries and setup.
+<!-- mcp-gateway-benchmark-results:start -->
+old mcp table
+<!-- mcp-gateway-benchmark-results:end -->
+MCP setup.
 `;
 
 function fixture() {
@@ -28,7 +32,7 @@ function fixture() {
     repeats: 2,
     requestsPerBlock: 300,
     streamingRequestsPerBlock: 60,
-    rows: ["chat", "tools", "stream"].map((scenario) => ({
+    rows: ["chat", "tools", "stream", "mcp"].map((scenario) => ({
       scenario,
       concurrency: 50,
       attempted: 600,
@@ -112,10 +116,20 @@ test("only the marked table changes; rendering is idempotent and has no dates or
     p95: 7,
     p99: 8,
   };
+  f.summary.rows.find((row) => row.scenario === "mcp").overheadMs = {
+    p50: 1,
+    p95: 2,
+    p99: 3,
+  };
   f.summary.rows.reverse();
   const result = updateBenchmarkTable(markdown, f.summary);
   assert.ok(result.startsWith(markdown.split("old table")[0]));
-  assert.ok(result.endsWith(markdown.split("old table")[1]));
+  assert.ok(result.includes("-->\nTiming boundaries and setup.\n<!--"));
+  assert.ok(result.endsWith(markdown.split("old mcp table")[1]));
+  assert.match(
+    result,
+    /Concurrent tool calls \| Median added latency[^]*\| 50 \| 1.00 ms \| 2.00 ms \| 3.00 ms \|/,
+  );
   assert.match(result, /Concurrent HTTP requests \| Median added latency/);
   assert.match(
     result,
@@ -199,6 +213,9 @@ test("partial, unsuccessful, missing, duplicate or injected results cannot repla
     (s) => {
       s.rows.pop();
     },
+    (s) => {
+      s.rows[3].overheadMs = null;
+    },
   ]) {
     const f = fixture();
     change(f.summary);
@@ -208,6 +225,7 @@ test("partial, unsuccessful, missing, duplicate or injected results cannot repla
     "no markers",
     markdown + markdown,
     markdown.replace("start", "missing"),
+    markdown.replace("mcp-gateway-benchmark-results:end", "missing"),
   ])
     assert.throws(() => updateBenchmarkTable(content, fixture().summary));
 });

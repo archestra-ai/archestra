@@ -45,6 +45,7 @@ import {
 } from "drizzle-orm";
 import { type AnyPgColumn, alias, unionAll } from "drizzle-orm/pg-core";
 import { z } from "zod";
+import { requestScope } from "@/auth/request-scope";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
@@ -536,6 +537,29 @@ class AgentModel {
   /**
    * Populate author identity on agents by looking up users in one batch.
    */
+  /**
+   * The fields tool resolution reads repeatedly during one call, read together
+   * once per request scope. Outside a memoizing request this is a fresh read,
+   * so a changed setting applies to the next call.
+   */
+  private static findToolAccessFields(
+    id: string,
+  ): Promise<{ environmentId: string | null; accessAllTools: boolean } | null> {
+    return requestScope.memo(`agent-tool-access:${id}`, async () => {
+      const [result] = await db
+        .select({
+          environmentId: schema.agentsTable.environmentId,
+          accessAllTools: schema.agentsTable.accessAllTools,
+        })
+        .from(schema.agentsTable)
+        .where(
+          and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)),
+        )
+        .limit(1);
+      return result ?? null;
+    });
+  }
+
   private static async populateAuthorNames(
     agents: Pick<
       Agent,
@@ -2922,13 +2946,7 @@ class AgentModel {
   }
 
   static async findEnvironmentId(id: string): Promise<string | null> {
-    const [result] = await db
-      .select({ environmentId: schema.agentsTable.environmentId })
-      .from(schema.agentsTable)
-      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
-      .limit(1);
-
-    return result?.environmentId ?? null;
+    return (await AgentModel.findToolAccessFields(id))?.environmentId ?? null;
   }
 
   /**
@@ -2965,18 +2983,12 @@ class AgentModel {
   /**
    * Whether the agent's "access all tools" toggle is on — the per-agent opt-in
    * for dynamic tool access via search_tools/run_tool. Lean read on the tool
-   * dispatch path; intentionally not cached so toggling the setting affects
-   * the next discovery/dispatch call. Defaults to false when the agent is
-   * missing or deleted.
+   * dispatch path; never cached across requests, so toggling the setting
+   * affects the next discovery/dispatch call. Defaults to false when the agent
+   * is missing or deleted.
    */
   static async getAccessAllTools(id: string): Promise<boolean> {
-    const [result] = await db
-      .select({ accessAllTools: schema.agentsTable.accessAllTools })
-      .from(schema.agentsTable)
-      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
-      .limit(1);
-
-    return result?.accessAllTools ?? false;
+    return (await AgentModel.findToolAccessFields(id))?.accessAllTools ?? false;
   }
 
   /**

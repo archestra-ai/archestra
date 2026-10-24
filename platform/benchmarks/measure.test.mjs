@@ -9,7 +9,11 @@ import {
   runBlock,
   summarize,
 } from "./measure.mjs";
-import { createMockServer, MOCK_CONTENT } from "./mock-upstream.mjs";
+import {
+  createMockServer,
+  MOCK_CONTENT,
+  MOCK_MCP_TOOL,
+} from "./mock-upstream.mjs";
 
 test("server timing accepts per-request durations and rejects misleading or partial measurements", () => {
   assert.deepEqual(
@@ -224,4 +228,31 @@ test("warmup failure stops scheduling and never starts a measured block", async 
     /Warmup failed/,
   );
   assert.equal(requests, 3);
+});
+
+test("the mock MCP server answers tools/call with the content an MCP measurement expects", async (t) => {
+  const server = createMockServer();
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  const url = `http://127.0.0.1:${server.address().port}/mcp`;
+  const call = (name) =>
+    measureRequest({
+      url,
+      body: {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name, arguments: { name: "widget" } },
+      },
+      expectedContent: MOCK_CONTENT,
+    });
+
+  assert.equal((await call(MOCK_MCP_TOOL)).ok, true);
+  const unknown = await call("unknown_tool");
+  assert.equal(unknown.ok, false);
+  assert.match(unknown.error, /Unexpected mock response content/);
 });

@@ -4,8 +4,19 @@ import { isPlatformReleasePr } from "./proxy-benchmark-baseline.mjs";
 export const benchmarkDocsPath =
   "docs/pages/admin/observability/performance-benchmarks.md";
 export const benchmarkDocsCommit = "docs: update proxy benchmark results";
-const start = "<!-- proxy-benchmark-results:start -->";
-const end = "<!-- proxy-benchmark-results:end -->";
+const blocks = {
+  chat: {
+    start: "<!-- proxy-benchmark-results:start -->",
+    end: "<!-- proxy-benchmark-results:end -->",
+    requests: "Concurrent HTTP requests",
+  },
+  mcp: {
+    start: "<!-- mcp-gateway-benchmark-results:start -->",
+    end: "<!-- mcp-gateway-benchmark-results:end -->",
+    requests: "Concurrent tool calls",
+  },
+};
+const workloads = ["chat", "tools", "stream", "mcp"];
 const sha = /^[a-f0-9]{40}$/;
 
 export function updateBenchmarkTable(markdown, summary) {
@@ -18,8 +29,10 @@ export function updateBenchmarkTable(markdown, summary) {
     summary.logicalCpus <= 0 ||
     !Number.isFinite(summary.memoryGiB) ||
     summary.memoryGiB <= 0 ||
-    summary.rows.length !== 3 ||
-    new Set(summary.rows.map((row) => row.scenario)).size !== 3 ||
+    summary.rows.length !== workloads.length ||
+    workloads.some(
+      (scenario) => !summary.rows.some((row) => row.scenario === scenario),
+    ) ||
     summary.rows.some(
       (row) =>
         row.successPercent !== 100 ||
@@ -39,28 +52,31 @@ export function updateBenchmarkTable(markdown, summary) {
     throw new Error(
       "Only complete, successful benchmark tables can update docs",
     );
-  if (
-    typeof markdown !== "string" ||
-    Buffer.byteLength(markdown) > 256000 ||
-    markdown.split(start).length !== 2 ||
-    markdown.split(end).length !== 2 ||
-    markdown.indexOf(start) > markdown.indexOf(end)
-  )
+  if (typeof markdown !== "string" || Buffer.byteLength(markdown) > 256000)
     throw new Error("Benchmark docs must contain exactly one results block");
-  const request = summary.rows.find((row) => row.scenario === "chat");
-  const table = [
-    "| Runner resources | Concurrent HTTP requests | Median added latency | P95 added latency | P99 added latency |",
-    "| --- | ---: | ---: | ---: | ---: |",
-    `| ${summary.logicalCpus} vCPU / ~${Math.round(summary.memoryGiB)} GiB RAM | ${request.concurrency} | ${["p50", "p95", "p99"].map((key) => `${request.overheadMs[key].toFixed(2)} ms`).join(" | ")} |`,
-  ].join("\n");
-  return (
-    markdown.slice(0, markdown.indexOf(start) + start.length) +
-    `\n${table}\n` +
-    markdown.slice(markdown.indexOf(end))
-  );
+  let updated = markdown;
+  for (const [scenario, { start, end, requests }] of Object.entries(blocks)) {
+    if (
+      updated.split(start).length !== 2 ||
+      updated.split(end).length !== 2 ||
+      updated.indexOf(start) > updated.indexOf(end)
+    )
+      throw new Error("Benchmark docs must contain exactly one results block");
+    const row = summary.rows.find((candidate) => candidate.scenario === scenario);
+    const table = [
+      `| Runner resources | ${requests} | Median added latency | P95 added latency | P99 added latency |`,
+      "| --- | ---: | ---: | ---: | ---: |",
+      `| ${summary.logicalCpus} vCPU / ~${Math.round(summary.memoryGiB)} GiB RAM | ${row.concurrency} | ${["p50", "p95", "p99"].map((key) => `${row.overheadMs[key].toFixed(2)} ms`).join(" | ")} |`,
+    ].join("\n");
+    updated =
+      updated.slice(0, updated.indexOf(start) + start.length) +
+      `\n${table}\n` +
+      updated.slice(updated.indexOf(end));
+  }
+  return updated;
 }
 
-/** Commit one generated table, using only trusted base-branch code and API data. */
+/** Commit the generated tables, using only trusted base-branch code and API data. */
 export async function commitBenchmarkDocs({
   github,
   context,

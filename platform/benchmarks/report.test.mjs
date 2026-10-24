@@ -228,3 +228,25 @@ test("streaming first content gets its own release delta while server timing sta
   assert.match(renderSummary(summary, baseline), /10.00 \(-50.0%\)/);
   assert.match(renderSummary(summary, baseline), /— \(unmeasured\)/);
 });
+
+test("adding the MCP workload keeps earlier workloads comparable with an older release", () => {
+  const baseline = comparison(createSummary(report()));
+  const source = report();
+  source.metadata.scenarios = ["chat", "mcp"];
+  source.blocks.push(
+    ...source.blocks.map((block) => ({
+      ...structuredClone(block),
+      scenario: "mcp",
+    })),
+  );
+  const current = createSummary(source);
+  const rendered = renderSummary(current, baseline);
+  const [chat, mcp] = rendered
+    .split("\n")
+    .filter((line) => /^\| (HTTP proxy request|MCP tool call)/.test(line));
+  assert.match(chat, /4.0 \(0.0%\)/);
+  assert.match(mcp, /^\| MCP tool call \(c=10\)/);
+  assert.match(mcp, /N\/A: new workload/);
+  assert.match(rendered, /stateless JSON-RPC tools\/call/);
+  assert.doesNotMatch(rendered, /setup changed/);
+});

@@ -49,6 +49,8 @@ import {
   ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
+import type { jsonSchemaValidator } from "@modelcontextprotocol/sdk/validation";
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv";
 import type { FastifyRequest } from "fastify";
 import { ZodError } from "zod";
 import {
@@ -764,6 +766,7 @@ export async function createAgentServer(params: {
       // `tools.listChanged: true`, backed by `subscriptions/listen`.
       capabilities: buildGatewayServerCapabilities(),
       instructions: buildGatewayInstructions(agent.description),
+      jsonSchemaValidator: lazyJsonSchemaValidator(),
     },
   );
   const { server } = mcpServer;
@@ -3176,3 +3179,17 @@ import {
   OAUTH_CLIENT_REFERENCE_PREFIX,
 } from "@archestra/shared/oauth";
 import ManagedOauthClientModel from "@/models/managed-oauth-client";
+
+/**
+ * The SDK builds a schema validator for every server, and the gateway builds a
+ * server for every request. Only elicitation uses it, so build it on first use.
+ */
+function lazyJsonSchemaValidator(): jsonSchemaValidator {
+  let validator: AjvJsonSchemaValidator | undefined;
+  return {
+    getValidator: (schema) => {
+      validator ??= new AjvJsonSchemaValidator();
+      return validator.getValidator(schema);
+    },
+  };
+}

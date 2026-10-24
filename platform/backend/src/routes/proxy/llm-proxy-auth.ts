@@ -35,7 +35,7 @@ import {
   OAuthAccessTokenModel,
   OAuthClientModel,
   OrganizationModel,
-  UserModel,
+  type UserModel,
   UserTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
@@ -331,7 +331,7 @@ export async function validatePassthroughVirtualKey(params: {
 }): Promise<PassthroughVirtualKeyResult> {
   const { tokenValue, agent } = params;
 
-  const resolved = await VirtualApiKeyModel.validateToken(tokenValue);
+  const resolved = await VirtualApiKeyModel.validateTokenWithOwner(tokenValue);
   if (!resolved) {
     throw new ApiError(401, "Invalid passthrough virtual key");
   }
@@ -350,25 +350,24 @@ export async function validatePassthroughVirtualKey(params: {
     throw new ApiError(401, "Passthrough virtual key has no owner");
   }
 
-  const noAccessError = new ApiError(
-    403,
-    "Your passthrough virtual key does not grant access to this LLM proxy. Contact your administrator.",
-  );
+  const noAccessError = () =>
+    new ApiError(
+      403,
+      "Your passthrough virtual key does not grant access to this LLM proxy. Contact your administrator.",
+    );
   if (virtualKey.organizationId !== agent.organizationId) {
-    throw noAccessError;
+    throw noAccessError();
   }
 
   // The key acts as its owner, so the owner must still be a member of the
   // proxy's organization — keys are not purged on membership removal, and the
   // agent-access check below passes for any org-scoped agent regardless of
   // membership.
-  const user = await UserModel.getProxyIdentity(
-    virtualKey.authorId,
-    agent.organizationId,
-  );
-  if (!user) {
-    throw noAccessError;
+  const { user, membership } = resolved;
+  if (!user || !membership) {
+    throw noAccessError();
   }
+  MemberModel.remember(membership);
 
   // The default organization proxy serves every current member and has no
   // scoped grant namespace. The fresh membership and organization checks above
@@ -389,7 +388,7 @@ export async function validatePassthroughVirtualKey(params: {
       action: "use",
     });
     if (!hasProxyAccess) {
-      throw noAccessError;
+      throw noAccessError();
     }
   }
 

@@ -16,6 +16,7 @@ import type {
 import type { GoogleGenAI } from "@google/genai";
 import client from "prom-client";
 import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
+import { llmUpstreamFetch } from "@/clients/llm-upstream-fetch";
 import { LRUCacheManager } from "@/in-memory-lru-cache";
 import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
@@ -731,9 +732,6 @@ export function getObservableFetch(
     // Opt-in upstream timeout dispatcher; undefined leaves undici defaults (and
     // `init`) untouched. See @/clients/llm-upstream-dispatcher.
     const dispatcher = getLlmUpstreamDispatcher();
-    const dispatchedInit = dispatcher
-      ? ({ ...init, dispatcher } as RequestInit)
-      : init;
     logger.debug(
       {
         url: typeof url === "string" ? url : url.toString(),
@@ -743,7 +741,7 @@ export function getObservableFetch(
     );
     if (!llmRequestDuration) {
       logger.warn("LLM metrics not initialized, skipping duration tracking");
-      return fetch(url, dispatchedInit);
+      return llmUpstreamFetch(url, init, dispatcher);
     }
 
     // Extract model from request body if available
@@ -762,7 +760,7 @@ export function getObservableFetch(
     let model = requestModel;
 
     try {
-      response = await fetch(url, dispatchedInit);
+      response = await llmUpstreamFetch(url, init, dispatcher);
       const duration = (Date.now() - startTime) / 1000;
       const status = response.status.toString();
 

@@ -20,11 +20,20 @@ later release publication will succeed.
   its separate scope; it is not release-candidate evidence.
 - The gate rechecks the queue ref still points at the scanned group SHA. GitHub's
   merge queue remains responsible for invalidating superseded groups.
-- It also resolves the single open Release Please PR and compares its current
-  test-merge **tree** with the scanned group's tree. A mixed group whose release
-  would contain different source fails closed with an explicit request to
-  validate the release in its own group. A successful scan of later queued code
-  cannot stand in for the earlier release commit's contents.
+- It also resolves the single open Release Please PR and reconstructs its merge
+  **tree** with `git merge-tree --write-tree` from the exact PR head and group
+  base commits. GitHub's asynchronously computed `merge_commit_sha` is not used
+  for this comparison: it can be missing or stale while head/base are current.
+  Missing Git objects, conflicts or an invalid merge result fail closed.
+- The entire reconstructed tree must equal the scanned group's tree. A mixed
+  group whose release would contain different source still fails closed with
+  the PR number, head/base SHAs and both trees in the diagnostic. Validate that
+  release's exact source in its own group; a successful scan of later queued
+  code cannot stand in for the earlier release commit's contents. No paths,
+  including generated documentation, are excluded from this comparison.
+- After checking all evidence, the gate rechecks the PR's open state, exact
+  head/base and the queue ref before writing the candidate index. The index
+  retains the PR number, head/base SHAs and reconstructed tree for audit.
 
 The matrix derives agents from this branch's catalog and includes Platform full
 and slim, MCP, p4 and sandbox. The publisher-inventory regression follows release
@@ -129,10 +138,20 @@ provenance in a consumer without the App token. It does not scan
 CVEs, push images, create tags or publish releases. Fixture artifacts cannot be
 selected as production scan evidence.
 
-Real catalog archive size, native build/scan duration, relay throughput and
-registry transport still need operational review before marking these drafts
-ready. Both live queues allow 30 minutes for required
+The release/1.4 merge-group
+[run 40102128984](https://github.com/archestra-ai/archestra/actions/runs/40102128984)
+completed all 20 native scan legs successfully, then its source gate rejected
+the live cached test-merge comparison. Reconstructing its recorded PR head
+`0403e1bbfbcd0e4e33f811b91136790fb01fd2f8` with base
+`c77da4df51fba5d5b7f2bfbe7d26d7669c8cf7c9` produces tree
+`c842516980963dd766bdf33ef34cc8e304e8f876`, exactly the scanned queue tree.
+The old log did not record the API's cached test-merge SHA/tree, so whether that
+response was stale or unavailable cannot be established retrospectively. The
+regression fixture reproduces both cases and checks the exact-source replacement
+without running a release; genuinely mixed groups still fail.
+
+Real catalog relay throughput and production registry transport remain untested
+by these non-publishing fixtures. Both live queues allow 30 minutes for required
 checks; runner capacity or larger builds can fail closed at that timeout. No live
 rules, credentials, pending releases, aliases or approvals are changed for this
-verification. Both PRs should remain draft until those operational checks and the
-catalog-scale operational checks have been reviewed.
+verification.

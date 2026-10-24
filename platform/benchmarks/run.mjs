@@ -27,9 +27,12 @@ const allowed = new Set([
   "proxy-url",
   "mock-url",
   "output",
+  "diagnostic",
 ]);
 for (const key of Object.keys(options))
   if (!allowed.has(key)) throw new Error(`Unknown option: ${key}`);
+if (options.diagnostic && options.diagnostic !== "cpu-profile")
+  throw new Error("Unknown diagnostic mode");
 const integer = (key, fallback) => {
   const value = Number(options[key] ?? fallback);
   if (!Number.isSafeInteger(value) || value < 1)
@@ -91,6 +94,7 @@ const report = {
   schemaVersion: 1,
   startedAt: new Date().toISOString(),
   metadata: {
+    ...(options.diagnostic ? { diagnostic: options.diagnostic } : {}),
     workloadVersion: "openai-chat-authenticated-v1",
     gitCommit: getGit(["rev-parse", "HEAD"]),
     platformTree: getGit(["rev-parse", "HEAD:platform"]),

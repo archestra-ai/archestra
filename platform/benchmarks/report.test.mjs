@@ -87,6 +87,18 @@ test("a failed or truncated run stays incomplete and includes unsuccessful reque
   assert.equal(createSummary(source).complete, false);
 });
 
+test("CPU profiling stays labeled diagnostic and cannot report release deltas", () => {
+  const source = report();
+  source.metadata.diagnostic = "cpu-profile";
+  const summary = createSummary(source);
+  assert.equal(summary.complete, true);
+  assert.equal(summary.diagnostic, "cpu-profile");
+  const rendered = renderSummary(summary, comparison(summary));
+  assert.match(rendered, /timings include profiler overhead/);
+  assert.match(rendered, /N\/A: setup changed/);
+  assert.doesNotMatch(rendered, /\(0\.0%\)/);
+});
+
 test("no completed requests produces no fabricated success or latency", () => {
   const source = report();
   source.blocks = [];

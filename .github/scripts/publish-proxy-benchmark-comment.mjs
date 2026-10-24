@@ -28,6 +28,7 @@ export async function publishBenchmarkComment({
   let savedSummary = null;
   if (
     summary &&
+    !summary.diagnostic &&
     summary.gitCommit === source.head.sha &&
     (benchmarkResult !== "success" || summary.complete)
   ) {

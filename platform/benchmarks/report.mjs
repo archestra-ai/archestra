@@ -100,6 +100,9 @@ export function createSummary(report) {
   return {
     schemaVersion: 1,
     complete,
+    ...(report.metadata.diagnostic
+      ? { diagnostic: report.metadata.diagnostic }
+      : {}),
     gitCommit: report.metadata.gitCommit,
     platformTree: report.metadata.platformTree,
     comparison: {
@@ -151,10 +154,16 @@ export function renderSummary(summary, baseline = null) {
       ? "Completed successfully."
       : "Incomplete benchmark; these are partial results.",
     "",
+    ...(summary.diagnostic
+      ? [
+          "Diagnostic CPU profile: timings include profiler overhead and are not release measurements.",
+          "",
+        ]
+      : []),
     "| Workload | Requests/sec | Success | Gateway ms P50 / P95 / P99 | Overhead ms P50 / P95 / P99 | Client ms P50 / P95 / P99 | First content P50 ms |",
     "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
   ];
-  const comparable = baseline?.state === "available";
+  const comparable = !summary.diagnostic && baseline?.state === "available";
   const setupMatches =
     comparable &&
     hasComparisonSetup(summary.comparison) &&

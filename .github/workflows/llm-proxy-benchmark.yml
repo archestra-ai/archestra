@@ -18,6 +18,11 @@ on:
         required: false
         default: ''
         type: string
+      cpu_profile:
+        description: Diagnostic CPU profile only; cannot publish release results or compare revisions
+        required: false
+        default: false
+        type: boolean
 
 permissions: {}
 
@@ -97,9 +102,21 @@ jobs:
         run: pnpm --dir backend exec vitest run src/server/llm-proxy-timing.unit.test.ts
       - name: Run mock inference benchmark
         # A repeatable shared-runner measurement, not an absolute latency gate.
-        run: bash benchmarks/ci.sh --requests=300 --stream-requests=60 --repeats=2
+        env:
+          CPU_PROFILE: ${{ github.event_name == 'workflow_dispatch' && inputs.cpu_profile == true }}
+          BASELINE_SHA: ${{ inputs.baseline_sha }}
+        run: |
+          if [ "$CPU_PROFILE" = true ]; then
+            if [ -n "$BASELINE_SHA" ]; then
+              echo 'CPU profiles are diagnostic and cannot be paired benchmark evidence.' >&2
+              exit 1
+            fi
+            bash benchmarks/ci.sh --cpu-profile --scenarios=chat,tools --concurrency=1,10,50 --requests=1000 --repeats=3
+          else
+            bash benchmarks/ci.sh --requests=300 --stream-requests=60 --repeats=2
+          fi
       - name: Compare pinned revisions on the same runner
-        if: github.event_name == 'workflow_dispatch' && inputs.baseline_sha != ''
+        if: github.event_name == 'workflow_dispatch' && !inputs.cpu_profile && inputs.baseline_sha != ''
         env:
           BASELINE_SHA: ${{ inputs.baseline_sha }}
         run: bash benchmarks/compare.sh "$BASELINE_SHA"
@@ -111,6 +128,9 @@ jobs:
           fi
           if [ -f benchmarks/results/comparison/summary.md ]; then
             cat benchmarks/results/comparison/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f benchmarks/results/profile/summary.md ]; then
+            cat benchmarks/results/profile/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Upload measurements and diagnostics
         if: always()

@@ -142,6 +142,14 @@ test("runner resources refresh from each measured host", () => {
   assert.doesNotMatch(updated, /4 vCPU|16 GiB/);
 });
 
+test("diagnostic CPU profiles cannot replace release docs", async () => {
+  const f = fixture();
+  f.summary.diagnostic = "cpu-profile";
+  assert.throws(() => updateBenchmarkTable(markdown, f.summary), /Only complete/);
+  assert.equal(await commitBenchmarkDocs(f), "ineligible");
+  assert.equal(f.writes.length, 0);
+});
+
 test("partial, unsuccessful, missing, duplicate or injected results cannot replace the docs table", () => {
   for (const change of [
     (s) => {

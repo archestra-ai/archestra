@@ -1,11 +1,16 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { benchmarkPorts } from "./ports.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ports = benchmarkPorts(process.argv[3]);
+const cpuProfile = process.argv[4] === "--cpu-profile";
+if (process.argv.length > (cpuProfile ? 5 : 4))
+  throw new Error("Unknown backend launcher arguments");
+if (cpuProfile && process.argv[2] !== "serve")
+  throw new Error("CPU profiling is only supported for serve");
 // The backend loads platform/.env itself. Require a clean worktree so a
 // benchmark never inherits deployment credentials or enables integrations.
 if (existsSync(path.join(root, ".env")))
@@ -64,7 +69,17 @@ if (process.argv[2] === "prepare") {
   await run("pnpm", ["--dir", "backend", "exec", "tsdown"]);
   await run("pnpm", ["--dir", "backend", "db:migrate"]);
 } else if (process.argv[2] === "serve") {
-  await run(process.execPath, ["backend/dist/server.mjs"]);
+  const args = [];
+  if (cpuProfile) {
+    const directory = path.join(root, "benchmarks/results/profile");
+    mkdirSync(directory, { recursive: true });
+    args.push(
+      "--cpu-prof",
+      `--cpu-prof-dir=${directory}`,
+      "--cpu-prof-name=backend.cpuprofile",
+    );
+  }
+  await run(process.execPath, [...args, "backend/dist/server.mjs"]);
 } else {
   throw new Error("Usage: node benchmarks/backend.mjs prepare|serve");
 }

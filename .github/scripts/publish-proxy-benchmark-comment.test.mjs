@@ -169,6 +169,16 @@ test("later runs update the existing bot comment instead of adding comments", as
   );
 });
 
+test("diagnostic CPU profiles cannot become saved release measurements", async () => {
+  const f = fixture();
+  f.summary.diagnostic = "cpu-profile";
+  assert.equal(await publishBenchmarkComment(f), "created");
+  const body = f.comments[0].body;
+  assert.doesNotMatch(body, /\| HTTP proxy request/);
+  const encoded = body.match(/data:v1:([A-Za-z0-9+/=]+)/)[1];
+  assert.equal(JSON.parse(Buffer.from(encoded, "base64")).summary, null);
+});
+
 test("superseded runs cannot replace results for a newer commit", async () => {
   const f = fixture();
   f.setHead("b".repeat(40));

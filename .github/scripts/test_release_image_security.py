@@ -35,6 +35,62 @@ def step_source(source, name):
 
 
 class ReleasePolicyTests(unittest.TestCase):
+    def test_scan_inventory_covers_every_published_agent_and_sandbox(self):
+        images = POLICY.candidate_matrix(ROOT)["include"]
+        by_image = {image["image"]: image for image in images}
+        self.assertEqual(len(images), len(by_image))
+        publisher = (ROOT / ".github/workflows/build-agent-catalog-images.yml").read_text()
+        publish_matrix = publisher.split("      matrix:\n", 1)[1].split("    permissions:", 1)[0]
+        published = set(re.findall(r"^\s+- (agent-[a-z0-9-]+)$", publish_matrix, re.M))
+        self.assertTrue(published)
+        # Follow the release callers and their wrappers so a newly published
+        # companion image cannot silently escape the preflight inventory.
+        release = (ROOT / ".github/workflows/release-please.yml").read_text()
+        for job in re.findall(r"^  [\w-]+:\n(.*?)(?=^  [\w-]+:|\Z)", release, re.M | re.S):
+            call = re.search(r"uses: [.$]/\.github/workflows/([\w-]+\.yml)", job)
+            if call:
+                wrapper = (ROOT / ".github/workflows" / call[1]).read_text()
+                published.update(re.findall(r"^\s+image_name: ([a-z0-9-]+)\s*$", job + wrapper, re.M))
+        self.assertEqual(set(by_image), published | {"platform-slim"})
+        for name in (image for image in published if image.startswith("agent-")):
+            self.assertEqual(by_image[name]["target"], name)
+            self.assertEqual(by_image[name]["context"], "./platform")
+        self.assertEqual(by_image["platform-slim"]["target"], "unified-slim")
+        self.assertEqual(by_image["sandbox-base"]["context"], "./platform/docker_images/sandbox_base")
+
+    def test_new_catalog_targets_are_scanned_and_invalid_inventories_fail_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalog = root / "platform/shared/agent-catalog-images.json"
+            catalog.parent.mkdir(parents=True)
+            for entry in POLICY.candidate_matrix(ROOT)["include"]:
+                file = root / entry["dockerfile"]
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text("FROM scratch AS agent-new\n")
+            catalog.write_text(json.dumps({"new": "agent-new"}))
+            self.assertIn("agent-new", {row["image"] for row in POLICY.candidate_matrix(root)["include"]})
+            for value in ({}, {"new": "agent-missing"}, {"a": "agent-new", "b": "agent-new"},
+                          {"new": "../escape"}, {"new": 23}):
+                with self.subTest(value=value), self.assertRaises(ValueError):
+                    catalog.write_text(json.dumps(value))
+                    POLICY.candidate_matrix(root)
+
+    def test_classification_emits_complete_matrix_and_ordinary_events_still_skip(self):
+        with tempfile.TemporaryDirectory() as directory:
+            event, output = Path(directory) / "event", Path(directory) / "output"
+            for branch in ("main", "release/1.4", "feature"):
+                pr = release_pr(branch if branch != "feature" else "main")
+                if branch == "feature":
+                    pr["head"]["ref"] = "feature"
+                event.write_text(json.dumps({"pull_request": pr}))
+                output.unlink(missing_ok=True)
+                subprocess.run(["python3", str(SCRIPTS / "release-image-policy.py"), "classify"],
+                    env=os.environ | {"GITHUB_EVENT_PATH": str(event), "GITHUB_OUTPUT": str(output),
+                        "GITHUB_EVENT_NAME": "pull_request", "GITHUB_REPOSITORY": REPOSITORY}, check=True)
+                values = dict(line.split("=", 1) for line in output.read_text().splitlines())
+                self.assertEqual(values["scan"], str(branch != "feature").lower())
+                self.assertEqual(json.loads(values["matrix"]), POLICY.candidate_matrix(ROOT))
+
     def test_main_and_stable_release_updates_always_scan_without_labels(self):
         for branch in ("main", "release/1.4", "release/12.30"):
             for action in ("opened", "synchronize", "reopened", "edited"):

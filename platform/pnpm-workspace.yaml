@@ -83,9 +83,9 @@ overrides:
   # GHSA-frvp-7c67-39w9 (serve-static path traversal) fixed in 1.19.15.
   # Bounded to <2 to keep the MCP SDK on the 1.x line.
   '@hono/node-server': '>=1.19.15 <2'
-  # GHSA-v422-hmwv-36x6 (invalid limit disables size enforcement) fixed in
-  # 2.3.0.
-  body-parser: '>=2.3.0 <3'
+  # GHSA-v422-hmwv-36x6: size enforcement; CVE-2026-111181: process crash
+  # from trailing bytes after a compressed body. Preserve the v2 API.
+  body-parser: '>=2.4.0 <3'
   # GHSA-cmwh-pvxp-8882 (fixed 3.4.11), GHSA-c2j3-45gr-mqc4 (fixed 3.4.12),
   # GHSA-p98j-92pf-mc4p and GHSA-6688-9rhm-gjv2 (IN_PLACE XSS, fixed 3.4.16),
   # GHSA-cg2g-xh64-v4q7 and GHSA-mrv2-3pqr-j5jr (fixed 3.4.17).
@@ -304,6 +304,9 @@ minimumReleaseAge: 10080
 # Published 2026-10-05; remove after 2026-10-12 22:38 UTC (7-day window).
 minimumReleaseAgeExclude:
   - handlebars@4.7.10
+  # CVE-2026-111181: exact urgent fix published 2026-10-22 11:39:38 UTC.
+  # Remove after 2026-10-29 11:39:38 UTC when the 7-day window clears.
+  - body-parser@2.4.0
 # OpenTelemetry instrumentation requires these packages hoisted to root.
 # @hookform/resolvers/zod statically imports `zod/v4/core` but does not declare
 # zod as a peer dependency, so hoist zod to the root node_modules.

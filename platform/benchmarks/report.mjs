@@ -4,6 +4,7 @@ const names = {
   chat: "HTTP proxy request",
   tools: "HTTP request with tool definition",
   stream: "Streaming HTTP request",
+  mcp: "MCP tool call",
 };
 
 function hasComparisonSetup(setup) {
@@ -144,7 +145,7 @@ export function renderSummary(summary, baseline = null) {
     typeof summary.complete !== "boolean" ||
     !Array.isArray(summary.rows) ||
     summary.rows.length < 1 ||
-    summary.rows.length > 3
+    summary.rows.length > Object.keys(names).length
   )
     throw new Error("Invalid benchmark summary");
   const number = (value, digits = 2) => {
@@ -170,11 +171,13 @@ export function renderSummary(summary, baseline = null) {
     "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
   ];
   const comparable = !summary.diagnostic && baseline?.state === "available";
+  // Workloads are matched row by row, so adding one keeps the others
+  // comparable; a row missing from the baseline reports as a new workload.
   const setupMatches =
     comparable &&
     hasComparisonSetup(summary.comparison) &&
-    JSON.stringify(summary.comparison) ===
-      JSON.stringify(baseline.summary.comparison);
+    JSON.stringify(withoutScenarios(summary.comparison)) ===
+      JSON.stringify(withoutScenarios(baseline.summary.comparison));
   for (const row of summary.rows) {
     if (!Object.hasOwn(names, row.scenario))
       throw new Error("Invalid benchmark workload");
@@ -230,7 +233,17 @@ export function renderSummary(summary, baseline = null) {
     `Each row pools ${number(summary.repeats, 0)} repeats at the highest tested concurrency; ${number(summary.requestsPerBlock, 0)} requests per non-streaming block and ${number(summary.streamingRequestsPerBlock, 0)} per streaming block. Warmup is excluded.`,
     "Gateway latency measures server request receipt through response serialization, before socket delivery. Overhead subtracts each request's upstream SDK-call duration before calculating percentiles; it includes authentication, routing, policies and persistence. Client latency ends at the complete response body. Streaming reports client latency and first content only (— means unmeasured).",
     "The isolated launcher validates a passthrough virtual key and persists requests; no real inference requests. Workloads run separately, with a short prompt and max_tokens=32; streaming uses 20 content events, 10 ms apart. Response caching and configured key budgets are not enabled.",
+    ...(summary.rows.some((row) => row.scenario === "mcp")
+      ? [
+          "The MCP tool call sends a stateless JSON-RPC tools/call to an MCP gateway with a user token; the gateway resolves and authorizes the tool, calls a one-tool mock MCP server and persists the call. Its overhead excludes the upstream tool call.",
+        ]
+      : []),
     "Shared-runner measurements track release changes; they are not a production capacity rating. Compare the same hardware, workload, concurrency, authentication and logging settings.",
   );
   return `${lines.join("\n")}\n`;
+}
+
+function withoutScenarios(setup) {
+  const { scenarios: _scenarios, ...rest } = setup ?? {};
+  return rest;
 }

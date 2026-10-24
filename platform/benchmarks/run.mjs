@@ -26,6 +26,8 @@ const allowed = new Set([
   "scenarios",
   "proxy-url",
   "mock-url",
+  "mcp-url",
+  "mcp-tool",
   "output",
   "diagnostic",
   "web-workers",
@@ -51,9 +53,14 @@ const concurrencyLevels = (options.concurrency ?? "1,10,50")
   .map(Number);
 if (concurrencyLevels.some((c) => !Number.isSafeInteger(c) || c < 1 || c > 500))
   throw new Error("Concurrency must be between 1 and 500");
-const scenarios = (options.scenarios ?? "chat,tools,stream").split(",");
-if (scenarios.some((s) => !["chat", "tools", "stream"].includes(s)))
+const mcpUrl = options["mcp-url"];
+const scenarios = (
+  options.scenarios ?? `chat,tools,stream${mcpUrl ? ",mcp" : ""}`
+).split(",");
+if (scenarios.some((s) => !["chat", "tools", "stream", "mcp"].includes(s)))
   throw new Error("Unknown scenario");
+if (scenarios.includes("mcp") && !(mcpUrl && options["mcp-tool"]))
+  throw new Error("The mcp scenario needs --mcp-url and --mcp-tool");
 const maxConcurrency = Math.max(...concurrencyLevels);
 if (
   (scenarios.includes("stream") && streamCount < maxConcurrency) ||
@@ -91,6 +98,15 @@ const headers = {
     ? { "x-archestra-virtual-key": process.env.ARCHESTRA_BENCHMARK_VIRTUAL_KEY }
     : {}),
 };
+const mcpHeaders = {
+  accept: "application/json, text/event-stream",
+  "mcp-protocol-version": "2025-11-25",
+};
+const mcpGatewayHeaders = {
+  ...mcpHeaders,
+  authorization: `Bearer ${process.env.ARCHESTRA_BENCHMARK_MCP_TOKEN ?? ""}`,
+};
+const mcpMockUrl = new URL("/mcp", mockUrl).href;
 const getGit = (args) =>
   execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 const report = {
@@ -113,6 +129,7 @@ const report = {
     totalMemoryBytes: os.totalmem(),
     proxyUrl,
     mockUrl,
+    ...(scenarios.includes("mcp") ? { mcpUrl, mcpMockUrl } : {}),
     auth: process.env.ARCHESTRA_BENCHMARK_VIRTUAL_KEY
       ? "passthrough-virtual-key"
       : process.env.ARCHESTRA_BENCHMARK_API_KEY
@@ -134,32 +151,55 @@ const report = {
 let failed = false;
 try {
   for (const scenario of scenarios) {
-    const body = {
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: "Reply with the benchmark marker." }],
-      max_tokens: 32,
-      ...(scenario === "stream"
-        ? { stream: true, stream_options: { include_usage: true } }
-        : {}),
-      ...(scenario === "tools"
+    const body =
+      scenario === "mcp"
         ? {
-            tools: [
-              {
-                type: "function",
-                function: {
-                  name: "benchmark_lookup",
-                  description: "Look up a fictional item.",
-                  parameters: {
-                    type: "object",
-                    properties: { name: { type: "string" } },
-                    required: ["name"],
-                  },
-                },
-              },
-            ],
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: {
+              name: options["mcp-tool"],
+              arguments: { name: "widget" },
+            },
           }
-        : {}),
-    };
+        : {
+            model: "gpt-4o-mini",
+            messages: [
+              { role: "user", content: "Reply with the benchmark marker." },
+            ],
+            max_tokens: 32,
+            ...(scenario === "stream"
+              ? { stream: true, stream_options: { include_usage: true } }
+              : {}),
+            ...(scenario === "tools"
+              ? {
+                  tools: [
+                    {
+                      type: "function",
+                      function: {
+                        name: "benchmark_lookup",
+                        description: "Look up a fictional item.",
+                        parameters: {
+                          type: "object",
+                          properties: { name: { type: "string" } },
+                          required: ["name"],
+                        },
+                      },
+                    },
+                  ],
+                }
+              : {}),
+          };
+    const targets =
+      scenario === "mcp"
+        ? {
+            direct: { url: mcpMockUrl, headers: mcpHeaders },
+            proxy: { url: mcpUrl, headers: mcpGatewayHeaders },
+          }
+        : {
+            direct: { url: mockUrl, headers: {} },
+            proxy: { url: proxyUrl, headers },
+          };
     const expectedContent =
       scenario === "stream"
         ? MOCK_CONTENT + ".".repeat(mockHealth.chunks - 1)
@@ -170,9 +210,8 @@ try {
           ? ["direct", "proxy"]
           : ["proxy", "direct"]) {
           const result = await runBlock({
-            url: target === "direct" ? mockUrl : proxyUrl,
+            ...targets[target],
             body,
-            headers: target === "proxy" ? headers : {},
             requireGatewayTiming: target === "proxy" && scenario !== "stream",
             expectedContent,
             count: scenario === "stream" ? streamCount : count,

@@ -96,7 +96,10 @@ export class CompletionReader {
         throw new Error("Incomplete SSE response");
     } else {
       const parsed = JSON.parse(this.buffer);
-      this.content = parsed.choices?.[0]?.message?.content;
+      // An OpenAI chat completion, or an MCP tools/call result.
+      this.content =
+        parsed.choices?.[0]?.message?.content ??
+        parsed.result?.content?.[0]?.text;
     }
     return this.content;
   }

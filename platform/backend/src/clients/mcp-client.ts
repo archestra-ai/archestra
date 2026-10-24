@@ -82,6 +82,7 @@ import {
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import { discoverOAuthEndpoints, refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
+import { llmProxyTiming } from "@/server/llm-proxy-timing";
 import {
   type AgentToolExclusionSets,
   agentToolExclusionsService,
@@ -142,6 +143,7 @@ import {
   isTimeoutErrno,
 } from "@/utils/network-errors";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
+import { ConnectionLimiter } from "./connection-limiter";
 import { K8sAttachTransport } from "./k8s-attach-transport";
 import {
   configureMcpElicitation,
@@ -403,67 +405,6 @@ type ToolCallAuthInfo = {
   llmSessionId?: string;
   llmToolCallId?: string;
 };
-
-/**
- * Simple async queue to serialize operations per connection
- * Prevents concurrent MCP calls to the same server (important for stdio transport)
- */
-type QueueState = {
-  activeCount: number;
-  queue: Array<() => void>;
-};
-
-class ConnectionLimiter {
-  private states = new Map<string, QueueState>();
-
-  /**
-   * Execute a function with a per-connection concurrency limit.
-   */
-  runWithLimit<T>(
-    connectionKey: string,
-    limit: number,
-    fn: () => Promise<T>,
-  ): Promise<T> {
-    if (limit <= 0) {
-      return fn();
-    }
-
-    const state = this.states.get(connectionKey) ?? {
-      activeCount: 0,
-      queue: [],
-    };
-    this.states.set(connectionKey, state);
-
-    return new Promise<T>((resolve, reject) => {
-      const execute = () => {
-        state.activeCount += 1;
-        // Adopt the complete operation, including its recursive retries, before
-        // releasing this lease. A retry must not acquire a second limiter slot.
-        Promise.resolve()
-          .then(fn)
-          .then(resolve, reject)
-          .finally(() => {
-            state.activeCount -= 1;
-            const next = state.queue.shift();
-            if (next) {
-              next();
-              return;
-            }
-            if (state.activeCount === 0) {
-              this.states.delete(connectionKey);
-            }
-          });
-      };
-
-      if (state.activeCount < limit) {
-        execute();
-        return;
-      }
-
-      state.queue.push(execute);
-    });
-  }
-}
 
 type TransportKind = "stdio" | "http";
 
@@ -1221,20 +1162,22 @@ class McpClient {
           // the timeout even though nobody is waiting on it.
           const upstreamTimeoutMs =
             options?.upstreamTimeoutMs ?? config.mcpGateway.toolCallTimeoutMs;
-          const result = await callWhileServerAnswers({
-            client,
-            timeoutMs: upstreamTimeoutMs,
-            signal: options?.abortSignal,
-            request: (signal) =>
-              client.callTool(
-                {
-                  name: targetToolName,
-                  arguments: toolCall.arguments,
-                },
-                undefined,
-                { signal, timeout: upstreamTimeoutMs },
-              ),
-          });
+          const result = await llmProxyTiming.hijackedUpstream(() =>
+            callWhileServerAnswers({
+              client,
+              timeoutMs: upstreamTimeoutMs,
+              signal: options?.abortSignal,
+              request: (signal) =>
+                client.callTool(
+                  {
+                    name: targetToolName,
+                    arguments: toolCall.arguments,
+                  },
+                  undefined,
+                  { signal, timeout: upstreamTimeoutMs },
+                ),
+            }),
+          );
 
           const isOAuthServer = !!catalogItem.oauthConfig;
           const toolResultAuthError = isAuthRelatedToolResult(result);

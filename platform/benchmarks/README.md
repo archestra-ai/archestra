@@ -1,6 +1,6 @@
-# LLM Proxy Benchmarks
+# LLM Proxy and MCP Gateway Benchmarks
 
-Measure gateway latency, gateway overhead and client latency through the real production backend against a deterministic HTTP upstream. The upstream returns synthetic OpenAI chat completions. No inference provider or provider key is required.
+Measure gateway latency, gateway overhead and client latency through the real production backend against a deterministic HTTP upstream. The upstream returns synthetic OpenAI chat completions and serves a one-tool MCP server at `/mcp`. No inference provider, provider key or real MCP server is required.
 
 ## Run Locally
 
@@ -38,8 +38,11 @@ This builds, migrates, measures, and tears down the disposable stack. It refuses
 | `chat` | Short prompt | Fixed JSON completion, no artificial delay |
 | `tools` | Short prompt and one function definition | Same JSON completion; no tool invocation |
 | `stream` | Short prompt, streaming enabled | 20 content events with a requested 10 ms delay before each event |
+| `mcp` | Stateless JSON-RPC `tools/call` through the MCP gateway | The mock tool's fixed text result |
 
-All scenarios use the standard OpenAI chat proxy route. The isolated launcher signs in through the public API and creates a disposable passthrough virtual key, paired with a synthetic provider key. This exercises the existing backend and its interaction persistence. It exercises virtual-key validation but does not configure spend limits, security rules or MCP execution. The mock reports zero tokens. A tools definition exercises discovery and metadata handling, not a tool-call policy decision.
+The `chat`, `tools` and `stream` scenarios use the standard OpenAI chat proxy route. The isolated launcher signs in through the public API and creates a disposable passthrough virtual key, paired with a synthetic provider key. This exercises the existing backend and its interaction persistence. It exercises virtual-key validation but does not configure spend limits, security rules or MCP execution. The mock reports zero tokens. A tools definition exercises discovery and metadata handling, not a tool-call policy decision.
+
+The `mcp` scenario calls `/v1/mcp/<gateway>` with a user token. The launcher creates a remote catalog entry for the mock's MCP server, installs it, assigns its tool to a new MCP gateway and reads the admin's user token. Each call authenticates, resolves and authorizes the tool, calls the mock over HTTP and persists the call log; the direct target is the mock's `/mcp` endpoint. It runs whenever `--mcp-url` and `--mcp-tool` are given, which `ci.sh` always does, and `ARCHESTRA_BENCHMARK_MCP_TOKEN` supplies the token.
 
 Defaults: concurrency 1, 10, and 50; three repeats; 1,000 measured requests per non-streaming block; 100 per streaming block. Each block first warms its own keep-alive connection pool with `max(30, concurrency)` requests. Direct and proxy blocks alternate order between repeats.
 
@@ -54,11 +57,11 @@ Additional flags: `--output=path`, `--proxy-url=URL`, and `--mock-url=URL`. URL 
 
 ## Measurements
 
-`results.json` contains every measured request, failures, block summaries, environment metadata, and the tested commit. `summary.md` contains a compact three-workload report at the highest tested concurrency. `report.json` is its machine-readable form; `details.md` retains every concurrency and repeat. Percentiles pool successful request samples across repeats; throughput divides their combined success count by combined measured duration. Results are ignored by Git. The [recorded local baseline](baselines/local-authenticated.json) retains block summaries and environment details without individual samples.
+`results.json` contains every measured request, failures, block summaries, environment metadata, and the tested commit. `summary.md` contains a compact per-workload report at the highest tested concurrency. `report.json` is its machine-readable form; `details.md` retains every concurrency and repeat. Percentiles pool successful request samples across repeats; throughput divides their combined success count by combined measured duration. Results are ignored by Git. The [recorded local baseline](baselines/local-authenticated.json) retains block summaries and environment details without individual samples.
 
 - Total latency ends when the complete validated response arrives.
-- Gateway latency starts in the server's first request hook, before authentication and body parsing, and ends in `onSend`, after response serialization and before socket delivery. It includes upstream time, authentication, routing, policy checks and persistence awaited before replying. It excludes client connection/upload time before the hook and socket delivery after it.
-- Upstream duration times each awaited non-streaming provider SDK call, including transport and decoding. Gateway overhead is gateway latency minus that request's upstream durations. Retry backoff between calls remains gateway overhead. Background work after responding is outside this window. Overlapping calls deliberately omit timing rather than summing concurrent wall time.
+- Gateway latency starts in the server's first request hook, before authentication and body parsing, and ends in `onSend`, after response serialization and before socket delivery. The MCP gateway writes its own response, so its window ends when the response head is written. It includes upstream time, authentication, routing, policy checks and persistence awaited before replying. It excludes client connection/upload time before the hook and socket delivery after it.
+- Upstream duration times each awaited non-streaming provider SDK call, including transport and decoding. For an MCP tool call it times the call to the MCP server; waiting for a free slot on that server's connection remains gateway overhead. Gateway overhead is gateway latency minus that request's upstream durations. Retry backoff between calls remains gateway overhead. Background work after responding is outside this window. Overlapping calls deliberately omit timing rather than summing concurrent wall time.
 - The non-streaming proxy returns these three durations in `Server-Timing` (`archestra_gateway`, `archestra_upstream`, `archestra_overhead`, in milliseconds). The runner requires complete, consistent timing on every successful non-streaming proxy response. Missing timing fails the run; it never becomes zero. P50/P95/P99 pool individual durations, not differences between percentiles.
 - First-byte latency starts at request submission and ends at the first response body bytes.
 - Streaming first-content latency excludes role-only and usage events.

@@ -1,6 +1,6 @@
 {
   "name": "@archestra/shared",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "description": "",
   "type": "module",
   "sideEffects": false,

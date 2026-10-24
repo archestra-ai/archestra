@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.4.4](https://github.com/archestra-ai/archestra/compare/platform-v1.4.3...platform-v1.4.4) (2026-10-24)
+## [1.4.5](https://github.com/archestra-ai/archestra/compare/platform-v1.4.3...platform-v1.4.5) (2026-10-24)
 
 
 ### Features
@@ -34,11 +34,17 @@
 * **proxy:** serve Responses on the xAI route (backport release/1.4) ([#9528](https://github.com/archestra-ai/archestra/issues/9528)) ([0b6c7f5](https://github.com/archestra-ai/archestra/commit/0b6c7f5847b0b5d9f041a2e4c59db4849a4a4b54))
 * remove vulnerable legacy Zod from SDK dependencies (backport release/1.4) ([#9584](https://github.com/archestra-ai/archestra/issues/9584)) ([c7c2ba6](https://github.com/archestra-ai/archestra/commit/c7c2ba65e40d148d7d984d33dd3e40e9715f4bfd))
 * **runtime:** await backend discovery before starting tasks (backport release/1.4) ([#9553](https://github.com/archestra-ai/archestra/issues/9553)) ([b5653a9](https://github.com/archestra-ai/archestra/commit/b5653a97f2fe606ef30ee74b45f47028ee4bc21d))
+* **docker:** patch the Agent npm HTTP dependency ([#9611](https://github.com/archestra-ai/archestra/issues/9611)) ([e8458a6](https://github.com/archestra-ai/archestra/commit/e8458a60499b63cfe9083c896f6c1f65cc5223a7))
+* **sandbox:** patch sandbox base image dependencies ([#9616](https://github.com/archestra-ai/archestra/issues/9616)) ([d554155](https://github.com/archestra-ai/archestra/commit/d554155851f8d7006092dbeaf624bae217aff998))
+* **agent:** patch runtime dependency toolchains and packages ([#9618](https://github.com/archestra-ai/archestra/issues/9618)) ([1f12361](https://github.com/archestra-ai/archestra/commit/1f1236109cc8566bed5ff188359ea5ce1f89085e))
+* **agent:** patch bundled Hermes Python dependencies ([#9623](https://github.com/archestra-ai/archestra/issues/9623)) ([7c96f84](https://github.com/archestra-ai/archestra/commit/7c96f8462ea6e6bfd6baa113869cf4e1879c5d6e))
 
 
 ### Miscellaneous Chores
 
 * **deps:** ignore the ctutils mask advisory until its fix clears the releas (backport release/1.4) ([#9523](https://github.com/archestra-ai/archestra/issues/9523)) ([bafedff](https://github.com/archestra-ai/archestra/commit/bafedfffdd05da332d951bdd490131eb7d53e200))
+* **ci:** scan every release/1.4 image target ([#9609](https://github.com/archestra-ai/archestra/issues/9609)) ([59e740d](https://github.com/archestra-ai/archestra/commit/59e740de0c5362cd6ebe43a4a2a6c79086f7ae91))
+
 
 ## [1.4.3](https://github.com/archestra-ai/archestra/compare/platform-v1.4.2...platform-v1.4.3) (2026-10-23)
 

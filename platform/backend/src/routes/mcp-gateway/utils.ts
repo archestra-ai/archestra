@@ -956,8 +956,9 @@ export async function createAgentServer(params: {
     // A connection that needs signing in again is offered to the person as a
     // link their client opens, then the call re-runs (see reauth-elicitation).
     const reauthExtra = {
-      sendRequest: extra.sendRequest,
-      signal: extra.signal,
+      sendRequest: (...args: Parameters<typeof extra.sendRequest>) =>
+        extra.sendRequest(...args),
+      signal: extra?.signal,
       // Straight onto this call's stream: the SDK checks the capability
       // against an `initialize` this per-request Server never saw, while
       // recoverExpiredAuthWithUrlElicitation has already checked it.

@@ -10,6 +10,7 @@ export async function publishBenchmarkComment({
   github,
   context,
   summary,
+  remeasured,
   benchmarkResult,
 }) {
   const source = context.payload.pull_request;
@@ -33,7 +34,11 @@ export async function publishBenchmarkComment({
     (benchmarkResult !== "success" || summary.complete)
   ) {
     try {
-      const baseline = await findReleaseBenchmark({ github, context });
+      const baseline = await findReleaseBenchmark({
+        github,
+        context,
+        remeasured,
+      });
       body = `${marker}\n${renderSummary(summary, baseline)}`;
       if (benchmarkResult === "success" && summary.complete)
         savedSummary = summary;

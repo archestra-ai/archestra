@@ -228,7 +228,7 @@ test("workflow selects release updates and benchmark changes without loading unr
   );
   const script = workflow
     .split("          script: |\n")[1]
-    .split("\n  benchmark:")[0]
+    .split("\n      #")[0]
     .split("\n")
     .map((line) => line.slice(12))
     .join("\n");
@@ -530,4 +530,40 @@ test("the first release of a new track and a new major version compare with the 
   // A 2.0.0 release PR on main.
   await findReleaseBenchmark(main);
   assert.deepEqual(main.lookups, ["platform-v1.9.4"]);
+});
+
+test("the previous release measured again on this runner is the baseline", async () => {
+  const f = fixture();
+  savePrevious(f, (s) => {
+    s.rows[0].p99Ms = 300;
+    return s;
+  });
+  const remeasured = structuredClone(f.summary);
+  remeasured.gitCommit = "e".repeat(40); // The release tag's commit.
+  remeasured.platformTree = "c".repeat(40);
+  remeasured.rows[0].p99Ms = 60;
+  await publishBenchmarkComment({ ...f, remeasured });
+  const body = f.comments[0].body;
+  assert.match(body, /measured again on this runner/);
+  assert.match(body, /30.00 \(-50.0%\)/);
+});
+
+test("a re-measurement of another revision or source tree falls back to saved metrics", async () => {
+  for (const change of [
+    { gitCommit: "0".repeat(40) },
+    { platformTree: "0".repeat(40) },
+    { complete: false },
+  ]) {
+    const f = fixture();
+    savePrevious(f);
+    const remeasured = {
+      ...structuredClone(f.summary),
+      gitCommit: "e".repeat(40),
+      platformTree: "c".repeat(40),
+      ...change,
+    };
+    const baseline = await findReleaseBenchmark({ ...f, remeasured });
+    assert.equal(baseline.state, "available");
+    assert.equal(baseline.sameRunner, undefined, JSON.stringify(change));
+  }
 });

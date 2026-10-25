@@ -18,6 +18,11 @@ on:
         required: false
         default: ''
         type: string
+      release_sha:
+        description: Optional full commit SHA of an earlier release to measure again on this runner, as release PRs do
+        required: false
+        default: ''
+        type: string
       web_workers:
         description: Candidate web processes within a fixed total database pool of 20 (manual configuration experiment)
         required: false
@@ -45,6 +50,7 @@ jobs:
     outputs:
       run: ${{ steps.select.outputs.run }}
       release: ${{ steps.select.outputs.release }}
+      previous-release-sha: ${{ steps.previous.outputs.sha }}
     steps:
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         id: select
@@ -64,13 +70,42 @@ jobs:
             }
             core.setOutput('run', String(run));
             core.setOutput('release', String(release));
+      # Release selection runs from the trusted base, never release PR code.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.select.outputs.release == 'true' && steps.select.outputs.run == 'true'
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: |
+            .github/scripts
+            platform/benchmarks
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        id: previous
+        if: steps.select.outputs.release == 'true' && steps.select.outputs.run == 'true'
+        with:
+          script: |
+            const { findPreviousRelease } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/proxy-benchmark-baseline.mjs`);
+            try {
+              const previous = await findPreviousRelease({github, context});
+              if (previous) {
+                const {data: commit} = await github.rest.repos.getCommit({...context.repo, ref: previous.tag_name});
+                core.info(`Measuring ${previous.tag_name} again on the benchmark runner`);
+                core.setOutput('sha', commit.sha);
+              }
+            } catch (error) {
+              // The comment falls back to the release's saved metrics.
+              core.warning(`Previous release lookup failed: ${error.message}`);
+            }
 
   benchmark:
     name: Measure LLM proxy latency
     needs: select
     if: needs.select.outputs.run == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # A fixed 16 vCPU size keeps the load client, mock and database off the
+    # measured web process. Results record the CPU model; comparisons across
+    # different CPUs are suppressed.
+    runs-on: ubicloud-standard-16-ubuntu-2404
+    timeout-minutes: 60
     # A generated table commit skips this job. Scope cancellation here so
     # that commit cannot cancel the successful run publishing its own docs.
     concurrency:
@@ -130,6 +165,14 @@ jobs:
           else
             bash benchmarks/ci.sh --requests=300 --stream-requests=60 --repeats=2 "--web-workers=$WEB_WORKERS"
           fi
+      - name: Measure the previous release on the same runner
+        # Release comments compare with this, not with numbers from whatever
+        # hardware ran the previous release. A failure keeps the fallback.
+        if: (needs.select.outputs.previous-release-sha != '' || inputs.release_sha != '') && !inputs.cpu_profile
+        continue-on-error: true
+        env:
+          RELEASE_SHA: ${{ needs.select.outputs.previous-release-sha || inputs.release_sha }}
+        run: bash benchmarks/remeasure-release.sh "$RELEASE_SHA"
       - name: Compare pinned revisions on the same runner
         if: github.event_name == 'workflow_dispatch' && !inputs.cpu_profile && inputs.baseline_sha != ''
         env:
@@ -141,6 +184,9 @@ jobs:
         run: |
           if [ -f benchmarks/results/ci/summary.md ]; then
             cat benchmarks/results/ci/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f benchmarks/results/release/summary.md ]; then
+            { echo; echo '### Previous release on this runner'; echo; cat benchmarks/results/release/summary.md; } >> "$GITHUB_STEP_SUMMARY"
           fi
           if [ -f benchmarks/results/comparison/summary.md ]; then
             cat benchmarks/results/comparison/summary.md >> "$GITHUB_STEP_SUMMARY"
@@ -185,18 +231,25 @@ jobs:
         with:
           script: |
             const fs = require('node:fs');
+            const read = (file) => {
+              if (!fs.existsSync(file)) return null;
+              if (fs.statSync(file).size > 65536) throw new Error('Benchmark summary is too large');
+              return JSON.parse(fs.readFileSync(file, 'utf8'));
+            };
             let summary = null;
-            const file = 'benchmark-artifact/ci/report.json';
             try {
-              if (fs.existsSync(file)) {
-                if (fs.statSync(file).size > 65536) throw new Error('Benchmark summary is too large');
-                summary = JSON.parse(fs.readFileSync(file, 'utf8'));
-              }
+              summary = read('benchmark-artifact/ci/report.json');
             } catch {
               core.warning('Benchmark summary is unavailable or invalid; publishing failure status.');
             }
+            let remeasured = null;
+            try {
+              remeasured = read('benchmark-artifact/release/report.json');
+            } catch {
+              core.warning('Previous release measurement is invalid; using its saved metrics.');
+            }
             const { publishBenchmarkComment } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/publish-proxy-benchmark-comment.mjs`);
-            const result = await publishBenchmarkComment({github, context, summary, benchmarkResult: process.env.BENCHMARK_RESULT});
+            const result = await publishBenchmarkComment({github, context, summary, remeasured, benchmarkResult: process.env.BENCHMARK_RESULT});
             core.info(result);
             core.setOutput('update-docs', String(['created', 'updated'].includes(result) && process.env.BENCHMARK_RESULT === 'success' && summary?.complete && summary.gitCommit === context.payload.pull_request.head.sha && context.payload.pull_request.user.login === 'archestra-ci[bot]'));
       # App-token pushes trigger ordinary PR validation. The select job skips

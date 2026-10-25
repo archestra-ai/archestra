@@ -18,6 +18,9 @@ if [[ "${ARCHESTRA_AGENT_RUNTIME_OPENAPPA:-0}" == "1" ]]; then
   : "${ARCHESTRA_AGENT_RUNTIME_BINDING:?OpenAPPA runtime binding is required}"
 fi
 export HERMES_HOME="${ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR:-${runtime_dir}}/hermes"
+# Read state.db with the SQLite that writes it: Hermes's own interpreter.
+hermes_python=/opt/hermes/.venv/bin/python
+[[ -x "${hermes_python}" ]] || hermes_python=python3
 mkdir -p "${runtime_dir}" "${HERMES_HOME}"
 attention_plugin_dir="${HERMES_HOME}/plugins/archestra-attention"
 mkdir -p "${attention_plugin_dir}"
@@ -258,7 +261,9 @@ if [[ "${event}" != "post_llm_call" && "${event}" != "on_session_end" ]] \
   exit 0
 fi
 # Hermes's own interpreter: its SQLite is the one that writes state.db.
-/opt/hermes/.venv/bin/python "${runtime_dir}/hermes-transcript.py" \
+hermes_python=/opt/hermes/.venv/bin/python
+[[ -x "${hermes_python}" ]] || hermes_python=python3
+"${hermes_python}" "${runtime_dir}/hermes-transcript.py" \
   "${HERMES_HOME:-${runtime_dir}/hermes}/state.db" \
   "${session_id}" \
   "${runtime_dir}/readable-transcript.json" || true
@@ -457,7 +462,7 @@ case "${runtime_mode}" in
 
     # Capture the cursor before starting Hermes, including when the next prompt
     # repeats an earlier one. Only messages written by this invocation can finish it.
-    message_cursor="$(/opt/hermes/.venv/bin/python - "${HERMES_HOME}/state.db" <<'PYTHON'
+    message_cursor="$("${hermes_python}" - "${HERMES_HOME}/state.db" <<'PYTHON'
 import sqlite3
 import sys
 from pathlib import Path
@@ -470,7 +475,7 @@ else:
     print(0)
 PYTHON
     )"
-    /opt/hermes/.venv/bin/python "${completion_watcher}" \
+    "${hermes_python}" "${completion_watcher}" \
       "${HERMES_HOME}/state.db" \
       "$(cat "${task_file}")" \
       "${runtime_dir}/final-answer.txt" \

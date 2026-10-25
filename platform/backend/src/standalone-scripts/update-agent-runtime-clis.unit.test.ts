@@ -25,6 +25,8 @@ const realAgentDir = path.resolve(
 const NOW = "2026-10-25T00:00:00Z";
 const OLD = "2026-10-01T00:00:00Z";
 const RECENT = "2026-10-24T00:00:00Z";
+const PINNED_HERMES_COMMIT = "d".repeat(40);
+const HERMES_COMMIT = "c".repeat(40);
 
 const cleanups: (() => void)[] = [];
 
@@ -65,13 +67,17 @@ test("raises each CLI to its newest stable release outside the cooldown", async 
       ...grokPackuments({ "1.0.70": OLD, "1.0.71": OLD }, { "1.0.70": OLD }),
     },
     grokTarball: grok.tarball,
-    pypi: {
-      "hermes-agent": pypiProject({
-        latest: "0.21.0",
-        releases: {
-          "0.20.0": [{ time: OLD }],
-          "0.21.0": [{ time: OLD, yanked: true }],
-        },
+    github: {
+      "NousResearch/hermes-agent": githubRepository({
+        latest: "v0.21.0",
+        releases: [
+          { tag: "v0.20.0", published: OLD },
+          { tag: "v0.20.1", published: OLD, draft: true },
+          { tag: "v0.21.0", published: OLD, prerelease: true },
+          { tag: "v0.21.0+canary.1", published: OLD },
+          { tag: "v2026.9.24", published: OLD },
+        ],
+        commits: { "v0.20.0": HERMES_COMMIT },
       }),
     },
     grokStable: "1.0.71",
@@ -93,7 +99,8 @@ test("raises each CLI to its newest stable release outside the cooldown", async 
     FIXTURE_DOCKERFILE.replaceAll("2.1.285", "2.1.300")
       .replace("@openai/codex@0.153.0", "@openai/codex@0.160.0")
       .replace("opencode-ai@1.18.23", "opencode-ai@1.19.3")
-      .replace("[mcp]==0.19.0", "[mcp]==0.20.0")
+      .replace("hermes_version=0.19.0", "hermes_version=0.20.0")
+      .replace(PINNED_HERMES_COMMIT, HERMES_COMMIT)
       .replaceAll("1.0.67", "1.0.70")
       .replace(/checksum=a{64}/, `checksum=${grok.binarySha256}`)
       .replace(/checksum=b{64}/, `checksum=${grok.binarySha256}`),
@@ -115,7 +122,7 @@ test("never moves a pin backwards past the channel pointer", async () => {
         versions: { "0.150.0": OLD },
       }),
     },
-    pypi: { "hermes-agent": pypiProject({ latest: "0.19.0", releases: {} }) },
+    github: hermesAt("v0.19.0"),
     grokStable: "1.0.67",
   });
 
@@ -138,7 +145,7 @@ test("updates the reachable CLIs and fails for an unreachable registry", async (
         versions: { "0.160.0": OLD },
       }),
     },
-    pypi: {},
+    github: {},
     grokStable: "1.0.67",
   });
 
@@ -157,7 +164,7 @@ test("refuses a Dockerfile target it does not know how to update", async () => {
   const agentDir = makeAgentDir(
     `${FIXTURE_DOCKERFILE}\nFROM agent-base AS agent-newcomer\n`,
   );
-  const registry = await startRegistry({ npm: {}, pypi: {}, grokStable: "" });
+  const registry = await startRegistry({ npm: {}, github: {}, grokStable: "" });
 
   const result = await runUpdater(agentDir, registry);
 
@@ -187,7 +194,7 @@ test("reads every pin in the real agent catalog Dockerfile", async () => {
       opencode: "0.0.1",
       openclaw: "0.0.1",
     }),
-    pypi: { "hermes-agent": pypiProject({ latest: "0.0.1", releases: {} }) },
+    github: hermesAt("v0.0.1"),
     grokStable: "0.0.1",
   });
 
@@ -212,7 +219,9 @@ FROM agent-base AS agent-opencode
 RUN pnpm add --global opencode-ai@1.18.23 \\
  && OPENCODE_PACKAGE_DIR="$(pnpm list --global --json opencode-ai)"
 FROM agent-base AS agent-hermes
-RUN /opt/hermes/bin/pip install --no-cache-dir 'hermes-agent[mcp]==0.19.0'
+RUN hermes_version=0.19.0 \\
+ && hermes_commit=${PINNED_HERMES_COMMIT} \\
+ && git -C /opt/hermes fetch --depth 1 origin "\${hermes_commit}"
 FROM agent-base AS agent-openclaw
 COPY docker_images/agent/openclaw /opt/agent-openclaw
 FROM agent-base AS agent-grok
@@ -297,35 +306,53 @@ function allNpmAt(
   };
 }
 
-function pypiProject({
+function githubRepository({
   latest,
   releases,
+  commits,
 }: {
   latest: string;
-  releases: Record<string, { time: string; yanked?: boolean }[]>;
+  releases: {
+    tag: string;
+    published: string;
+    draft?: boolean;
+    prerelease?: boolean;
+  }[];
+  commits: Record<string, string>;
 }) {
   return {
-    info: { version: latest },
-    releases: Object.fromEntries(
-      Object.entries(releases).map(([version, uploads]) => [
-        version,
-        uploads.map(({ time, yanked = false }) => ({
-          upload_time_iso_8601: time,
-          yanked,
-        })),
-      ]),
+    latest: { tag_name: latest },
+    releases: releases.map(
+      ({ tag, published, draft = false, prerelease = false }) => ({
+        tag_name: tag,
+        published_at: published,
+        draft,
+        prerelease,
+      }),
     ),
+    commits,
+  };
+}
+
+// A Hermes repository whose latest release is `latest` and nothing newer.
+function hermesAt(latest: string) {
+  return {
+    "NousResearch/hermes-agent": githubRepository({
+      latest,
+      releases: [{ tag: latest, published: OLD }],
+      commits: {},
+    }),
   };
 }
 
 async function startRegistry({
   npm,
-  pypi,
+  github,
   grokStable,
   grokTarball,
 }: {
   npm: Record<string, ReturnType<typeof packument>>;
-  pypi: Record<string, ReturnType<typeof pypiProject>>;
+  github: Record<string, ReturnType<typeof githubRepository>>;
   grokStable: string;
   grokTarball?: Buffer;
 }) {
@@ -343,10 +370,18 @@ async function startRegistry({
     if (url.pathname === "/grok.tgz" && grokTarball) {
       return send(200, grokTarball);
     }
-    const pypiMatch = /^\/pypi\/(.+)\/json$/.exec(url.pathname);
-    if (pypiMatch) {
-      const project = pypi[pypiMatch[1]];
-      return project ? send(200, project) : send(404, {});
+    const githubMatch =
+      /^\/repos\/([^/]+\/[^/]+)\/(releases\/latest|releases|commits\/(.+))$/.exec(
+        url.pathname,
+      );
+    if (githubMatch) {
+      const [, repository, resource, ref] = githubMatch;
+      const repo = github[repository];
+      if (!repo) return send(404, {});
+      if (resource === "releases/latest") return send(200, repo.latest);
+      if (resource === "releases") return send(200, repo.releases);
+      const sha = repo.commits[decodeURIComponent(ref)];
+      return sha ? send(200, { sha }) : send(404, {});
     }
     const npmPath = decodeURIComponent(url.pathname.slice(1));
     const [, name, version] =
@@ -376,7 +411,9 @@ function runUpdater(agentDir: string, registry: string) {
           env: {
             ...process.env,
             NPM_CONFIG_REGISTRY: registry,
-            PYPI_URL: registry,
+            GITHUB_API_URL: registry,
+            GH_TOKEN: "",
+            GITHUB_TOKEN: "",
             GROK_STABLE_URLS: `${registry}/grok/stable`,
           },
         },

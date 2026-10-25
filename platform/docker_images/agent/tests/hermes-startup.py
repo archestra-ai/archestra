@@ -71,7 +71,8 @@ class HermesStartupTest(unittest.TestCase):
         followup_sent = False
         try:
             transcript = runtime / "readable-transcript.json"
-            while time.monotonic() - started < 25:
+            # Generous for a contended builder; a healthy run takes under 10s.
+            while time.monotonic() - started < 60:
                 if server.package_requests:
                     break
                 if select.select([master], [], [], 0.1)[0]:
@@ -99,6 +100,10 @@ class HermesStartupTest(unittest.TestCase):
                 "Startup attempted an optional package download",
             )
             self.assertGreater(server.tool_calls, 0, "The real MCP tool was not executed")
+            self.assertEqual(
+                server.onboarding_notes, 0,
+                "Hermes asked the model for a first-contact introduction",
+            )
             self.assertTrue(transcript.exists(), output.decode(errors="replace")[-4000:])
             entries = json.loads(transcript.read_text())["entries"]
             self.assertGreater(count_answers(entries), 0, entries)
@@ -124,6 +129,9 @@ class HermesStartupTest(unittest.TestCase):
             except ProcessLookupError:
                 pass
             process.wait(timeout=5)
+            # Hermes runs hooks in their own sessions, so they can outlive the
+            # group kill and still write under the temporary directory.
+            stop_runtime_processes(runtime)
             os.close(master)
             server.release_packages.set()
             server.shutdown()
@@ -135,6 +143,7 @@ class RuntimeAPIs(ThreadingHTTPServer):
         super().__init__(("127.0.0.1", 0), RequestHandler)
         self.package_requests = []
         self.tool_calls = 0
+        self.onboarding_notes = 0
         self.release_packages = threading.Event()
         self.input_ready = threading.Event()
 
@@ -191,6 +200,11 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.respond({"jsonrpc": "2.0", "id": request["id"], "result": result})
             return
         tools = request.get("tools", [])
+        if any(
+            ONBOARDING_NOTE in json.dumps(m.get("content"))
+            for m in request.get("messages", [])
+        ):
+            self.server.onboarding_notes += 1
         echo = next(
             (t["function"]["name"] for t in tools
              if t["function"]["name"].endswith("echo")),
@@ -240,6 +254,38 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+
+# Hermes's first-contact note; its introduction would end up in the answer.
+ONBOARDING_NOTE = "This is the user's very first message ever."
+
+
+def stop_runtime_processes(runtime, timeout=10):
+    """Kill every live process started for this runtime, found by its environment."""
+    marker = f"ARCHESTRA_AGENT_RUNTIME_DIR={runtime}".encode()
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        live = []
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdigit() or int(entry.name) == os.getpid():
+                continue
+            try:
+                # The field after "(comm)" is the state; zombies hold no files.
+                if (entry / "stat").read_text().rsplit(")", 1)[1].split()[0] == "Z":
+                    continue
+                if marker in (entry / "environ").read_bytes().split(b"\0"):
+                    live.append(int(entry.name))
+            except (OSError, ValueError, IndexError):
+                continue
+        if not live:
+            return
+        for pid in live:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        time.sleep(0.1)
+    raise AssertionError(f"Processes for {runtime} outlived SIGKILL")
 
 
 def count_answers(entries):

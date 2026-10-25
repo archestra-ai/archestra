@@ -324,8 +324,8 @@ test("release comments compare every percentile and numeric cell with the publis
     body,
     /10.00 \(-50.0%\) \/ 20.00 \(-50.0%\) \/ 30.00 \(-50.0%\)/,
   );
-  assert.match(body, /— \(unmeasured\)/);
-  assert.match(body, /platform-v1.5.0-rc.3/);
+  assert.match(body, /\| — \|\n/);
+  assert.match(body, /Percentages compare with `platform-v1.5.0-rc.3`/);
   assert.match(body, /archestra-llm-proxy-benchmark-data:v1:/);
 });
 
@@ -477,4 +477,57 @@ test("a release outside the base ancestry is skipped before selecting its benchm
   });
   await findReleaseBenchmark(f);
   assert.deepEqual(f.lookups, ["platform-v1.5.0-rc.3"]);
+});
+
+test("a release squashed on top of later commits still supplies its measured baseline", async () => {
+  const f = fixture();
+  savePrevious(f);
+  // The release commit's tree includes a change merged after the release
+  // PR was measured; the measured revision's tree matches the saved one.
+  const trees = { [f.previousPr.head.sha]: "1".repeat(40) };
+  f.github.rest.repos.getCommit = async ({ ref }) => {
+    f.lookups.push(ref);
+    return { data: { sha: "e".repeat(40), commit: { tree: { sha: trees[ref] ?? "2".repeat(40) } } } };
+  };
+  f.github.rest.git.getTree = async ({ tree_sha }) => ({
+    data: {
+      tree: [
+        {
+          path: "platform",
+          type: "tree",
+          sha: tree_sha === "1".repeat(40) ? "c".repeat(40) : "9".repeat(40),
+        },
+      ],
+    },
+  });
+  const baseline = await findReleaseBenchmark(f);
+  assert.equal(baseline.state, "available");
+  assert.equal(baseline.tag, "platform-v1.5.0-rc.3");
+});
+
+test("the first release of a new track and a new major version compare with the release before them", async () => {
+  const f = fixture();
+  // release/1.6 has no 1.6 stable release yet: it was cut from 1.6.0-rc.3.
+  f.context.payload.pull_request.base.ref = "release/1.6";
+  f.releases.length = 0;
+  f.releases.push({
+    tag_name: "platform-v1.6.0-rc.3",
+    draft: false,
+    prerelease: true,
+    published_at: "2026-10-20T00:00:00Z",
+  });
+  await findReleaseBenchmark(f);
+  assert.deepEqual(f.lookups, ["platform-v1.6.0-rc.3"]);
+
+  const main = fixture();
+  main.releases.length = 0;
+  main.releases.push({
+    tag_name: "platform-v1.9.4",
+    draft: false,
+    prerelease: false,
+    published_at: "2026-10-20T00:00:00Z",
+  });
+  // A 2.0.0 release PR on main.
+  await findReleaseBenchmark(main);
+  assert.deepEqual(main.lookups, ["platform-v1.9.4"]);
 });

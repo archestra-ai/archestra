@@ -37,7 +37,7 @@ export async function findReleaseBenchmark({ github, context }) {
   const source = context.payload.pull_request;
   const missing = (reason) => ({ state: "missing", reason });
   try {
-    const releases = (
+    const published = (
       await github.paginate(github.rest.repos.listReleases, {
         ...repo,
         per_page: 100,
@@ -49,15 +49,21 @@ export async function findReleaseBenchmark({ github, context }) {
           release.published_at &&
           platformTag.test(release.tag_name),
       )
-      .filter(
-        (release) =>
-          !source.base.ref.startsWith("release/") ||
-          (!release.prerelease &&
-            release.tag_name.startsWith(
-              `platform-v${source.base.ref.slice(8)}.`,
-            )),
-      )
       .sort((a, b) => b.published_at.localeCompare(a.published_at));
+    // A stable release track (release/1.4) compares with its own previous
+    // stable release. Its first release has none, so it compares with the
+    // release it was cut from: the newest one in its history, whatever the
+    // version. Main always compares with the newest release in its history,
+    // so a new minor or major version still finds the last one.
+    const track = source.base.ref.startsWith("release/")
+      ? `platform-v${source.base.ref.slice(8)}.`
+      : null;
+    const sameTrack = (release) =>
+      track && !release.prerelease && release.tag_name.startsWith(track);
+    const releases = [
+      ...published.filter(sameTrack),
+      ...published.filter((release) => !sameTrack(release)),
+    ];
     let previous;
     for (const release of releases) {
       const { data } = await github.rest.repos.compareCommits({
@@ -149,9 +155,17 @@ export async function findReleaseBenchmark({ github, context }) {
         );
     }
     renderSummary(payload.summary); // Only validated numeric metrics may reach the comment.
+    // The saved tree must be the measured revision's. The release commit
+    // itself can differ: the merge queue squashes the release PR on top of
+    // whatever merged since its last update, and those changes are measured
+    // by the next release instead.
+    const { data: measured } = await github.rest.repos.getCommit({
+      ...repo,
+      ref: payload.gitCommit,
+    });
     const { data: tree } = await github.rest.git.getTree({
       ...repo,
-      tree_sha: commit.commit.tree.sha,
+      tree_sha: measured.commit.tree.sha,
     });
     const platform = tree.tree.find(
       (entry) => entry.path === "platform" && entry.type === "tree",
@@ -161,7 +175,7 @@ export async function findReleaseBenchmark({ github, context }) {
       payload.summary.platformTree !== platform?.sha
     )
       return missing(
-        `Last release (${previous.tag_name}) differs from the platform source tree that was benchmarked.`,
+        `Last release (${previous.tag_name}) has saved metrics that do not match the revision they name.`,
       );
     return {
       state: "available",

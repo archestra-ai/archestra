@@ -154,91 +154,80 @@ export function renderSummary(summary, baseline = null) {
       throw new Error("Invalid benchmark measurement");
     return value.toFixed(digits);
   };
+  // Workloads are matched row by row, so adding one keeps the others
+  // comparable; a row missing from the baseline is marked new.
+  const setupMatches =
+    hasComparisonSetup(summary.comparison) &&
+    JSON.stringify(withoutScenarios(summary.comparison)) ===
+      JSON.stringify(withoutScenarios(baseline?.summary?.comparison));
+  // One reason for the whole table, instead of a label in every cell.
+  const noComparison = !baseline
+    ? null
+    : summary.diagnostic
+      ? "No release comparison for a diagnostic run."
+      : !summary.complete
+        ? "No release comparison for an incomplete run."
+        : baseline.state !== "available"
+          ? baseline.reason
+          : !setupMatches
+            ? `No release comparison: the benchmark setup differs from \`${baseline.tag}\`.`
+            : null;
+  const comparing = Boolean(baseline) && !noComparison;
   const lines = [
     "## LLM Proxy Benchmark",
     "",
-    summary.complete
-      ? "Completed successfully."
-      : "Incomplete benchmark; these are partial results.",
+    [
+      summary.complete
+        ? "Completed successfully."
+        : "Incomplete benchmark; these are partial results.",
+      ...(summary.diagnostic
+        ? ["Diagnostic CPU profile: timings include profiler overhead."]
+        : []),
+      comparing
+        ? `Percentages compare with \`${baseline.tag}\`; lower latency and higher throughput are better.`
+        : (noComparison ?? ""),
+    ]
+      .filter(Boolean)
+      .join(" "),
     "",
-    ...(summary.diagnostic
-      ? [
-          "Diagnostic CPU profile: timings include profiler overhead and are not release measurements.",
-          "",
-        ]
-      : []),
     "| Workload | Requests/sec | Success | Gateway ms P50 / P95 / P99 | Overhead ms P50 / P95 / P99 | Client ms P50 / P95 / P99 | First content P50 ms |",
     "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
   ];
-  const comparable = !summary.diagnostic && baseline?.state === "available";
-  // Workloads are matched row by row, so adding one keeps the others
-  // comparable; a row missing from the baseline reports as a new workload.
-  const setupMatches =
-    comparable &&
-    hasComparisonSetup(summary.comparison) &&
-    JSON.stringify(withoutScenarios(summary.comparison)) ===
-      JSON.stringify(withoutScenarios(baseline.summary.comparison));
   for (const row of summary.rows) {
     if (!Object.hasOwn(names, row.scenario))
       throw new Error("Invalid benchmark workload");
-    const previous = baseline?.summary?.rows.find(
-      (candidate) =>
-        candidate.scenario === row.scenario &&
-        candidate.concurrency === row.concurrency,
-    );
+    const previous = comparing
+      ? baseline.summary.rows.find(
+          (candidate) =>
+            candidate.scenario === row.scenario &&
+            candidate.concurrency === row.concurrency,
+        )
+      : undefined;
     const measurement = (value, prior, digits = 2, unit = "") => {
       const rendered = `${number(value, digits)}${value === null ? "" : unit}`;
-      if (!baseline) return rendered;
-      let change;
-      if (value === null || value === undefined) change = "unmeasured";
-      else if (!summary.complete) change = "N/A: incomplete run";
-      else if (baseline.state !== "available")
-        change =
-          baseline.state === "first-run"
-            ? "first run"
-            : "N/A: baseline missing";
-      else if (!setupMatches) change = "N/A: setup changed";
-      else if (!previous) change = "N/A: new workload";
-      else if (prior == null) change = "N/A: unmeasured baseline";
-      else if (!Number.isFinite(prior) || prior < 0)
+      // No change for an unmeasured value, an unmeasured or zero baseline,
+      // or a workload the baseline does not have.
+      if (value == null || !previous || prior == null) return rendered;
+      if (!Number.isFinite(prior) || prior < 0)
         throw new Error("Invalid baseline measurement");
-      else if (prior === 0 && value !== 0) change = "N/A: baseline zero";
-      else {
-        const delta = prior === 0 ? 0 : (100 * (value - prior)) / prior;
-        change = `${delta > 0 ? "+" : ""}${delta.toFixed(1)}%`;
-      }
-      return `${rendered} (${change})`;
+      if (prior === 0) return rendered;
+      const delta = (100 * (value - prior)) / prior;
+      return `${rendered} (${delta > 0 ? "+" : ""}${delta.toFixed(1)}%)`;
     };
     const percentiles = (value, prior) =>
       value == null
-        ? measurement(null, null)
+        ? "—"
         : ["p50", "p95", "p99"]
             .map((key) => measurement(value[key], prior?.[key]))
             .join(" / ");
+    const workload = `${names[row.scenario]} (c=${number(row.concurrency, 0)}${comparing && !previous ? ", new" : ""})`;
     lines.push(
-      `| ${names[row.scenario]} (c=${number(row.concurrency, 0)}) | ${measurement(row.requestsPerSecond, previous?.requestsPerSecond, 1)} | ${measurement(row.successPercent, previous?.successPercent, 2, "%")} | ${percentiles(row.gatewayMs, previous?.gatewayMs)} | ${percentiles(row.overheadMs, previous?.overheadMs)} | ${percentiles({ p50: row.p50Ms, p95: row.p95Ms, p99: row.p99Ms }, previous && { p50: previous.p50Ms, p95: previous.p95Ms, p99: previous.p99Ms })} | ${measurement(row.firstContentP50Ms, previous?.firstContentP50Ms)} |`,
-    );
-  }
-  if (baseline) {
-    lines.push(
-      "",
-      baseline.state === "available"
-        ? `Changes versus last released benchmark (\`${baseline.tag}\`). Signed percentages are relative changes; higher throughput/success and lower latency are better. ${setupMatches ? "" : "Setup differs or its comparison metadata is missing; percentages are unavailable."}`
-        : baseline.reason,
+      `| ${workload} | ${measurement(row.requestsPerSecond, previous?.requestsPerSecond, 1)} | ${measurement(row.successPercent, previous?.successPercent, 2, "%")} | ${percentiles(row.gatewayMs, previous?.gatewayMs)} | ${percentiles(row.overheadMs, previous?.overheadMs)} | ${percentiles({ p50: row.p50Ms, p95: row.p95Ms, p99: row.p99Ms }, previous && { p50: previous.p50Ms, p95: previous.p95Ms, p99: previous.p99Ms })} | ${measurement(row.firstContentP50Ms, previous?.firstContentP50Ms)} |`,
     );
   }
   lines.push(
     "",
-    `Production web processes: ${summary.webWorkers ?? 1}; total database pool budget: 20; PostgreSQL; local mock upstream. Host: ${number(summary.logicalCpus, 0)} logical CPUs, ${number(summary.memoryGiB, 1)} GiB RAM.`,
-    `Each row pools ${number(summary.repeats, 0)} repeats at the highest tested concurrency; ${number(summary.requestsPerBlock, 0)} requests per non-streaming block and ${number(summary.streamingRequestsPerBlock, 0)} per streaming block. Warmup is excluded.`,
-    "Gateway latency measures server request receipt through response serialization, before socket delivery. Overhead subtracts each request's upstream SDK-call duration before calculating percentiles; it includes authentication, routing, policies and persistence. Client latency ends at the complete response body. Streaming reports client latency and first content only (— means unmeasured).",
-    "The isolated launcher validates a passthrough virtual key and persists requests; no real inference requests. Workloads run separately, with a short prompt and max_tokens=32; streaming uses 20 content events, 10 ms apart. Response caching and configured key budgets are not enabled.",
-    ...(summary.rows.some((row) => row.scenario === "mcp")
-      ? [
-          "The MCP tool call sends a stateless JSON-RPC tools/call to an MCP gateway with a user token; the gateway resolves and authorizes the tool, calls a one-tool mock MCP server and persists the call. Its overhead excludes the upstream tool call.",
-        ]
-      : []),
-    "Shared-runner measurements track release changes; they are not a production capacity rating. Compare the same hardware, workload, concurrency, authentication and logging settings.",
+    `${number(summary.logicalCpus, 0)} vCPU / ${number(summary.memoryGiB, 1)} GiB shared runner · ${summary.webWorkers ?? 1} web process, database pool 20 · mock upstream · ${number(summary.repeats, 0)} repeats of ${number(summary.requestsPerBlock, 0)} requests (${number(summary.streamingRequestsPerBlock, 0)} streaming), warmup excluded. Overhead is gateway time minus the upstream call. [Method](https://archestra.ai/docs/admin/observability/performance-benchmarks)`,
   );
   return `${lines.join("\n")}\n`;
 }

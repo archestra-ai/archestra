@@ -257,8 +257,9 @@ if [[ "${event}" != "post_llm_call" && "${event}" != "on_session_end" ]] \
   || [[ "${session_id}" != "$(cat "${session_file}")" ]]; then
   exit 0
 fi
-python3 "${runtime_dir}/hermes-transcript.py" \
-  "${runtime_dir}/hermes/state.db" \
+# Hermes's own interpreter: its SQLite is the one that writes state.db.
+/opt/hermes/.venv/bin/python "${runtime_dir}/hermes-transcript.py" \
+  "${HERMES_HOME:-${runtime_dir}/hermes}/state.db" \
   "${session_id}" \
   "${runtime_dir}/readable-transcript.json" || true
 
@@ -302,7 +303,6 @@ jq -n \
     security:{allow_lazy_installs:false},
     plugins:{enabled:["archestra-attention"]},
     model:{
-      max_tokens:16384,
       context_length:1047576,
       default_headers:({
         "X-Archestra-Run-Id":$task_id,
@@ -311,6 +311,12 @@ jq -n \
       } + (if $binding == "" then {} else {"X-Archestra-Runtime-Binding":$binding} end))
     },
     mcp_discovery_timeout:30,
+    mcp_single_query_discovery_timeout:30,
+    # The image pins Hermes, and an unanswered consent prompt would hold the session.
+    updates:{check:false},
+    # Declare the gateway tools directly: no tool_search bridge in front of them.
+    tools:{tool_search:{enabled:"off"}},
+    telemetry:{shared_metrics:{enabled:false, send:false, offer_version:2}},
     mcp_servers:{archestra:{
       url:$mcp_url,
       headers:({
@@ -444,7 +450,7 @@ case "${runtime_mode}" in
 
     # Capture the cursor before starting Hermes, including when the next prompt
     # repeats an earlier one. Only messages written by this invocation can finish it.
-    message_cursor="$(python3 - "${HERMES_HOME}/state.db" <<'PYTHON'
+    message_cursor="$(/opt/hermes/.venv/bin/python - "${HERMES_HOME}/state.db" <<'PYTHON'
 import sqlite3
 import sys
 from pathlib import Path
@@ -457,7 +463,7 @@ else:
     print(0)
 PYTHON
     )"
-    python3 "${completion_watcher}" \
+    /opt/hermes/.venv/bin/python "${completion_watcher}" \
       "${HERMES_HOME}/state.db" \
       "$(cat "${task_file}")" \
       "${runtime_dir}/final-answer.txt" \

@@ -157,3 +157,8 @@ OpenClaw lockfile. The pull request does not merge itself: merge it once the
 `Validate agent-*` builds pass. A new catalog target fails that script until it
 is registered there. Every CLI's own update check is off in the image, so an
 older session never stops on an update prompt.
+
+Hermes no longer publishes to PyPI. The image builds a GitHub release from
+source, the way upstream's own image does: Python, uv, and every package come
+from the versions locked in that checkout. Its pin is a `hermes_version` and
+`hermes_commit` pair, and the build fails unless the tag resolves to that commit.

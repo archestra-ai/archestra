@@ -173,6 +173,10 @@ export function renderSummary(summary, baseline = null) {
             ? `No release comparison: the benchmark setup differs from \`${baseline.tag}\`.`
             : null;
   const comparing = Boolean(baseline) && !noComparison;
+  // Runner metadata is untrusted artifact text; keep it plain.
+  const cpu = String(summary.comparison?.cpu ?? "")
+    .replace(/[^\w ().@-]/g, "")
+    .slice(0, 80);
   const lines = [
     "## LLM Proxy Benchmark",
     "",
@@ -184,7 +188,7 @@ export function renderSummary(summary, baseline = null) {
         ? ["Diagnostic CPU profile: timings include profiler overhead."]
         : []),
       comparing
-        ? `Percentages compare with \`${baseline.tag}\`; lower latency and higher throughput are better.`
+        ? `Percentages compare with \`${baseline.tag}\`${baseline.sameRunner ? ", measured again on this runner" : ""}; lower latency and higher throughput are better.`
         : (noComparison ?? ""),
     ]
       .filter(Boolean)
@@ -227,7 +231,7 @@ export function renderSummary(summary, baseline = null) {
   }
   lines.push(
     "",
-    `${number(summary.logicalCpus, 0)} vCPU / ${number(summary.memoryGiB, 1)} GiB shared runner · ${summary.webWorkers ?? 1} web process, database pool 20 · mock upstream · ${number(summary.repeats, 0)} repeats of ${number(summary.requestsPerBlock, 0)} requests (${number(summary.streamingRequestsPerBlock, 0)} streaming), warmup excluded. Overhead is gateway time minus the upstream call. [Method](https://archestra.ai/docs/admin/observability/performance-benchmarks)`,
+    `${cpu ? `${cpu}, ` : ""}${number(summary.logicalCpus, 0)} vCPU / ${number(summary.memoryGiB, 1)} GiB runner · ${summary.webWorkers ?? 1} web process, database pool 20 · mock upstream · ${number(summary.repeats, 0)} repeats of ${number(summary.requestsPerBlock, 0)} requests (${number(summary.streamingRequestsPerBlock, 0)} streaming), warmup excluded. Overhead is gateway time minus the upstream call. [Method](https://archestra.ai/docs/admin/observability/performance-benchmarks)`,
   );
   return `${lines.join("\n")}\n`;
 }

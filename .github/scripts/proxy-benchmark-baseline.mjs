@@ -32,50 +32,67 @@ function readPayload(body) {
     : null;
 }
 
-export async function findReleaseBenchmark({ github, context }) {
+/**
+ * The release a release PR compares with: on a `release/X.Y` branch its
+ * previous `X.Y` stable release, otherwise the newest published release in
+ * the base branch's history. Null when there is none.
+ */
+export async function findPreviousRelease({ github, context }) {
   const repo = context.repo;
   const source = context.payload.pull_request;
+  const published = (
+    await github.paginate(github.rest.repos.listReleases, {
+      ...repo,
+      per_page: 100,
+    })
+  )
+    .filter(
+      (release) =>
+        !release.draft &&
+        release.published_at &&
+        platformTag.test(release.tag_name),
+    )
+    .sort((a, b) => b.published_at.localeCompare(a.published_at));
+  // A stable release track (release/1.4) compares with its own previous
+  // stable release. Its first release has none, so it compares with the
+  // release it was cut from: the newest one in its history, whatever the
+  // version. Main always compares with the newest release in its history,
+  // so a new minor or major version still finds the last one.
+  const track = source.base.ref.startsWith("release/")
+    ? `platform-v${source.base.ref.slice(8)}.`
+    : null;
+  const sameTrack = (release) =>
+    track && !release.prerelease && release.tag_name.startsWith(track);
+  const releases = [
+    ...published.filter(sameTrack),
+    ...published.filter((release) => !sameTrack(release)),
+  ];
+  let previous = null;
+  for (const release of releases) {
+    const { data } = await github.rest.repos.compareCommits({
+      ...repo,
+      base: release.tag_name,
+      head: source.base.sha,
+    });
+    if (data.status === "ahead" || data.status === "identical") {
+      previous = release;
+      break;
+    }
+  }
+  return previous;
+}
+
+/**
+ * The previous release's benchmark. `remeasured` is that release measured
+ * again on this run's runner (benchmarks/remeasure-release.sh); it is used
+ * when it names the release's own commit, so both sides share hardware.
+ * Otherwise the metrics saved on the release's PR are used.
+ */
+export async function findReleaseBenchmark({ github, context, remeasured }) {
+  const repo = context.repo;
   const missing = (reason) => ({ state: "missing", reason });
   try {
-    const published = (
-      await github.paginate(github.rest.repos.listReleases, {
-        ...repo,
-        per_page: 100,
-      })
-    )
-      .filter(
-        (release) =>
-          !release.draft &&
-          release.published_at &&
-          platformTag.test(release.tag_name),
-      )
-      .sort((a, b) => b.published_at.localeCompare(a.published_at));
-    // A stable release track (release/1.4) compares with its own previous
-    // stable release. Its first release has none, so it compares with the
-    // release it was cut from: the newest one in its history, whatever the
-    // version. Main always compares with the newest release in its history,
-    // so a new minor or major version still finds the last one.
-    const track = source.base.ref.startsWith("release/")
-      ? `platform-v${source.base.ref.slice(8)}.`
-      : null;
-    const sameTrack = (release) =>
-      track && !release.prerelease && release.tag_name.startsWith(track);
-    const releases = [
-      ...published.filter(sameTrack),
-      ...published.filter((release) => !sameTrack(release)),
-    ];
-    let previous;
-    for (const release of releases) {
-      const { data } = await github.rest.repos.compareCommits({
-        ...repo,
-        base: release.tag_name,
-        head: source.base.sha,
-      });
-      if (data.status === "ahead" || data.status === "identical") {
-        previous = release;
-        break;
-      }
-    }
+    const previous = await findPreviousRelease({ github, context });
     if (!previous)
       return {
         state: "first-run",
@@ -86,6 +103,21 @@ export async function findReleaseBenchmark({ github, context }) {
       ...repo,
       ref: previous.tag_name,
     });
+    if (
+      remeasured?.complete === true &&
+      !remeasured.diagnostic &&
+      remeasured.gitCommit === commit.sha &&
+      (await platformTree({ github, repo, treeSha: commit.commit.tree.sha })) ===
+        remeasured.platformTree
+    ) {
+      renderSummary(remeasured); // Only validated numeric metrics may reach the comment.
+      return {
+        state: "available",
+        tag: previous.tag_name,
+        summary: remeasured,
+        sameRunner: true,
+      };
+    }
     const pulls = await github.paginate(
       github.rest.repos.listPullRequestsAssociatedWithCommit,
       { ...repo, commit_sha: commit.sha, per_page: 100 },
@@ -163,16 +195,14 @@ export async function findReleaseBenchmark({ github, context }) {
       ...repo,
       ref: payload.gitCommit,
     });
-    const { data: tree } = await github.rest.git.getTree({
-      ...repo,
-      tree_sha: measured.commit.tree.sha,
-    });
-    const platform = tree.tree.find(
-      (entry) => entry.path === "platform" && entry.type === "tree",
-    );
     if (
       !sha.test(payload.summary.platformTree) ||
-      payload.summary.platformTree !== platform?.sha
+      payload.summary.platformTree !==
+        (await platformTree({
+          github,
+          repo,
+          treeSha: measured.commit.tree.sha,
+        }))
     )
       return missing(
         `Last release (${previous.tag_name}) has saved metrics that do not match the revision they name.`,
@@ -187,4 +217,14 @@ export async function findReleaseBenchmark({ github, context }) {
       "Last release benchmark could not be read or validated. Release lookup, saved metrics or API access may be unavailable; no older release is substituted.",
     );
   }
+}
+
+async function platformTree({ github, repo, treeSha }) {
+  const { data: tree } = await github.rest.git.getTree({
+    ...repo,
+    tree_sha: treeSha,
+  });
+  return tree.tree.find(
+    (entry) => entry.path === "platform" && entry.type === "tree",
+  )?.sha;
 }

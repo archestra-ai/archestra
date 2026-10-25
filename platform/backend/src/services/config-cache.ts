@@ -10,6 +10,7 @@ import { sharedNotifyHub } from "@/services/shared-notify-hub";
  * depend on changes. Triggers on those tables publish it (see the
  * `archestra_notify_proxy_config` migration), so every write path is covered
  * however it reaches the database.
+ * @public — exported for testability
  */
 export const PROXY_CONFIG_CHANNEL = "archestra_proxy_config";
 
@@ -17,6 +18,7 @@ export const PROXY_CONFIG_CHANNEL = "archestra_proxy_config";
  * Upper bound on how long an entry may outlive a change whose notification was
  * lost, for example while the listener's connection is dying but not yet
  * closed. Delivered notifications drop entries within milliseconds.
+ * @public — exported for testability
  */
 export const PROXY_CONFIG_TTL_MS = 5_000;
 
@@ -34,6 +36,7 @@ export const PROXY_CONFIG_TTL_MS = 5_000;
  *
  * Under load an entry is refreshed in the background before it expires, and
  * concurrent misses share one read, so expiry never stalls a burst of requests.
+ * @public — exported for testability (one instance per simulated replica)
  */
 export class ConfigCache {
   private readonly entries = registerProcessLocalCache(

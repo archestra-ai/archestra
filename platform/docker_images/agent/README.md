@@ -148,3 +148,12 @@ Grok Build differs from the other clients in three ways:
 The six public catalog targets are built for development deployments and
 releases. Keep native CLI versions exact and review their published package
 scripts before updating them.
+
+The daily `agent-runtime` job in `.github/workflows/update-client-versions.yml`
+proposes those updates as one pull request on `automation/agent-runtime-clis`.
+It runs `pnpm --dir backend update:agent-runtime-clis`, which picks each CLI's
+newest stable release that has been public for 7 days, and refreshes the
+OpenClaw lockfile. The pull request does not merge itself: merge it once the
+`Validate agent-*` builds pass. A new catalog target fails that script until it
+is registered there. Every CLI's own update check is off in the image, so an
+older session never stops on an update prompt.

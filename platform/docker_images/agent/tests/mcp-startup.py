@@ -275,6 +275,11 @@ class StartupTest(unittest.TestCase):
             runtime.mkdir()
             home = root / "home"
             home.mkdir()
+            if CLIENT == "codex":
+                # A cached newer release is what raises Codex's update prompt,
+                # which would hold the pinned image's TUI before the turn.
+                (runtime / "codex").mkdir()
+                (runtime / "codex" / "version.json").write_text(json.dumps({"latest_version": "999.0.0", "last_checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}))
             server = Gateway(failure)
             threading.Thread(target=server.serve_forever, daemon=True).start()
             origin = f"http://127.0.0.1:{server.server_port}"
@@ -378,6 +383,7 @@ class StartupTest(unittest.TestCase):
                 if mode == "interactive" and len(server.calls) == 3 and len(server.requests) >= 4 and (runtime / "readable-transcript.json").exists():
                     break
             details = output.decode(errors="replace")[-6000:]
+            self.assertNotIn("Update available", output.decode(errors="replace"), details)
             for path, binding in server.binding_headers:
                 self.assertEqual(binding, env["ARCHESTRA_AGENT_RUNTIME_BINDING"], f"{path}: missing or stale workspace binding")
             if failure:

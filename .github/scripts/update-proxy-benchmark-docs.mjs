@@ -165,6 +165,15 @@ export async function commitBenchmarkDocs({
   } catch (error) {
     if ((error.status === 409 || error.status === 422) && !(await isCurrent()))
       return "superseded";
+    // Queue admission can race this optional publication. Keep GitHub's locked
+    // head and the measured artifacts; never dequeue or retry the branch write.
+    if (
+      error.status === 422 &&
+      /A pull request for this branch has been added to a merge queue\. Branches that\s+are queued for merging cannot be updated\./.test(
+        error.message,
+      )
+    )
+      return "queued; retaining validated benchmark artifacts and the queued head";
     throw error;
   }
   return "updated";

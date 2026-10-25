@@ -329,6 +329,23 @@ test("a rejected write at an unchanged head fails visibly instead of claiming a 
   }
 });
 
+test("queue entry during publication retains the validated head without retrying the write", async () => {
+  const f = fixture();
+  let attempts = 0;
+  f.github.rest.git.updateRef = async ({ force }) => {
+    attempts++;
+    assert.equal(force, false);
+    throw Object.assign(new Error(
+      "A pull request for this branch has been added to a merge queue. Branches that\n" +
+      "are queued for merging cannot be updated. To modify this branch, dequeue the\n" +
+      "associated pull request.",
+    ), { status: 422 });
+  };
+  assert.equal(await commitBenchmarkDocs(f), "queued; retaining validated benchmark artifacts and the queued head");
+  assert.equal(attempts, 1);
+  assert.equal(f.current.head.sha, f.summary.gitCommit);
+});
+
 test("source mismatch, symlinks and invalid marker blocks cannot produce a docs commit", async () => {
   for (const change of [
     (f) => {

@@ -41,6 +41,7 @@ if (Number.isNaN(now.getTime())) {
 const publishedBefore = now.getTime() - cooldownDays * 24 * 60 * 60 * 1000;
 
 const STABLE_SEMVER = /^\d+\.\d+\.\d+$/;
+const HERMES_REPOSITORY = "NousResearch/hermes-agent";
 const GROK_ARCHES = [
   ["amd64", "x64"],
   ["arm64", "arm64"],
@@ -49,10 +50,11 @@ const GROK_ARCHES = [
 const npmRegistry = (
   process.env.NPM_CONFIG_REGISTRY || "https://registry.npmjs.org"
 ).replace(/\/+$/, "");
-const pypiUrl = (process.env.PYPI_URL || "https://pypi.org").replace(
-  /\/+$/,
-  "",
-);
+// GitHub Actions sets GITHUB_API_URL; a token lifts the anonymous rate limit.
+const githubApiUrl = (
+  process.env.GITHUB_API_URL || "https://api.github.com"
+).replace(/\/+$/, "");
+const githubToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || "";
 // The same channel pointer and fallback that https://x.ai/cli/install.sh reads.
 const grokStableUrls = (
   process.env.GROK_STABLE_URLS ||
@@ -121,17 +123,26 @@ const AGENT_RUNTIME_CLIS = [
   {
     target: "agent-hermes",
     label: "Hermes",
-    resolve: () => resolvePypi("hermes-agent"),
+    // Hermes ships only from source; PyPI stopped at 0.19.0. The image builds
+    // the release commit, so the pin carries the tag's version and commit.
+    resolve: () => resolveGithubReleases(HERMES_REPOSITORY),
     read: (files) =>
       readSingleVersion(files.dockerfile, [
-        /'hermes-agent\[mcp\]==(\d+\.\d+\.\d+)'/g,
+        /\bhermes_version=(\d+\.\d+\.\d+)\b/g,
       ]),
-    write: (files, version) => {
-      files.dockerfile = replaceVersion(
+    write: async (files, version) => {
+      const commit = await githubTagCommit(HERMES_REPOSITORY, `v${version}`);
+      let dockerfile = replaceVersion(
         files.dockerfile,
-        [/('hermes-agent\[mcp\]==)\d+\.\d+\.\d+(?=')/g],
+        [/(\bhermes_version=)\d+\.\d+\.\d+\b/g],
         version,
       );
+      dockerfile = replaceExactlyOnce(
+        dockerfile,
+        /(\bhermes_commit=)[0-9a-f]{40}\b/g,
+        `$1${commit}`,
+      );
+      files.dockerfile = dockerfile;
     },
   },
   {
@@ -273,23 +284,37 @@ async function resolveNpm({ name, channel, pattern = STABLE_SEMVER }) {
   return { releases: npmReleases(packument), ceiling, pattern };
 }
 
-async function resolvePypi(name) {
-  const project = await fetchJson(`${pypiUrl}/pypi/${name}/json`);
-  const ceiling = project.info?.version;
-  if (!STABLE_SEMVER.test(ceiling ?? "")) {
-    throw new Error(`PyPI ${name} latest is not a stable version: ${ceiling}`);
+// Releases tagged `vX.Y.Z`; `releases/latest` is the ceiling, which also keeps
+// older calendar-versioned tags (`v2026.9.24`) out of the comparison.
+async function resolveGithubReleases(repository) {
+  const latest = await fetchGithub(`/repos/${repository}/releases/latest`);
+  const ceiling = /^v(\d+\.\d+\.\d+)$/.exec(latest.tag_name ?? "")?.[1];
+  if (!ceiling) {
+    throw new Error(
+      `${repository} latest release is not a vX.Y.Z tag: ${latest.tag_name}`,
+    );
   }
-  const releases = Object.entries(project.releases ?? {}).flatMap(
-    ([version, uploads]) => {
-      const live = uploads.filter((upload) => !upload.yanked);
-      if (live.length === 0) return [];
-      const publishedAt = Math.min(
-        ...live.map((upload) => Date.parse(upload.upload_time_iso_8601)),
-      );
-      return [{ version, publishedAt }];
-    },
-  );
+  const releases = (
+    await fetchGithub(`/repos/${repository}/releases?per_page=100`)
+  ).flatMap((release) => {
+    const version = /^v(\d+\.\d+\.\d+)$/.exec(release.tag_name ?? "")?.[1];
+    const publishedAt = Date.parse(release.published_at ?? "");
+    return version &&
+      !release.draft &&
+      !release.prerelease &&
+      !Number.isNaN(publishedAt)
+      ? [{ version, publishedAt }]
+      : [];
+  });
   return { releases, ceiling, pattern: STABLE_SEMVER };
+}
+
+async function githubTagCommit(repository, tag) {
+  const { sha } = await fetchGithub(`/repos/${repository}/commits/${tag}`);
+  if (!/^[0-9a-f]{40}$/.test(sha ?? "")) {
+    throw new Error(`${repository} ${tag} has no commit`);
+  }
+  return sha;
 }
 
 // The npm `latest` tag of the Grok binary packages is stale; xAI's stable
@@ -436,12 +461,21 @@ async function fetchJson(url) {
   return (await fetchOk(url)).json();
 }
 
+async function fetchGithub(path) {
+  const headers = { accept: "application/vnd.github+json" };
+  if (githubToken) headers.authorization = `Bearer ${githubToken}`;
+  return (await fetchOk(`${githubApiUrl}${path}`, headers)).json();
+}
+
 async function fetchText(url) {
   return (await fetchOk(url)).text();
 }
 
-async function fetchOk(url) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+async function fetchOk(url, headers = {}) {
+  const response = await fetch(url, {
+    headers,
+    signal: AbortSignal.timeout(60_000),
+  });
   if (!response.ok) {
     throw new Error(`GET ${url} returned ${response.status}`);
   }

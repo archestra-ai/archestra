@@ -355,6 +355,7 @@ jobs:
       - name: Update agent runtime CLIs
         id: update
         env:
+          GH_TOKEN: ${{ github.token }}
           TARGET: ${{ steps.branch.outputs.path }}
         run: |
           set -euo pipefail
@@ -415,7 +416,7 @@ jobs:
           fi
 
           pr_title="chore: update agent runtime CLIs"
-          pr_body="Raise the agent CLIs in the agent catalog images (Claude Code, Codex, OpenCode, Hermes, OpenClaw, Grok CLI) to their newest stable release that has been public for at least 7 days, matching the repository's \`minimumReleaseAge\`. Upstream channel pointers cap each pick: npm \`stable\` for Claude Code, npm \`latest\` for Codex, OpenCode, and OpenClaw, PyPI for Hermes, and xAI's stable channel for Grok CLI.
+          pr_body="Raise the agent CLIs in the agent catalog images (Claude Code, Codex, OpenCode, Hermes, OpenClaw, Grok CLI) to their newest stable release that has been public for at least 7 days, matching the repository's \`minimumReleaseAge\`. Upstream channel pointers cap each pick: npm \`stable\` for Claude Code, npm \`latest\` for Codex, OpenCode, and OpenClaw, GitHub releases for Hermes, and xAI's stable channel for Grok CLI.
 
           Merge once every **Validate agent-\*** check passes. Those builds run each image's startup and MCP tests on amd64 and arm64, but they are not required checks. Hermes and OpenClaw carry source patches that a new release can invalidate."
           owner="${GH_REPO%%/*}"

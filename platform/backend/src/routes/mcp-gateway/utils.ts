@@ -953,6 +953,25 @@ export async function createAgentServer(params: {
     const taskEligible =
       mrtrEnabled && clientDeclaredTasks({ params: request.params });
 
+    // A connection that needs signing in again is offered to the person as a
+    // link their client opens, then the call re-runs (see reauth-elicitation).
+    const reauthExtra = {
+      sendRequest: extra.sendRequest,
+      signal: extra.signal,
+      // Straight onto this call's stream: the SDK checks the capability
+      // against an `initialize` this per-request Server never saw, while
+      // recoverExpiredAuthWithUrlElicitation has already checked it.
+      sendNotification: async (notification: {
+        method: "notifications/elicitation/complete";
+        params: { elicitationId: string };
+      }) => {
+        await mcpServer.server.transport?.send(
+          { jsonrpc: "2.0", ...notification },
+          { relatedRequestId: extra.requestId },
+        );
+      },
+    };
+
     const executeCallToolRequest = async (
       taskAbortSignal: AbortSignal,
     ): Promise<Record<string, unknown>> => {
@@ -1123,34 +1142,47 @@ export async function createAgentServer(params: {
             toolArgs: args,
             user: mcpUser,
             callback: async (span) => {
-              const result = await executeArchestraTool(name, args, {
-                openappaSession: params.openappaSession,
-                currentToolCallId: params.currentToolCallId,
-                agent: { id: agent.id, name: agent.name },
-                agentId: agent.id,
-                userId: tokenAuth?.serviceAccountId
-                  ? serviceAccountUserId(tokenAuth.serviceAccountId)
-                  : tokenAuth?.userId,
-                organizationId: tokenAuth?.organizationId,
-                tokenAuth,
-                mrtr: {
-                  enabled: mrtrEnabled,
-                  inputResponses: mrtr?.inputResponses,
-                  clientCapabilities: mrtr?.clientCapabilities,
-                  round: mrtr?.round,
-                },
-                elicitation: {
-                  elicit: createGatewayUserElicit({
-                    extra,
-                    mrtr,
-                    mrtrEnabled,
-                    agentId,
-                    toolName: name,
-                    requestMeta: request.params._meta as
-                      | Record<string, unknown>
-                      | undefined,
-                  }),
-                },
+              const runArchestraTool = () =>
+                executeArchestraTool(name, args, {
+                  openappaSession: params.openappaSession,
+                  currentToolCallId: params.currentToolCallId,
+                  agent: { id: agent.id, name: agent.name },
+                  agentId: agent.id,
+                  userId: tokenAuth?.serviceAccountId
+                    ? serviceAccountUserId(tokenAuth.serviceAccountId)
+                    : tokenAuth?.userId,
+                  organizationId: tokenAuth?.organizationId,
+                  tokenAuth,
+                  mrtr: {
+                    enabled: mrtrEnabled,
+                    inputResponses: mrtr?.inputResponses,
+                    clientCapabilities: mrtr?.clientCapabilities,
+                    round: mrtr?.round,
+                  },
+                  elicitation: {
+                    elicit: createGatewayUserElicit({
+                      extra,
+                      mrtr,
+                      mrtrEnabled,
+                      agentId,
+                      toolName: name,
+                      requestMeta: request.params._meta as
+                        | Record<string, unknown>
+                        | undefined,
+                    }),
+                  },
+                });
+              // run_tool reaches upstream servers, so its call can fail on an
+              // expired connection just like a direct one.
+              const result = await recoverExpiredAuthWithUrlElicitation({
+                result: await runArchestraTool(),
+                clientCapabilities: mrtr?.clientCapabilities,
+                mrtrEnabled,
+                inputResponses: mrtr?.inputResponses,
+                extra: reauthExtra,
+                rerun: runArchestraTool,
+                agentId,
+                toolName: name,
               });
               span.setAttribute(
                 ATTR_MCP_IS_ERROR_RESULT,
@@ -1324,26 +1356,12 @@ export async function createAgentServer(params: {
                   },
                 },
               );
-            // A connection that needs signing in again is offered to the
-            // person as a link their client opens, then the call re-runs.
             const r = await recoverExpiredAuthWithUrlElicitation({
               result: await runUpstream(),
               clientCapabilities: mrtr?.clientCapabilities,
               mrtrEnabled,
               inputResponses: mrtr?.inputResponses,
-              extra: {
-                sendRequest: extra.sendRequest,
-                signal: extra.signal,
-                // Straight onto this call's stream: the SDK checks the
-                // capability against an `initialize` this per-request Server
-                // never saw, while the capability was already checked above.
-                sendNotification: async (notification) => {
-                  await mcpServer.server.transport?.send(
-                    { jsonrpc: "2.0", ...notification },
-                    { relatedRequestId: extra.requestId },
-                  );
-                },
-              },
+              extra: reauthExtra,
               rerun: runUpstream,
               agentId,
               toolName: name,

@@ -10,7 +10,6 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import logger from "@/logging";
 import { McpServerModel } from "@/models";
-import type { CommonToolResult } from "@/types";
 import {
   clientSupportsInputRequest,
   type InputRequest,
@@ -41,8 +40,10 @@ const REAUTH_INPUT_REQUEST_KEY = "gateway_reauthentication";
  * `notifications/elicitation/complete`. Under 2026-07-28 it unwinds to an
  * InputRequiredResult, and the retry carrying the answer waits here instead.
  */
-export async function recoverExpiredAuthWithUrlElicitation(params: {
-  result: CommonToolResult;
+export async function recoverExpiredAuthWithUrlElicitation<
+  T extends { isError?: boolean | null },
+>(params: {
+  result: T;
   clientCapabilities: unknown;
   mrtrEnabled: boolean;
   inputResponses?: InputResponses;
@@ -58,10 +59,10 @@ export async function recoverExpiredAuthWithUrlElicitation(params: {
     }) => Promise<void>;
     signal?: AbortSignal;
   };
-  rerun: () => Promise<CommonToolResult>;
+  rerun: () => Promise<T>;
   agentId: string;
   toolName: string;
-}): Promise<CommonToolResult> {
+}): Promise<T> {
   const {
     result,
     clientCapabilities,
@@ -178,9 +179,9 @@ const REAUTH_POLL_INTERVAL_MS = 2 * TimeInMs.Second;
  * credential may be one the caller is not allowed to re-authenticate, so it
  * keeps the plain link.
  */
-function expiredOwnCredential(
-  result: CommonToolResult,
-): AuthExpiredMcpToolError | null {
+function expiredOwnCredential(result: {
+  isError?: boolean | null;
+}): AuthExpiredMcpToolError | null {
   if (!result.isError) return null;
   const error = extractMcpToolError(result);
   if (

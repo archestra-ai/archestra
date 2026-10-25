@@ -11,6 +11,10 @@
  */
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import {
+  getArchestraToolFullName,
+  TOOL_RUN_TOOL_SHORT_NAME,
+} from "@archestra/shared";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Server as McpSdkServer } from "@modelcontextprotocol/sdk/server/index.js";
@@ -121,6 +125,54 @@ describe("MCP gateway - re-authentication through URL elicitation", () => {
     );
     // The client's "waiting for the server" prompt is told it is done.
     expect(completed).toEqual([prompts[0].elicitationId]);
+  });
+
+  test("a call dispatched through run_tool recovers the same way", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    upstream = await startUpstream();
+    const install = await installAndSync({
+      upstream,
+      // The default gateway: clients see search_tools and run_tool only.
+      toolExposureMode: "search_and_run_only",
+      fixtures: {
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeAgent,
+        makeInternalMcpCatalog,
+        makeMcpServer,
+      },
+    });
+    upstream.revoke(INITIAL_TOKEN);
+    app = await gatewayApp();
+
+    const prompts: Array<Record<string, unknown>> = [];
+    client = await connectGatewayClient({
+      app,
+      agentId: install.agentId,
+      token: install.token,
+      capabilities: { elicitation: { form: {}, url: {} } },
+      onElicit: async (params) => {
+        prompts.push(params);
+        await reauthenticate({ serverId: install.serverId });
+        return { action: "accept" };
+      },
+    });
+
+    const result = await client.callTool({
+      name: getArchestraToolFullName(TOOL_RUN_TOOL_SHORT_NAME),
+      arguments: { tool_name: install.toolName, tool_args: { city: "Lisbon" } },
+    });
+
+    expect(prompts).toHaveLength(1);
+    expect(result.isError).toBeFalsy();
+    expect(errorText(result)).toContain("Lisbon: 21C");
   });
 
   test("a client without URL mode keeps the error text with the re-authentication link", async ({
@@ -316,6 +368,7 @@ async function reauthenticate(params: { serverId: string }) {
 
 async function installAndSync(params: {
   upstream: { url: string };
+  toolExposureMode?: "full" | "search_and_run_only";
   fixtures: {
     makeOrganization: () => Promise<{ id: string }>;
     makeUser: () => Promise<{ id: string }>;
@@ -327,7 +380,7 @@ async function installAndSync(params: {
     makeAgent: (overrides: {
       organizationId: string;
       agentType: "mcp_gateway";
-      toolExposureMode: "full";
+      toolExposureMode: "full" | "search_and_run_only";
       accessAllTools: false;
     }) => Promise<{ id: string }>;
     makeInternalMcpCatalog: (overrides: {
@@ -353,7 +406,7 @@ async function installAndSync(params: {
   const agent = await fixtures.makeAgent({
     organizationId: org.id,
     agentType: "mcp_gateway",
-    toolExposureMode: "full",
+    toolExposureMode: params.toolExposureMode ?? "full",
     accessAllTools: false,
   });
   const catalog = await fixtures.makeInternalMcpCatalog({

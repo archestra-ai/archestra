@@ -317,6 +317,13 @@ jq -n \
     # Declare the gateway tools directly: no tool_search bridge in front of them.
     tools:{tool_search:{enabled:"off"}},
     telemetry:{shared_metrics:{enabled:false, send:false, offer_version:2}},
+    # First-touch tips and the profile offer would land in the final answer.
+    onboarding:{profile_build:"off", seen:{
+      busy_input_prompt:true,
+      tool_progress_prompt:true,
+      openclaw_residue_cleanup:true,
+      profile_build_offered:true
+    }},
     mcp_servers:{archestra:{
       url:$mcp_url,
       headers:({

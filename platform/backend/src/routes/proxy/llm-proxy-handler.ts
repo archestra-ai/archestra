@@ -114,6 +114,7 @@ import {
 } from "@/proxy/plugins/registry";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { llmProxyTiming } from "@/server/llm-proxy-timing";
+import { configCache } from "@/services/config-cache";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeploymentFromSnapshot } from "@/services/guardrails-deployment";
 import { LlmThroughput, ThroughputError } from "@/services/llm-throughput";
@@ -176,7 +177,6 @@ import {
   withProviderToolCallIds,
   withSessionContext,
 } from "./llm-proxy-helpers";
-import { proxyConfigCache } from "./proxy-config-cache";
 import { StreamKeepAlive } from "./stream-keepalive";
 import {
   openUpstreamWithRetry,
@@ -4323,7 +4323,7 @@ function readEncryptedChatDek(request: FastifyRequest): Buffer | null {
 async function readProxyRequestState(
   params: Parameters<typeof ProxyRequestContextModel.readForProxy>[0],
 ): Promise<ProxyRequestState> {
-  return proxyConfigCache.read(`context:${JSON.stringify(params)}`, () =>
+  return configCache.read(`context:${JSON.stringify(params)}`, () =>
     ProxyRequestContextModel.readForProxy(params),
   );
 }

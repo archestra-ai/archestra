@@ -3,6 +3,7 @@ import type { ScopedResource } from "@archestra/shared";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
+import { readConfig } from "@/services/config-cache";
 import type { AgentAccessContext, LabelWithDetails } from "@/types";
 import AgentModel from "./agent";
 import { findAgentAccessContextById } from "./agent-access-context";
@@ -114,36 +115,41 @@ class AgentTeamModel {
       lookups,
       { organizationId: agent.organizationId, userId },
     );
-    const [granted] = await db
-      .select({ id: table.id })
-      .from(table)
-      .where(
-        and(
-          eq(table.id, agentId),
-          or(
+    return readConfig(
+      `agent-grant\0${action}\0${agentId}\0${agent.organizationId}\0${userId}`,
+      async () => {
+        const [granted] = await db
+          .select({ id: table.id })
+          .from(table)
+          .where(
             and(
-              inArray(table.agentType, ["agent", "profile"]),
-              ResourcePermissionPolicyModel.grantCondition({
-                ...principal,
-                resource: "agent",
-                scopeColumn: table.id,
-                action,
-              }),
+              eq(table.id, agentId),
+              or(
+                and(
+                  inArray(table.agentType, ["agent", "profile"]),
+                  ResourcePermissionPolicyModel.grantCondition({
+                    ...principal,
+                    resource: "agent",
+                    scopeColumn: table.id,
+                    action,
+                  }),
+                ),
+                and(
+                  eq(table.agentType, "mcp_gateway"),
+                  ResourcePermissionPolicyModel.grantCondition({
+                    ...principal,
+                    resource: "mcpGateway",
+                    scopeColumn: table.id,
+                    action,
+                  }),
+                ),
+              ),
             ),
-            and(
-              eq(table.agentType, "mcp_gateway"),
-              ResourcePermissionPolicyModel.grantCondition({
-                ...principal,
-                resource: "mcpGateway",
-                scopeColumn: table.id,
-                action,
-              }),
-            ),
-          ),
-        ),
-      )
-      .limit(1);
-    return granted !== undefined;
+          )
+          .limit(1);
+        return granted !== undefined;
+      },
+    );
   }
 
   /**

@@ -2214,7 +2214,9 @@ class McpClient {
     }
 
     // Get catalog item
-    const catalogItem = await InternalMcpCatalogModel.findById(tool.catalogId);
+    const catalogItem = await InternalMcpCatalogModel.findForToolCall(
+      tool.catalogId,
+    );
     if (!catalogItem) {
       return {
         error: await this.createErrorResult({

@@ -43,6 +43,7 @@ import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { validateExternalIdpToken } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import { configCache } from "@/services/config-cache";
 import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -54,7 +55,6 @@ import {
   type ProviderKeySelection,
   selectMappedProviderKey,
 } from "@/utils/provider-key-mappings";
-import { proxyConfigCache } from "./proxy-config-cache";
 import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
 
 export function isJwtLike(token: string): boolean {
@@ -91,9 +91,7 @@ function requestedModelFromBody(request: FastifyRequest): string | null {
 export async function resolveAgent(
   agentId: string | undefined,
 ): Promise<GatewayAgent> {
-  return proxyConfigCache.read(`agent:${agentId ?? ""}`, () =>
-    readAgent(agentId),
-  );
+  return configCache.read(`agent:${agentId ?? ""}`, () => readAgent(agentId));
 }
 
 // =========================================================================
@@ -325,7 +323,7 @@ export async function readPassthroughAuthenticationSnapshot(params: {
   const oauthTokenHash = params.oauthTokenCandidate
     ? OAuthAccessTokenModel.hashTokenForLookup(params.oauthTokenCandidate)
     : undefined;
-  return proxyConfigCache.read(
+  return configCache.read(
     `credential:${VirtualApiKeyModel.tokenStartOf(params.tokenValue)}:${oauthTokenHash ?? ""}`,
     () =>
       VirtualApiKeyModel.readDeploymentProxyAndTokenOwner(

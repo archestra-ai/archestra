@@ -3,6 +3,7 @@ import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import type { PrincipalSource } from "@/models/resource-permission-subject";
+import { readConfig } from "@/services/config-cache";
 
 /** The identity an agent's tools are listed to or run for. */
 export interface CatalogAccessCaller {
@@ -39,19 +40,23 @@ export async function getCallerAccessibleCatalogIds(
   ) {
     return null;
   }
-  const isAdmin = await isMcpInstallationAdmin({
-    userId,
-    organizationId,
-    lookups,
-  });
-  return new Set(
-    await McpCatalogTeamModel.getAccessibleCatalogIds({
-      userId,
-      isAdmin,
-      organizationId,
-      lookups,
-    }),
+  const ids = await readConfig(
+    `caller-catalog-ids\0${organizationId}\0${userId}`,
+    async () => {
+      const isAdmin = await isMcpInstallationAdmin({
+        userId,
+        organizationId,
+        lookups,
+      });
+      return McpCatalogTeamModel.getAccessibleCatalogIds({
+        userId,
+        isAdmin,
+        organizationId,
+        lookups,
+      });
+    },
   );
+  return new Set(ids);
 }
 
 /**

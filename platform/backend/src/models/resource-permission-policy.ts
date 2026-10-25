@@ -29,6 +29,7 @@ import {
 } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
+import { readConfig } from "@/services/config-cache";
 import { idArrayCondition } from "./id-array-condition";
 import type { GrantPrincipal } from "./resource-permission-subject";
 import RoleCompositionModel from "./role-composition";
@@ -1170,11 +1171,16 @@ export default class ResourcePermissionPolicyModel {
     resource: ScopedResource;
     scopes: string[];
   }) {
-    return ResourcePermissionPolicyModel.byApplicableScopes.get().execute({
-      organizationId: params.organizationId,
-      resource: params.resource,
-      scopes: [...params.scopes, "*"],
-    });
+    const scopes = [...params.scopes, "*"];
+    return readConfig(
+      `applicable-policies\0${params.organizationId}\0${params.resource}\0${JSON.stringify(scopes)}`,
+      () =>
+        ResourcePermissionPolicyModel.byApplicableScopes.get().execute({
+          organizationId: params.organizationId,
+          resource: params.resource,
+          scopes,
+        }),
+    );
   }
 
   /** revision=0 creates a policy; stale writers never overwrite newer revocations. */

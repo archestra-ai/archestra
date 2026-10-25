@@ -857,7 +857,7 @@ The [SRE agent](/docs/admin/deployment/diagnostics#sre-agent) investigates the i
   - Default: unset. The Helm chart creates a read-only `-sre` account for it and sets it when `archestra.orchestrator.kubernetes.mcpServerRbac.create` is `true`.
   - Required: without it, nothing is installed.
 
-- **`ARCHESTRA_SRE_APISERVER_CIDRS`** - Kubernetes API server endpoint CIDRs the MCP server may reach. Its environment allows egress to these only.
+- **`ARCHESTRA_SRE_APISERVER_CIDRS`** - Kubernetes API server endpoint CIDRs the MCP server may reach, added to the organization's default egress policy.
   - Default: unset (the environment uses the organization's default egress policy)
   - Values: comma-separated IPv4 or IPv6 CIDRs, for example `172.16.0.2/32`. Invalid entries are ignored and logged.
 

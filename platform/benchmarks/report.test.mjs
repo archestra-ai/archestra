@@ -95,8 +95,8 @@ test("CPU profiling stays labeled diagnostic and cannot report release deltas", 
   assert.equal(summary.diagnostic, "cpu-profile");
   const rendered = renderSummary(summary, comparison(summary));
   assert.match(rendered, /timings include profiler overhead/);
-  assert.match(rendered, /N\/A: setup changed/);
-  assert.doesNotMatch(rendered, /\(0\.0%\)/);
+  assert.match(rendered, /No release comparison for a diagnostic run/);
+  assert.doesNotMatch(rendered, /%\)/);
 });
 
 test("scaling is an explicit setup change rather than an implementation-only release delta", () => {
@@ -106,9 +106,9 @@ test("scaling is an explicit setup change rather than an implementation-only rel
   const current = createSummary(source);
   const rendered = renderSummary(current, comparison(baseline));
   assert.equal(current.webWorkers, 4);
-  assert.match(rendered, /Production web processes: 4/);
-  assert.match(rendered, /N\/A: setup changed/);
-  assert.doesNotMatch(rendered, /\(0\.0%\)/);
+  assert.match(rendered, /4 web process/);
+  assert.match(rendered, /setup differs from `platform-v1\.0\.0`/);
+  assert.doesNotMatch(rendered, /%\)/);
 });
 
 test("no completed requests produces no fabricated success or latency", () => {
@@ -179,14 +179,15 @@ test("each metric reports first-run and missing-baseline states", () => {
     state: "first-run",
     reason: "First release benchmark.",
   });
-  assert.match(first, /4.0 \(first run\)/);
-  assert.match(first, /20.00 \(first run\)/);
+  // One reason for the table, not a label in every cell.
+  assert.match(first, /First release benchmark\./);
+  assert.match(first, /\| 4\.0 \| 100\.00% \|/);
   const missing = renderSummary(summary, {
     state: "missing",
     reason: "Previous metrics expired.",
   });
-  assert.match(missing, /4.0 \(N\/A: baseline missing\)/);
-  assert.match(missing, /Previous metrics expired/);
+  assert.equal(missing.match(/Previous metrics expired/g).length, 1);
+  assert.doesNotMatch(missing, /N\/A|%\)/);
 });
 
 test("zero, absent and newly added metrics never fabricate percentages", () => {
@@ -197,12 +198,12 @@ test("zero, absent and newly added metrics never fabricate percentages", () => {
   summary.rows[0].gatewayMs.p50 = 0;
   baseline.summary.rows[0].overheadMs = null;
   let rendered = renderSummary(summary, baseline);
-  assert.match(rendered, /4.0 \(N\/A: baseline zero\)/);
-  assert.match(rendered, /0.00 \(0.0%\)/);
-  assert.match(rendered, /1.00 \(N\/A: unmeasured baseline\)/);
+  assert.match(rendered, /\| 4\.0 \| 100\.00% \(0\.0%\) \|/);
+  assert.match(rendered, /\| 0\.00 \/ /);
+  assert.match(rendered, /\| 1\.00 \/ /);
   baseline.summary.rows = [];
   rendered = renderSummary(summary, baseline);
-  assert.match(rendered, /4.0 \(N\/A: new workload\)/);
+  assert.match(rendered, /HTTP proxy request \(c=10, new\) \| 4\.0 \|/);
   assert.doesNotMatch(rendered, /Infinity|NaN/);
 });
 
@@ -210,11 +211,14 @@ test("changed or missing setup and incomplete runs suppress comparisons", () => 
   const summary = createSummary(report());
   const baseline = comparison(summary);
   baseline.summary.comparison.auth = "synthetic-provider-key";
-  assert.match(renderSummary(summary, baseline), /N\/A: setup changed/);
+  assert.match(renderSummary(summary, baseline), /setup differs/);
   delete baseline.summary.comparison;
-  assert.match(renderSummary(summary, baseline), /N\/A: setup changed/);
+  assert.match(renderSummary(summary, baseline), /setup differs/);
   summary.complete = false;
-  assert.match(renderSummary(summary, baseline), /N\/A: incomplete run/);
+  assert.match(
+    renderSummary(summary, baseline),
+    /No release comparison for an incomplete run/,
+  );
 });
 
 test("streaming first content gets its own release delta while server timing stays unmeasured", () => {
@@ -226,7 +230,7 @@ test("streaming first content gets its own release delta while server timing sta
   const baseline = comparison(summary);
   baseline.summary.rows[0].firstContentP50Ms = 20;
   assert.match(renderSummary(summary, baseline), /10.00 \(-50.0%\)/);
-  assert.match(renderSummary(summary, baseline), /— \(unmeasured\)/);
+  assert.match(renderSummary(summary, baseline), /\| — \| — \|/);
 });
 
 test("adding the MCP workload keeps earlier workloads comparable with an older release", () => {
@@ -245,8 +249,6 @@ test("adding the MCP workload keeps earlier workloads comparable with an older r
     .split("\n")
     .filter((line) => /^\| (HTTP proxy request|MCP tool call)/.test(line));
   assert.match(chat, /4.0 \(0.0%\)/);
-  assert.match(mcp, /^\| MCP tool call \(c=10\)/);
-  assert.match(mcp, /N\/A: new workload/);
-  assert.match(rendered, /stateless JSON-RPC tools\/call/);
-  assert.doesNotMatch(rendered, /setup changed/);
+  assert.match(mcp, /^\| MCP tool call \(c=10, new\) \| 4\.0 \|/);
+  assert.doesNotMatch(rendered, /setup differs/);
 });

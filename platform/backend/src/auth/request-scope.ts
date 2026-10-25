@@ -8,16 +8,24 @@ import { isLlmProxyPath } from "@/routes/route-paths";
  * teams memoize, so a write never sees an answer from before itself.
  */
 class RequestScope {
-  private storage = new AsyncLocalStorage<Map<
-    string,
-    Promise<unknown>
-  > | null>();
+  private storage = new AsyncLocalStorage<{
+    memo: Map<string, Promise<unknown>>;
+    sharesConfig: boolean;
+  } | null>();
 
-  /** Start a request's scope. Reads get a memo; other requests get none. */
-  enter(params: { memoize: boolean }): void {
+  /**
+   * Start a request's scope. Reads get a memo; other requests get none.
+   * `sharesConfig` also lets the request read configuration other requests
+   * read recently (see `readConfig`): only for requests that never write it.
+   */
+  enter(params: { memoize: boolean; sharesConfig?: boolean }): void {
     // Always rebinds, so a write on a keep-alive connection never inherits
     // the scope of the read before it.
-    this.storage.enterWith(params.memoize ? new Map() : null);
+    this.storage.enterWith(
+      params.memoize
+        ? { memo: new Map(), sharesConfig: params.sharesConfig ?? false }
+        : null,
+    );
   }
 
   /** Whether the current request can reuse a combined caller lookup. */
@@ -25,9 +33,14 @@ class RequestScope {
     return Boolean(this.storage.getStore());
   }
 
+  /** Whether the current request may read configuration cached across requests. */
+  sharesConfig(): boolean {
+    return this.storage.getStore()?.sharesConfig ?? false;
+  }
+
   /** `load()` once per request and key, or every time outside a read scope. */
   memo<T>(key: string, load: () => Promise<T>): Promise<T> {
-    const cache = this.storage.getStore();
+    const cache = this.storage.getStore()?.memo;
     if (!cache) return load();
     const cached = cache.get(key) as Promise<T> | undefined;
     if (cached) return cached;

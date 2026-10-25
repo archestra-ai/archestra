@@ -1,3 +1,4 @@
+import { requestScope } from "@/auth/request-scope";
 import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
@@ -9,6 +10,7 @@ import { sharedNotifyHub } from "@/services/shared-notify-hub";
  * depend on changes. Triggers on those tables publish it (see the
  * `archestra_notify_proxy_config` migration), so every write path is covered
  * however it reaches the database.
+ * @public — exported for testability
  */
 export const PROXY_CONFIG_CHANNEL = "archestra_proxy_config";
 
@@ -16,6 +18,7 @@ export const PROXY_CONFIG_CHANNEL = "archestra_proxy_config";
  * Upper bound on how long an entry may outlive a change whose notification was
  * lost, for example while the listener's connection is dying but not yet
  * closed. Delivered notifications drop entries within milliseconds.
+ * @public — exported for testability
  */
 export const PROXY_CONFIG_TTL_MS = 5_000;
 
@@ -23,6 +26,7 @@ export const PROXY_CONFIG_TTL_MS = 5_000;
  * Per-process cache for the configuration rows every proxied request reads:
  * the gateway, the credential and its owner's membership, the request's
  * policy and budget rules, and which of its declared tools are already known.
+ * MCP gateway calls that opt in read their configuration through `readConfig`.
  *
  * Entries are used only while database notifications are proven to arrive,
  * and only within one listener session. Any change notification drops every
@@ -32,8 +36,9 @@ export const PROXY_CONFIG_TTL_MS = 5_000;
  *
  * Under load an entry is refreshed in the background before it expires, and
  * concurrent misses share one read, so expiry never stalls a burst of requests.
+ * @public — exported for testability (one instance per simulated replica)
  */
-export class ProxyConfigCache {
+export class ConfigCache {
   private readonly entries = registerProcessLocalCache(
     new LRUCacheManager<Entry>({
       maxSize: 10_000,
@@ -48,6 +53,23 @@ export class ProxyConfigCache {
   private trustedAfter: number | null = null;
 
   constructor(private readonly hub: PgNotifyHub) {}
+
+  /**
+   * Configuration a request reads repeatedly, read once per request. A request
+   * that opted in with `requestScope.enter({ sharesConfig: true })` reads it
+   * through {@link read} instead, sharing it with other requests. Each request
+   * gets its own copy, so a caller may change what it receives; the value
+   * must be cloneable.
+   */
+  readShared<T>(key: string, load: () => Promise<T>): Promise<T> {
+    return requestScope.memo<T>(`config:${key}`, () =>
+      requestScope.sharesConfig()
+        ? this.read<T>(`shared:${key}`, load).then((value) =>
+            structuredClone(value),
+          )
+        : load(),
+    );
+  }
 
   async read<T>(key: string, load: () => Promise<T>): Promise<T> {
     const stamp = this.stamp();
@@ -106,7 +128,12 @@ export class ProxyConfigCache {
   }
 }
 
-export const proxyConfigCache = new ProxyConfigCache(sharedNotifyHub);
+export const configCache = new ConfigCache(sharedNotifyHub);
+
+/** {@link ConfigCache.readShared} on the process-wide cache. */
+export function readConfig<T>(key: string, load: () => Promise<T>): Promise<T> {
+  return configCache.readShared(key, load);
+}
 
 type Entry = { stamp: string; readAt: number; value: unknown };
 

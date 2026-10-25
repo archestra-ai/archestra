@@ -4173,6 +4173,13 @@
       "when": 1792873668058,
       "tag": "0595_notify-proxy-config-changes",
       "breakpoints": true
+    },
+    {
+      "idx": 596,
+      "version": "7",
+      "when": 1792892060968,
+      "tag": "0596_notify-mcp-gateway-config",
+      "breakpoints": true
     }
   ]
 }

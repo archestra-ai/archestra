@@ -8,6 +8,7 @@ import { and, eq, ilike, inArray, or } from "drizzle-orm";
 import { requestScope } from "@/auth/request-scope";
 import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import db, { schema } from "@/database";
+import { readConfig } from "@/services/config-cache";
 import MemberModel from "./member";
 import RoleCompositionModel from "./role-composition";
 import TeamModel from "./team";
@@ -93,7 +94,10 @@ export default class ResourcePermissionSubjectModel {
       `principal\0${params.organizationId}\0${params.userId}`,
       async () => ({
         organizationId: params.organizationId,
-        subjects: await ResourcePermissionSubjectModel.resolveSubjects(params),
+        subjects: await readConfig(
+          `principal-subjects\0${params.organizationId}\0${params.userId}`,
+          () => ResourcePermissionSubjectModel.resolveSubjects(params),
+        ),
       }),
     );
   }

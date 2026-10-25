@@ -972,9 +972,11 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
       }
 
       // Authentication and the tool call's own access checks resolve the same
-      // caller. A request that cannot change roles or teams shares those
-      // answers for its lifetime, as reads of the REST API do.
-      requestScope.enter({ memoize: sharesCallerLookups(request.body) });
+      // caller. A request that cannot change roles, teams or gateway settings
+      // shares those answers for its lifetime, and reads the gateway's
+      // configuration from the notify-invalidated cache other calls filled.
+      const readOnly = sharesCallerLookups(request.body);
+      requestScope.enter({ memoize: readOnly, sharesConfig: readOnly });
 
       // Each stateless POST builds its server from scratch; these lookups let
       // authentication and every tools/list helper share one caller and agent

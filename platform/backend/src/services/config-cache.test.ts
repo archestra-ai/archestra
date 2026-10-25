@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { type PgClient, PostgresNotifyHub } from "@/services/pg-notify-hub";
+import { requestScope } from "@/auth/request-scope";
 import {
+  ConfigCache,
   PROXY_CONFIG_CHANNEL,
   PROXY_CONFIG_TTL_MS,
-  ProxyConfigCache,
-} from "./proxy-config-cache";
+} from "@/services/config-cache";
+import { type PgClient, PostgresNotifyHub } from "@/services/pg-notify-hub";
 
 /**
  * The listener connection is the process boundary. The hub above it, and its
@@ -47,9 +48,9 @@ class FakePgClient implements PgClient {
   }
 }
 
-describe("ProxyConfigCache", () => {
+describe("ConfigCache", () => {
   let clients: FakePgClient[];
-  let cache: ProxyConfigCache;
+  let cache: ConfigCache;
   let loads: number;
   const load = async () => ++loads;
 
@@ -62,7 +63,7 @@ describe("ProxyConfigCache", () => {
       clients.push(client);
       return client;
     });
-    cache = new ProxyConfigCache(hub);
+    cache = new ConfigCache(hub);
   });
 
   afterEach(() => {
@@ -86,13 +87,60 @@ describe("ProxyConfigCache", () => {
     expect(loads).toBe(1);
   });
 
+  /** Run `body` as one request with the given scope. */
+  function inRequest<T>(
+    scope: { memoize: boolean; sharesConfig?: boolean },
+    body: () => Promise<T>,
+  ): Promise<T> {
+    return (async () => {
+      requestScope.enter(scope);
+      return body();
+    })();
+  }
+
+  test("requests that opt in share a copy of configuration other requests read", async () => {
+    await becomeLive();
+    const loadRow = async () => ({ loads: ++loads, tools: ["lookup"] });
+    const shared = { memoize: true, sharesConfig: true };
+
+    const first = await inRequest(shared, async () => {
+      const row = await cache.readShared("tools", loadRow);
+      row.tools.push("changed by the caller");
+      return row;
+    });
+    const second = await inRequest(shared, () =>
+      cache.readShared("tools", loadRow),
+    );
+
+    expect(first.loads).toBe(1);
+    expect(second).toEqual({ loads: 1, tools: ["lookup"] });
+  });
+
+  test("other requests read once per request, never from other requests", async () => {
+    await becomeLive();
+    const reads = await Promise.all(
+      [{ memoize: true }, { memoize: true }, { memoize: false }].map((scope) =>
+        inRequest(scope, async () => [
+          await cache.readShared("tools", load),
+          await cache.readShared("tools", load),
+        ]),
+      ),
+    );
+
+    // Each memoizing request reads once; a write request reads every time.
+    expect(reads.flat()).toHaveLength(6);
+    expect(new Set(reads.flat()).size).toBe(4);
+    expect(reads[0][0]).toBe(reads[0][1]);
+    expect(reads[2][0]).not.toBe(reads[2][1]);
+  });
+
   test("reads the database every time while delivery is unproven", async () => {
     const hub = new PostgresNotifyHub("postgres://test", () => {
       const client = new FakePgClient();
       client.deliversNotifications = false;
       return client;
     });
-    cache = new ProxyConfigCache(hub);
+    cache = new ConfigCache(hub);
     await cache.read("warmup", load);
     vi.setSystemTime(Date.now() + 2_001);
 

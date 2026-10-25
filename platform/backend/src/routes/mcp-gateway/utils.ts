@@ -121,6 +121,7 @@ import {
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
 import { filterToolsByCallerCatalogAccess } from "@/services/caller-catalog-access";
+import { readConfig } from "@/services/config-cache";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
@@ -773,14 +774,17 @@ export async function createAgentServer(params: {
 
   // Fetch the agent's teams and the calling user's teams (with labels) for
   // trace span team attributes.
-  const teams = await AgentTeamModel.getTeamLabelInfoForAgent(agentId);
-  const userTeams =
-    tokenAuth?.userId && tokenAuth.organizationId
-      ? await TeamModel.getTeamLabelInfoForUser({
-          userId: tokenAuth.userId,
-          organizationId: tokenAuth.organizationId,
-        })
-      : [];
+  const { userId, organizationId } = tokenAuth ?? {};
+  const [teams, userTeams] = await Promise.all([
+    readConfig(`agent-team-labels\0${agentId}`, () =>
+      AgentTeamModel.getTeamLabelInfoForAgent(agentId),
+    ),
+    userId && organizationId
+      ? readConfig(`user-team-labels\0${organizationId}\0${userId}`, () =>
+          TeamModel.getTeamLabelInfoForUser({ userId, organizationId }),
+        )
+      : [],
+  ]);
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const startedAt = Date.now();
@@ -961,14 +965,11 @@ export async function createAgentServer(params: {
         name?: string;
       } | null = null;
       if (tokenAuth?.userId) {
-        const userDetails = await UserModel.getById(tokenAuth.userId);
-        if (userDetails) {
-          mcpUser = {
-            id: userDetails.id,
-            email: userDetails.email,
-            name: userDetails.name,
-          };
-        }
+        const userId = tokenAuth.userId;
+        mcpUser = await readConfig(`span-user\0${userId}`, async () => {
+          const user = await UserModel.getById(userId);
+          return user && { id: user.id, email: user.email, name: user.name };
+        });
       }
 
       try {

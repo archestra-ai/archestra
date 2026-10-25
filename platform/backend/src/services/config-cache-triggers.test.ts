@@ -1,8 +1,8 @@
 import type { PGlite } from "@electric-sql/pglite";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { PROXY_CONFIG_CHANNEL } from "@/services/config-cache";
 import { describe, expect, test } from "@/test";
-import { PROXY_CONFIG_CHANNEL } from "./proxy-config-cache";
 
 /**
  * The cache trusts these triggers to cover every write path, so they are
@@ -82,6 +82,54 @@ describe("proxy configuration change notifications", () => {
       .where(eq(schema.agentsTable.id, agent.id));
 
     expect(await flush()).toEqual([]);
+    await unlisten();
+  });
+
+  test("an MCP tool assignment, catalog item or installation change notifies, but its use does not", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeOrganization,
+    makeTool,
+  }) => {
+    const organization = await makeOrganization();
+    const agent = await makeAgent({ organizationId: organization.id });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: organization.id,
+    });
+    const server = await makeMcpServer({ catalogId: catalog.id });
+    const tool = await makeTool({ catalogId: catalog.id });
+    const { flush, unlisten } = await listen();
+
+    await makeAgentTool(agent.id, tool.id);
+    await db
+      .update(schema.internalMcpCatalogTable)
+      .set({ serverUrl: "https://example.test/mcp" })
+      .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+    await db
+      .update(schema.mcpServersTable)
+      .set({ reinstallRequired: true })
+      .where(eq(schema.mcpServersTable.id, server.id));
+    await db
+      .update(schema.mcpServersTable)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(schema.mcpServersTable.id, server.id));
+
+    await db.insert(schema.organizationRolesTable).values({
+      id: crypto.randomUUID(),
+      organizationId: organization.id,
+      role: "tool-callers",
+      name: "Tool callers",
+      permission: "{}",
+    });
+
+    expect(await flush()).toEqual([
+      "agent_tools",
+      "internal_mcp_catalog",
+      "mcp_server",
+      "organization_role",
+    ]);
     await unlisten();
   });
 });

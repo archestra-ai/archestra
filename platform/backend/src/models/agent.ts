@@ -45,7 +45,6 @@ import {
 } from "drizzle-orm";
 import { type AnyPgColumn, alias, unionAll } from "drizzle-orm/pg-core";
 import { z } from "zod";
-import { requestScope } from "@/auth/request-scope";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
@@ -62,6 +61,7 @@ import { qualified } from "@/database/utils/qualified-column";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
+import { readConfig } from "@/services/config-cache";
 import {
   type Agent,
   type AgentAccessContext,
@@ -545,7 +545,7 @@ class AgentModel {
   private static findToolAccessFields(
     id: string,
   ): Promise<{ environmentId: string | null; accessAllTools: boolean } | null> {
-    return requestScope.memo(`agent-tool-access:${id}`, async () => {
+    return readConfig(`agent-tool-access\0${id}`, async () => {
       const [result] = await db
         .select({
           environmentId: schema.agentsTable.environmentId,
@@ -3353,20 +3353,9 @@ class AgentModel {
   static async findAccessContextById(
     id: string,
   ): Promise<AgentAccessContext | null> {
-    const [agent] = await db
-      .select({
-        id: schema.agentsTable.id,
-        organizationId: schema.agentsTable.organizationId,
-        scope: schema.agentsTable.scope,
-        authorId: schema.agentsTable.authorId,
-        agentType: schema.agentsTable.agentType,
-        createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
-      })
-      .from(schema.agentsTable)
-      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
-      .limit(1);
-
-    return agent ?? null;
+    return readConfig(`agent-access-context\0${id}`, () =>
+      AgentModel.loadAccessContext(id),
+    );
   }
 
   /**
@@ -3603,13 +3592,10 @@ class AgentModel {
    * so configuration and labels are loaded together in one statement.
    */
   static async findGatewayAgentById(id: string): Promise<GatewayAgent | null> {
-    const [agent] = await AgentModel.gatewayById.get().execute({ id });
-
-    if (!agent) {
-      return null;
-    }
-
-    return agent;
+    return readConfig(`gateway-agent\0${id}`, async () => {
+      const [agent] = await AgentModel.gatewayById.get().execute({ id });
+      return agent ?? null;
+    });
   }
 
   /**
@@ -6189,6 +6175,25 @@ class AgentModel {
       .limit(1)
       .prepare("archestra_first_organization"),
   );
+
+  private static async loadAccessContext(
+    id: string,
+  ): Promise<AgentAccessContext | null> {
+    const [agent] = await db
+      .select({
+        id: schema.agentsTable.id,
+        organizationId: schema.agentsTable.organizationId,
+        scope: schema.agentsTable.scope,
+        authorId: schema.agentsTable.authorId,
+        agentType: schema.agentsTable.agentType,
+        createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
+      })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return agent ?? null;
+  }
 }
 
 const PERSONAL_MCP_GATEWAY_DESCRIPTION =

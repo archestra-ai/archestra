@@ -37,6 +37,7 @@
     "check:migrations": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/check-drizzle-migration-journal.ts && TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/lint-drizzle-migrations.ts",
     "check:sandbox-base": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/check-sandbox-base-sync.ts",
     "check:test-imports": "dependency-cruiser --config .dependency-cruiser.mjs 'src/**/*.unit.test.ts' src/plugins/github-import.ts src/plugins/github-tree.ts src/plugins/plugin-tree-files.ts --output-type err && TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/check-test-fixture-imports.ts",
+    "update:agent-runtime-clis": "node scripts/update-agent-runtime-clis.mjs",
     "update:codex-models-client-version": "node scripts/update-codex-models-client-version.mjs",
     "update:copilot-chat-client-version": "node scripts/update-copilot-chat-client-version.mjs",
     "update:grok-client-version": "node scripts/update-grok-client-version.mjs",

@@ -242,6 +242,8 @@ model = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}" '$value
 model_provider = "archestra"
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
+# The image pins Codex; an update prompt would block the session's first turn.
+check_for_update_on_startup = false
 developer_instructions = ${developer_instructions}
 ${notify_config}
 ${openappa_config}

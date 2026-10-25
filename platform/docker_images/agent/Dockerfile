@@ -194,7 +194,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-hermes
 USER root
-# Hermes 0.19.0 pins vulnerable versions; override its transitive packages
+# Hermes pins vulnerable versions; override its transitive packages
 # until upstream publishes a fixed release. The startup tests below exercise
 # the resulting runtime, including gateway discovery.
 RUN python3 -m venv /opt/hermes \
@@ -223,6 +223,8 @@ RUN --network=none \
 FROM agent-base AS agent-openclaw
 USER root
 COPY docker_images/agent/openclaw /opt/agent-openclaw
+# The image pins OpenClaw; skip its startup update checks and notices.
+ENV OPENCLAW_NO_AUTO_UPDATE=1
 RUN pnpm --dir /opt/agent-openclaw install --frozen-lockfile \
  && ln -s /opt/agent-openclaw/node_modules/.bin/openclaw /usr/local/bin/openclaw \
  && openclaw --version \

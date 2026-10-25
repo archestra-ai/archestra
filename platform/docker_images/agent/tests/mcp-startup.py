@@ -349,7 +349,7 @@ class StartupTest(unittest.TestCase):
         started = time.monotonic()
         held_since = None
         try:
-            while time.monotonic() - started < 65:
+            while time.monotonic() - started < (95 if failure else 65):
                 if select.select([fd], [], [], 0.1)[0]:
                     try:
                         chunk = os.read(fd, 65536)
@@ -364,8 +364,14 @@ class StartupTest(unittest.TestCase):
                     self.fail("Idle resume submitted inference without a prompt")
                 if (failure or submission_failure) and server.inference():
                     self.fail("Inference ran after required gateway discovery failed: " + repr(server.inference()[:1]))
-                if failure and server.discovery_failed.is_set() and time.monotonic() - started > (40 if failure in ("timeout", "empty") else 12):
-                    break
+                if failure and server.discovery_failed.is_set():
+                    # Watch for a forbidden model call at least this long, then give
+                    # clients whose own connect retries report later (Hermes takes
+                    # ~10s after a gateway error) bounded time to write the failure.
+                    observed = 40 if failure in ("timeout", "empty") else 12
+                    elapsed = time.monotonic() - started
+                    if elapsed > observed and (Path(turn_prefix + ".failure").exists() or elapsed > observed + 30):
+                        break
                 if server.list_started.is_set() and not server.release.is_set():
                     held_since = held_since or time.monotonic()
                     self.assertFalse(server.inference(), "Inference began while tools/list was held")

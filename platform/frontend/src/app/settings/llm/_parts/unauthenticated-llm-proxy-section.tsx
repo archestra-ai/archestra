@@ -1,12 +1,17 @@
 "use client";
 
-import Link from "next/link";
+import { AlertTriangle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
   SettingsSaveBar,
 } from "@/components/settings/settings-block";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { Switch } from "@/components/ui/switch";
 import {
   useOrganization,
@@ -67,27 +72,18 @@ export function UnauthenticatedLlmProxySection() {
             )}
           </WithPermissions>
         }
-        contentClassName="flex flex-col gap-[18px]"
       >
-        <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5 dark:border-amber-900 dark:bg-amber-950/40">
-          <span className="text-xs font-semibold text-amber-800 dark:text-amber-300">
-            Dangerous
-          </span>
-          <p className="text-[13px] leading-5 text-amber-950/80 dark:text-amber-200/80">
-            These requests are not tied to a user, so per-user limits and
-            attribution don't apply. Keyless self-hosted upstreams such as
-            Ollama or vLLM become reachable by anyone who can reach the proxy.
-          </p>
-        </div>
-        <p className="text-[13px] text-muted-foreground">
-          Next step:{" "}
-          <Link
-            href="/llm/proxy"
-            className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
-          >
-            Set up the LLM proxy
-          </Link>
-        </p>
+        <InlineNotice variant="warning">
+          <AlertTriangle />
+          <InlineNoticeBody>
+            <span className="font-medium">Dangerous</span>
+            <InlineNoticeText>
+              These requests are not tied to a user, so per-user limits and
+              attribution don't apply. Keyless self-hosted upstreams such as
+              Ollama or vLLM become reachable by anyone who can reach the proxy.
+            </InlineNoticeText>
+          </InlineNoticeBody>
+        </InlineNotice>
       </SettingsBlock>
       <SettingsSaveBar
         hasChanges={allowed !== saved}

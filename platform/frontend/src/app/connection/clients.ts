@@ -18,6 +18,7 @@ import {
   CLAUDE_MARK,
   GROK_MARK,
   HERMES_AGENT_MARK,
+  KIMI_MARK,
   OPENAI_MARK,
   OPENCLAW_MARK,
 } from "@/components/client-marks";
@@ -294,6 +295,12 @@ const POPULAR_GENERIC_CLIENTS: (Pick<
     label: "Hermes Agent",
     sub: "Nous Research agent",
     ...markFields(HERMES_AGENT_MARK),
+  },
+  {
+    id: "kimi-code",
+    label: "Kimi Code",
+    sub: "Kimi coding agent",
+    ...markFields(KIMI_MARK),
   },
   {
     id: "kiro",

@@ -200,6 +200,33 @@ const AGENT_RUNTIME_CLIS = [
       files.dockerfile = dockerfile;
     },
   },
+  {
+    target: "agent-kimi",
+    label: "Kimi Code",
+    resolve: () =>
+      resolveNpm({ name: "@moonshot-ai/kimi-code", channel: "latest" }),
+    read: (files) =>
+      readSingleVersion(files.dockerfile, [
+        /@moonshot-ai\/kimi-code@(\d+\.\d+\.\d+)\b/g,
+      ]),
+    write: async (files, version) => {
+      const checksum = await npmTarballSha512(
+        "@moonshot-ai/kimi-code",
+        version,
+      );
+      let dockerfile = replaceVersion(
+        files.dockerfile,
+        [/(@moonshot-ai\/kimi-code@)\d+\.\d+\.\d+\b/g],
+        version,
+      );
+      dockerfile = replaceExactlyOnce(
+        dockerfile,
+        /(echo ")[0-9a-f]{128}(  kimi-code\.tgz")/g,
+        `$1${checksum}$2`,
+      );
+      files.dockerfile = dockerfile;
+    },
+  },
 ];
 
 // =============================================================================
@@ -381,6 +408,23 @@ async function grokBinaryChecksum(grokArch, version) {
   }
   const binary = readTarEntry(gunzipSync(archive), "package/bin/grok.br");
   return createHash("sha256").update(binary).digest("hex");
+}
+
+// The Dockerfile verifies the packed tarball against the registry's own
+// integrity, which is its SHA-512.
+async function npmTarballSha512(name, version) {
+  const manifest = await fetchJson(
+    `${npmRegistry}/${encodeNpmName(name)}/${version}`,
+  );
+  const match = /^sha512-(.+)$/.exec(manifest.dist?.integrity ?? "");
+  if (!match) {
+    throw new Error(`${name}@${version} has no sha512 integrity`);
+  }
+  const digest = Buffer.from(match[1], "base64");
+  if (digest.length !== 64) {
+    throw new Error(`${name}@${version} has a malformed sha512 integrity`);
+  }
+  return digest.toString("hex");
 }
 
 function readTarEntry(tar, wanted) {

@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+"""Report the outcome of Kimi Code's own gateway catalog request.
+
+`archestra-kimi-mcp` sits between Kimi and the gateway and records the answer
+Kimi received to its initialize and tools/list requests. Kimi itself goes on
+without the gateway's tools when either fails, so the task gate reads this
+record instead.
+
+Usage: archestra-kimi-gateway-state [--wait SECONDS]
+Prints `ready <tool-count>`, `failed`, or `pending`. With --wait, polls until
+the outcome is known or the time is up.
+"""
+
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+
+def main() -> int:
+    arguments = sys.argv[1:]
+    wait = float(arguments[1]) if len(arguments) == 2 and arguments[0] == "--wait" else 0
+    deadline = time.monotonic() + wait
+    while True:
+        state = current()
+        if state != "pending" or time.monotonic() >= deadline:
+            print(state)
+            return 0
+        time.sleep(0.2)
+
+
+def current() -> str:
+    runtime_dir = os.environ.get("ARCHESTRA_AGENT_RUNTIME_DIR", "/var/run/archestra")
+    path = Path(os.environ.get("ARCHESTRA_KIMI_GATEWAY_STATE") or Path(runtime_dir) / "kimi-gateway-state.json")
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "pending"
+    if not isinstance(record, dict):
+        return "pending"
+    if record.get("state") == "failed":
+        return "failed"
+    if record.get("state") == "ready":
+        tools = record.get("tools")
+        return f"ready {tools if isinstance(tools, int) and tools >= 0 else 0}"
+    return "pending"
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

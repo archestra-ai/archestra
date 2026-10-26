@@ -39,11 +39,18 @@ class HermesStartupTest(unittest.TestCase):
         # A first SDK import on the discovery thread races the main thread's
         # imports and can leave the process without the SDK's HTTP transport.
         script = (
-            "import logging\n"
+            "import logging, threading\n"
             "from hermes_cli import mcp_startup\n"
             "from tools import mcp_tool\n"
+            "callers, ensure = [], mcp_tool._ensure_mcp_sdk\n"
+            "def recording_ensure():\n"
+            "    callers.append(threading.current_thread().name)\n"
+            "    return ensure()\n"
+            "mcp_tool._ensure_mcp_sdk = recording_ensure\n"
             "mcp_startup.start_background_mcp_discovery(logger=logging.getLogger('test'), thread_name='test-discovery')\n"
-            "assert mcp_tool.ClientSession is not None and mcp_tool._MCP_HTTP_AVAILABLE, 'the discovery thread imports the MCP SDK'\n"
+            "assert mcp_startup.join_mcp_discovery(timeout=60), 'discovery did not finish'\n"
+            "assert callers[:1] == ['MainThread'], f'first MCP SDK import ran on {callers}'\n"
+            "assert mcp_tool._MCP_HTTP_AVAILABLE, 'the MCP SDK has no HTTP transport'\n"
         )
         with tempfile.TemporaryDirectory() as directory:
             Path(directory, "config.yaml").write_text(json.dumps({"mcp_servers": {"archestra": {"url": "http://127.0.0.1:9/mcp"}}}))

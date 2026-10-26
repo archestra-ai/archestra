@@ -38,29 +38,38 @@ class HermesStartupTest(unittest.TestCase):
     def test_discovery_thread_does_not_import_the_mcp_sdk(self):
         # A first SDK import on the discovery thread races the main thread's
         # imports and can leave the process without the SDK's HTTP transport.
+        # Discovery stops where the real one starts, at the SDK import, so the
+        # test never waits on a connection.
         script = (
             "import logging, threading\n"
             "from hermes_cli import mcp_startup\n"
-            "from tools import mcp_tool\n"
+            "from tools import mcp_tool, mcp_tool_discovery\n"
             "callers, ensure = [], mcp_tool._ensure_mcp_sdk\n"
             "def recording_ensure():\n"
             "    callers.append(threading.current_thread().name)\n"
             "    return ensure()\n"
+            "def discover_without_connecting(**kwargs):\n"
+            "    mcp_tool._ensure_mcp_sdk()\n"
+            "    return []\n"
             "mcp_tool._ensure_mcp_sdk = recording_ensure\n"
+            "mcp_tool_discovery.discover_mcp_tools = discover_without_connecting\n"
             "mcp_startup.start_background_mcp_discovery(logger=logging.getLogger('test'), thread_name='test-discovery')\n"
-            "assert mcp_startup.join_mcp_discovery(timeout=60), 'discovery did not finish'\n"
+            "assert mcp_startup.join_mcp_discovery(timeout=30), 'discovery did not finish'\n"
             "assert callers[:1] == ['MainThread'], f'first MCP SDK import ran on {callers}'\n"
             "assert mcp_tool._MCP_HTTP_AVAILABLE, 'the MCP SDK has no HTTP transport'\n"
         )
         with tempfile.TemporaryDirectory() as directory:
             Path(directory, "config.yaml").write_text(json.dumps({"mcp_servers": {"archestra": {"url": "http://127.0.0.1:9/mcp"}}}))
-            result = subprocess.run(
-                ["/opt/hermes/.venv/bin/python", "-c", script],
-                env={**os.environ, "HERMES_HOME": directory},
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
+            try:
+                result = subprocess.run(
+                    ["/opt/hermes/.venv/bin/python", "-c", script],
+                    env={**os.environ, "HERMES_HOME": directory},
+                    capture_output=True,
+                    text=True,
+                    timeout=90,
+                )
+            except subprocess.TimeoutExpired as error:
+                self.fail(f"SDK import check timed out: {error.stdout}{error.stderr}")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_task_completes_without_package_downloads(self):

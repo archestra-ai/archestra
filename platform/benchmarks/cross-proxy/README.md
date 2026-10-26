@@ -1,5 +1,8 @@
 # Controlled Archestra / LiteLLM proxy comparison
 
+[Measured 2026-10-26 results and caveats](evidence/2026-10-26/RESULTS.md).
+
+
 Run on the existing `ubicloud-standard-16-ubuntu-2404` runner, using the existing
 **LLM Proxy Benchmark** workflow's manual `compare_litellm=true` input. This mode
 skips the ordinary release benchmark (including MCP). It never updates public
@@ -9,7 +12,7 @@ performance docs. No model provider credentials are needed.
 gh workflow run llm-proxy-benchmark.yml --ref YOUR_BRANCH -f compare_litellm=true
 ```
 
-For direct reproduction on a clean, disposable Linux x86_64 host with >=8 logical
+For direct reproduction on a clean, disposable Ubuntu 24.04 x86_64 host with >=8 logical
 CPUs, Docker, the repository's pinned Node/pnpm/Rust toolchain and no `platform/.env`:
 
 ```sh
@@ -72,3 +75,6 @@ before expiration. `summary.md` is generated only after all runs succeed.
 Cleanup removes only this script's named temporary containers, database tmpfs and
 mock/resource processes, after saving diagnostics. It refuses occupied ports and
 existing container names. No persistent infrastructure or credentials are created.
+
+Verify extracted evidence with `python3 benchmarks/cross-proxy/verify.py PATH_TO_EXTRACTED/cross-proxy`.
+Preserve or move previous result directories before rerunning locally.

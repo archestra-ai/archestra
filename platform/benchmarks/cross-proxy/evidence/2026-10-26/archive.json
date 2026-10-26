@@ -1,0 +1,9 @@
+{
+  "filename": "controlled-proxy-40402009733.tar.gz",
+  "bytes": 60923023,
+  "sha256": "8d239dc5d413352511bcbc16f6fc5dcef6eca10f1f0ff136a86f66c5e769f5aa",
+  "contents": "Complete successful-run raw evidence, CI log, provenance, independent verification and per-file SHA256SUMS; compact repo JSON copies can be whitespace formatted.",
+  "githubArtifactUrl": "https://github.com/archestra-ai/archestra/actions/runs/40402009733/artifacts/12691596491",
+  "githubZipSha256": "964c32ac70f5309020020c68b27ddd9cc18e824238ca548b3e34bd0048bf52ab",
+  "githubExpiresAt": "2026-11-09T21:35:19Z"
+}

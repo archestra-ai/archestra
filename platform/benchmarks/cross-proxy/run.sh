@@ -4,6 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 [[ $(uname -m) == x86_64 && $(nproc) -ge 8 && ! -e .env ]] || { echo 'Requires clean Linux x86_64 runner with >=8 CPUs and no .env'; exit 1; }
 out=benchmarks/results/cross-proxy
+[[ ! -e "$out/versions.txt" ]] || { echo "Preserve/move previous cross-proxy results before rerunning."; exit 1; }
 mkdir -p "$out"
 project=archestra-cross-proxy
 lite_image=ghcr.io/berriai/litellm-database@sha256:496cc6cb0295414585790b86467566fb4c93d8e12d7f0e889f18fcfc54cbdd5e

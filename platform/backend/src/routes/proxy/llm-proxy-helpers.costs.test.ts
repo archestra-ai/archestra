@@ -2,6 +2,7 @@ import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model
 import ModelModel from "@/models/model";
 import { describe, expect, test } from "@/test";
 import type { CreateModel, UsageView } from "@/types";
+import type { AutoRoutingRequestContext } from "@/types/auto-routing";
 import { normalizeAnthropicUsage } from "@/utils/billable-usage";
 import {
   buildInteractionRecord,
@@ -260,9 +261,10 @@ describe("smart-tier baseline", () => {
       costs: result,
     });
 
-  const autoRouting = (modelId: string) => ({
+  const autoRouting = (modelId: string): AutoRoutingRequestContext => ({
     decisionId: "decision-1",
     smartModel: { modelId, provider: "anthropic" },
+    derivedSessionKey: null,
   });
 
   test("prices the smart model with its own quote on the same usage in both modes", async () => {

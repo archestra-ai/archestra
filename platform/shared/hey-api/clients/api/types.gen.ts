@@ -14575,6 +14575,14 @@ export type GetAgentCatalogResponses = {
                 modelId: string | null;
                 fastModelId: string | null;
                 smartModelId: string | null;
+                autoRoutingEnabled: boolean;
+                autoRoutingBudgetUsdPerDay: string | null;
+                autoRoutingFastModelId: string | null;
+                autoRoutingNormalModelId: string | null;
+                autoRoutingSmartModelId: string | null;
+                autoRoutingScorerVersionId: string | null;
+                autoRoutingGeneration: number;
+                autoRoutingPlannedGeneration: number;
                 identityProviderId: string | null;
                 environmentId: string | null;
                 runtime: {
@@ -14956,6 +14964,14 @@ export type GetAgentsResponses = {
             modelId: string | null;
             fastModelId: string | null;
             smartModelId: string | null;
+            autoRoutingEnabled: boolean;
+            autoRoutingBudgetUsdPerDay: string | null;
+            autoRoutingFastModelId: string | null;
+            autoRoutingNormalModelId: string | null;
+            autoRoutingSmartModelId: string | null;
+            autoRoutingScorerVersionId: string | null;
+            autoRoutingGeneration: number;
+            autoRoutingPlannedGeneration: number;
             identityProviderId: string | null;
             environmentId: string | null;
             runtime: {
@@ -15371,6 +15387,14 @@ export type CreateAgentResponses = {
         modelId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
+        autoRoutingEnabled: boolean;
+        autoRoutingBudgetUsdPerDay: string | null;
+        autoRoutingFastModelId: string | null;
+        autoRoutingNormalModelId: string | null;
+        autoRoutingSmartModelId: string | null;
+        autoRoutingScorerVersionId: string | null;
+        autoRoutingGeneration: number;
+        autoRoutingPlannedGeneration: number;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -16635,6 +16659,14 @@ export type GetDefaultMcpGatewayResponses = {
         modelId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
+        autoRoutingEnabled: boolean;
+        autoRoutingBudgetUsdPerDay: string | null;
+        autoRoutingFastModelId: string | null;
+        autoRoutingNormalModelId: string | null;
+        autoRoutingSmartModelId: string | null;
+        autoRoutingScorerVersionId: string | null;
+        autoRoutingGeneration: number;
+        autoRoutingPlannedGeneration: number;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -16935,6 +16967,14 @@ export type ImportAgentResponses = {
             modelId: string | null;
             fastModelId: string | null;
             smartModelId: string | null;
+            autoRoutingEnabled: boolean;
+            autoRoutingBudgetUsdPerDay: string | null;
+            autoRoutingFastModelId: string | null;
+            autoRoutingNormalModelId: string | null;
+            autoRoutingSmartModelId: string | null;
+            autoRoutingScorerVersionId: string | null;
+            autoRoutingGeneration: number;
+            autoRoutingPlannedGeneration: number;
             identityProviderId: string | null;
             environmentId: string | null;
             runtime: {
@@ -17244,6 +17284,14 @@ export type GetAgentResponses = {
         modelId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
+        autoRoutingEnabled: boolean;
+        autoRoutingBudgetUsdPerDay: string | null;
+        autoRoutingFastModelId: string | null;
+        autoRoutingNormalModelId: string | null;
+        autoRoutingSmartModelId: string | null;
+        autoRoutingScorerVersionId: string | null;
+        autoRoutingGeneration: number;
+        autoRoutingPlannedGeneration: number;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -17543,6 +17591,14 @@ export type UpdateAgentResponses = {
         modelId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
+        autoRoutingEnabled: boolean;
+        autoRoutingBudgetUsdPerDay: string | null;
+        autoRoutingFastModelId: string | null;
+        autoRoutingNormalModelId: string | null;
+        autoRoutingSmartModelId: string | null;
+        autoRoutingScorerVersionId: string | null;
+        autoRoutingGeneration: number;
+        autoRoutingPlannedGeneration: number;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -18126,6 +18182,14 @@ export type RestoreAgentVersionResponses = {
         modelId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
+        autoRoutingEnabled: boolean;
+        autoRoutingBudgetUsdPerDay: string | null;
+        autoRoutingFastModelId: string | null;
+        autoRoutingNormalModelId: string | null;
+        autoRoutingSmartModelId: string | null;
+        autoRoutingScorerVersionId: string | null;
+        autoRoutingGeneration: number;
+        autoRoutingPlannedGeneration: number;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -18364,6 +18428,14 @@ export type CloneAgentResponses = {
         modelId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
+        autoRoutingEnabled: boolean;
+        autoRoutingBudgetUsdPerDay: string | null;
+        autoRoutingFastModelId: string | null;
+        autoRoutingNormalModelId: string | null;
+        autoRoutingSmartModelId: string | null;
+        autoRoutingScorerVersionId: string | null;
+        autoRoutingGeneration: number;
+        autoRoutingPlannedGeneration: number;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -20841,6 +20913,14 @@ export type RestoreAgentResponses = {
         modelId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
+        autoRoutingEnabled: boolean;
+        autoRoutingBudgetUsdPerDay: string | null;
+        autoRoutingFastModelId: string | null;
+        autoRoutingNormalModelId: string | null;
+        autoRoutingSmartModelId: string | null;
+        autoRoutingScorerVersionId: string | null;
+        autoRoutingGeneration: number;
+        autoRoutingPlannedGeneration: number;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -30017,6 +30097,666 @@ export type PostApiAuthBy__Responses = {
     200: unknown;
 };
 
+export type GetAutoRoutingSettingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/settings';
+};
+
+export type GetAutoRoutingSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAutoRoutingSettingsError = GetAutoRoutingSettingsErrors[keyof GetAutoRoutingSettingsErrors];
+
+export type GetAutoRoutingSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+        budgetUsdPerDay: number | null;
+        tiers: {
+            fast: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            } | null;
+            normal: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            } | null;
+            smart: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            } | null;
+        };
+        generation: number;
+        plannedGeneration: number;
+        status: {
+            activePlan: {
+                id: string;
+                createdAt: string;
+            } | null;
+            coldStart: {
+                scorerVersionId: string;
+                sessions: number;
+                required: number;
+            };
+            lastFitError: string | null;
+        };
+    };
+};
+
+export type GetAutoRoutingSettingsResponse = GetAutoRoutingSettingsResponses[keyof GetAutoRoutingSettingsResponses];
+
+export type UpdateAutoRoutingSettingsData = {
+    body: {
+        enabled?: boolean;
+        budgetUsdPerDay?: number;
+        fastModelId?: string;
+        normalModelId?: string;
+        smartModelId?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/settings';
+};
+
+export type UpdateAutoRoutingSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateAutoRoutingSettingsError = UpdateAutoRoutingSettingsErrors[keyof UpdateAutoRoutingSettingsErrors];
+
+export type UpdateAutoRoutingSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+        budgetUsdPerDay: number | null;
+        tiers: {
+            fast: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            } | null;
+            normal: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            } | null;
+            smart: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            } | null;
+        };
+        generation: number;
+        plannedGeneration: number;
+        status: {
+            activePlan: {
+                id: string;
+                createdAt: string;
+            } | null;
+            coldStart: {
+                scorerVersionId: string;
+                sessions: number;
+                required: number;
+            };
+            lastFitError: string | null;
+        };
+    };
+};
+
+export type UpdateAutoRoutingSettingsResponse = UpdateAutoRoutingSettingsResponses[keyof UpdateAutoRoutingSettingsResponses];
+
+export type GetAutoRoutingPlansData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+    };
+    url: '/api/auto-routing/plans';
+};
+
+export type GetAutoRoutingPlansErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAutoRoutingPlansError = GetAutoRoutingPlansErrors[keyof GetAutoRoutingPlansErrors];
+
+export type GetAutoRoutingPlansResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        createdAt: string;
+        trigger: 'nightly' | 'settings' | 'manual' | 'scorer_change';
+        status: 'active' | 'superseded' | 'failed' | 'cold_start';
+        generation: number;
+        inputWatermark: string;
+        budgetUsdPerDay: number;
+        scorerVersion: {
+            id: string;
+            name: string;
+            model: string;
+            specHash: string;
+        };
+        coreVersion: string;
+        planFormatVersion: number;
+        summary: {
+            [key: string]: unknown;
+        } | null;
+        diagnostics: {
+            [key: string]: unknown;
+        } | null;
+        error: string | null;
+        decisionCount: number;
+    }>;
+};
+
+export type GetAutoRoutingPlansResponse = GetAutoRoutingPlansResponses[keyof GetAutoRoutingPlansResponses];
+
+export type GetAutoRoutingPlanData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/auto-routing/plans/{id}';
+};
+
+export type GetAutoRoutingPlanErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAutoRoutingPlanError = GetAutoRoutingPlanErrors[keyof GetAutoRoutingPlanErrors];
+
+export type GetAutoRoutingPlanResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        createdAt: string;
+        trigger: 'nightly' | 'settings' | 'manual' | 'scorer_change';
+        status: 'active' | 'superseded' | 'failed' | 'cold_start';
+        generation: number;
+        inputWatermark: string;
+        budgetUsdPerDay: number;
+        scorerVersion: {
+            id: string;
+            name: string;
+            model: string;
+            specHash: string;
+        };
+        coreVersion: string;
+        planFormatVersion: number;
+        summary: {
+            [key: string]: unknown;
+        } | null;
+        diagnostics: {
+            [key: string]: unknown;
+        } | null;
+        error: string | null;
+        decisionCount: number;
+        tiersFingerprint: {
+            [key: string]: unknown;
+        };
+        plan: {
+            [key: string]: unknown;
+        } | null;
+    };
+};
+
+export type GetAutoRoutingPlanResponse = GetAutoRoutingPlanResponses[keyof GetAutoRoutingPlanResponses];
+
+export type ReplanAutoRoutingData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/replan';
+};
+
+export type ReplanAutoRoutingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ReplanAutoRoutingError = ReplanAutoRoutingErrors[keyof ReplanAutoRoutingErrors];
+
+export type ReplanAutoRoutingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        generation: number;
+    };
+};
+
+export type ReplanAutoRoutingResponse = ReplanAutoRoutingResponses[keyof ReplanAutoRoutingResponses];
+
+export type PreviewAutoRoutingData = {
+    body: {
+        text: string;
+        kind?: 'main' | 'subagent';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/preview';
+};
+
+export type PreviewAutoRoutingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PreviewAutoRoutingError = PreviewAutoRoutingErrors[keyof PreviewAutoRoutingErrors];
+
+export type PreviewAutoRoutingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        tierNeeded: [
+            number,
+            number,
+            number
+        ];
+        pLong: number;
+        reason: 'planned' | 'cold_start' | 'plan_stale';
+        planId: string | null;
+        chosen: {
+            tier: 'fast' | 'normal' | 'smart';
+            model: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            };
+        };
+        propensity: number;
+        scorerCostUsd: number | null;
+    };
+};
+
+export type PreviewAutoRoutingResponse = PreviewAutoRoutingResponses[keyof PreviewAutoRoutingResponses];
+
 export type AzureListFilesData = {
     body?: never;
     path?: never;
@@ -37056,6 +37796,7 @@ export type GetBootstrapResponses = {
                 };
                 mcpGatewaySkillsEnabled: boolean;
                 devFeedbackEnabled: boolean;
+                autoRoutingEnabled: boolean;
             };
             providerBaseUrls: {
                 [key: string]: string | null;
@@ -37381,6 +38122,14 @@ export type GetNewChatBootstrapResponses = {
                 modelId: string | null;
                 fastModelId: string | null;
                 smartModelId: string | null;
+                autoRoutingEnabled: boolean;
+                autoRoutingBudgetUsdPerDay: string | null;
+                autoRoutingFastModelId: string | null;
+                autoRoutingNormalModelId: string | null;
+                autoRoutingSmartModelId: string | null;
+                autoRoutingScorerVersionId: string | null;
+                autoRoutingGeneration: number;
+                autoRoutingPlannedGeneration: number;
                 identityProviderId: string | null;
                 environmentId: string | null;
                 runtime: {
@@ -37932,6 +38681,14 @@ export type GetConversationBootstrapResponses = {
                     modelId: string | null;
                     fastModelId: string | null;
                     smartModelId: string | null;
+                    autoRoutingEnabled: boolean;
+                    autoRoutingBudgetUsdPerDay: string | null;
+                    autoRoutingFastModelId: string | null;
+                    autoRoutingNormalModelId: string | null;
+                    autoRoutingSmartModelId: string | null;
+                    autoRoutingScorerVersionId: string | null;
+                    autoRoutingGeneration: number;
+                    autoRoutingPlannedGeneration: number;
                     identityProviderId: string | null;
                     environmentId: string | null;
                     runtime: {
@@ -45944,6 +46701,7 @@ export type GetConfigResponses = {
             };
             mcpGatewaySkillsEnabled: boolean;
             devFeedbackEnabled: boolean;
+            autoRoutingEnabled: boolean;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -84701,6 +85459,11 @@ export type GetModelsWithApiKeysResponses = {
         customPricePerMillionOutput: string | null;
         customPricePerMillionCacheRead: string | null;
         customPricePerMillionCacheWrite: string | null;
+        longContextThreshold: number | null;
+        longContextPricePerMillionInput: string | null;
+        longContextPricePerMillionOutput: string | null;
+        longContextPricePerMillionCacheRead: string | null;
+        longContextPricePerMillionCacheWrite: string | null;
         ignored: boolean;
         embeddingDimensions: EmbeddingDimensions | null;
         defaultParameters: {
@@ -85049,6 +85812,11 @@ export type UpdateModelData = {
         customPricePerMillionOutput?: string | null;
         customPricePerMillionCacheRead?: string | null;
         customPricePerMillionCacheWrite?: string | null;
+        longContextThreshold?: number | null;
+        longContextPricePerMillionInput?: string | null;
+        longContextPricePerMillionOutput?: string | null;
+        longContextPricePerMillionCacheRead?: string | null;
+        longContextPricePerMillionCacheWrite?: string | null;
         customContextLength?: number | null;
         customOutputLength?: number | null;
         ignored?: boolean;
@@ -85178,6 +85946,11 @@ export type UpdateModelResponses = {
         customPricePerMillionOutput: string | null;
         customPricePerMillionCacheRead: string | null;
         customPricePerMillionCacheWrite: string | null;
+        longContextThreshold: number | null;
+        longContextPricePerMillionInput: string | null;
+        longContextPricePerMillionOutput: string | null;
+        longContextPricePerMillionCacheRead: string | null;
+        longContextPricePerMillionCacheWrite: string | null;
         ignored: boolean;
         embeddingDimensions: EmbeddingDimensions | null;
         defaultParameters: {

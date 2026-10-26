@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import { decide } from "@archestra/router-rs";
+import { coreVersion, decide } from "@archestra/router-rs";
 import type { FastifyRequest } from "fastify";
 import { z } from "zod";
 import config from "@/config";
@@ -25,6 +25,7 @@ import type {
   RoutingDecisionReason,
   RoutingPlan,
   RoutingSessionFeatures,
+  RoutingSessionKey,
 } from "@/types/auto-routing";
 import {
   checkAutoTierEligibility,
@@ -48,8 +49,6 @@ import {
 export const AUTO_MODEL = "auto";
 
 const FEATURES_SCHEMA_VERSION = 1;
-/** router-core crate version, recorded on decisions made without a plan. */
-const ROUTER_CORE_VERSION = "0.1.0";
 
 const DecisionSchema = z.object({
   tier_index: z.union([z.literal(0), z.literal(1), z.literal(2)]),
@@ -100,7 +99,15 @@ export async function resolveAutoModel(params: {
     firstUserMessage: text,
   });
   const route = (decision: RoutingDecision) =>
-    routeByDecision({ request, auth, endpoint, trio, tiers, decision });
+    routeByDecision({
+      request,
+      auth,
+      endpoint,
+      trio,
+      tiers,
+      decision,
+      derivedSessionKey: sessionId ? null : sessionKey,
+    });
 
   const existing = sessionKey
     ? await RoutingDecisionModel.find({
@@ -211,6 +218,7 @@ async function routeByDecision(params: {
   trio: Trio;
   tiers: readonly [EligibleTier, EligibleTier, EligibleTier];
   decision: RoutingDecision;
+  derivedSessionKey: RoutingSessionKey | null;
 }): Promise<string> {
   const { decision, trio } = params;
   const tier = trio.findIndex((model) => model.id === decision.modelId);
@@ -223,6 +231,7 @@ async function routeByDecision(params: {
   setAutoRoutingContext(params.request, {
     decisionId: decision.id,
     smartModel: { modelId: smart.modelId, provider: smart.provider },
+    derivedSessionKey: params.derivedSessionKey,
   });
   return eligibility.routedModel;
 }
@@ -310,7 +319,7 @@ async function decideSession(params: {
         ? scored.costUsd.toFixed(10)
         : null,
     featuresSchemaVersion: FEATURES_SCHEMA_VERSION,
-    coreVersion: planRow?.coreVersion ?? ROUTER_CORE_VERSION,
+    coreVersion: planRow?.coreVersion ?? coreVersion(),
     planFormatVersion: planRow?.planFormatVersion ?? null,
   });
 
@@ -320,9 +329,10 @@ async function decideSession(params: {
     return routed("scorer_error", NORMAL_TIER, 1, plan);
   if (!usable) return routed("plan_stale", NORMAL_TIER, 1, null);
   const decision = decidePlanned(plan, scored.features, u);
-  return decision
-    ? routed("planned", decision.tier_index, decision.propensity, plan)
-    : routed("plan_stale", NORMAL_TIER, 1, null);
+  if (decision)
+    return routed("planned", decision.tier_index, decision.propensity, plan);
+  await requestReplan(params.settings, organizationId);
+  return routed("plan_stale", NORMAL_TIER, 1, null);
 }
 
 function decidePlanned(
@@ -381,7 +391,7 @@ async function scoreSession(
  * replica converges on one row; read per new session rather than memoized,
  * as the row is what each decision references.
  */
-function activeScorerVersion() {
+export function activeScorerVersion() {
   const spec = sessionScorer.spec;
   return RoutingScorerVersionModel.upsert({
     name: spec.name,

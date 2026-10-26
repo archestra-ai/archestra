@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -164,5 +165,20 @@ export type RoutingPublishResult =
 
 export type AutoRoutingRequestContext = {
   decisionId: string;
-  smartModel: { modelId: string; provider: string };
+  smartModel: { modelId: string; provider: SupportedProvider };
+  /** The routing key standing in for a session id the client did not send. */
+  derivedSessionKey: RoutingSessionKey | null;
 };
+
+/** A plan row with the scorer version it was fitted for and the sessions it routed. */
+export const RoutingPlanRecordSchema = z.object({
+  plan: SelectRoutingPlanSchema,
+  scorerVersion: SelectRoutingScorerVersionSchema.pick({
+    id: true,
+    name: true,
+    model: true,
+    specHash: true,
+  }),
+  decisionCount: z.number().int().nonnegative(),
+});
+export type RoutingPlanRecord = z.infer<typeof RoutingPlanRecordSchema>;

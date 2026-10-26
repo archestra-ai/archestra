@@ -524,9 +524,10 @@ export async function handleLLMProxy<
       : parsedSource) ??
     "api";
 
+  const autoRouting = autoRoutingContext(request);
   // Session extraction reuses the resolved client attribution above to gate
   // OpenCode- and Codex-specific signals, so client identification lives in one place.
-  const { sessionId, sessionSource } = followAppaSessionHeader({
+  const extractedSession = followAppaSessionHeader({
     headers: headersForExtraction,
     source,
     ordinarySession: utils.headers.sessionId.extractSessionInfo({
@@ -535,6 +536,13 @@ export async function handleLLMProxy<
       externalAgentId,
     }),
   });
+  const { sessionId, sessionSource }: utils.headers.sessionId.SessionInfo =
+    extractedSession.sessionId === null && autoRouting?.derivedSessionKey
+      ? {
+          sessionId: autoRouting.derivedSessionKey,
+          sessionSource: "auto_routing",
+        }
+      : extractedSession;
 
   // Extract W3C trace context (traceparent/tracestate) from incoming request headers.
   // When the chat route calls the LLM proxy via localhost, the traced fetch injects these
@@ -551,7 +559,6 @@ export async function handleLLMProxy<
     utils.gatewayToolDeclarations.extractGatewayToolDeclarations(body);
   const requestAdapter = provider.createRequestAdapter(body);
   assertNotAutoOnNativeRoute(requestAdapter.getModel());
-  const autoRouting = autoRoutingContext(request);
   const streamAdapter = provider.createStreamAdapter(body);
   const providerMessages = requestAdapter.getProviderMessages();
   const messagesCount = getProviderMessagesCount(providerMessages);

@@ -10,6 +10,16 @@ export type Trio = readonly [Model, Model, Model];
 
 export const NORMAL_TIER: TierIndex = 1;
 
+/** router-core `TierSet` JSON. */
+export type RouterTierSet = {
+  tiers: {
+    model_id: string;
+    short: RouterTokenPrices;
+    long: RouterTokenPrices | null;
+  }[];
+  long_context_threshold: number | null;
+};
+
 /** The configured (fast, normal, smart) models, or why there is no trio. */
 export async function loadTrio(
   settings: AutoRoutingSettings,
@@ -37,7 +47,7 @@ export async function loadTrio(
  * fitted for and must still match to be served.
  * @public — the plan fit builds its tiers with this; exported for testability
  */
-export function tiersFingerprint(trio: Trio): RouterDocument {
+export function tiersFingerprint(trio: Trio): RouterTierSet {
   const thresholds = trio.flatMap((model) =>
     model.longContextThreshold === null ? [] : [model.longContextThreshold],
   );
@@ -61,7 +71,14 @@ export function fingerprintMatches(
   return isDeepStrictEqual(planFingerprint, tiersFingerprint(trio));
 }
 
-function prices(model: Model, promptTokens?: number) {
+type RouterTokenPrices = {
+  input: number;
+  cache_read: number;
+  cache_write: number;
+  output: number;
+};
+
+function prices(model: Model, promptTokens?: number): RouterTokenPrices {
   const pricing = ModelModel.getEffectivePricing(
     model,
     undefined,

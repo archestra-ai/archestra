@@ -1,4 +1,4 @@
-import { and, eq, gte, isNotNull, type SQL, sql } from "drizzle-orm";
+import { and, count, eq, gte, isNotNull, type SQL, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import db, { schema, type Transaction } from "@/database";
 import {
@@ -23,6 +23,21 @@ class RoutingUsageModel {
       .onConflictDoNothing({ target: usage.interactionId });
   }
 
+  /** How many sessions a fit started now would read: the cold-start progress. */
+  static async countFitSessions(params: FitWindow): Promise<number> {
+    const window = fitWindow(params);
+    const sessions = db
+      .select({ id: decisions.id })
+      .from(decisions)
+      .innerJoin(usage, eq(usage.decisionId, decisions.id))
+      .where(window.where)
+      .groupBy(decisions.id)
+      .having(window.having)
+      .as("sessions");
+    const [row] = await db.select({ sessions: count() }).from(sessions);
+    return row?.sessions ?? 0;
+  }
+
   /**
    * Per decision of the given scorer version: its features and summed usage,
    * split into requests whose prompt (input + cache read + cache write)
@@ -35,7 +50,7 @@ class RoutingUsageModel {
     inputWatermark: Date;
     longContextThreshold: number | null;
   }) {
-    const watermark = params.inputWatermark.getTime();
+    const window = fitWindow(params);
     const prompt = sql`${usage.input} + ${usage.cacheRead} + ${usage.cacheWrite}`;
     const long =
       params.longContextThreshold === null
@@ -66,18 +81,9 @@ class RoutingUsageModel {
       })
       .from(decisions)
       .innerJoin(usage, eq(usage.decisionId, decisions.id))
-      .where(
-        and(
-          eq(decisions.organizationId, params.organizationId),
-          eq(decisions.scorerVersionId, params.scorerVersionId),
-          isNotNull(decisions.features),
-          gte(decisions.createdAt, new Date(watermark - HISTORY_MS)),
-        ),
-      )
+      .where(window.where)
       .groupBy(decisions.id)
-      .having(
-        sql`max(${usage.createdAt}) < ${new Date(watermark - IDLE_MS).toISOString()}::timestamptz`,
-      )
+      .having(window.having)
       .orderBy(decisions.createdAt, decisions.id);
     return rows.map((row) => ({
       ...row,
@@ -87,6 +93,26 @@ class RoutingUsageModel {
 }
 
 export default RoutingUsageModel;
+
+type FitWindow = {
+  organizationId: string;
+  scorerVersionId: string;
+  inputWatermark: Date;
+};
+
+/** Scored sessions of the scorer version, created within the history window and idle for a day before the watermark. */
+function fitWindow(params: FitWindow) {
+  const watermark = params.inputWatermark.getTime();
+  return {
+    where: and(
+      eq(decisions.organizationId, params.organizationId),
+      eq(decisions.scorerVersionId, params.scorerVersionId),
+      isNotNull(decisions.features),
+      gte(decisions.createdAt, new Date(watermark - HISTORY_MS)),
+    ),
+    having: sql`max(${usage.createdAt}) < ${new Date(watermark - IDLE_MS).toISOString()}::timestamptz`,
+  };
+}
 
 function total(column: AnyPgColumn, filter: SQL) {
   return sql<number>`coalesce(sum(${column}) filter (where ${filter}), 0)`.mapWith(

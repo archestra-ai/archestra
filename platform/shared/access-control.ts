@@ -693,6 +693,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateLlmProxy]: {
     llmProxy: ["update"],
   },
+  [RouteId.GetAutoRoutingSettings]: { llmProxy: ["read"] },
+  [RouteId.UpdateAutoRoutingSettings]: { llmProxy: ["update"] },
+  [RouteId.GetAutoRoutingPlans]: { llmProxy: ["read"] },
+  [RouteId.GetAutoRoutingPlan]: { llmProxy: ["read"] },
+  [RouteId.ReplanAutoRouting]: { llmProxy: ["update"] },
+  // Preview spends on the scorer, so it needs the same right as changing settings.
+  [RouteId.PreviewAutoRouting]: { llmProxy: ["update"] },
   // Agent-tool routes: agent-type and scope checks are handled dynamically in the route handlers
   [RouteId.GetAgentTools]: {},
   [RouteId.GetAllAgentTools]: {},

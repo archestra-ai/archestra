@@ -12,6 +12,7 @@ import {
 } from "fastify-type-provider-zod";
 import { delay, HttpResponse, http } from "msw";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
+import { activeScorerVersion } from "@/auto-routing/router";
 import { type Trio, tiersFingerprint } from "@/auto-routing/tiers";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -23,12 +24,18 @@ import {
 } from "@/models";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import RoutingDecisionModel from "@/models/routing-decision";
 import RoutingPlanModel from "@/models/routing-plan";
 import RoutingScorerVersionModel from "@/models/routing-scorer-version";
+import { handleAutoRoutingFit } from "@/task-queue/handlers/auto-routing-fit-handler";
 import { accessGrants, beforeEach, describe, expect, test } from "@/test";
+import { seedFitHistory } from "@/test/auto-routing-fit";
 import { useMswServer } from "@/test/msw";
 import { ApiError, type Model } from "@/types";
-import type { RoutingDecision } from "@/types/auto-routing";
+import {
+  type RoutingDecision,
+  RoutingSessionKeySchema,
+} from "@/types/auto-routing";
 import modelRouterProxyRoutes from "./model-router";
 import openAiProxyRoutes from "./openai";
 
@@ -306,6 +313,106 @@ describe("Model Router auto model", () => {
     expect(jevCalls).toBe(0);
   });
 
+  test("a session without a client id is logged under its routing key", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await setupOrganization({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+
+    const response = await send(org, {
+      ingress: "chat",
+      path: "chat/completions",
+      session: null,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const [decision] = await decisions(org.organizationId);
+    const rows = await db
+      .select({
+        sessionId: schema.interactionsTable.sessionId,
+        sessionSource: schema.interactionsTable.sessionSource,
+      })
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.profileId, org.agentId));
+    expect(rows).toEqual([
+      { sessionId: decision.sessionKey, sessionSource: "auto_routing" },
+    ]);
+  });
+
+  test("a plan fitted by the plan fit routes the next session as planned", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await setupOrganization({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    config.autoRouting.minSessions = 30;
+    await AutoRoutingSettingsModel.update(org.organizationId, {
+      budgetUsdPerDay: "10000.00",
+    });
+    await seedFitHistory({
+      organizationId: org.organizationId,
+      modelId: org.trio[2].id,
+      scorerVersionId: (await activeScorerVersion()).id,
+      sessions: 40,
+    });
+
+    await handleAutoRoutingFit({ organizationId: org.organizationId });
+    const response = await send(org, {
+      ingress: "chat",
+      path: "chat/completions",
+      session: "fresh-session",
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const plan = await RoutingPlanModel.findActive(org.organizationId);
+    expect(
+      await RoutingDecisionModel.find({
+        organizationId: org.organizationId,
+        sessionKey: RoutingSessionKeySchema.parse("fresh-session"),
+      }),
+    ).toMatchObject({ reason: "planned", planId: plan?.id });
+  });
+
+  test("a plan the router rejects falls back and requests a re-plan", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await setupOrganization({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    await publishPlan(org, (plan) => ({
+      ...plan,
+      versions: { ...plan.versions, plan_format_version: 999 },
+    }));
+    const before = await AutoRoutingSettingsModel.find(org.organizationId);
+
+    const response = await send(org, {
+      ingress: "chat",
+      path: "chat/completions",
+      session: "s-1",
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(upstreamModels).toEqual([org.trio[1].modelId]);
+    expect(await decisions(org.organizationId)).toEqual([
+      expect.objectContaining({ reason: "plan_stale", planId: null }),
+    ]);
+    const after = await AutoRoutingSettingsModel.find(org.organizationId);
+    expect(after?.generation).toBeGreaterThan(before?.generation ?? 0);
+  });
+
   describe("tier eligibility", () => {
     test("an unlinked tier is refused before scoring and hides auto", async ({
       makeOrganization,
@@ -541,6 +648,11 @@ describe("Model Router auto model", () => {
 
 // === Helpers ===
 
+type RouterPlan = { versions: Record<string, unknown> } & Record<
+  string,
+  unknown
+>;
+
 type MakeSecret = (params: {
   secret: Record<string, unknown>;
 }) => Promise<{ id: string }>;
@@ -655,7 +767,10 @@ async function virtualKey(
 }
 
 /** Fits a real plan for the trio over synthetic history and publishes it. */
-async function publishPlan(org: Org) {
+async function publishPlan(
+  org: Org,
+  edit: (plan: RouterPlan) => RouterPlan = (plan) => plan,
+) {
   const settings = await AutoRoutingSettingsModel.find(org.organizationId);
   if (!settings) throw new Error("organization has no LLM Proxy");
   const fingerprint = tiersFingerprint(org.trio);
@@ -702,7 +817,7 @@ async function publishPlan(org: Org) {
     planFormatVersion: 1,
     outcome: {
       status: "active",
-      plan: JSON.parse(planJson),
+      plan: edit(JSON.parse(planJson)),
       summary: null,
       diagnostics: null,
     },

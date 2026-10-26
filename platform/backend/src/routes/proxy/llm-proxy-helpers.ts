@@ -32,7 +32,6 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   type SupportedProvider,
   type SupportedProviderDiscriminator,
-  SupportedProvidersSchema,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
@@ -530,10 +529,7 @@ async function smartBaselineCost(params: {
   usage: UsageView;
   billingUsage?: PricedBillingUsage;
 }): Promise<string | null> {
-  const { actualModel, usage, billingUsage } = params;
-  const provider = SupportedProvidersSchema.safeParse(params.smart.provider);
-  if (!provider.success) return null;
-  const smart = { modelId: params.smart.modelId, provider: provider.data };
+  const { smart, actualModel, usage, billingUsage } = params;
   if (!billingUsage) {
     const quote = await resolvePricingQuote({
       model: smart.modelId,

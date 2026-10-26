@@ -1,0 +1,120 @@
+import { SupportedProvidersSchema } from "@archestra/shared";
+import { z } from "zod";
+import {
+  RouterDocumentSchema,
+  RoutingDecisionReasonSchema,
+  RoutingPlanRecordSchema,
+  RoutingPlanStatusSchema,
+  RoutingPlanTriggerSchema,
+} from "@/types/auto-routing";
+
+/** `routing_plans.budget_usd_per_day` is numeric(12, 2). */
+const BudgetUsdPerDaySchema = z.number().min(0.01).max(9_999_999_999.99);
+
+export const AutoRoutingTierNameSchema = z.enum(["fast", "normal", "smart"]);
+
+const AutoRoutingTierModelSchema = z.object({
+  id: z.string().uuid(),
+  provider: SupportedProvidersSchema,
+  modelId: z.string(),
+});
+
+export const AutoRoutingSettingsResponseSchema = z.object({
+  enabled: z.boolean(),
+  budgetUsdPerDay: z.number().nullable(),
+  tiers: z.object({
+    fast: AutoRoutingTierModelSchema.nullable(),
+    normal: AutoRoutingTierModelSchema.nullable(),
+    smart: AutoRoutingTierModelSchema.nullable(),
+  }),
+  generation: z.number().int(),
+  plannedGeneration: z.number().int(),
+  status: z.object({
+    activePlan: z
+      .object({ id: z.string().uuid(), createdAt: z.date() })
+      .nullable(),
+    /** Sessions a fit started now would read (scored by the running scorer version, idle for a day), against the fit's minimum. */
+    coldStart: z.object({
+      scorerVersionId: z.string().uuid(),
+      sessions: z.number().int().nonnegative(),
+      required: z.number().int().positive(),
+    }),
+    /** Error of the newest fit outcome, when it failed. */
+    lastFitError: z.string().nullable(),
+  }),
+});
+export type AutoRoutingSettingsResponse = z.infer<
+  typeof AutoRoutingSettingsResponseSchema
+>;
+
+export const UpdateAutoRoutingSettingsBodySchema = z.strictObject({
+  enabled: z.boolean().optional(),
+  budgetUsdPerDay: BudgetUsdPerDaySchema.optional(),
+  fastModelId: z.string().uuid().optional(),
+  normalModelId: z.string().uuid().optional(),
+  smartModelId: z.string().uuid().optional(),
+});
+export type UpdateAutoRoutingSettingsBody = z.infer<
+  typeof UpdateAutoRoutingSettingsBodySchema
+>;
+
+export const AutoRoutingPlanSummarySchema = z.object({
+  id: z.string().uuid(),
+  createdAt: z.date(),
+  trigger: RoutingPlanTriggerSchema,
+  status: RoutingPlanStatusSchema,
+  generation: z.number().int(),
+  inputWatermark: z.date(),
+  budgetUsdPerDay: z.number(),
+  scorerVersion: RoutingPlanRecordSchema.shape.scorerVersion,
+  coreVersion: z.string(),
+  planFormatVersion: z.number().int(),
+  summary: RouterDocumentSchema.nullable(),
+  diagnostics: RouterDocumentSchema.nullable(),
+  error: z.string().nullable(),
+  /** Sessions this plan routed. */
+  decisionCount: z.number().int().nonnegative(),
+});
+
+export type AutoRoutingPlanSummary = z.infer<
+  typeof AutoRoutingPlanSummarySchema
+>;
+
+/** Adds the router-core plan document (size and long-share coefficients, policy) and the tiers it was fitted for. */
+export const AutoRoutingPlanDetailSchema = AutoRoutingPlanSummarySchema.extend({
+  tiersFingerprint: RouterDocumentSchema,
+  plan: RouterDocumentSchema.nullable(),
+});
+export type AutoRoutingPlanDetail = z.infer<typeof AutoRoutingPlanDetailSchema>;
+
+export const AutoRoutingPlansQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+/**
+ * The scorer clips the text to its head and tail before asking, so longer
+ * input changes nothing but the omitted-length note; this bounds the body
+ * while still accepting a long pasted first message.
+ */
+export const AUTO_ROUTING_PREVIEW_MAX_CHARS = 20_000;
+
+export const AutoRoutingPreviewBodySchema = z.strictObject({
+  text: z.string().trim().min(1).max(AUTO_ROUTING_PREVIEW_MAX_CHARS),
+  kind: z.enum(["main", "subagent"]).default("main"),
+});
+
+export const AutoRoutingPreviewResponseSchema = z.object({
+  tierNeeded: z.tuple([z.number(), z.number(), z.number()]),
+  pLong: z.number(),
+  reason: RoutingDecisionReasonSchema.exclude(["scorer_error"]),
+  planId: z.string().uuid().nullable(),
+  chosen: z.object({
+    tier: AutoRoutingTierNameSchema,
+    model: AutoRoutingTierModelSchema,
+  }),
+  propensity: z.number(),
+  scorerCostUsd: z.number().nullable(),
+});
+export type AutoRoutingPreviewResponse = z.infer<
+  typeof AutoRoutingPreviewResponseSchema
+>;

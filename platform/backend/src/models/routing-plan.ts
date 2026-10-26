@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import {
   lockRoutingPlan,
@@ -7,6 +7,8 @@ import {
 import {
   type RoutingFit,
   type RoutingPlan,
+  type RoutingPlanRecord,
+  RoutingPlanRecordSchema,
   type RoutingPublishRejection,
   type RoutingPublishResult,
   SelectRoutingPlanSchema,
@@ -14,6 +16,8 @@ import {
 
 const plans = schema.routingPlansTable;
 const agents = schema.agentsTable;
+const scorerVersions = schema.routingScorerVersionsTable;
+const decisions = schema.routingDecisionsTable;
 
 class RoutingPlanModel {
   static async findActive(organizationId: string): Promise<RoutingPlan | null> {
@@ -27,6 +31,28 @@ class RoutingPlanModel {
         ),
       );
     return row ? SelectRoutingPlanSchema.parse(row) : null;
+  }
+
+  /** The organization's fit outcomes, newest first. */
+  static async findHistory(
+    organizationId: string,
+    limit: number,
+  ): Promise<RoutingPlanRecord[]> {
+    const rows = await planRecords()
+      .where(eq(plans.organizationId, organizationId))
+      .orderBy(desc(plans.createdAt), desc(plans.id))
+      .limit(limit);
+    return rows.map((row) => RoutingPlanRecordSchema.parse(row));
+  }
+
+  static async findRecord(
+    organizationId: string,
+    id: string,
+  ): Promise<RoutingPlanRecord | null> {
+    const [row] = await planRecords().where(
+      and(eq(plans.organizationId, organizationId), eq(plans.id, id)),
+    );
+    return row ? RoutingPlanRecordSchema.parse(row) : null;
   }
 
   /**
@@ -107,3 +133,25 @@ class RoutingPlanModel {
 }
 
 export default RoutingPlanModel;
+
+/** Plans with their scorer version and how many sessions each routed. */
+function planRecords() {
+  return db
+    .select({
+      plan: plans,
+      scorerVersion: {
+        id: scorerVersions.id,
+        name: scorerVersions.name,
+        model: scorerVersions.model,
+        specHash: scorerVersions.specHash,
+      },
+      decisionCount: sql<number>`(
+        select count(*) from ${decisions}
+        where ${decisions.planId} = ${plans.id}
+          and ${decisions.organizationId} = ${plans.organizationId}
+      )`.mapWith(Number),
+    })
+    .from(plans)
+    .innerJoin(scorerVersions, eq(scorerVersions.id, plans.scorerVersionId))
+    .$dynamic();
+}

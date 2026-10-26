@@ -1,4 +1,4 @@
-interface TerminalDimensions {
+export interface TerminalDimensions {
   cols: number;
   rows: number;
 }
@@ -14,11 +14,15 @@ export function parseTerminalSize(data: string): TerminalDimensions | null {
     : null;
 }
 
-/** Recover geometry for old TUI recordings that predate ordered size events. */
+/**
+ * Recover geometry for old TUI recordings that predate ordered size events,
+ * and leave out the fenced answer that precedes a captured screen.
+ */
 export function prepareTerminalRecording(content: string): {
   content: string;
   dimensions: TerminalDimensions;
 } {
+  content = content.replace(FENCED_ANSWER_BEFORE_CAPTURE, "");
   const tokens = Array.from(content.matchAll(TERMINAL_TOKENS));
   const exact = tokens.find((token) => sizeFromToken(token[0]));
   const legacyEnd = exact?.index ?? content.length;
@@ -68,6 +72,21 @@ export function prepareTerminalRecording(content: string): {
 }
 
 // ===================== internals =====================
+
+// A maintained image ends a turn under a full-screen client with the answer
+// between fences, then a capture of the client's screen behind a clear.
+// Replayed, the answer scrolls that screen up by its own length before the
+// capture repaints it, so the screen's top rows stayed in the document twice.
+// The answer reaches the reader as the run's result; the document keeps the
+// captured screen. The last fence before the clear is the answer's, as the
+// backend reads it: a client can scroll an earlier one back into view. An
+// answer with nothing after it stays, as the only output of a run without a
+// terminal.
+// The tempered match is linear in the answer's length for each fence, and
+// a fenced answer is a few kilobytes.
+const FENCED_ANSWER_BEFORE_CAPTURE =
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: the clear that starts the capture is a terminal control
+  /\r?\n?===ARCHESTRA-FINAL-ANSWER===(?:(?!===ARCHESTRA-FINAL-ANSWER===)[\s\S])*?===ARCHESTRA-FINAL-ANSWER-END===\r?\n?(?=(?:\x1b\[[0-?]*[ -/]*[@-~])*?\x1b\[2J)/g;
 
 // Consume OSC payloads as whole tokens, so titles/links cannot look like grids.
 const TERMINAL_TOKENS =

@@ -72,6 +72,7 @@ export interface ChatSession {
   }) => Promise<void>;
   stop: (options?: {
     preserveQueuedMessages?: boolean;
+    interruptQueued?: boolean;
     stopServer?: () => Promise<unknown>;
   }) => void;
   status: "ready" | "submitted" | "streaming" | "error";

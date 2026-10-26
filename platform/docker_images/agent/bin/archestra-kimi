@@ -1,0 +1,244 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "openai_chat" ]]; then
+  echo "archestra: Kimi Code requires an Agent configured for OpenAI Chat Completions" >&2
+  "$(dirname "${BASH_SOURCE[0]}")/archestra-agent-failure" \
+    "kimi_protocol" "Kimi Code requires an Agent configured for OpenAI Chat Completions."
+  exit 78
+fi
+
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
+# Restoring an interactive session does not submit another model turn.
+if [[ "${runtime_mode}" != "interactive" || "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" != "1" ]]; then
+  : "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
+fi
+if [[ "${ARCHESTRA_AGENT_RUNTIME_OPENAPPA:-0}" == "1" ]]; then
+  : "${ARCHESTRA_AGENT_RUNTIME_BINDING:?OpenAPPA runtime binding is required}"
+fi
+: "${OPENAI_BASE_URL:?}" "${OPENAI_API_KEY:?}"
+: "${ARCHESTRA_MCP_GATEWAY_URL:?}" "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}"
+: "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}" "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}"
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if ! command -v kimi >/dev/null 2>&1; then
+  "${script_dir}/archestra-kimi-turn-failure" missing
+  exit 78
+fi
+# KIMI_CODE_HOME holds Kimi's config, instructions, logs and saved sessions.
+# The persisted state directory keeps sessions available to follow-ups.
+export KIMI_CODE_HOME="${ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR:-${runtime_dir}}/kimi"
+export KIMI_CODE_NO_AUTO_UPDATE=1 KIMI_CLI_NO_AUTO_UPDATE=1 KIMI_DISABLE_TELEMETRY=1
+# The runtime's working directory is the Agent's own; without this the TUI
+# stops on a folder-trust dialog. A trusted folder would also load the
+# repository's MCP files; the image patches Kimi to read only the user
+# mcp.json below (patches/kimi-user-mcp-only.py).
+export KIMI_CODE_TRUST_WORKSPACE=1
+mkdir -p "${runtime_dir}" "${KIMI_CODE_HOME}"
+chmod 0700 "${KIMI_CODE_HOME}"
+
+# The runtime binding is a credential: it reaches the proxy through Kimi's
+# custom-header variable and the gateway through the bridge's environment,
+# never through a file.
+if [[ -n "${ARCHESTRA_AGENT_RUNTIME_BINDING:-}" ]]; then
+  export KIMI_CODE_CUSTOM_HEADERS="X-Archestra-Runtime-Binding: ${ARCHESTRA_AGENT_RUNTIME_BINDING}"
+else
+  unset KIMI_CODE_CUSTOM_HEADERS
+fi
+
+# The gateway bridge records the outcome of Kimi's own catalog request here;
+# the task waits for it. A previous process's outcome does not count.
+export ARCHESTRA_KIMI_GATEWAY_STATE="${runtime_dir}/kimi-gateway-state.json"
+rm -f "${ARCHESTRA_KIMI_GATEWAY_STATE}" "${runtime_dir}/kimi-turn-running"
+
+# The global AGENTS.md loads for every project, after Kimi's own system prompt
+# and before the workspace's AGENTS.md.
+instructions_file="${KIMI_CODE_HOME}/AGENTS.md"
+"${script_dir}/archestra-agent-instructions" > "${instructions_file}.tmp"
+chmod 0600 "${instructions_file}.tmp"
+mv "${instructions_file}.tmp" "${instructions_file}"
+
+# Credentials stay in the environment: Kimi reads the provider key through
+# api_key_env, and the bridge reads the gateway token itself.
+python3 - "${KIMI_CODE_HOME}" "${script_dir}/archestra-kimi-hook" "${script_dir}/archestra-kimi-mcp" <<'PYTHON'
+import json
+import os
+import re
+import sys
+
+home, hook, bridge = sys.argv[1], sys.argv[2], sys.argv[3]
+env = os.environ
+session = env.get("ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID") or env["ARCHESTRA_AGENT_RUNTIME_TASK_ID"]
+model = env["ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL"]
+kimi_provider = env.get("ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER") == "kimi"
+tracing = {
+    "X-Archestra-Run-Id": env["ARCHESTRA_AGENT_RUNTIME_TASK_ID"],
+    "X-Archestra-Session-Id": session,
+    "X-Appa-Session-ID": session,
+}
+# Kimi refuses a model without a context size. When the platform does not know
+# it, assume 128K tokens.
+DEFAULT_CONTEXT_LENGTH = 131072
+
+
+def string(value):
+    # A JSON string is a valid TOML basic string: both escape the quote, the
+    # backslash and control characters the same way. Non-ASCII text stays
+    # literal because TOML rejects the UTF-16 surrogate pairs JSON would write
+    # for it.
+    return json.dumps(str(value), ensure_ascii=False)
+
+
+def positive(name):
+    value = env.get(name, "")
+    return int(value) if value.isdigit() and int(value) > 0 else None
+
+
+def kimi_capabilities(model_id):
+    # Kimi Code matches thinking support by model name only for its own
+    # catalog; a custom provider sends `thinking: disabled`, which K3.1 Pro
+    # refuses. Kimi's coding models think; K3.1 Pro only thinks.
+    name = model_id.lower()
+    capabilities = ["tool_use"]
+    if re.match(r"^(kimi-)?(k3|for-coding)", name) or "thinking" in name:
+        capabilities.append("thinking")
+    if re.match(r"^(kimi-)?k3\.1", name):
+        capabilities.append("always_thinking")
+    return capabilities
+
+
+lines = [
+    'default_model = "archestra"',
+    # The launcher's command-line mode wins; a session Kimi opens on its own
+    # never stops on an approval dialog.
+    'default_permission_mode = "auto"',
+    "telemetry = false",
+    "",
+    # Model requests go to the Agent-scoped proxy; MCP tools come from mcp.json.
+    "[providers.archestra]",
+    f'type = "{"kimi" if kimi_provider else "openai"}"',
+    f"base_url = {string(env['OPENAI_BASE_URL'])}",
+    'api_key_env = "OPENAI_API_KEY"',
+    "",
+    "[providers.archestra.custom_headers]",
+    *(f"{string(key)} = {string(value)}" for key, value in tracing.items()),
+    "",
+    "[models.archestra]",
+    'provider = "archestra"',
+    f"model = {string(model)}",
+    f"max_context_size = {positive('ARCHESTRA_AGENT_RUNTIME_MODEL_CONTEXT_LENGTH') or DEFAULT_CONTEXT_LENGTH}",
+]
+output_length = positive("ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH")
+if output_length:
+    lines.append(f"max_output_size = {output_length}")
+if kimi_provider:
+    lines.append(f"capabilities = {json.dumps(kimi_capabilities(model))}")
+lines.append("")
+
+
+def hook_entry(event, matcher=None, timeout=10):
+    entry = ["[[hooks]]", f"event = {string(event)}"]
+    if matcher:
+        entry.append(f"matcher = {string(matcher)}")
+    entry += [f"command = {string(hook + ' ' + event)}", f"timeout = {timeout}", ""]
+    return entry
+
+
+lines += hook_entry("SessionStart")
+# Holds the prompt until the gateway catalog is loaded; blocks it otherwise.
+lines += hook_entry("UserPromptSubmit", timeout=60)
+lines += hook_entry("TurnStarted")
+lines += hook_entry("PreToolUse", "^AskUserQuestion$")
+# Any finished tool means an answered question or approved permission.
+lines += hook_entry("PostToolUse")
+lines += hook_entry("PostToolUseFailure")
+lines += hook_entry("PermissionRequest")
+lines += hook_entry("PermissionResult")
+lines += hook_entry("Stop", timeout=30)
+lines += hook_entry("StopFailure", timeout=30)
+lines += hook_entry("Interrupt", timeout=30)
+
+tui = [
+    # Titles would spend an extra model call on every new session.
+    "auto_session_title = false",
+    "disable_feedback_survey = true",
+    "",
+    "[upgrade]",
+    "auto_install = false",
+    "",
+    "[notifications]",
+    "enabled = false",
+]
+
+mcp = {
+    "mcpServers": {
+        # The bridge reads the gateway URL, token and run headers from the
+        # environment and records whether Kimi's catalog request succeeded.
+        "archestra": {
+            "command": bridge,
+            "startupTimeoutMs": 30000,
+            # A gateway call can wait on a person's review for minutes.
+            "toolTimeoutMs": 600000,
+        }
+    }
+}
+
+
+def write_private(name, content):
+    path = os.path.join(home, name)
+    temporary = f"{path}.tmp"
+    with open(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as file:
+        file.write(content)
+    os.replace(temporary, path)
+
+
+write_private("config.toml", "\n".join(lines))
+write_private("tui.toml", "\n".join(tui) + "\n")
+write_private("mcp.json", json.dumps(mcp, indent=2, ensure_ascii=False) + "\n")
+PYTHON
+
+session_file="${runtime_dir}/kimi-main-session"
+if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
+  if [[ ! -s "${session_file}" ]]; then
+    echo "archestra: Cannot resume the saved Kimi Code session: its session ID is missing. The workspace is preserved; no new session was started." >&2
+    exit 78
+  fi
+else
+  # A new conversation: the SessionStart hook records its session.
+  rm -f "${session_file}"
+fi
+
+# Delegated runs never stop on a question or an approval. A person is at the
+# terminal of an interactive session: Kimi's auto mode would also refuse the
+# model's questions to them, so it asks only for dangerous commands there.
+if [[ "${runtime_mode}" == "interactive" ]]; then
+  args=(--yolo)
+else
+  args=(--auto)
+fi
+if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
+  args+=(--session "$(cat "${session_file}")")
+fi
+
+case "${runtime_mode}" in
+  interactive)
+    exec "${script_dir}/archestra-kimi-tui-start" kimi "${args[@]}"
+    ;;
+  one_shot)
+    if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]]; then
+      # Without a terminal, run the turn in Kimi's print mode.
+      exec "${script_dir}/archestra-kimi-print" "${args[@]:1}"
+    fi
+    # The native TUI runs in the pane like the other maintained clients, so
+    # terminal steering reaches the running turn. The Stop hook settles it.
+    exec "${script_dir}/archestra-tui-run" \
+      "${runtime_dir}/turn-complete" \
+      "${runtime_dir}/final-answer.txt" \
+      "${script_dir}/archestra-kimi-tui-start" kimi "${args[@]}"
+    ;;
+  *)
+    echo "archestra: unknown Agent Runtime mode" >&2
+    exit 78
+    ;;
+esac

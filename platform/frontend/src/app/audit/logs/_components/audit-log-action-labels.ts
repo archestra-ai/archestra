@@ -240,6 +240,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "user.password_reset": "Password reset",
   // User token
   "userToken.rotated": "Personal token rotated",
+  "userLimitUsage.reset": "User limit usage reset",
   // Virtual API key
   "virtualApiKey.created": "Virtual API key created",
   "virtualApiKey.deleted": "Virtual API key deleted",
@@ -372,6 +373,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "plugin",
   "connector",
   "defaultUserLimit",
+  "userLimitUsage",
   "environment",
   "credential",
   "githubPat",

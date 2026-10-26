@@ -31,6 +31,15 @@ import type { ArchestraContext } from "./types";
 
 // === Constants ===
 
+const ReasonArgSchema = z
+  .string()
+  .max(500)
+  .nullable()
+  .optional()
+  .describe(
+    "Optional note on why the limit was set, shown with custom per-user limits. Null clears it.",
+  );
+
 const LimitOutputItemSchema = z.object({
   throughputUsage: z
     .object({ currentUsage: z.number(), resetsAt: z.string() })
@@ -40,6 +49,11 @@ const LimitOutputItemSchema = z.object({
   entityId: z.string().describe("The limited entity ID."),
   limitType: LimitTypeSchema.describe("The kind of limit."),
   limitValue: z.number().describe("The configured limit value."),
+  reason: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Why the limit was set, if a reason was given."),
   cleanupInterval: LimitCleanupIntervalSchema.describe(
     "How often this limit resets.",
   ),
@@ -92,6 +106,7 @@ const CreateLimitToolArgsSchema = z
       .string()
       .optional()
       .describe("Tool name. Required for tool_calls limits."),
+    reason: ReasonArgSchema,
   })
   .strict()
   .superRefine((args, ctx) => {
@@ -157,6 +172,7 @@ const registry = defineArchestraTools([
           cleanupInterval: args.cleanup_interval,
           mcpServerName: args.mcp_server_name,
           toolName: args.tool_name,
+          reason: args.reason?.trim() || null,
         });
 
         return structuredSuccessResult(
@@ -291,6 +307,7 @@ const registry = defineArchestraTools([
         cleanup_interval: LimitCleanupIntervalSchema.optional().describe(
           "Optional new cleanup interval for this limit.",
         ),
+        reason: ReasonArgSchema,
       })
       .strict(),
     outputSchema: z.object({
@@ -314,6 +331,9 @@ const registry = defineArchestraTools([
         }
         if (args.cleanup_interval !== undefined) {
           updateData.cleanupInterval = args.cleanup_interval;
+        }
+        if (args.reason !== undefined) {
+          updateData.reason = args.reason?.trim() || null;
         }
 
         if (Object.keys(updateData).length === 0) {

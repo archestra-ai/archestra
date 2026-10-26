@@ -386,6 +386,7 @@ jobs:
         id: push
         if: steps.update.outputs.changed == 'true'
         env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
           TARGET: ${{ steps.branch.outputs.path }}
           SUMMARY: ${{ steps.update.outputs.summary }}
         run: |

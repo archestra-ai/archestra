@@ -940,21 +940,19 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       }
       const useResponses = isAzureOpenAiFirstPartyModelName(modelName);
 
-      // The AI SDK client can't set Azure's api-version as a default query
-      // param, so we wrap fetch and inject it on every request — except for
-      // Foundry v1 endpoints (`.../openai/v1`), which reject date-based
-      // api-version values with "API version not supported". On the proxy path
-      // baseURL is the local proxy (never a v1 URL), so injection is unchanged
-      // there and the proxy's azure adapter applies this same guard against
-      // the real target.
-      const fetchWithVersion = shouldUseAzureOpenAiApiVersion(baseURL)
-        ? createAzureFetchWithApiVersion({
-            apiVersion: useResponses
-              ? config.llm.azure.responsesApiVersion
-              : config.llm.azure.apiVersion,
-            fetch: providedFetch,
-          })
-        : providedFetch;
+      // Only direct classic Azure calls need the AI SDK to inject api-version.
+      // Proxied calls let the adapter choose from the actual upstream URL:
+      // a date injected against the loopback URL would be forwarded as a caller
+      // override, which Foundry v1 rejects with "API version not supported".
+      const fetchWithVersion =
+        direct && shouldUseAzureOpenAiApiVersion(baseURL)
+          ? createAzureFetchWithApiVersion({
+              apiVersion: useResponses
+                ? config.llm.azure.responsesApiVersion
+                : config.llm.azure.apiVersion,
+              fetch: providedFetch,
+            })
+          : providedFetch;
       const normalizedApiKey = normalizeAzureApiKey(apiKey);
       const sdkApiKey =
         normalizedApiKey ??

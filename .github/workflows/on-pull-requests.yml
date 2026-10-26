@@ -220,8 +220,8 @@ jobs:
   # A skipped job satisfies its required PR check under its existing name;
   # the same job runs for real on merge_group. Do not add same-named success
   # placeholders: they could mask a failing merge-group job.
-  # Release-please is the sole exception below: it needs the full build before
-  # codegen can commit its docs/openapi.json version bump to the PR.
+  # Release-please is the exception below: validate its generated head before
+  # queue entry. Release PR Generation owns publication of all generated files.
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
     if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'archestra-ci[bot]' && startsWith(github.event.pull_request.head.ref, 'release-please--'))
@@ -236,7 +236,7 @@ jobs:
     # caches are empty.
     timeout-minutes: 20
     permissions:
-      contents: write # Required to push generated code updates back to release-please PRs.
+      contents: read # Release generation has a separate, single writer.
     defaults:
       run:
         working-directory: ./platform
@@ -264,23 +264,13 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      # Generate a GitHub App token for release-please PRs so pushed generated
-      # updates re-trigger workflows. Pushes made with GITHUB_TOKEN do not.
-      - name: Generate token for release-please PR
-        if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
-        id: generate-token
-        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
-        with:
-          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
-          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
-
-      - name: Update checkout credentials for release-please PR
+      # Validate the same source as the generation coordinator, never a moving branch.
+      - name: Pin release PR source
         if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: true # zizmor: ignore[artipacked] release-please PRs need push credentials for generated updates.
-          ref: ${{ github.head_ref }}
-          token: ${{ steps.generate-token.outputs.token }}
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
 
       - name: Setup environment
@@ -407,20 +397,13 @@ jobs:
 
           # Check for codegen changes
           if ! git -C "$GITHUB_WORKSPACE" diff --exit-code -- docs/ platform/ || ! git -C "$GITHUB_WORKSPACE" diff --cached --exit-code -- docs/ platform/; then
-            if [ "$IS_RELEASE_PLEASE_PR" = "true" ]; then
-              echo "Waiting for drizzle-kit check before auto-committing generated changes..."
-              wait $DRIZZLE_PID
-
-              echo "Release-please PR with generated changes detected. Auto-committing..."
-              git config user.name "github-actions[bot]"
-              git config user.email "github-actions[bot]@users.noreply.github.com"
-              git -C "$GITHUB_WORKSPACE" add docs/ platform/
-              git commit -m "chore: update docs/openapi.json version for release"
-              git push
-              echo "Changes committed. Workflow will be re-triggered."
-              exit 0
+            if [ "$IS_RELEASE_PLEASE_PR" = "true" ] && [ "$(git log -1 --format=%s)" != "docs: generate release artifacts" ] && [ "$(git -C "$GITHUB_WORKSPACE" diff --name-only HEAD -- docs/ platform/)" = "docs/openapi.json" ]; then
+              # The coordinator will publish all outputs together. This source run
+              # may observe the expected OpenAPI drift; the generated head must
+              # subsequently pass this entire job with no codegen differences.
+              echo "Waiting for combined release generation to publish OpenAPI."
             else
-              echo "::error::Codegen produced changes. Please run 'pnpm codegen && pnpm lint:fix' locally and commit the results."
+              echo "::error::Codegen produced unexpected changes. Run pnpm codegen && pnpm lint:fix locally."
               git -C "$GITHUB_WORKSPACE" diff --stat -- docs/ platform/
               exit 1
             fi

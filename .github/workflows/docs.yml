@@ -5,9 +5,8 @@ name: Docs
 # the app in light and dark mode.
 #
 # Merge groups validate every screenshot without publication. Screenshots are
-# also captured when docs get published: on release-please pull
-# requests (the capture commits changed images back to the release branch) and
-# on a manual run (which opens a pull request with the changes). Locally the
+# published by Release PR Generation in one combined commit, or by a manual
+# run here (which opens a pull request with the changes). Locally the
 # same capture runs with `pnpm docs:screenshots` (see
 # .agents/skills/archestra-docs-writer/SKILL.md).
 
@@ -62,6 +61,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read # Validate the release's saved benchmark before queue entry.
+      actions: read # Verify the combined generator's exact successful run attempt.
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -93,7 +93,10 @@ jobs:
       - name: Run docs check regression tests
         run: python3 -m unittest discover -s .github/scripts -p 'test_docs_*.py'
 
-      # This required check must stay pending until benchmark codegen finishes.
+      - name: Test release generation coordination
+        run: node --test .github/scripts/release-pr-generation.test.mjs
+
+      # This required check must stay pending until all release codegen finishes.
       # Otherwise the merge queue locks the release branch before its tables land.
       - name: Require current release benchmark tables
         if: >-
@@ -105,9 +108,11 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
+            const { verifyGeneration } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/release-pr-generation.mjs`);
             const { verifyBenchmarkDocs } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/update-proxy-benchmark-docs.mjs`);
             for (let attempt = 0; attempt < 140; attempt++) {
-              const result = await verifyBenchmarkDocs({github, context});
+              const generation = await verifyGeneration({github, context});
+              const result = generation.ready ? await verifyBenchmarkDocs({github, context}) : generation;
               if (result.ready) {
                 core.info(result.reason);
                 return;
@@ -159,14 +164,8 @@ jobs:
 
   docs-screenshots:
     name: Docs Screenshots
-    # Release-please PRs come from this repository's own branch, so the capture
-    # can push to it; manual runs open a pull request instead.
-    if: >-
-      (github.event_name == 'workflow_dispatch' && !inputs.validation_only) ||
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.user.login == 'archestra-ci[bot]' &&
-       github.event.pull_request.head.repo.full_name == github.repository &&
-       startsWith(github.event.pull_request.head.ref, 'release-please--'))
+    # Release PR captures belong to the single generation coordinator.
+    if: github.event_name == 'workflow_dispatch' && !inputs.validation_only
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 60
     permissions:

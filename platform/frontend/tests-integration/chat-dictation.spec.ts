@@ -127,11 +127,21 @@ for (const mobile of [false, true]) {
     if (!box) throw new Error("Recording controls have no visible bounds");
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(mobile ? 390 : 1280);
+    const audio = await controls.locator("[data-audio-strip]").boundingBox();
+    const send = await controls
+      .getByRole("button", { name: "Send voice input" })
+      .boundingBox();
+    expect(audio?.height).toBe(32);
+    expect(send?.height).toBe(32);
+    expect(audio?.y).toBe(send?.y);
+    await expect(
+      page.getByRole("button", { name: "Cancel voice input" }),
+    ).toHaveCount(0);
     if (mobile) {
       const heights = await controls
         .locator("span[style]")
         .evaluateAll((bars) => bars.map((bar) => getComputedStyle(bar).height));
-      expect(heights.every((height) => height === "4px")).toBe(true);
+      expect(heights.every((height) => height === "2px")).toBe(true);
     } else {
       await expect
         .poll(async () =>

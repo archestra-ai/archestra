@@ -2,11 +2,10 @@
 
 import {
   AlertCircleIcon,
-  ArrowUpIcon,
+  CornerDownLeftIcon,
   Loader2Icon,
   MicIcon,
   SquareIcon,
-  XIcon,
 } from "lucide-react";
 import {
   type RefObject,
@@ -18,6 +17,7 @@ import {
 import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import { InputGroupButton } from "@/components/ui/input-group";
 import {
   type DictationRecognition,
   DictationSession,
@@ -241,38 +241,66 @@ export function PromptInputSpeechButton({
         </Button>
       ) : secure ? (
         <fieldset
-          className="flex min-w-0 items-center gap-1 rounded-xl bg-muted p-1 motion-safe:animate-in motion-safe:slide-in-from-right-2 motion-reduce:transition-none"
+          className="m-0 inline-flex h-8 shrink-0 items-center overflow-hidden rounded-md border-0 p-0"
           aria-label="Voice input controls"
           aria-busy={busy}
-          title={busy ? "Transcribing voice input" : "Recording voice input"}
+          title={
+            busy
+              ? "Transcribing voice input"
+              : state.phase === "starting"
+                ? "Starting voice input"
+                : "Recording voice input"
+          }
         >
-          <Button
-            type="button"
-            size="icon-xs"
-            variant="ghost"
-            aria-label="Cancel voice input"
-            title="Cancel voice input (Esc)"
-            onClick={() => {
-              session.current?.cancel();
-              textareaRef?.current?.focus();
-            }}
-          >
-            <XIcon className="size-3.5" />
-          </Button>
           <div
-            className="flex h-7 w-16 items-center justify-end gap-[2px] overflow-hidden sm:w-28"
-            aria-hidden="true"
+            data-audio-strip
+            className="flex h-8 items-center gap-0.5 rounded-l-md border border-r-0 border-border/70 bg-muted/35 pl-1"
           >
-            {levels.map((height, index) => (
-              // These are fixed time slots, with new amplitude samples scrolling left.
-              <span
-                // biome-ignore lint/suspicious/noArrayIndexKey: stable waveform time slots
-                key={index}
-                className="w-[2px] shrink-0 rounded-full bg-muted-foreground motion-safe:transition-[height] motion-reduce:!h-1"
-                style={{ height }}
-              />
-            ))}
+            <div
+              className="flex h-6 w-[76px] items-center justify-end gap-0.5 overflow-hidden bg-background/40"
+              aria-hidden="true"
+            >
+              {levels.slice(-18).map((level, index) => (
+                <span
+                  // biome-ignore lint/suspicious/noArrayIndexKey: stable waveform time slots
+                  key={`sample-${index}`}
+                  className="w-0.5 shrink-0 rounded-[1px] bg-foreground/55 motion-safe:transition-[height] motion-safe:duration-75 motion-reduce:!h-0.5"
+                  style={{
+                    height:
+                      busy || error ? 2 : Math.max(2, Math.min(18, level)),
+                  }}
+                />
+              ))}
+            </div>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              className="rounded-none text-foreground/80"
+              aria-label={error ? "Keep voice transcript" : "Stop voice input"}
+              title={error ? "Keep transcript" : "Stop dictation"}
+              disabled={busy || disabled}
+              onClick={() => session.current?.finish(false)}
+            >
+              {busy ? (
+                <Loader2Icon className="size-3.5 motion-safe:animate-spin" />
+              ) : (
+                <SquareIcon className="size-3" strokeWidth={1.5} />
+              )}
+            </Button>
           </div>
+          <InputGroupButton
+            type="button"
+            size="icon-sm"
+            variant="default"
+            className="rounded-l-none rounded-r-md border-l border-primary-foreground/15"
+            aria-label="Send voice input"
+            title="Stop dictation and send"
+            disabled={busy || error || disabled || sendDisabled}
+            onClick={() => session.current?.finish(true)}
+          >
+            <CornerDownLeftIcon className="size-4" />
+          </InputGroupButton>
           <output className="sr-only">
             {busy
               ? "Transcribing voice input"
@@ -282,33 +310,6 @@ export function PromptInputSpeechButton({
                   ? "Starting voice input"
                   : "Recording voice input"}
           </output>
-          {busy ? (
-            <Loader2Icon
-              aria-hidden="true"
-              className="size-4 motion-safe:animate-spin"
-            />
-          ) : (
-            <Button
-              type="button"
-              size="icon-xs"
-              variant="ghost"
-              aria-label={error ? "Keep voice transcript" : "Stop voice input"}
-              title="Stop and edit transcript"
-              onClick={() => session.current?.finish(false)}
-            >
-              <SquareIcon className="size-3" />
-            </Button>
-          )}
-          <Button
-            type="button"
-            size="icon-xs"
-            disabled={busy || error || disabled || sendDisabled}
-            aria-label="Send voice input"
-            title="Finish transcription and send"
-            onClick={() => session.current?.finish(true)}
-          >
-            <ArrowUpIcon className="size-4" />
-          </Button>
         </fieldset>
       ) : null}
       {error && (

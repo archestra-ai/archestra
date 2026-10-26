@@ -66,7 +66,7 @@ describe("GET /api/auto-routing/plans", () => {
       createdAt: second.createdAt.toISOString(),
       trigger: "manual",
       status: "active",
-      generation: 1,
+      generation: 2,
       inputWatermark: second.inputWatermark.toISOString(),
       budgetUsdPerDay: 10000,
       scorerVersion,

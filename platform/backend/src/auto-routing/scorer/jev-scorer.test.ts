@@ -41,10 +41,7 @@ describe("JevScorer", () => {
   const server = useMswServer();
   const scorer = new JevScorer();
   let organizationId: string;
-  const ctx = () => ({
-    organizationId,
-    signal: new AbortController().signal,
-  });
+  const ctx = () => ({ organizationId });
 
   beforeEach(
     async ({ makeOrganization, makeSecret, makeLlmProviderApiKey }) => {
@@ -126,10 +123,7 @@ describe("JevScorer", () => {
     });
     server.use(http.post(openRouter, () => HttpResponse.json(ANSWERS)));
 
-    const result = await scorer.score(INPUT, {
-      organizationId: org.id,
-      signal: new AbortController().signal,
-    });
+    const result = await scorer.score(INPUT, { organizationId: org.id });
 
     expect(result.pLong).toBe(0.35);
   });
@@ -144,25 +138,6 @@ describe("JevScorer", () => {
     );
 
     await expectScorerError(scorer.score(INPUT, ctx()), "timeout");
-  });
-
-  test("propagates the caller's abort instead of a scorer error", async () => {
-    server.use(
-      http.post(TYPESAFE_ENDPOINT, async () => {
-        await delay("infinite");
-        return HttpResponse.json(ANSWERS);
-      }),
-    );
-    const caller = new AbortController();
-    const reason = new Error("request closed");
-
-    const pending = scorer.score(INPUT, {
-      organizationId,
-      signal: caller.signal,
-    });
-    caller.abort(reason);
-
-    await expect(pending).rejects.toBe(reason);
   });
 
   test("reports an HTTP error with its status", async () => {
@@ -214,10 +189,7 @@ describe("JevScorer", () => {
     const org = await makeOrganization();
 
     await expectScorerError(
-      scorer.score(INPUT, {
-        organizationId: org.id,
-        signal: new AbortController().signal,
-      }),
+      scorer.score(INPUT, { organizationId: org.id }),
       "no_credentials",
     );
   });

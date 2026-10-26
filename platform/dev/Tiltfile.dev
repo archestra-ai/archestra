@@ -160,6 +160,8 @@ if code_runtime_enabled:
   backend_resource_deps.append('sandbox-rs-build')
 # The MCP App runtime addon must be built before the backend boots.
 backend_resource_deps.append('app-runtime-rs-build')
+# The auto-routing planner addon must be built before the backend boots.
+backend_resource_deps.append('router-rs-build')
 
 local_resource(
   'pnpm-install',
@@ -214,6 +216,24 @@ local_resource(
   ],
   resource_deps=['pnpm-install'],
   labels=['apps'],
+)
+
+# Rebuild the native auto-routing planner addon (napi) when its Rust sources
+# change; the backend loads @archestra/router-rs at startup. Mirrors
+# app-runtime-rs-build.
+local_resource(
+  'router-rs-build',
+  cmd='pnpm --filter @archestra/router-rs build:dev',
+  deps=[
+    '../archestra-rs/router-rs/src',
+    '../archestra-rs/router-core/src',
+    '../archestra-rs/router-rs/Cargo.toml',
+    '../archestra-rs/router-core/Cargo.toml',
+    '../archestra-rs/Cargo.toml',
+    '../archestra-rs/Cargo.lock',
+  ],
+  resource_deps=['pnpm-install'],
+  labels=['dev'],
 )
 
 # Main dev/prod bundle

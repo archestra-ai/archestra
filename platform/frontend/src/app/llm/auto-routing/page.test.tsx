@@ -1,6 +1,6 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -21,8 +21,10 @@ import type {
   AutoRoutingSettings,
   AutoRoutingSettingsUpdate,
 } from "@/lib/auto-routing.query";
+import type { LlmModel } from "@/lib/llm-models.query";
 import { useOrganization } from "@/lib/organization.query";
 import AutoRoutingOverviewPage from "./page";
+import AutoRoutingPlansPage from "./plans/page";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
@@ -95,6 +97,35 @@ const activePlan: AutoRoutingPlanDetail = {
   plan: null,
 };
 
+function catalogModel(
+  dbId: string,
+  id: string,
+  supportsToolCalling: boolean | null,
+): LlmModel {
+  return {
+    id,
+    dbId,
+    displayName: id,
+    provider: "anthropic",
+    isFree: false,
+    capabilities: {
+      contextLength: null,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling,
+      supportsReasoningEffort: null,
+      recommendedForAgents: null,
+      pricePerMillionInput: null,
+      pricePerMillionOutput: null,
+      isCustomPrice: false,
+      priceSource: "default",
+      pricePerMillionCacheRead: null,
+      pricePerMillionCacheWrite: null,
+      cachePriceSource: "default",
+    },
+  };
+}
+
 let settings: AutoRoutingSettings;
 const updates: AutoRoutingSettingsUpdate[] = [];
 
@@ -145,6 +176,72 @@ describe("AutoRoutingOverviewPage", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(updates).toEqual([{ budgetUsdPerDay: 55.5 }]));
+  });
+
+  it("saves a tier change while disabled routing has no budget", async () => {
+    settings = makeSettings({ enabled: false, budgetUsdPerDay: null });
+    const toolModel = catalogModel(
+      "00000000-0000-4000-8000-000000000201",
+      "claude-haiku-next",
+      true,
+    );
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-models/available`, () =>
+        HttpResponse.json([toolModel]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByLabelText("Daily budget (USD)");
+    const [fastTier] = screen.getAllByRole("combobox");
+    await user.click(fastTier);
+    await user.click(await screen.findByText("claude-haiku-next"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(updates).toEqual([{ fastModelId: toolModel.dbId }]),
+    );
+  });
+
+  it("requires a budget to enable routing", async () => {
+    settings = makeSettings({ enabled: false, budgetUsdPerDay: null });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("switch", { name: "Enabled" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("Set a daily budget")).toBeInTheDocument();
+    expect(updates).toEqual([]);
+  });
+
+  it("offers only tool-capable models as tiers, keeping a saved one shown", async () => {
+    const savedFast = makeSettings().tiers.fast;
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-models/available`, () =>
+        HttpResponse.json([
+          catalogModel(savedFast?.id ?? "", "claude-haiku", false),
+          catalogModel(
+            "00000000-0000-4000-8000-000000000201",
+            "claude-sonnet-next",
+            true,
+          ),
+          catalogModel(
+            "00000000-0000-4000-8000-000000000202",
+            "text-only-model",
+            false,
+          ),
+        ]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByLabelText("Daily budget (USD)");
+    const [, normalTier] = screen.getAllByRole("combobox");
+    await user.click(normalTier);
+
+    expect(await screen.findByText("claude-sonnet-next")).toBeInTheDocument();
+    expect(screen.queryByText("text-only-model")).not.toBeInTheDocument();
+    expect(screen.getAllByText("claude-haiku").length).toBeGreaterThan(0);
   });
 
   it("rejects a budget below a cent without saving", async () => {
@@ -201,6 +298,79 @@ describe("AutoRoutingOverviewPage", () => {
     );
   });
 
+  it("labels the plan's tier split with the models it was fitted for", async () => {
+    const fittedFast = catalogModel(
+      "00000000-0000-4000-8000-000000000201",
+      "claude-haiku-legacy",
+      true,
+    );
+    const unlisted = "00000000-0000-4000-8000-000000000299";
+    settings = makeSettings({
+      status: {
+        ...makeSettings().status,
+        activePlan: { id: PLAN_ID, createdAt: activePlan.createdAt },
+      },
+    });
+    const normal = settings.tiers.normal?.id ?? "";
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-models/available`, () =>
+        HttpResponse.json([fittedFast]),
+      ),
+      http.get(`${API_ORIGIN}/api/auto-routing/plans/${PLAN_ID}`, () =>
+        HttpResponse.json({
+          ...activePlan,
+          tiersFingerprint: fingerprint([fittedFast.dbId, normal, unlisted]),
+        }),
+      ),
+    );
+    renderPage();
+
+    expect(
+      await screen.findByText(
+        "fast · claude-haiku-legacy: 50.0% sessions, 20.0% tokens",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("normal · claude-sonnet: 30.0% sessions, 30.0% tokens"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(`smart · ${unlisted}: 20.0% sessions, 50.0% tokens`),
+    ).toBeInTheDocument();
+  });
+
+  it("follows a requested re-plan until its plan is published", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      settings = makeSettings({ generation: 4, plannedGeneration: 3 });
+      let plans: AutoRoutingPlanDetail[] = [];
+      server.use(
+        http.get(`${API_ORIGIN}/api/auto-routing/plans`, () =>
+          HttpResponse.json(plans),
+        ),
+      );
+      renderPage(<AutoRoutingPlansPage />);
+      expect(await screen.findByText("Re-plan pending")).toBeInTheDocument();
+      expect(await screen.findByText("No plans yet")).toBeInTheDocument();
+
+      settings = makeSettings({
+        generation: 4,
+        plannedGeneration: 4,
+        status: {
+          ...makeSettings().status,
+          activePlan: { id: PLAN_ID, createdAt: activePlan.createdAt },
+        },
+      });
+      plans = [activePlan];
+      await act(() => vi.advanceTimersByTimeAsync(5_000));
+
+      expect(await screen.findByText("$12.50/day")).toBeInTheDocument();
+      expect(screen.queryByText("Re-plan pending")).not.toBeInTheDocument();
+      expect(await screen.findByText("420")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("previews the tier a prompt would get", async () => {
     const previewed: unknown[] = [];
     server.use(
@@ -247,13 +417,26 @@ function setCanUpdate(canUpdate: boolean) {
   } as unknown as ReturnType<typeof useHasPermissions>);
 }
 
-function renderPage() {
+function fingerprint(modelIds: string[]) {
+  const prices = { input: 1, cache_read: 0.1, cache_write: 1.25, output: 5 };
+  return {
+    tiers: modelIds.map((model_id) => ({
+      model_id,
+      short: prices,
+      long: null,
+    })),
+    long_context_threshold: null,
+  };
+}
+
+function renderPage(sibling?: React.ReactNode) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   render(
     <QueryClientProvider client={queryClient}>
       <AutoRoutingOverviewPage />
+      {sibling}
     </QueryClientProvider>,
   );
 }

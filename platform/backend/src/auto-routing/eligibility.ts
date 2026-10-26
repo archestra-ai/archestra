@@ -16,7 +16,8 @@ import { ApiError, type Model } from "@/types";
 export type EligibleTier = {
   eligible: true;
   routedModel: string;
-  resolution: ModelRouterResolution;
+  /** The provider instance the request would be sent to. */
+  providerApiKeyId: string;
 };
 export type IneligibleTier = {
   eligible: false;
@@ -71,5 +72,9 @@ export async function checkAutoTierEligibility(params: {
   const credential = await selectModelRouterCredential({ auth, resolution });
   if (credential.kind === "denied") return denied(credential.error.message);
 
-  return { eligible: true, routedModel, resolution };
+  return {
+    eligible: true,
+    routedModel,
+    providerApiKeyId: credential.mappedApiKey.providerApiKeyId,
+  };
 }

@@ -114,6 +114,7 @@ export const AutoRoutingSettingsSchema = z.object({
 export type AutoRoutingSettings = z.infer<typeof AutoRoutingSettingsSchema>;
 
 export const UpdateAutoRoutingSettingsSchema = AutoRoutingSettingsSchema.omit({
+  scorerVersionId: true,
   generation: true,
   plannedGeneration: true,
 }).partial();
@@ -153,6 +154,7 @@ export type RoutingFit = {
 
 export const RoutingPublishRejectionSchema = z.enum([
   "stale_generation",
+  "stale_scorer_version",
   "stale_watermark",
 ]);
 export type RoutingPublishRejection = z.infer<
@@ -165,7 +167,12 @@ export type RoutingPublishResult =
 
 export type AutoRoutingRequestContext = {
   decisionId: string;
-  smartModel: { modelId: string; provider: SupportedProvider };
+  smartModel: {
+    modelId: string;
+    provider: SupportedProvider;
+    /** The provider instance the smart tier would be served by for this credential. */
+    providerApiKeyId: string;
+  };
   /** The routing key standing in for a session id the client did not send. */
   derivedSessionKey: RoutingSessionKey | null;
 };

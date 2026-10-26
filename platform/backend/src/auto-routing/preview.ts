@@ -2,7 +2,7 @@ import RoutingPlanModel from "@/models/routing-plan";
 import { ApiError } from "@/types";
 import type { RoutingPlan, RoutingSessionFeatures } from "@/types/auto-routing";
 import type { AutoRoutingPreviewResponse } from "@/types/auto-routing-api";
-import { decidePlanned, uniform } from "./router";
+import { activeScorerVersion, decidePlanned, uniform } from "./router";
 import { JevScorer } from "./scorer/jev-scorer";
 import { ScorerError, type ScorerInput } from "./scorer/types";
 import { loadAutoRoutingSettings } from "./settings";
@@ -39,7 +39,7 @@ export async function previewAutoRouting(params: {
   const scored = await scorer
     .score(
       { firstUserText: params.text, kind: params.kind, client: null },
-      { organizationId, signal: new AbortController().signal },
+      { organizationId },
     )
     .catch((error: unknown) => {
       throw scorerFailure(error);
@@ -53,6 +53,7 @@ export async function previewAutoRouting(params: {
 
   const outcome = decideAgainstActivePlan(
     await RoutingPlanModel.findActive(organizationId),
+    (await activeScorerVersion()).id,
     trio,
     features,
   );
@@ -86,10 +87,12 @@ const STALE: Outcome = {
 /** The router's flow without its side effects: a stale plan falls back but requests no re-plan. */
 function decideAgainstActivePlan(
   plan: RoutingPlan | null,
+  scorerVersionId: string,
   trio: Trio,
   features: RoutingSessionFeatures,
 ): Outcome {
-  if (plan === null) return { ...STALE, reason: "cold_start" };
+  if (plan?.scorerVersionId !== scorerVersionId)
+    return { ...STALE, reason: "cold_start" };
   if (!fingerprintMatches(plan.tiersFingerprint, trio)) return STALE;
   const decision = decidePlanned(plan, features, uniform());
   if (decision === null) return STALE;

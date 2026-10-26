@@ -15,7 +15,7 @@ import type {
   UpdateAutoRoutingSettingsBody,
 } from "@/types/auto-routing-api";
 import { activeScorerVersion } from "./router";
-import { TIER_NAMES } from "./tiers";
+import { sharedLongContextThreshold, TIER_NAMES } from "./tiers";
 
 const TIER_FIELDS = {
   fast: "fastModelId",
@@ -43,6 +43,12 @@ export async function updateAutoRoutingSettings(
     TIER_NAMES.flatMap((tier) => {
       const id = body[TIER_FIELDS[tier]];
       return id === undefined ? [] : [{ tier, id }];
+    }),
+  );
+  await assertSharedLongContextThreshold(
+    TIER_NAMES.flatMap((tier) => {
+      const id = next[TIER_FIELDS[tier]];
+      return id === null ? [] : [id];
     }),
   );
   if (next.enabled) {
@@ -149,6 +155,16 @@ async function assertTierModels(
         `The ${tier} tier model "${model.provider}/${model.modelId}" is not a tool-capable chat model.`,
       );
     }
+  }
+}
+
+async function assertSharedLongContextThreshold(ids: string[]) {
+  const shared = sharedLongContextThreshold(await ModelModel.findByIds(ids));
+  if (shared.kind === "mismatched") {
+    throw new ApiError(
+      400,
+      `The tier models have different long-context thresholds (${shared.thresholds.join(", ")}). Auto routing needs every tier with long-context prices to use the same threshold.`,
+    );
   }
 }
 

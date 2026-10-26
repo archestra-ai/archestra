@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, max, ne, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import {
   lockRoutingPlan,
@@ -57,8 +57,9 @@ class RoutingPlanModel {
 
   /**
    * Records a fit's outcome under the routing-plan lock. The fit loses — and is
-   * recorded as failed — when settings changed since it read them or a fit over
-   * newer usage already published. An `active` outcome supersedes the serving
+   * recorded as failed — when settings changed since it read them, it was
+   * fitted for another scorer version than the organization's, or a fit over
+   * newer usage was already accepted. An `active` outcome supersedes the serving
    * plan and a `cold_start` retires it; a failure leaves it serving. Every
    * outcome marks its generation planned, so a failing fit does not hot-loop.
    */
@@ -66,11 +67,14 @@ class RoutingPlanModel {
     return withDbTransaction(async (tx) => {
       await lockRoutingPlan(tx, fit.organizationId);
       const [settings] = await tx
-        .select({ generation: agents.autoRoutingGeneration })
+        .select({
+          generation: agents.autoRoutingGeneration,
+          scorerVersionId: agents.autoRoutingScorerVersionId,
+        })
         .from(agents)
         .where(organizationLlmProxy(fit.organizationId));
       const [active] = await tx
-        .select({ id: plans.id, inputWatermark: plans.inputWatermark })
+        .select({ id: plans.id })
         .from(plans)
         .where(
           and(
@@ -78,12 +82,25 @@ class RoutingPlanModel {
             eq(plans.status, "active"),
           ),
         );
+      // A cold start retires the serving plan but still fences older fits.
+      const [accepted] = await tx
+        .select({ inputWatermark: max(plans.inputWatermark) })
+        .from(plans)
+        .where(
+          and(
+            eq(plans.organizationId, fit.organizationId),
+            ne(plans.status, "failed"),
+          ),
+        );
       const rejection: RoutingPublishRejection | null =
         settings?.generation !== fit.generation
           ? "stale_generation"
-          : active && fit.inputWatermark < active.inputWatermark
-            ? "stale_watermark"
-            : null;
+          : settings.scorerVersionId !== fit.scorerVersionId
+            ? "stale_scorer_version"
+            : accepted?.inputWatermark &&
+                fit.inputWatermark < accepted.inputWatermark
+              ? "stale_watermark"
+              : null;
       const outcome = rejection
         ? {
             status: "failed" as const,

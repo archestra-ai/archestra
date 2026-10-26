@@ -29,17 +29,42 @@ const autoRoutingKeys = {
   all: ["auto-routing"] as const,
   settings: () => [...autoRoutingKeys.all, "settings"] as const,
   plans: () => [...autoRoutingKeys.all, "plans"] as const,
-  plan: (id: string | null) => [...autoRoutingKeys.all, "plan", id] as const,
+  planDetails: () => [...autoRoutingKeys.all, "plan"] as const,
+  plan: (id: string | null) => [...autoRoutingKeys.planDetails(), id] as const,
 };
+
+const REPLAN_POLL_INTERVAL_MS = 3_000;
+
+export function isReplanPending(settings: AutoRoutingSettings): boolean {
+  return settings.generation > settings.plannedGeneration;
+}
 
 export function useAutoRoutingSettings() {
   return useQuery({
     queryKey: autoRoutingKeys.settings(),
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
       const { data, error } = await getAutoRoutingSettings();
       throwOnApiError(error, { toastOnError: false });
+      const previous = client.getQueryData<AutoRoutingSettings | null>(
+        autoRoutingKeys.settings(),
+      );
+      if (
+        previous &&
+        data &&
+        previous.plannedGeneration !== data.plannedGeneration
+      ) {
+        // A fit finished: plans gained a row and the old one changed status.
+        void client.invalidateQueries({ queryKey: autoRoutingKeys.plans() });
+        void client.invalidateQueries({
+          queryKey: autoRoutingKeys.planDetails(),
+        });
+      }
       return data ?? null;
     },
+    refetchInterval: ({ state }) =>
+      state.data && isReplanPending(state.data)
+        ? REPLAN_POLL_INTERVAL_MS
+        : false,
   });
 }
 

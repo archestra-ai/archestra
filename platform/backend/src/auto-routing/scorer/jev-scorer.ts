@@ -66,9 +66,9 @@ export class JevScorer implements SessionScorer {
       url: baseUrl ?? config.llm.jev.baseUrl,
       apiKey: apiKey.replace(/^Bearer\s+/i, ""),
       request,
-      signal: AbortSignal.any([ctx.signal, timeout]),
+      signal: timeout,
     }).catch((error: unknown) => {
-      throw transportFailure(error, ctx.signal, timeout);
+      throw transportFailure(error, timeout);
     });
     const parsed = SessionAnswersSchema.safeParse(body);
     if (!parsed.success) {
@@ -108,17 +108,10 @@ async function postDecisions(params: {
   return response.json();
 }
 
-/** A caller abort propagates as is: the caller cancelled, the scorer did not fail. */
-function transportFailure(
-  error: unknown,
-  callerSignal: AbortSignal,
-  timeout: AbortSignal,
-): unknown {
+function transportFailure(error: unknown, timeout: AbortSignal): unknown {
   switch (true) {
     case error instanceof ScorerError:
       return error;
-    case callerSignal.aborted:
-      return callerSignal.reason;
     case timeout.aborted:
       return new ScorerError("timeout", "Jev did not answer in time", {
         cause: error,

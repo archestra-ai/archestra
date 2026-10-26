@@ -105,6 +105,35 @@ export function modelRouterAuthenticatedUserId(
   }
 }
 
+/** The agent a Model Router request is served by, as usage limits scope it. */
+export type ModelRouterLimitAgent = {
+  id: string;
+  organizationId: string;
+  environmentId: string | null;
+};
+
+/**
+ * The identity the proxy checks usage limits for on a Model Router request,
+ * matching what `applyModelRouterAuthOverride` hands the proxy.
+ */
+export function modelRouterLimitScope(
+  auth: ModelRouterAuth,
+  agent: ModelRouterLimitAgent,
+) {
+  return {
+    agentId: agent.id,
+    agent,
+    userId: modelRouterAuthenticatedUserId(auth),
+    virtualKeyId:
+      auth.authMethod === "virtual_key" ? auth.virtualKeyId : undefined,
+    llmOauthClientId: auth.oauthClient?.id,
+    billingTeamId:
+      auth.authMethod === "oauth_user"
+        ? undefined
+        : (auth.billingTeamId ?? undefined),
+  };
+}
+
 /**
  * The provider credential a Model Router request for `resolution` would be
  * sent with, or why it may not be sent. Reads only.

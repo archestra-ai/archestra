@@ -52,6 +52,22 @@ const PlanModelsSchema = z.object({
 });
 export type PlanModels = z.infer<typeof PlanModelsSchema>;
 
+const TierRefSchema = z.object({ model_id: z.string() });
+
+/** router-core `TierSet`: the plan's fitted tiers, fast to smart. */
+const TiersFingerprintSchema = z.object({
+  tiers: z.tuple([TierRefSchema, TierRefSchema, TierRefSchema]),
+});
+
+export function parseTierModelIds(
+  document: unknown,
+): readonly [string, string, string] | null {
+  const tiers = TiersFingerprintSchema.safeParse(document).data?.tiers;
+  return tiers
+    ? [tiers[0].model_id, tiers[1].model_id, tiers[2].model_id]
+    : null;
+}
+
 export function parsePlanSummary(document: unknown): PlanSummary | null {
   return PlanSummarySchema.safeParse(document).data ?? null;
 }

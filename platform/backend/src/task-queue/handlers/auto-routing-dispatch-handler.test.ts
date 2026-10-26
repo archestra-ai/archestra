@@ -156,9 +156,13 @@ async function configuredOrganization(
 
 /** Records a fit outcome at the current generation, leaving the organization clean. */
 async function fitAtCurrentGeneration(organizationId: string) {
+  const scorer = await makeScorerVersion();
+  await AutoRoutingSettingsModel.activateScorerVersion(
+    organizationId,
+    scorer.id,
+  );
   const settings = await AutoRoutingSettingsModel.find(organizationId);
   if (!settings) throw new Error("organization has no LLM Proxy");
-  const scorer = await makeScorerVersion();
   const result = await RoutingPlanModel.publish(
     activeFit({
       organizationId,

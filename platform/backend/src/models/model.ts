@@ -953,13 +953,16 @@ class ModelModel {
       promptTokens > model.longContextThreshold
     ) {
       // The CHECK constraint makes the threshold and all four prices all-or-none.
+      // They are configured on the model, so they are no estimate even when
+      // the base rates fell back to the default.
+      const longSource = source === "default" ? "custom" : source;
       return {
         pricePerMillionInput: model.longContextPricePerMillionInput,
         pricePerMillionOutput: model.longContextPricePerMillionOutput,
         pricePerMillionCacheRead: model.longContextPricePerMillionCacheRead,
         pricePerMillionCacheWrite: model.longContextPricePerMillionCacheWrite,
-        source,
-        cacheSource: cacheSource ?? source,
+        source: longSource,
+        cacheSource: cacheSource ?? longSource,
       };
     }
 

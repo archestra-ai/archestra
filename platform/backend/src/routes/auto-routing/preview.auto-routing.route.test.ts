@@ -3,7 +3,11 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import { beforeEach, describe, expect, test } from "@/test";
-import { configureAutoRouting, publishFittedPlan } from "@/test/auto-routing";
+import {
+  configureAutoRouting,
+  makeScorerVersion,
+  publishFittedPlan,
+} from "@/test/auto-routing";
 import { useMswServer } from "@/test/msw";
 import { useRouteTestApp } from "@/test/route-test-app";
 import autoRoutingRoutes from "./auto-routing.routes";
@@ -57,6 +61,7 @@ describe("POST /api/auto-routing/preview", () => {
       organizationId: ctx.organizationId,
       trio,
     });
+    const before = await AutoRoutingSettingsModel.find(ctx.organizationId);
 
     const response = await preview({ text: "Refactor the billing module" });
 
@@ -76,9 +81,27 @@ describe("POST /api/auto-routing/preview", () => {
     expect(jevPrompts).toEqual(["Refactor the billing module"]);
     expect(await db.$count(schema.routingDecisionsTable)).toBe(0);
     expect(await db.$count(schema.routingUsageTable)).toBe(0);
-    expect(
-      (await AutoRoutingSettingsModel.find(ctx.organizationId))?.generation,
-    ).toBe(1);
+    expect(await AutoRoutingSettingsModel.find(ctx.organizationId)).toEqual(
+      before,
+    );
+  });
+
+  test("a plan fitted for another scorer version reports a cold start", async () => {
+    const trio = await configureAutoRouting(ctx.organizationId);
+    await publishFittedPlan({
+      organizationId: ctx.organizationId,
+      trio,
+      scorerVersionId: (await makeScorerVersion()).id,
+    });
+
+    const response = await preview({ text: "Refactor the billing module" });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      reason: "cold_start",
+      planId: null,
+      chosen: { tier: "normal" },
+    });
   });
 
   test("without a plan, reports the cold-start normal tier", async () => {

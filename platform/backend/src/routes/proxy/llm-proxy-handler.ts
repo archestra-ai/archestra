@@ -65,6 +65,7 @@ import {
   UserModel,
   UserTokenModel,
 } from "@/models";
+import type { LimitViolationResponse } from "@/models/limit";
 import ProxyRequestContextModel, {
   type ProxyRequestState,
 } from "@/models/proxy-request-context";
@@ -1190,32 +1191,11 @@ export async function handleLLMProxy<
       });
 
     if (limitViolation) {
-      const [_refusalMessage, contentMessage, limitMetadata] = limitViolation;
       logger.info(
         { resolvedAgentId, reason: "token_cost_limit_exceeded" },
         `${providerName} request blocked due to token cost limit`,
       );
-      // Preserve the proxy-compatible error envelope so chat clients can read
-      // structured limit metadata. This is Archestra budget enforcement, not the
-      // provider throttling traffic, so it must not look like a rate limit:
-      // a 429 makes every LLM SDK auto-retry a block that cannot clear on retry,
-      // and makes clients frame it as a provider limit ("not your usage limit").
-      // 402 Payment Required is non-retryable in all SDKs and semantically a
-      // budget stop. The Archestra-specific `type` plus the stable `code` keep
-      // structured detection working.
-      return reply.status(402).send({
-        error: {
-          message: contentMessage,
-          type: "usage_limit_exceeded",
-          code: "token_cost_limit_exceeded",
-          usage_limit: limitMetadata
-            ? {
-                limit_type: limitMetadata.limitType,
-                entity_type: limitMetadata.entityType,
-              }
-            : undefined,
-        },
-      });
+      return sendUsageLimitRefusal(reply, limitViolation);
     }
     logger.debug(
       { resolvedAgentId },
@@ -4308,4 +4288,33 @@ async function readProxyRequestState(
   return configCache.read(`context:${JSON.stringify(params)}`, () =>
     ProxyRequestContextModel.readForProxy(params),
   );
+}
+
+/**
+ * Preserve the proxy-compatible error envelope so chat clients can read
+ * structured limit metadata. This is Archestra budget enforcement, not the
+ * provider throttling traffic, so it must not look like a rate limit: a 429
+ * makes every LLM SDK auto-retry a block that cannot clear on retry, and makes
+ * clients frame it as a provider limit ("not your usage limit"). 402 Payment
+ * Required is non-retryable in all SDKs and semantically a budget stop. The
+ * Archestra-specific `type` plus the stable `code` keep structured detection
+ * working.
+ */
+export function sendUsageLimitRefusal(
+  reply: FastifyReply,
+  [_refusalMessage, contentMessage, limitMetadata]: LimitViolationResponse,
+) {
+  return reply.status(402).send({
+    error: {
+      message: contentMessage,
+      type: "usage_limit_exceeded",
+      code: "token_cost_limit_exceeded",
+      usage_limit: limitMetadata
+        ? {
+            limit_type: limitMetadata.limitType,
+            entity_type: limitMetadata.entityType,
+          }
+        : undefined,
+    },
+  });
 }

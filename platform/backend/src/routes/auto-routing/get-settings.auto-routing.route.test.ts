@@ -90,8 +90,8 @@ describe("GET /api/auto-routing/settings", () => {
         },
         smart: { id: trio[2].id, provider: "openai", modelId: trio[2].modelId },
       },
-      generation: 1,
-      plannedGeneration: 1,
+      generation: 2,
+      plannedGeneration: 2,
       status: {
         activePlan: { id: plan.id, createdAt: plan.createdAt.toISOString() },
         coldStart: { scorerVersionId: running.id, sessions: 2, required: 100 },

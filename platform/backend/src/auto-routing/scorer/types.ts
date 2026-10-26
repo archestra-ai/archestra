@@ -9,7 +9,6 @@ export interface ScorerInput {
 
 export interface ScorerContext {
   organizationId: string;
-  signal: AbortSignal;
 }
 
 export interface ScorerResult {

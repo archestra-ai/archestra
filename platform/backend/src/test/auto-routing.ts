@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { plan as fitPlan } from "@archestra/router-rs";
+import { activeScorerVersion } from "@/auto-routing/router";
 import { type Trio, tiersFingerprint } from "@/auto-routing/tiers";
 import AgentModel from "@/models/agent";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
@@ -88,11 +89,19 @@ export function activeFit(params: {
   };
 }
 
-/** Fits a real plan for `trio` over synthetic history and publishes it at the current generation. */
+/** Fits a real plan for `trio` over synthetic history and publishes it for the running scorer version. */
 export async function publishFittedPlan(params: {
   organizationId: string;
   trio: Trio;
+  /** Defaults to the running scorer version. */
+  scorerVersionId?: string;
 }) {
+  const scorerVersionId =
+    params.scorerVersionId ?? (await activeScorerVersion()).id;
+  await AutoRoutingSettingsModel.activateScorerVersion(
+    params.organizationId,
+    scorerVersionId,
+  );
   const settings = await AutoRoutingSettingsModel.find(params.organizationId);
   if (!settings) throw new Error("organization has no LLM Proxy");
   const fingerprint = tiersFingerprint(params.trio);
@@ -121,7 +130,6 @@ export async function publishFittedPlan(params: {
       baseline_source: "unknown",
     }),
   );
-  const scorer = await makeScorerVersion();
   const published = await RoutingPlanModel.publish({
     organizationId: params.organizationId,
     trigger: "manual",
@@ -129,7 +137,7 @@ export async function publishFittedPlan(params: {
     inputWatermark: new Date(),
     tiersFingerprint: fingerprint,
     budgetUsdPerDay: "10000",
-    scorerVersionId: scorer.id,
+    scorerVersionId,
     coreVersion: "0.1.0",
     planFormatVersion: 1,
     outcome: {

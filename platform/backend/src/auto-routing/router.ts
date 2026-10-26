@@ -4,8 +4,9 @@ import type { FastifyRequest } from "fastify";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
-import { ModelModel } from "@/models";
+import { LimitValidationService, ModelModel } from "@/models";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import type { LimitViolationResponse } from "@/models/limit";
 import RoutingDecisionModel from "@/models/routing-decision";
 import RoutingScorerVersionModel from "@/models/routing-scorer-version";
 import { followAppaSessionHeader } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
@@ -13,6 +14,8 @@ import {
   type ModelRouterAuth,
   type ModelRouterEndpoint,
   ModelRouterEndpointSchema,
+  type ModelRouterLimitAgent,
+  modelRouterLimitScope,
 } from "@/routes/proxy/model-router-access";
 import { setAutoRoutingContext } from "@/routes/proxy/utils/auto-routing-context";
 import { extractAutoRoutingSessionMetadata } from "@/routes/proxy/utils/headers/session-metadata";
@@ -61,6 +64,11 @@ function isAutoModel(model: string): boolean {
   return model.trim() === AUTO_MODEL;
 }
 
+type AutoModelResolution =
+  | { kind: "routed"; model: string }
+  /** The caller is over a usage limit; nothing was scored. */
+  | { kind: "usage_limited"; violation: LimitViolationResponse };
+
 /**
  * The model a Model Router request should be resolved as. Anything but
  * "auto" — and "auto" itself while the feature is off — is returned as is.
@@ -71,14 +79,15 @@ function isAutoModel(model: string): boolean {
 export async function resolveAutoModel(params: {
   request: FastifyRequest;
   auth: ModelRouterAuth;
+  agent: ModelRouterLimitAgent;
   endpoint: ModelRouterEndpoint;
   requestedModel: string;
   /** The body as the client sent it. */
   body: unknown;
-}): Promise<string> {
+}): Promise<AutoModelResolution> {
   const { request, auth, endpoint, body } = params;
   if (!config.autoRouting.enabled || !isAutoModel(params.requestedModel)) {
-    return params.requestedModel;
+    return { kind: "routed", model: params.requestedModel };
   }
   const { settings, trio } = await loadEnabledTrio(auth.organizationId);
   const tiers = requireEligible(await checkTrio({ auth, endpoint, trio }));
@@ -98,8 +107,11 @@ export async function resolveAutoModel(params: {
     virtualKeyId: auth.authMethod === "virtual_key" ? auth.virtualKeyId : null,
     firstUserMessage: text,
   });
-  const route = (decision: RoutingDecision) =>
-    routeByDecision({
+  const route = async (
+    decision: RoutingDecision,
+  ): Promise<AutoModelResolution> => ({
+    kind: "routed",
+    model: await routeByDecision({
       request,
       auth,
       endpoint,
@@ -107,7 +119,8 @@ export async function resolveAutoModel(params: {
       tiers,
       decision,
       derivedSessionKey: sessionId ? null : sessionKey,
-    });
+    }),
+  });
 
   const existing = sessionKey
     ? await RoutingDecisionModel.find({
@@ -124,10 +137,14 @@ export async function resolveAutoModel(params: {
       },
       "[AutoRouting] Nothing to decide on; routing to the normal tier",
     );
-    return tiers[NORMAL_TIER].routedModel;
+    return { kind: "routed", model: tiers[NORMAL_TIER].routedModel };
   }
-  const { decision } = await RoutingDecisionModel.insertOrGet(
-    await decideSession({
+  const violation = await LimitValidationService.checkLimitsBeforeRequest(
+    modelRouterLimitScope(auth, params.agent),
+  );
+  if (violation) return { kind: "usage_limited", violation };
+  return route(
+    await createDecisionOnce({
       organizationId: auth.organizationId,
       settings,
       trio,
@@ -139,7 +156,6 @@ export async function resolveAutoModel(params: {
       },
     }),
   );
-  return route(decision);
 }
 
 /**
@@ -257,7 +273,11 @@ async function routeByDecision(params: {
   const smart = trio[2];
   setAutoRoutingContext(params.request, {
     decisionId: decision.id,
-    smartModel: { modelId: smart.modelId, provider: smart.provider },
+    smartModel: {
+      modelId: smart.modelId,
+      provider: smart.provider,
+      providerApiKeyId: params.tiers[2].providerApiKeyId,
+    },
     derivedSessionKey: params.derivedSessionKey,
   });
   return eligibility.routedModel;
@@ -310,16 +330,56 @@ type Scored =
     }
   | { kind: "failed"; scorerVersionId: string };
 
-async function decideSession(params: {
+type DecisionParams = {
   organizationId: string;
   settings: AutoRoutingSettings;
   trio: Trio;
-  sessionKey: InsertRoutingDecision["sessionKey"];
+  sessionKey: RoutingSessionKey;
   scorerInput: Parameters<SessionScorer["score"]>[0];
-}): Promise<InsertRoutingDecision> {
+};
+
+/** First-request decisions in flight in this process, by organization and session key. */
+const decisionsInFlight = new Map<string, Promise<RoutingDecision>>();
+
+/**
+ * The session's decision, created at most once per process at a time:
+ * concurrent first requests share one scorer call. `insertOrGet` still
+ * settles races between processes.
+ */
+function createDecisionOnce(params: DecisionParams): Promise<RoutingDecision> {
+  const key = `${params.organizationId}\u0000${params.sessionKey}`;
+  const pending = decisionsInFlight.get(key);
+  if (pending) return pending;
+  const created = (async () => {
+    const stored = await RoutingDecisionModel.find({
+      organizationId: params.organizationId,
+      sessionKey: params.sessionKey,
+    });
+    if (stored) return stored;
+    const { decision } = await RoutingDecisionModel.insertOrGet(
+      await decideSession(params),
+    );
+    return decision;
+  })().finally(() => decisionsInFlight.delete(key));
+  decisionsInFlight.set(key, created);
+  return created;
+}
+
+async function decideSession(
+  params: DecisionParams,
+): Promise<InsertRoutingDecision> {
   const { organizationId, trio } = params;
   const scored = await scoreSession(organizationId, params.scorerInput);
-  const plan = await routingPlanCache.findActive(organizationId);
+  if (params.settings.scorerVersionId !== scored.scorerVersionId) {
+    await AutoRoutingSettingsModel.activateScorerVersion(
+      organizationId,
+      scored.scorerVersionId,
+    );
+  }
+  const active = await routingPlanCache.findActive(organizationId);
+  // A plan fitted on another scorer's features cannot read these.
+  const plan =
+    active?.scorerVersionId === scored.scorerVersionId ? active : null;
   const u = uniform();
   const usable =
     plan !== null && fingerprintMatches(plan.tiersFingerprint, trio);
@@ -368,10 +428,7 @@ async function scoreSession(
 ): Promise<Scored> {
   const scorerVersionId = (await activeScorerVersion()).id;
   try {
-    const result = await sessionScorer.score(input, {
-      organizationId,
-      signal: new AbortController().signal,
-    });
+    const result = await sessionScorer.score(input, { organizationId });
     return {
       kind: "scored",
       features: {

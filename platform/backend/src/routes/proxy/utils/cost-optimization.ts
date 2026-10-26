@@ -142,34 +142,8 @@ interface CacheCostBreakdown {
  *  - `cacheReadSavings`: gross amount saved by cache reads alone (always >= 0).
  *    Exposed separately because Prometheus counters cannot take negative
  *    increments, so the metrics layer reports this monotonic read-side savings.
- * Returns undefined when there are no cache tokens.
+ * Undefined when there are no cache tokens. Priced at the request's quote.
  */
-export async function calculateCacheCost(
-  model: string,
-  provider: SupportedProvider,
-  readTokens: number,
-  writeTokens: number,
-  /** Portion of writeTokens written at the 1-hour TTL (the rest is costed at the 5m rate). */
-  write1hTokens = 0,
-  providerApiKeyId?: string,
-  /** Uncached input of the same request; it decides the prompt-size price tier. */
-  inputTokens = 0,
-): Promise<CacheCostBreakdown | undefined> {
-  if (!readTokens && !writeTokens) {
-    return undefined;
-  }
-  const tokens = {
-    inputTokens,
-    outputTokens: 0,
-    readTokens,
-    writeTokens,
-    write1hTokens,
-  };
-  const quoted = await quoteModel(model, provider, tokens, providerApiKeyId);
-  return cacheCostFromQuote(quoted, tokens);
-}
-
-/** Cache cost and savings of `tokens` at already-quoted prices. */
 export function cacheCostFromQuote(
   quoted: QuotedPrices,
   tokens: CostTokens,

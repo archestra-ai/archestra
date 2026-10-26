@@ -164,4 +164,40 @@ describe("PUT /api/auto-routing/settings", () => {
       generation: 1,
     });
   });
+
+  test("rejects tiers with different long-context thresholds", async () => {
+    const trio = await configureAutoRouting(ctx.organizationId);
+    const withThreshold = (threshold: number) =>
+      ModelModel.create({
+        externalId: `openai/long-${randomUUID()}`,
+        provider: "openai",
+        modelId: `long-${randomUUID()}`,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        longContextThreshold: threshold,
+        longContextPricePerMillionInput: "6",
+        longContextPricePerMillionOutput: "22.5",
+        longContextPricePerMillionCacheRead: "0.6",
+        longContextPricePerMillionCacheWrite: "7.5",
+      });
+    const fast = await withThreshold(128_000);
+    const normal = await withThreshold(200_000);
+
+    const response = await putSettings({
+      fastModelId: fast.id,
+      normalModelId: normal.id,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(
+      await AutoRoutingSettingsModel.find(ctx.organizationId),
+    ).toMatchObject({ fastModelId: trio[0].id, normalModelId: trio[1].id });
+
+    const shared = await withThreshold(128_000);
+    const accepted = await putSettings({
+      fastModelId: fast.id,
+      normalModelId: shared.id,
+    });
+    expect(accepted.statusCode, accepted.body).toBe(200);
+  });
 });

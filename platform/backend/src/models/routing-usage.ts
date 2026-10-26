@@ -61,23 +61,15 @@ class RoutingUsageModel {
       input: total(usage.input, filter),
       cacheRead: total(usage.cacheRead, filter),
       cacheWrite: total(usage.cacheWrite, filter),
-      cacheWrite1h: total(usage.cacheWrite1h, filter),
       output: total(usage.output, filter),
     });
 
     const rows = await db
       .select({
-        decisionId: decisions.id,
         createdAt: decisions.createdAt,
-        tierIndex: decisions.tierIndex,
         features: decisions.features,
         short: block(short),
         long: block(long),
-        requests: sql<number>`count(*)`.mapWith(Number),
-        estimatedRequests:
-          sql<number>`count(*) filter (where ${usage.estimated})`.mapWith(
-            Number,
-          ),
       })
       .from(decisions)
       .innerJoin(usage, eq(usage.decisionId, decisions.id))

@@ -93,6 +93,7 @@ import {
 import {
   handleLLMProxy,
   type LLMProxyAuthOverride,
+  sendUsageLimitRefusal,
 } from "../llm-proxy-handler";
 import {
   type ModelRouterAuth,
@@ -445,14 +446,18 @@ async function routeChatCompletion(
     ? await getModelRouterAgent(params.agentId)
     : await getDefaultModelRouterAgent();
   await ensureModelRouterAgentAccess({ agent, auth });
+  const auto = await resolveAutoModel({
+    request,
+    auth,
+    agent,
+    endpoint: "chat_completions",
+    requestedModel: body.model,
+    body,
+  });
+  if (auto.kind === "usage_limited")
+    return sendUsageLimitRefusal(reply, auto.violation);
   const resolution = await resolveModelRoute({
-    requestedModel: await resolveAutoModel({
-      request,
-      auth,
-      endpoint: "chat_completions",
-      requestedModel: body.model,
-      body,
-    }),
+    requestedModel: auto.model,
     allowedProviders: getMappedProviders(auth),
     allowedApiKeyIds: getMappedApiKeyIds(auth),
   });
@@ -499,14 +504,18 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     ? await getModelRouterAgent(params.agentId)
     : await getDefaultModelRouterAgent();
   await ensureModelRouterAgentAccess({ agent, auth });
+  const auto = await resolveAutoModel({
+    request,
+    auth,
+    agent,
+    endpoint: "responses",
+    requestedModel: body.model,
+    body,
+  });
+  if (auto.kind === "usage_limited")
+    return sendUsageLimitRefusal(reply, auto.violation);
   const resolution = await resolveModelRoute({
-    requestedModel: await resolveAutoModel({
-      request,
-      auth,
-      endpoint: "responses",
-      requestedModel: body.model,
-      body,
-    }),
+    requestedModel: auto.model,
     allowedProviders: getMappedProviders(auth),
     allowedApiKeyIds: getMappedApiKeyIds(auth),
   });

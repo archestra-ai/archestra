@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +11,8 @@ pub(crate) const TOKEN_SCALE: f64 = 1e6;
 pub(crate) const MAX_NEWTON_ITERATIONS: usize = 100;
 const RIDGE_ALPHA: f64 = 1e-6;
 const STEP_TOLERANCE: f64 = 1e-10;
+// Each one-hot source adds a dense column; Newton's Hessian is O(rows · width²) per step.
+pub(crate) const MAX_FIT_SOURCES: usize = 20;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SourceEffect {
@@ -66,16 +68,26 @@ impl SizeModel {
 }
 
 /// Poisson GLM on [1, one-hot(source ≠ baseline), p_long], sources lexicographic after the baseline.
+/// Only the `MAX_FIT_SOURCES` most frequent non-baseline sources (ties by label) get a column;
+/// the rest are fit, and later predicted, as the baseline.
 pub(crate) fn fit_size(
     rows: &[HistoryRow],
     baseline: &Source,
     max_iterations: usize,
 ) -> Result<SizeModel, RouterError> {
-    let sources: BTreeSet<&Source> = rows.iter().map(|r| &r.features.source).collect();
-    if !sources.contains(baseline) {
+    let mut counts: BTreeMap<&Source, usize> = BTreeMap::new();
+    for r in rows {
+        *counts.entry(&r.features.source).or_default() += 1;
+    }
+    if !counts.contains_key(baseline) {
         return Err(RouterError::BaselineSourceMissing(baseline.0.clone()));
     }
-    let others: Vec<&Source> = sources.into_iter().filter(|s| *s != baseline).collect();
+    let mut ranked: Vec<(&Source, usize)> =
+        counts.into_iter().filter(|(s, _)| *s != baseline).collect();
+    ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
+    ranked.truncate(MAX_FIT_SOURCES);
+    let mut others: Vec<&Source> = ranked.into_iter().map(|(s, _)| s).collect();
+    others.sort();
     let width = others.len() + 2;
     let design: Vec<Vec<f64>> = rows
         .iter()
@@ -372,6 +384,52 @@ mod tests {
             fit_size(&rows, &Source("missing".into()), MAX_NEWTON_ITERATIONS),
             Err(RouterError::BaselineSourceMissing("missing".into()))
         );
+    }
+
+    /// s00..s03 seen once, s04/s05 twice, s06..s24 three times: the cap keeps s06..s24 plus s04,
+    /// which wins the count tie with s05 on label.
+    fn many_sources() -> Vec<HistoryRow> {
+        let mut rows = vec![row("base", SessionKind::Main, 0.0, 1000, 0)];
+        for i in 0..MAX_FIT_SOURCES + 5 {
+            let repeats = match i {
+                0..4 => 1,
+                4..6 => 2,
+                _ => 3,
+            };
+            for k in 0..repeats {
+                let tokens = 1000 + 100 * i as u64 + 10 * k;
+                rows.push(row(&format!("s{i:02}"), SessionKind::Main, 0.0, tokens, 0));
+            }
+        }
+        rows
+    }
+
+    fn retained(model: &SizeModel) -> Vec<String> {
+        let SizeModel::PoissonGlm { source_effects, .. } = model;
+        source_effects.iter().map(|e| e.source.0.clone()).collect()
+    }
+
+    #[test]
+    fn source_dimensions_are_capped_to_most_frequent() {
+        let rows = many_sources();
+        let baseline = Source("base".into());
+        let model = fit_size(&rows, &baseline, MAX_NEWTON_ITERATIONS).unwrap();
+        let expected: Vec<String> = std::iter::once(4)
+            .chain(6..MAX_FIT_SOURCES + 5)
+            .map(|i| format!("s{i:02}"))
+            .collect();
+        assert_eq!(retained(&model), expected);
+
+        let reversed: Vec<HistoryRow> = rows.iter().rev().cloned().collect();
+        let model_reversed = fit_size(&reversed, &baseline, MAX_NEWTON_ITERATIONS).unwrap();
+        assert_eq!(retained(&model_reversed), expected);
+
+        let mut features = rows[0].features.clone();
+        let baseline_prediction = model.predict(&features);
+        for dropped in ["s00", "s05"] {
+            features.source = Source(dropped.into());
+            assert_eq!(model.predict(&features), baseline_prediction);
+        }
     }
 
     #[test]

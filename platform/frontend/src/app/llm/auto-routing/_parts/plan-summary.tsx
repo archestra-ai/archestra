@@ -2,19 +2,18 @@
 
 import { Bar, BarChart, XAxis, YAxis } from "recharts";
 import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
-import type { AutoRoutingSettings } from "@/lib/auto-routing.query";
 import { formatCurrency } from "@/lib/utils/format-currency";
 import type { PlanSummary } from "./plan-document";
-import { TIER_NAMES } from "./tiers";
+import { TIER_NAMES, type TierName } from "./tiers";
 
 export function PlanSummaryView({
   summary,
   budgetUsdPerDay,
-  tiers,
+  tierModels,
 }: {
   summary: PlanSummary;
   budgetUsdPerDay: number;
-  tiers: AutoRoutingSettings["tiers"];
+  tierModels: Record<TierName, string>;
 }) {
   return (
     <div className="space-y-4">
@@ -47,23 +46,23 @@ export function PlanSummaryView({
           </span>
         </SummaryTile>
       </div>
-      <TierSplit summary={summary} tiers={tiers} />
+      <TierSplit summary={summary} tierModels={tierModels} />
     </div>
   );
 }
 
 function TierSplit({
   summary,
-  tiers,
+  tierModels,
 }: {
   summary: PlanSummary;
-  tiers: AutoRoutingSettings["tiers"];
+  tierModels: Record<TierName, string>;
 }) {
   const config: ChartConfig = Object.fromEntries(
     TIER_NAMES.map((tier, index) => [
       tier,
       {
-        label: `${tier} · ${tiers[tier]?.modelId ?? "unset"}`,
+        label: `${tier} · ${tierModels[tier]}`,
         color: `var(--chart-${index + 1})`,
       },
     ]),

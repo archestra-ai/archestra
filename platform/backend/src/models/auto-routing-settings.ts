@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type {
@@ -39,12 +39,43 @@ class AutoRoutingSettingsModel {
           autoRoutingFastModelId: update.fastModelId,
           autoRoutingNormalModelId: update.normalModelId,
           autoRoutingSmartModelId: update.smartModelId,
-          autoRoutingScorerVersionId: update.scorerVersionId,
           autoRoutingGeneration: sql`${agents.autoRoutingGeneration} + 1`,
         })
         .where(organizationLlmProxy(organizationId))
         .returning(settingsColumns);
       return row ?? null;
+    });
+  }
+
+  /**
+   * Makes `scorerVersionId` the organization's scorer version, bumping the
+   * generation so plans fitted for the previous version stop serving and
+   * cannot publish. Rechecked under the lock: concurrent callers bump once.
+   * True when this call changed the version.
+   */
+  static async activateScorerVersion(
+    organizationId: string,
+    scorerVersionId: string,
+  ): Promise<boolean> {
+    return withDbTransaction(async (tx) => {
+      await lockRoutingPlan(tx, organizationId);
+      const changed = await tx
+        .update(agents)
+        .set({
+          autoRoutingScorerVersionId: scorerVersionId,
+          autoRoutingGeneration: sql`${agents.autoRoutingGeneration} + 1`,
+        })
+        .where(
+          and(
+            organizationLlmProxy(organizationId),
+            or(
+              isNull(agents.autoRoutingScorerVersionId),
+              ne(agents.autoRoutingScorerVersionId, scorerVersionId),
+            ),
+          ),
+        )
+        .returning({ id: agents.id });
+      return changed.length > 0;
     });
   }
 }

@@ -9,6 +9,7 @@ import { AgentModel, ModelModel } from "@/models";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import RoutingPlanModel from "@/models/routing-plan";
 import { beforeEach, describe, expect, test } from "@/test";
+import { activeFit, makeScorerVersion } from "@/test/auto-routing";
 import { seedFitHistory } from "@/test/auto-routing-fit";
 import { autoRoutingDispatcher } from "./auto-routing-dispatch-handler";
 import { handleAutoRoutingFit } from "./auto-routing-fit-handler";
@@ -72,6 +73,72 @@ describe("auto routing plan fit", () => {
     expect(plan.status).toBe("failed");
     expect(plan.error).toMatch(/^ARCHESTRA_ROUTER_INFEASIBLE: /);
     expect(await RoutingPlanModel.findActive(org.organizationId)).toBeNull();
+    expect(await isDirty(org.organizationId)).toBe(false);
+  });
+
+  test("records tiers with different long-context thresholds as a failed fit", async ({
+    makeOrganization,
+  }) => {
+    const org = await configuredOrganization(makeOrganization);
+    const [fast, normal] = await currentTrio(org.organizationId);
+    for (const [model, threshold] of [
+      [fast, 128_000],
+      [normal, 200_000],
+    ] as const) {
+      await ModelModel.update(model.id, {
+        longContextThreshold: threshold,
+        longContextPricePerMillionInput: "6",
+        longContextPricePerMillionOutput: "22.5",
+        longContextPricePerMillionCacheRead: "0.6",
+        longContextPricePerMillionCacheWrite: "7.5",
+      });
+    }
+    await seedHistory(org, 40);
+
+    await handleAutoRoutingFit({ organizationId: org.organizationId });
+
+    const [plan] = await plans(org.organizationId);
+    expect(plan.status).toBe("failed");
+    expect(plan.tiersFingerprint).toMatchObject({
+      long_context_thresholds: [128_000, 200_000, null],
+    });
+    expect(await RoutingPlanModel.findActive(org.organizationId)).toBeNull();
+    expect(await isDirty(org.organizationId)).toBe(false);
+  });
+
+  test("a new scorer version is activated once and refitted as a scorer change", async ({
+    makeOrganization,
+  }) => {
+    const org = await configuredOrganization(makeOrganization);
+    const previous = await makeScorerVersion();
+    await AutoRoutingSettingsModel.activateScorerVersion(
+      org.organizationId,
+      previous.id,
+    );
+    const before = await AutoRoutingSettingsModel.find(org.organizationId);
+    if (!before) throw new Error("organization has no LLM Proxy");
+    await RoutingPlanModel.publish(
+      activeFit({
+        organizationId: org.organizationId,
+        scorerVersionId: previous.id,
+        generation: before.generation,
+        inputWatermark: new Date(Date.now() - 60_000),
+      }),
+    );
+    await seedHistory(org, 40);
+
+    await handleAutoRoutingFit({ organizationId: org.organizationId });
+
+    const running = (await activeScorerVersion()).id;
+    expect(await RoutingPlanModel.findActive(org.organizationId)).toMatchObject(
+      { trigger: "scorer_change", scorerVersionId: running },
+    );
+    expect(
+      await AutoRoutingSettingsModel.find(org.organizationId),
+    ).toMatchObject({
+      scorerVersionId: running,
+      generation: before.generation + 1,
+    });
     expect(await isDirty(org.organizationId)).toBe(false);
   });
 

@@ -534,6 +534,7 @@ async function smartBaselineCost(params: {
     const quote = await resolvePricingQuote({
       model: smart.modelId,
       provider: smart.provider,
+      providerApiKeyId: smart.providerApiKeyId,
       usage: { ...usage, billingUsage: undefined, billingQuote: undefined },
     });
     const tokens = usageCostTokens(usage);
@@ -564,6 +565,7 @@ async function smartBaselineCost(params: {
   const quote = await resolvePricingQuote({
     model: smart.modelId,
     provider: smart.provider,
+    providerApiKeyId: smart.providerApiKeyId,
     usage: {
       ...usage,
       billingQuote: undefined,

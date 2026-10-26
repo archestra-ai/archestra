@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import { describe, expect, test } from "@/test";
@@ -109,6 +110,16 @@ describe("calculateInteractionCosts pricing quote", () => {
         10,
       );
     }
+  });
+
+  test("configured long prices over a default base are not an estimate", async () => {
+    await makeModel("long-only", LONG_PRICES);
+    const result = await costs(mixedUsage(601), "long-only", {
+      usageAccountingMode: "enforce",
+    });
+    expect(result.billingUsage?.components[0].prices.source).toBe("custom");
+    expect(result.billingUsage?.issues).toEqual([]);
+    expect(result.actualCost).toBeCloseTo(0.006966, 10);
   });
 
   test("long prices replace the custom rates while the source stays custom", async () => {
@@ -261,10 +272,85 @@ describe("smart-tier baseline", () => {
       costs: result,
     });
 
-  const autoRouting = (modelId: string): AutoRoutingRequestContext => ({
+  const autoRouting = (
+    modelId: string,
+    params: {
+      provider?: AutoRoutingRequestContext["smartModel"]["provider"];
+      providerApiKeyId?: string;
+    } = {},
+  ): AutoRoutingRequestContext => ({
     decisionId: "decision-1",
-    smartModel: { modelId, provider: "anthropic" },
+    smartModel: {
+      modelId,
+      provider: params.provider ?? "anthropic",
+      providerApiKeyId: params.providerApiKeyId ?? randomUUID(),
+    },
     derivedSessionKey: null,
+  });
+
+  test("prices the smart baseline at the provider instance the smart tier is served by", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const organization = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "fixture-key" } });
+    const key = await makeLlmProviderApiKey(organization.id, secret.id, {
+      provider: "openai",
+    });
+    const smart = await makeModel(
+      "instance-smart",
+      { promptPricePerToken: "0.000009", completionPricePerToken: "0.000009" },
+      "openai",
+    );
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      key.id,
+      [
+        {
+          id: smart.id,
+          modelId: smart.modelId,
+          providerPricing: {
+            promptPricePerToken: "0.000004",
+            completionPricePerToken: "0.000004",
+            cacheReadPricePerToken: null,
+            cacheWritePricePerToken: null,
+          },
+        },
+      ],
+      "openai",
+    );
+    for (const usageAccountingMode of [undefined, "enforce"] as const) {
+      const usage: UsageView = { inputTokens: 1000, outputTokens: 0 };
+      const result = await calculateInteractionCosts({
+        actualModel: "instance-smart",
+        usage,
+        providerName: "openai",
+        providerApiKeyId: key.id,
+        usageAccountingMode,
+        autoRouting: autoRouting("instance-smart", {
+          provider: "openai",
+          providerApiKeyId: key.id,
+        }),
+      });
+      expect(result.actualCost).toBeCloseTo(0.004, 10);
+      expect(Number(result.baseline?.cost)).toBeCloseTo(0.004, 10);
+    }
+  });
+
+  test("a smart model priced only by its long-context group is a known baseline above the threshold", async () => {
+    await makeModel("cheap", BASE_PRICES);
+    await makeModel("long-only-smart", LONG_PRICES);
+    for (const usageAccountingMode of [undefined, "enforce"] as const) {
+      const usage = mixedUsage(601);
+      const result = await costs(usage, "cheap", {
+        usageAccountingMode,
+        autoRouting: autoRouting("long-only-smart"),
+      });
+      const row = record(usage, "cheap", result);
+      expect(row.baselineModel).toBe("long-only-smart");
+      // 601*6 + 100*22.5 + 300*0.6 + 60*7.5 + 40*12
+      expect(Number(row.baselineCost)).toBeCloseTo(0.006966, 10);
+    }
   });
 
   test("prices the smart model with its own quote on the same usage in both modes", async () => {

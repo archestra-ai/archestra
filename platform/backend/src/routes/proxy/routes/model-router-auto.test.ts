@@ -18,6 +18,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import {
   AgentModel,
+  LimitModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
   VirtualApiKeyModel,
@@ -171,6 +172,7 @@ describe("Model Router auto model", () => {
         );
 
         expect(responses.map((r) => r.statusCode)).toEqual([200, 200, 200]);
+        expect(jevCalls).toBe(1);
         const rows = await decisions(org.organizationId);
         expect(rows).toHaveLength(1);
         expect(new Set(upstreamModels)).toEqual(
@@ -287,6 +289,96 @@ describe("Model Router auto model", () => {
       });
     });
   }
+
+  test("a plan of another scorer version cold-starts and activates the running version once", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await setupOrganization({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const previous = await RoutingScorerVersionModel.upsert({
+      name: "previous",
+      model: "jev-1.12.0",
+      spec: { name: "previous" },
+      specHash: crypto.randomUUID(),
+    });
+    await publishPlan(org, (plan) => plan, previous.id);
+    const before = await AutoRoutingSettingsModel.find(org.organizationId);
+
+    for (const session of ["s-1", "s-2"]) {
+      const response = await send(org, {
+        ingress: "chat",
+        path: "chat/completions",
+        session,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+    }
+
+    expect(upstreamModels).toEqual([org.trio[1].modelId, org.trio[1].modelId]);
+    const rows = await decisions(org.organizationId);
+    expect(rows.map((row) => [row.reason, row.planId])).toEqual([
+      ["cold_start", null],
+      ["cold_start", null],
+    ]);
+    expect(
+      await AutoRoutingSettingsModel.find(org.organizationId),
+    ).toMatchObject({
+      scorerVersionId: (await activeScorerVersion()).id,
+      generation: (before?.generation ?? 0) + 1,
+    });
+  });
+
+  test("a caller over its usage limit is refused before the scorer is called", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await setupOrganization({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    await publishPlan(org);
+    const [key] = await db
+      .select({ id: schema.virtualApiKeysTable.id })
+      .from(schema.virtualApiKeysTable)
+      .where(eq(schema.virtualApiKeysTable.organizationId, org.organizationId));
+    await LimitModel.create({
+      entityType: "virtual_key",
+      entityId: key.id,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: [org.trio[2].modelId],
+      lastCleanup: new Date(),
+    });
+    await LimitModel.updateTokenLimitUsage(
+      "virtual_key",
+      key.id,
+      org.trio[2].modelId,
+      1_000_000,
+      1_000_000,
+    );
+
+    const response = await send(org, {
+      ingress: "chat",
+      path: "chat/completions",
+      session: "s-1",
+    });
+
+    expect(response.statusCode, response.body).toBe(402);
+    expect(response.json().error).toMatchObject({
+      type: "usage_limit_exceeded",
+      code: "token_cost_limit_exceeded",
+      usage_limit: { entity_type: "virtual_key", limit_type: "token_cost" },
+    });
+    expect(jevCalls).toBe(0);
+    expect(await decisions(org.organizationId)).toEqual([]);
+    expect(upstreamModels).toEqual([]);
+  });
 
   test("routes to the normal tier without a decision when there is nothing to key on", async ({
     makeOrganization,
@@ -770,7 +862,13 @@ async function virtualKey(
 async function publishPlan(
   org: Org,
   edit: (plan: RouterPlan) => RouterPlan = (plan) => plan,
+  scorerVersionId?: string,
 ) {
+  const scorer = { id: scorerVersionId ?? (await activeScorerVersion()).id };
+  await AutoRoutingSettingsModel.activateScorerVersion(
+    org.organizationId,
+    scorer.id,
+  );
   const settings = await AutoRoutingSettingsModel.find(org.organizationId);
   if (!settings) throw new Error("organization has no LLM Proxy");
   const fingerprint = tiersFingerprint(org.trio);
@@ -799,12 +897,6 @@ async function publishPlan(
       baseline_source: "unknown",
     }),
   );
-  const scorer = await RoutingScorerVersionModel.upsert({
-    name: "fixture",
-    model: "jev-1.13.0",
-    spec: { name: "fixture" },
-    specHash: crypto.randomUUID(),
-  });
   const published = await RoutingPlanModel.publish({
     organizationId: org.organizationId,
     trigger: "manual",

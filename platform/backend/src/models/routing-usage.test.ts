@@ -36,7 +36,6 @@ describe("routing usage", () => {
       scorerVersionId: scorer.id,
       inputWatermark: twoDaysAhead(),
     });
-    expect(row.requests).toBe(1);
     expect(row.short.input).toBe(100);
   });
 
@@ -102,12 +101,10 @@ describe("routing usage", () => {
       scorerVersionId: scorer.id,
       inputWatermark: twoDaysAhead(),
     });
-    expect(row.requests).toBe(completions);
     expect(row.short).toEqual({
       input: 100 * completions,
       cacheRead: 1_000 * completions,
       cacheWrite: 50 * completions,
-      cacheWrite1h: 10 * completions,
       output: 20 * completions,
     });
   });
@@ -174,7 +171,7 @@ describe("routing usage", () => {
         scorerVersionId: scorer.id,
       });
 
-      expect(rows.map((row) => row.decisionId)).toEqual([idle.id]);
+      expect(rows.map((row) => row.createdAt)).toEqual([idle.createdAt]);
     });
 
     test("reads only the active scorer version, scored sessions, and the last 35 days", async ({
@@ -220,7 +217,7 @@ describe("routing usage", () => {
         scorerVersionId: scorer.id,
       });
 
-      expect(rows.map((row) => row.decisionId)).toEqual([decision.id]);
+      expect(rows.map((row) => row.createdAt)).toEqual([decision.createdAt]);
     });
 
     test("splits usage at the long-context threshold, strictly above it", async ({
@@ -249,8 +246,15 @@ describe("routing usage", () => {
       expect(row.short.input).toBe(100);
       expect(row.long.input).toBe(101);
       expect(row.long.output).toBe(20);
-      expect(row.estimatedRequests).toBe(1);
       expect(row.features.source).toBe("claude-code");
+      const stored = await db
+        .select({ estimated: schema.routingUsageTable.estimated })
+        .from(schema.routingUsageTable)
+        .where(eq(schema.routingUsageTable.decisionId, decision.id));
+      expect(stored.map((usage) => usage.estimated).sort()).toEqual([
+        false,
+        true,
+      ]);
     });
   });
 });

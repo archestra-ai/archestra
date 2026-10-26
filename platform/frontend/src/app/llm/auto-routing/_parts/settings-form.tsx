@@ -79,7 +79,9 @@ export function AutoRoutingSettingsForm({
         <FormField
           control={form.control}
           name="budgetUsdPerDay"
-          rules={{ validate: validateBudget }}
+          rules={{
+            validate: (value, values) => validateBudget(value, values.enabled),
+          }}
           render={({ field }) => (
             <FormItem>
               <FormLabel>Daily budget (USD)</FormLabel>
@@ -161,8 +163,9 @@ const TIER_LABELS: Record<TierName, string> = {
 const MIN_BUDGET = 0.01;
 const MAX_BUDGET = 9_999_999_999.99;
 
-function validateBudget(value: string): true | string {
-  if (!value.trim()) return "Set a daily budget";
+/** Disabled routing may stay without a budget; the API refuses enabling one. */
+function validateBudget(value: string, enabled: boolean): true | string {
+  if (!value.trim()) return enabled ? "Set a daily budget" : true;
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < MIN_BUDGET || parsed > MAX_BUDGET) {
     return `Enter an amount between ${MIN_BUDGET} and ${MAX_BUDGET.toLocaleString("en-US")}`;
@@ -187,7 +190,7 @@ function changedFields(
 ): AutoRoutingSettingsUpdate {
   return {
     ...(dirty.enabled ? { enabled: values.enabled } : {}),
-    ...(dirty.budgetUsdPerDay
+    ...(dirty.budgetUsdPerDay && values.budgetUsdPerDay.trim()
       ? { budgetUsdPerDay: Number(values.budgetUsdPerDay) }
       : {}),
     ...Object.fromEntries(
@@ -198,12 +201,23 @@ function changedFields(
   };
 }
 
-/** Every model the viewer can route to, plus saved tiers they cannot list. */
+/**
+ * Every tool-capable model the viewer can route to (the API rejects others as
+ * tiers), plus saved tiers that are not among them.
+ */
 function useTierModelOptions(
   settings: AutoRoutingSettings,
 ): LlmModelSelectOption[] {
   const { data: models = [] } = useLlmModels();
-  const options: LlmModelSelectOption[] = models.map((model) => ({
+  const savedIds = new Set(
+    TIER_NAMES.flatMap((tier) => settings.tiers[tier]?.id ?? []),
+  );
+  const candidates = models.filter(
+    (model) =>
+      model.capabilities?.supportsToolCalling !== false ||
+      savedIds.has(model.dbId),
+  );
+  const options: LlmModelSelectOption[] = candidates.map((model) => ({
     value: model.dbId,
     model: model.displayName ?? model.id,
     modelId: model.id,

@@ -59,6 +59,10 @@ const routingDecisionsTable = pgTable(
       table.segment,
     ),
     index("routing_decisions_created_at_idx").on(table.createdAt),
+    index("routing_decisions_org_plan_idx").on(
+      table.organizationId,
+      table.planId,
+    ),
     check(
       "routing_decisions_reason_check",
       sql`${table.reason} IN ('planned', 'cold_start', 'scorer_error', 'plan_stale')`,

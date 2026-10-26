@@ -43,14 +43,49 @@ export async function loadTrio(
 }
 
 /**
+ * The long-context threshold the tiers share. router-core prices every tier
+ * at one threshold, so unequal non-null thresholds cannot be represented.
+ */
+export function sharedLongContextThreshold(
+  models: readonly Pick<Model, "longContextThreshold">[],
+):
+  | { kind: "ok"; threshold: number | null }
+  | { kind: "mismatched"; thresholds: number[] } {
+  const thresholds = [
+    ...new Set(
+      models.flatMap((model) =>
+        model.longContextThreshold === null ? [] : [model.longContextThreshold],
+      ),
+    ),
+  ];
+  switch (thresholds.length) {
+    case 0:
+      return { kind: "ok", threshold: null };
+    case 1:
+      return { kind: "ok", threshold: thresholds[0] };
+    default:
+      return { kind: "mismatched", thresholds };
+  }
+}
+
+export class TierThresholdMismatchError extends Error {
+  constructor(thresholds: number[]) {
+    super(
+      `Auto routing tiers have different long-context thresholds (${thresholds.join(", ")}); give every tier with long-context prices the same threshold.`,
+    );
+  }
+}
+
+/**
  * router-core `TierSet` for the trio at its current prices: what a plan is
- * fitted for and must still match to be served.
+ * fitted for and must still match to be served. Throws
+ * `TierThresholdMismatchError` when the tiers do not share a threshold.
  * @public — the plan fit builds its tiers with this; exported for testability
  */
 export function tiersFingerprint(trio: Trio): RouterTierSet {
-  const thresholds = trio.flatMap((model) =>
-    model.longContextThreshold === null ? [] : [model.longContextThreshold],
-  );
+  const shared = sharedLongContextThreshold(trio);
+  if (shared.kind === "mismatched")
+    throw new TierThresholdMismatchError(shared.thresholds);
   return {
     tiers: trio.map((model) => ({
       model_id: model.id,
@@ -60,15 +95,19 @@ export function tiersFingerprint(trio: Trio): RouterTierSet {
           ? null
           : prices(model, model.longContextThreshold + 1),
     })),
-    long_context_threshold: thresholds.length ? Math.min(...thresholds) : null,
+    long_context_threshold: shared.threshold,
   };
 }
 
+/** A trio without a shared threshold matches no plan. */
 export function fingerprintMatches(
   planFingerprint: RouterDocument,
   trio: Trio,
 ): boolean {
-  return isDeepStrictEqual(planFingerprint, tiersFingerprint(trio));
+  return (
+    sharedLongContextThreshold(trio).kind === "ok" &&
+    isDeepStrictEqual(planFingerprint, tiersFingerprint(trio))
+  );
 }
 
 type RouterTokenPrices = {

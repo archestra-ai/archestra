@@ -10,13 +10,20 @@ import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import RoutingPlanModel from "@/models/routing-plan";
 import RoutingUsageModel from "@/models/routing-usage";
 import {
+  type RouterDocument,
   RouterDocumentSchema,
   type RoutingFitOutcome,
   type RoutingPlanTrigger,
   type RoutingPublishResult,
 } from "@/types/auto-routing";
 import { activeScorerVersion } from "./router";
-import { loadTrio, type RouterTierSet, tiersFingerprint } from "./tiers";
+import {
+  loadTrio,
+  type RouterTierSet,
+  TierThresholdMismatchError,
+  type Trio,
+  tiersFingerprint,
+} from "./tiers";
 
 /** Everything a fit is computed from, read without the routing-plan lock. */
 type FitInputs = {
@@ -24,39 +31,52 @@ type FitInputs = {
   trigger: RoutingPlanTrigger;
   generation: number;
   inputWatermark: Date;
-  tiers: RouterTierSet;
+  tiers: FitTiers;
   budgetUsdPerDay: string;
   scorerVersionId: string;
   history: FitHistoryRow[];
 };
 
+/** The trio as router-core prices it, or why it cannot be priced (recorded as a failed fit). */
+type FitTiers =
+  | { kind: "ok"; tiers: RouterTierSet }
+  | { kind: "invalid"; error: string; fingerprint: RouterDocument };
+
 /**
- * Reads a fit's inputs. Nothing is locked: publication rejects the fit when
- * settings moved on meanwhile. Null when auto routing is not (or no longer)
- * fully configured for the organization.
+ * Reads a fit's inputs, first making this process's scorer version the
+ * organization's (a change bumps the generation). Nothing else is locked:
+ * publication rejects the fit when settings moved on meanwhile. Null when
+ * auto routing is not (or no longer) fully configured for the organization.
  */
 export async function prepareFit(
   organizationId: string,
 ): Promise<FitInputs | null> {
+  const scorerVersion = await activeScorerVersion();
+  await AutoRoutingSettingsModel.activateScorerVersion(
+    organizationId,
+    scorerVersion.id,
+  );
   const settings = await AutoRoutingSettingsModel.find(organizationId);
   if (!settings?.enabled || settings.budgetUsdPerDay === null) return null;
   const loaded = await loadTrio(settings);
   if (loaded.kind !== "ok") return null;
-  const tiers = tiersFingerprint(loaded.trio);
-  const scorerVersion = await activeScorerVersion();
-  const active = await RoutingPlanModel.findActive(organizationId);
+  const tiers = fitTiers(loaded.trio);
+  const [latest] = await RoutingPlanModel.findHistory(organizationId, 1);
   const inputWatermark = new Date();
-  const history = await RoutingUsageModel.findFitHistory({
-    organizationId,
-    scorerVersionId: scorerVersion.id,
-    inputWatermark,
-    longContextThreshold: tiers.long_context_threshold,
-  });
+  const history =
+    tiers.kind === "ok"
+      ? await RoutingUsageModel.findFitHistory({
+          organizationId,
+          scorerVersionId: scorerVersion.id,
+          inputWatermark,
+          longContextThreshold: tiers.tiers.long_context_threshold,
+        })
+      : [];
   const trigger: RoutingPlanTrigger =
-    settings.generation > settings.plannedGeneration
-      ? "settings"
-      : active && active.scorerVersionId !== scorerVersion.id
-        ? "scorer_change"
+    latest && latest.plan.scorerVersionId !== scorerVersion.id
+      ? "scorer_change"
+      : settings.generation > settings.plannedGeneration
+        ? "settings"
         : "nightly";
   return {
     organizationId,
@@ -80,7 +100,10 @@ export async function completeFit(
     trigger: inputs.trigger,
     generation: inputs.generation,
     inputWatermark: inputs.inputWatermark,
-    tiersFingerprint: inputs.tiers,
+    tiersFingerprint:
+      inputs.tiers.kind === "ok"
+        ? inputs.tiers.tiers
+        : inputs.tiers.fingerprint,
     budgetUsdPerDay: inputs.budgetUsdPerDay,
     scorerVersionId: inputs.scorerVersionId,
     ...fitted,
@@ -88,6 +111,24 @@ export async function completeFit(
 }
 
 // === Internal ===
+
+function fitTiers(trio: Trio): FitTiers {
+  try {
+    return { kind: "ok", tiers: tiersFingerprint(trio) };
+  } catch (error) {
+    if (!(error instanceof TierThresholdMismatchError)) throw error;
+    return {
+      kind: "invalid",
+      error: error.message,
+      fingerprint: {
+        model_ids: trio.map((model) => model.id),
+        long_context_thresholds: trio.map(
+          (model) => model.longContextThreshold,
+        ),
+      },
+    };
+  }
+}
 
 type FitHistoryRow = Awaited<
   ReturnType<typeof RoutingUsageModel.findFitHistory>
@@ -129,6 +170,17 @@ async function fit(inputs: FitInputs): Promise<{
     coreVersion: coreVersion(),
     planFormatVersion: planFormatVersion(),
   };
+  if (inputs.tiers.kind === "invalid") {
+    return {
+      ...versions,
+      outcome: {
+        status: "failed",
+        error: inputs.tiers.error,
+        diagnostics: null,
+      },
+    };
+  }
+  const { tiers } = inputs.tiers;
   const sessions = inputs.history.length;
   const minSessions = config.autoRouting.minSessions;
   if (sessions < minSessions) {
@@ -143,7 +195,7 @@ async function fit(inputs: FitInputs): Promise<{
   }
   try {
     const plan = RouterPlanSchema.parse(
-      JSON.parse(await fitPlan(JSON.stringify(planInput(inputs)))),
+      JSON.parse(await fitPlan(JSON.stringify(planInput(inputs, tiers)))),
     );
     return {
       coreVersion: plan.versions.core_version,
@@ -178,7 +230,7 @@ async function fit(inputs: FitInputs): Promise<{
  * sessions and tokens per day over the span the history covers (at least a
  * day, so a burst does not read as an extreme rate).
  */
-function planInput(inputs: FitInputs) {
+function planInput(inputs: FitInputs, tiers: RouterTierSet) {
   const { history } = inputs;
   const created = history.map((row) => row.createdAt.getTime());
   const span =
@@ -197,7 +249,7 @@ function planInput(inputs: FitInputs) {
   );
   return {
     history: rows,
-    tiers: inputs.tiers,
+    tiers,
     budget: Number(inputs.budgetUsdPerDay),
     volume: {
       kind: "flat",
@@ -208,7 +260,7 @@ function planInput(inputs: FitInputs) {
   };
 }
 
-/** Cache writes include the 1h ones, so `cacheWrite1h` is not counted again. */
+/** Cache writes include the 1h ones. */
 function tokenCounts(block: FitHistoryRow["short"]) {
   return {
     input: block.input,

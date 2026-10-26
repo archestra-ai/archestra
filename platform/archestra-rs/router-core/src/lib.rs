@@ -293,6 +293,28 @@ mod tests {
     }
 
     #[test]
+    fn sources_beyond_the_fit_cap_route_as_baseline() {
+        let mut input = input(4.0);
+        let extra = fit::MAX_FIT_SOURCES + 5;
+        let main_rows = input.history.len() - extra;
+        for (i, row) in input.history.iter_mut().skip(main_rows).enumerate() {
+            row.features.source = Source(format!("s{i:02}"));
+        }
+        let plan = plan(input).unwrap();
+        let SizeModel::PoissonGlm { source_effects, .. } = &plan.size_model;
+        assert_eq!(source_effects.len(), fit::MAX_FIT_SOURCES);
+        let dropped = format!("s{:02}", extra - 1);
+        assert!(source_effects.iter().all(|e| e.source.0 != dropped));
+        let q = plan.policy.q;
+        for u in [q * 0.5, (1.0 + q) / 2.0] {
+            assert_eq!(
+                decide(&plan, &features(&dropped), u),
+                decide(&plan, &features("main"), u)
+            );
+        }
+    }
+
+    #[test]
     fn single_window_history_skips_holdout() {
         let mut input = input(4.0);
         for row in &mut input.history {

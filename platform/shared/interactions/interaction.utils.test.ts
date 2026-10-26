@@ -311,3 +311,24 @@ describe("calculateCostSavings", () => {
     expect(result.savingsPercent).toBe(0);
   });
 });
+
+describe.each([
+  "azure:images",
+  "openai:images",
+])("%s image audit rendering", (type) => {
+  it("renders the image count without treating image bytes as text or tools", () => {
+    const interaction = new DynamicInteraction({
+      id: "image-audit",
+      type,
+      model: "image-alias",
+      request: { model: "image-alias", prompt: "Draw a blue circle." },
+      response: { created: 1, data: [{ b64_json: "private-image-bytes" }] },
+    } as unknown as Interaction);
+    expect(interaction.getLastUserMessage()).toBe("Draw a blue circle.");
+    expect(interaction.getLastAssistantResponse()).toBe("Generated images: 1");
+    expect(interaction.getToolNamesUsed()).toEqual([]);
+    expect(JSON.stringify(interaction.mapToUiMessages())).not.toContain(
+      "private-image-bytes",
+    );
+  });
+});

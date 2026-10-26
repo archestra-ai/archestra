@@ -90,7 +90,7 @@ class RoutingUsageModel {
       .where(window.where)
       .groupBy(decisions.id)
       .having(window.having)
-      .orderBy(sql`md5(${decisions.id}::text)`)
+      .orderBy(sql`hashtextextended(${decisions.id}::text, 0)`)
       .limit(maxSessions);
     const [first] = rows;
     const volume: FitVolume = first

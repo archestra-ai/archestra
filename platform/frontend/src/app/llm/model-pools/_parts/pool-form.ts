@@ -42,7 +42,7 @@ export function isValidWeight(value: number): boolean {
 export function toFormValues(pool: ModelPool | null): PoolFormValues {
   return {
     name: pool?.name ?? "",
-    members:
+    members: compactPriorities(
       pool?.members.map((member) => ({
         providerApiKeyId: member.providerApiKeyId,
         modelId: member.modelId,
@@ -50,6 +50,7 @@ export function toFormValues(pool: ModelPool | null): PoolFormValues {
         weight: member.weight,
         enabled: member.enabled,
       })) ?? [],
+    ),
     virtualApiKeyIds: pool?.virtualApiKeyIds ?? [],
   };
 }
@@ -57,7 +58,7 @@ export function toFormValues(pool: ModelPool | null): PoolFormValues {
 export function toPoolInput(values: PoolFormValues): ModelPoolInput {
   return {
     name: values.name.trim(),
-    members: values.members.map((member) => ({
+    members: compactPriorities(values.members).map((member) => ({
       ...member,
       modelId: member.modelId.trim(),
     })),
@@ -168,38 +169,73 @@ export function hasRepeatedMember(members: PoolFormValues["members"]) {
   return keys.some((key, index) => keys.indexOf(key) !== index);
 }
 
-/** A new member goes one priority below the last, as a standby. */
-export function nextPriority(members: PoolFormValues["members"]): number {
-  if (members.length === 0) return 1;
-  return Math.min(100, Math.max(...members.map((m) => m.priority || 1)) + 1);
+/**
+ * Priorities renumbered 1, 2, 3 in the same order, so each priority reads as
+ * a role: Primary, Fallback, Fallback 2. Routing only compares them.
+ */
+export function compactPriorities(
+  members: PoolFormValues["members"],
+): PoolFormValues["members"] {
+  const ranks = [...new Set(members.map((member) => member.priority))].sort(
+    (a, b) => a - b,
+  );
+  return members.map((member) => ({
+    ...member,
+    priority: ranks.indexOf(member.priority) + 1,
+  }));
 }
 
-/** The member's share of its priority tier, among members that are on. */
-export function tierShare(
+/** "Primary" for priority 1, "Fallback" for 2, then "Fallback 2" and on. */
+export function roleLabel(priority: number): string {
+  if (priority <= 1) return "Primary";
+  if (priority === 2) return "Fallback";
+  return `Fallback ${priority - 1}`;
+}
+
+/** The first member is primary; later ones start as fallbacks. */
+export function nextPriority(members: PoolFormValues["members"]): number {
+  return members.length === 0 ? 1 : 2;
+}
+
+/**
+ * The member's percent of its role's traffic, among members that are on, or
+ * null when it is off.
+ */
+export function roleShare(
   members: PoolFormValues["members"],
   index: number,
-): string {
+): number | null {
   const member = members[index];
-  if (!member?.enabled) return "";
-  const tier = members.filter(
+  if (!member?.enabled) return null;
+  const role = members.filter(
     (other) => other.enabled && other.priority === member.priority,
   );
-  if (tier.length < 2) return "";
-  const total = tier.reduce((sum, other) => sum + (other.weight || 0), 0);
-  if (total <= 0) return "";
-  return `${Math.round(((member.weight || 0) / total) * 100)}%`;
+  const total = role.reduce((sum, other) => sum + (other.weight || 0), 0);
+  if (total <= 0) return null;
+  return Math.round(((member.weight || 0) / total) * 100);
 }
 
-/** "3 members, 2 on priority 1": how many there are and how many lead. */
+/** "2 primary, 1 fallback": how many members hold each role. */
+export function roleSummary(members: { priority: number }[]): string {
+  if (members.length === 0) return "No members";
+  const first = Math.min(...members.map((member) => member.priority));
+  const primary = members.filter((member) => member.priority === first).length;
+  const fallback = members.length - primary;
+  return fallback === 0
+    ? `${primary} primary`
+    : `${primary} primary, ${fallback} fallback`;
+}
+
+/** "3 members, 2 primary": how many there are and how many lead. */
 export function memberSummary(pool: ModelPool): string {
   const on = pool.members.filter((member) => member.enabled);
   const count = `${pool.members.length} member${pool.members.length === 1 ? "" : "s"}`;
   if (on.length === 0) return count;
   const first = Math.min(...on.map((member) => member.priority));
-  const leading = on.filter((member) => member.priority === first).length;
-  return leading === pool.members.length
+  const primary = on.filter((member) => member.priority === first).length;
+  return primary === pool.members.length
     ? count
-    : `${count}, ${leading} on priority ${first}`;
+    : `${count}, ${primary} primary`;
 }
 
 export function accessSummary(count: number): string {

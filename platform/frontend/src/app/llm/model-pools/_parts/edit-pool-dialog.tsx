@@ -22,21 +22,21 @@ import {
 import { useBenchedMembers } from "./member-status";
 import {
   AccessField,
+  FailureRules,
   MembersEditor,
   ModelNameField,
-  ReliabilityRules,
-  RoutingNote,
 } from "./pool-fields";
 import {
   accessSummary,
   type PoolFormValues,
+  roleSummary,
   toFormValues,
   toPoolInput,
   usePoolOptions,
   usePoolProblem,
 } from "./pool-form";
 
-type Section = "general" | "members" | "access" | "reliability" | "connect";
+type Section = "general" | "members" | "connect";
 
 /**
  * Edits one pool in tabs, as a virtual key is edited. The form is seeded once,
@@ -76,7 +76,7 @@ export function EditPoolDialog({
     if (saved) onOpenChange(false);
   });
 
-  const memberStatus = `${members.length} member${members.length === 1 ? "" : "s"}${
+  const memberStatus = `${roleSummary(members)}${
     benched.length > 0 ? `, ${benched.length} benched` : ""
   }`;
 
@@ -85,7 +85,7 @@ export function EditPoolDialog({
       open
       onOpenChange={onOpenChange}
       title={pool.name}
-      description="Edit the pool's name, members and the virtual keys that can use it."
+      description="Edit the pool's name, who can use it, and its members."
       sidebarLabel={name || "Model pool"}
       sidebarDescription="Model pool"
       sidebarIcon={<Layers className="h-4 w-4 text-muted-foreground" />}
@@ -93,19 +93,17 @@ export function EditPoolDialog({
       activeSection={section}
       onActiveSectionChange={setSection}
       navItems={[
-        { id: "general", label: "General", status: name || "No name" },
-        { id: "members", label: "Members", status: memberStatus },
         {
-          id: "access",
-          label: "Access",
+          id: "general",
+          label: "General",
           status: accessSummary(virtualApiKeyIds.length),
         },
-        { id: "reliability", label: "Reliability", status: "Defaults" },
+        { id: "members", label: "Members", status: memberStatus },
         { id: "connect", label: "Connect", status: "Code sample" },
       ]}
       onSubmit={(event) => void onSubmit(event)}
       footer={
-        (section === "connect" || section === "reliability") && !isDirty ? (
+        section === "connect" && !isDirty ? (
           <DialogCancelButton>Close</DialogCancelButton>
         ) : (
           <>
@@ -130,21 +128,16 @@ export function EditPoolDialog({
           disabled={disabled}
           taken={problem === "taken"}
         />
-        <RoutingNote />
+        <AccessField form={form} options={options} disabled={disabled} />
       </div>
-      <div hidden={section !== "members"}>
+      <div hidden={section !== "members"} className="space-y-4">
         <MembersEditor
           form={form}
           options={options}
           disabled={disabled}
           savedMembers={live.members}
         />
-      </div>
-      <div hidden={section !== "access"}>
-        <AccessField form={form} options={options} disabled={disabled} />
-      </div>
-      <div hidden={section !== "reliability"}>
-        <ReliabilityRules />
+        <FailureRules />
       </div>
       {section === "connect" ? <ConnectExample poolName={pool.name} /> : null}
     </TabbedDialogShell>
@@ -179,7 +172,7 @@ function ConnectExample({ poolName }: { poolName: string }) {
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
             Set <span className="font-mono">ARCHESTRA_LLM_VIRTUAL_KEY</span> to
-            a virtual key listed under Access, then run:
+            a virtual key listed under Who can use it, then run:
           </p>
           <CodeExample language="curl" code={example} />
         </div>

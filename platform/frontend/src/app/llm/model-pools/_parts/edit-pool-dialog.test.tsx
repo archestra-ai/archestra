@@ -98,9 +98,7 @@ describe("EditPoolDialog", () => {
   });
 
   it.each([
-    ["Priority", ""],
-    ["Priority", "0"],
-    ["Priority", "101"],
+    ["Weight", ""],
     ["Weight", "0"],
     ["Weight", "1001"],
   ])("keeps Save off while %s is %j", async (field, value) => {

@@ -1,10 +1,15 @@
 "use client";
 
 import type { SupportedProvider } from "@archestra/shared";
-import { Plus, TriangleAlert, X } from "lucide-react";
+import { ChevronDown, CircleHelp, Plus, TriangleAlert, X } from "lucide-react";
 import { Controller, useFieldArray } from "react-hook-form";
 import { ProviderIcon } from "@/components/provider-icon";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,20 +23,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import type { ModelPool } from "@/lib/model-pools.query";
+import { cn } from "@/lib/utils/tailwind";
 import { MemberStatus } from "./member-status";
 import { suggestModelId } from "./model-name";
 import {
+  compactPriorities,
   hasRepeatedMember,
-  isValidPriority,
   isValidWeight,
   MAX_PRIORITY,
   MAX_WEIGHT,
   nextPriority,
   type PoolForm,
   type PoolOptions,
-  tierShare,
+  roleLabel,
+  roleShare,
 } from "./pool-form";
 
 type SavedMember = ModelPool["members"][number];
@@ -49,7 +62,13 @@ export function ModelNameField({
 }) {
   return (
     <div className="space-y-2">
-      <Label htmlFor="pool-name">Model name</Label>
+      <span className="flex items-center gap-1.5">
+        <Label htmlFor="pool-name">Model name</Label>
+        <HelpTip topic="Model name">
+          The name clients send as the model. Each request goes to one member,
+          whichever provider it is on.
+        </HelpTip>
+      </span>
       <Controller
         control={form.control}
         name="name"
@@ -88,10 +107,6 @@ export function ModelNameField({
           />
         )}
       />
-      <p className="text-xs text-muted-foreground">
-        Clients ask for this name, and each request goes to one of the pool's
-        members, whichever provider it is on.
-      </p>
       {taken ? (
         <InlineNotice>
           <TriangleAlert />
@@ -103,9 +118,14 @@ export function ModelNameField({
   );
 }
 
+// Key, model id, role, weight, traffic, status, on, remove.
+const MEMBER_COLUMNS =
+  "@3xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_8rem_4.5rem_4.5rem_7.5rem_2.25rem_2rem]";
+
 /**
- * One row per member, on two lines so it fits a dialog: the key and the model
- * id it is sent as, then its priority, weight, switch and status.
+ * One row per member, primaries first, so the list reads in the order
+ * requests try them. In a wide dialog each row is one line under column
+ * headers; in a narrow one it wraps to two.
  */
 export function MembersEditor({
   form,
@@ -130,180 +150,259 @@ export function MembersEditor({
     sharedKeys.find(
       (key) => !members.some((member) => member.providerApiKeyId === key.id),
     ) ?? sharedKeys[0];
+  const lastRole = Math.max(0, ...members.map((member) => member.priority));
+  const roles = Array.from(
+    { length: Math.min(lastRole + 1, MAX_PRIORITY) },
+    (_, index) => index + 1,
+  );
+  const order = fields
+    .map((_, index) => index)
+    .sort(
+      (a, b) =>
+        (members[a]?.priority ?? 0) - (members[b]?.priority ?? 0) || a - b,
+    );
+
+  // Keeps roles numbered 1, 2, 3 after a member moves or leaves.
+  const renumber = () => {
+    const current = form.getValues("members");
+    compactPriorities(current).forEach((member, index) => {
+      if (member.priority !== current[index]?.priority) {
+        form.setValue(`members.${index}.priority`, member.priority, {
+          shouldDirty: true,
+        });
+      }
+    });
+  };
 
   return (
     <div className="space-y-3">
       {fields.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Add the provider keys that serve this model, on any provider. Priority
-          1 takes traffic first; higher numbers are standbys.
+          Add the provider keys that serve this model.
         </p>
       ) : (
-        <ul className="divide-y rounded-md border">
-          {fields.map((field, index) => {
-            const member = members[index];
-            const saved =
-              savedMembers.find(
-                (row) =>
-                  row.providerApiKeyId === member?.providerApiKeyId &&
-                  row.modelId === member?.modelId,
-              ) ?? null;
-            const keyModels =
-              modelIdsByKey.get(member?.providerApiKeyId ?? "") ?? [];
-            const provider = keysById.get(
-              member?.providerApiKeyId ?? "",
-            )?.provider;
-            const share = tierShare(members, index);
-            return (
-              <li key={field.id} className="space-y-2 p-3">
-                <div className="flex items-start gap-2">
-                  <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
-                    <Controller
-                      control={form.control}
-                      name={`members.${index}.providerApiKeyId`}
-                      render={({ field: keyField }) => (
-                        <Select
-                          value={keyField.value}
-                          onValueChange={(value) => {
-                            keyField.onChange(value);
-                            form.setValue(
-                              `members.${index}.modelId`,
-                              suggestModelId(
-                                name,
-                                keysById.get(value)?.provider,
-                                modelIdsByKey.get(value),
-                              ),
-                              { shouldDirty: true },
-                            );
-                          }}
-                          disabled={disabled}
-                        >
-                          <SelectTrigger
-                            className="w-full min-w-0"
-                            aria-label="Provider key"
-                          >
-                            <SelectValue placeholder="Choose a key" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {sharedKeys.map((key) => (
-                              <SelectItem key={key.id} value={key.id}>
-                                <span className="flex min-w-0 items-center gap-2">
-                                  <ProviderIcon provider={key.provider} />
-                                  <span className="truncate">{key.name}</span>
-                                </span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
-                    <Controller
-                      control={form.control}
-                      name={`members.${index}.modelId`}
-                      render={({ field: modelField }) => (
-                        <SearchableSelect
-                          value={modelField.value}
-                          onValueChange={modelField.onChange}
-                          disabled={disabled || !member?.providerApiKeyId}
-                          placeholder="Model ID"
-                          ariaLabel="Member model ID"
-                          searchPlaceholder="Search or type a model ID"
-                          allowCustom
-                          className="w-full min-w-0 font-mono"
-                          items={keyModels.map((value) => ({
-                            value,
-                            label: value,
-                          }))}
-                        />
-                      )}
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Remove member"
-                    disabled={disabled}
-                    onClick={() => remove(index)}
-                  >
-                    <X />
-                  </Button>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-                  <Label className="gap-1.5 text-xs font-normal text-muted-foreground">
-                    <span>Priority</span>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={MAX_PRIORITY}
-                      className="w-16 font-mono"
-                      disabled={disabled}
-                      aria-invalid={
-                        member ? !isValidPriority(member.priority) : undefined
-                      }
-                      {...form.register(`members.${index}.priority`, {
-                        valueAsNumber: true,
-                      })}
-                    />
-                  </Label>
-                  <Label className="gap-1.5 text-xs font-normal text-muted-foreground">
-                    <span>Weight</span>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={MAX_WEIGHT}
-                      className="w-20 font-mono"
-                      disabled={disabled}
-                      aria-invalid={
-                        member ? !isValidWeight(member.weight) : undefined
-                      }
-                      {...form.register(`members.${index}.weight`, {
-                        valueAsNumber: true,
-                      })}
-                    />
-                    {share ? (
-                      <span className="tabular-nums">{share} of its tier</span>
-                    ) : null}
-                  </Label>
-                  <Controller
-                    control={form.control}
-                    name={`members.${index}.enabled`}
-                    render={({ field: enabledField }) => (
-                      <span className="flex items-center gap-1.5 text-muted-foreground">
-                        <Switch
-                          checked={enabledField.value}
-                          onCheckedChange={enabledField.onChange}
-                          disabled={disabled}
-                          aria-label="Member on"
-                        />
-                        <span>On</span>
-                      </span>
+        <>
+          <RoleOrder members={members} />
+          <div className="@container rounded-md border">
+            <div
+              className={cn(
+                "hidden gap-2 border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground @3xl:grid",
+                MEMBER_COLUMNS,
+              )}
+            >
+              <span>Provider key</span>
+              <span>Model ID</span>
+              <span className="flex items-center gap-1">
+                Role
+                <HelpTip topic="Role">
+                  Primary members get every request. Fallbacks get one only when
+                  every primary fails or is benched.
+                </HelpTip>
+              </span>
+              <span className="flex items-center gap-1">
+                Weight
+                <HelpTip topic="Weight">
+                  Splits traffic between members with the same role. 3 and 1
+                  means 75% and 25%.
+                </HelpTip>
+              </span>
+              <span>Traffic</span>
+              <span>Status</span>
+              <span>On</span>
+            </div>
+            <ul className="divide-y">
+              {order.map((index) => {
+                const field = fields[index];
+                const member = members[index];
+                const saved =
+                  savedMembers.find(
+                    (row) =>
+                      row.providerApiKeyId === member?.providerApiKeyId &&
+                      row.modelId === member?.modelId,
+                  ) ?? null;
+                const keyModels =
+                  modelIdsByKey.get(member?.providerApiKeyId ?? "") ?? [];
+                const provider = keysById.get(
+                  member?.providerApiKeyId ?? "",
+                )?.provider;
+                const share = roleShare(members, index);
+                const alone =
+                  members.filter((other) => other.priority === member?.priority)
+                    .length === 1;
+                return (
+                  <li
+                    key={field.id}
+                    className={cn(
+                      "grid grid-cols-[minmax(0,1fr)_auto] gap-2 p-3 @3xl:items-center @3xl:py-2",
+                      MEMBER_COLUMNS,
                     )}
-                  />
-                  <span className="ml-auto">
-                    <MemberStatus
-                      enabled={member?.enabled ?? true}
-                      saved={saved}
-                    />
-                  </span>
-                </div>
-                {member?.providerApiKeyId &&
-                member.modelId &&
-                !keyModels.includes(member.modelId) ? (
-                  <p className="text-xs text-muted-foreground">
-                    This key doesn't list {member.modelId}.
-                  </p>
-                ) : null}
-                {provider === "bedrock" ? (
-                  <p className="text-xs text-muted-foreground">
-                    Anthropic-style clients such as Claude Code skip Bedrock
-                    members.
-                  </p>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
+                  >
+                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 @3xl:contents">
+                      <Controller
+                        control={form.control}
+                        name={`members.${index}.providerApiKeyId`}
+                        render={({ field: keyField }) => (
+                          <Select
+                            value={keyField.value}
+                            onValueChange={(value) => {
+                              keyField.onChange(value);
+                              form.setValue(
+                                `members.${index}.modelId`,
+                                suggestModelId(
+                                  name,
+                                  keysById.get(value)?.provider,
+                                  modelIdsByKey.get(value),
+                                ),
+                                { shouldDirty: true },
+                              );
+                            }}
+                            disabled={disabled}
+                          >
+                            <SelectTrigger
+                              className="w-full min-w-0"
+                              aria-label="Provider key"
+                            >
+                              <SelectValue placeholder="Choose a key" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {sharedKeys.map((key) => (
+                                <SelectItem key={key.id} value={key.id}>
+                                  <span className="flex min-w-0 items-center gap-2">
+                                    <ProviderIcon provider={key.provider} />
+                                    <span className="truncate">{key.name}</span>
+                                  </span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                      <Controller
+                        control={form.control}
+                        name={`members.${index}.modelId`}
+                        render={({ field: modelField }) => (
+                          <SearchableSelect
+                            value={modelField.value}
+                            onValueChange={modelField.onChange}
+                            disabled={disabled || !member?.providerApiKeyId}
+                            placeholder="Model ID"
+                            ariaLabel="Member model ID"
+                            searchPlaceholder="Search or type a model ID"
+                            allowCustom
+                            className="w-full min-w-0 font-mono"
+                            items={keyModels.map((value) => ({
+                              value,
+                              label: value,
+                            }))}
+                          />
+                        )}
+                      />
+                    </div>
+                    <div className="col-span-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs @3xl:contents">
+                      <Controller
+                        control={form.control}
+                        name={`members.${index}.priority`}
+                        render={({ field: roleField }) => (
+                          <Select
+                            value={String(roleField.value)}
+                            onValueChange={(value) => {
+                              roleField.onChange(Number(value));
+                              renumber();
+                            }}
+                            disabled={disabled}
+                          >
+                            <SelectTrigger
+                              className="w-32 @3xl:w-full"
+                              aria-label="Role"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {roles.map((role) => (
+                                <SelectItem key={role} value={String(role)}>
+                                  {roleLabel(role)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                      <Label className="gap-1.5 text-xs font-normal text-muted-foreground">
+                        <span className="@3xl:sr-only">Weight</span>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={MAX_WEIGHT}
+                          className={cn(
+                            "w-16 font-mono @3xl:w-full",
+                            alone && "border-dashed text-muted-foreground",
+                          )}
+                          disabled={disabled}
+                          aria-invalid={
+                            member ? !isValidWeight(member.weight) : undefined
+                          }
+                          {...form.register(`members.${index}.weight`, {
+                            valueAsNumber: true,
+                          })}
+                        />
+                      </Label>
+                      <TrafficShare
+                        share={share}
+                        role={roleLabel(member?.priority ?? 1)}
+                      />
+                      <MemberStatus
+                        enabled={member?.enabled ?? true}
+                        saved={saved}
+                      />
+                      <Controller
+                        control={form.control}
+                        name={`members.${index}.enabled`}
+                        render={({ field: enabledField }) => (
+                          <span className="flex items-center gap-1.5 text-muted-foreground">
+                            <Switch
+                              checked={enabledField.value}
+                              onCheckedChange={enabledField.onChange}
+                              disabled={disabled}
+                              aria-label="Member on"
+                            />
+                            <span className="@3xl:sr-only">On</span>
+                          </span>
+                        )}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Remove member"
+                      className="col-start-2 row-start-1 @3xl:col-auto @3xl:row-auto"
+                      disabled={disabled}
+                      onClick={() => {
+                        remove(index);
+                        renumber();
+                      }}
+                    >
+                      <X />
+                    </Button>
+                    {member?.providerApiKeyId &&
+                    member.modelId &&
+                    !keyModels.includes(member.modelId) ? (
+                      <p className="col-span-2 text-xs text-muted-foreground @3xl:col-span-full">
+                        This key doesn't list {member.modelId}.
+                      </p>
+                    ) : null}
+                    {provider === "bedrock" ? (
+                      <p className="col-span-2 text-xs text-muted-foreground @3xl:col-span-full">
+                        Anthropic-style clients such as Claude Code skip Bedrock
+                        members.
+                      </p>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </>
       )}
       <div className="flex flex-wrap items-center gap-3">
         <Button
@@ -344,6 +443,51 @@ export function MembersEditor({
   );
 }
 
+/** "Primary · 2 → Fallback · 1": the roles in the order requests try them. */
+function RoleOrder({ members }: { members: { priority: number }[] }) {
+  const counts = new Map<number, number>();
+  for (const member of members) {
+    counts.set(member.priority, (counts.get(member.priority) ?? 0) + 1);
+  }
+  const roles = [...counts.keys()].sort((a, b) => a - b);
+  return (
+    <ol
+      aria-label="Order requests try members in"
+      className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"
+    >
+      {roles.map((role, position) => (
+        <li key={role} className="flex items-center gap-1.5">
+          {position > 0 ? <span aria-hidden="true">→</span> : null}
+          <span className="rounded-full border bg-muted/50 px-2 py-0.5 text-foreground">
+            {roleLabel(role)} · {counts.get(role)}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** The member's percent of its role's traffic, with a bar; a dash when off. */
+function TrafficShare({ share, role }: { share: number | null; role: string }) {
+  if (share === null) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  return (
+    <span
+      className="grid w-16 gap-1 text-xs tabular-nums @3xl:w-full"
+      title={`${share}% of ${role.toLowerCase()} traffic`}
+    >
+      <span>{share}%</span>
+      <span className="h-1 overflow-hidden rounded-full bg-muted">
+        <span
+          className="block h-full rounded-full bg-primary"
+          style={{ width: `${share}%` }}
+        />
+      </span>
+    </span>
+  );
+}
+
 export function AccessField({
   form,
   options,
@@ -355,7 +499,13 @@ export function AccessField({
 }) {
   return (
     <div className="space-y-2">
-      <Label>Virtual keys</Label>
+      <span className="flex items-center gap-1.5">
+        <Label>Who can use it</Label>
+        <HelpTip topic="Who can use it">
+          Virtual keys listed here can call this pool. Agents and chats can when
+          their own provider key is a member.
+        </HelpTip>
+      </span>
       <Controller
         control={form.control}
         name="virtualApiKeyIds"
@@ -374,64 +524,67 @@ export function AccessField({
           />
         )}
       />
-      <p className="text-xs text-muted-foreground">
-        A virtual key reaches this pool only when it is listed here, as it
-        reaches a provider key only when mapped to one. Agents and chats reach
-        it when their own provider key is a member.
-      </p>
     </div>
   );
 }
 
-export function RoutingNote() {
+/** A "?" beside a label that explains it in one or two sentences. */
+function HelpTip({
+  topic,
+  children,
+}: {
+  topic: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="space-y-2">
-      <Label>Routing</Label>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <div className="grid gap-0.5 rounded-md border px-3 py-2">
-          <span className="text-sm font-medium">Priority, then weight</span>
-          <span className="text-xs text-muted-foreground">
-            Try priority 1 first. Members that share a priority split traffic by
-            weight.
-          </span>
-        </div>
-        <div className="grid gap-0.5 rounded-md border border-dashed px-3 py-2 text-muted-foreground">
-          <span className="flex items-center gap-2 text-sm font-medium">
-            <span>Most headroom</span>
-            <span className="rounded-sm bg-muted px-1 text-[10px] font-medium uppercase">
-              Later
-            </span>
-          </span>
-          <span className="text-xs">
-            Pick the member furthest from its per-minute limit.
-          </span>
-        </div>
-      </div>
-    </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <UnstyledButton
+          aria-label={`About ${topic}`}
+          className="inline-flex text-muted-foreground hover:text-foreground"
+          onFocus={(event) => {
+            // A dialog focuses its first control on open; only keyboard
+            // focus should open the tip.
+            if (!event.currentTarget.matches(":focus-visible")) {
+              event.preventDefault();
+            }
+          }}
+        >
+          <CircleHelp className="size-3.5" aria-hidden="true" />
+        </UnstyledButton>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-64">{children}</TooltipContent>
+    </Tooltip>
   );
 }
 
-/** What the proxy does today, stated as rules the admin can read. */
-export function ReliabilityRules() {
+/** What the proxy does today, as rules the admin can open and read. */
+export function FailureRules() {
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        Every pool follows these rules today.
-      </p>
-      <dl className="divide-y rounded-md border">
-        {RELIABILITY_RULES.map((rule) => (
-          <div
-            key={rule.label}
-            className="grid gap-0.5 px-3 py-2 sm:grid-cols-[14rem_1fr] sm:gap-3"
-          >
-            <dt className="text-xs text-muted-foreground sm:text-sm">
-              {rule.label}
-            </dt>
-            <dd className="text-sm">{rule.value}</dd>
-          </div>
-        ))}
-      </dl>
-    </div>
+    <Collapsible className="rounded-md border">
+      <CollapsibleTrigger
+        type="button"
+        className="group flex w-full cursor-pointer items-center justify-between px-3 py-2 text-sm font-medium"
+      >
+        <span>When does a member count as failed?</span>
+        <ChevronDown className="size-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <dl className="divide-y border-t">
+          {RELIABILITY_RULES.map((rule) => (
+            <div
+              key={rule.label}
+              className="grid gap-0.5 px-3 py-2 sm:grid-cols-[14rem_1fr] sm:gap-3"
+            >
+              <dt className="text-xs text-muted-foreground sm:text-sm">
+                {rule.label}
+              </dt>
+              <dd className="text-sm">{rule.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 

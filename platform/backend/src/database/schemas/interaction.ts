@@ -140,8 +140,9 @@ const interactionsTable = pgTable(
     /**
      * Model pool this call was balanced through, with the attempt's 1-based
      * number and outcome. A request that fails over writes one row per
-     * attempt: failed attempts carry no tokens or cost and say why they
-     * failed in `failureReason`. Null on calls that no pool handled.
+     * attempt, and a failed one says why in `failureReason`. A refused
+     * attempt carries no tokens or cost; one cut off by a timeout carries an
+     * estimate of the input it read. Null on calls that no pool handled.
      */
     modelPoolId: uuid("model_pool_id"),
     attempt: integer("attempt"),

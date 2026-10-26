@@ -6,6 +6,7 @@
  * latency routing (AC-Q1, AC-O1, AC-L1, AC-M1, AC-M2) are left out.
  */
 
+import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import config from "@/config";
@@ -190,6 +191,16 @@ labTest(
     ]);
     // One hit per Retry-After window; every other request skips it.
     expect([first.hits, second.hits]).toEqual([1, 10]);
+    // A refused attempt read nothing, so it carries no input and no cost.
+    const [refused] = await db
+      .select()
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.attemptOutcome, "failed_over"));
+    expect(refused).toMatchObject({
+      inputTokens: 0,
+      inputTokensEstimated: false,
+      cost: "0.0000000000",
+    });
   },
 );
 
@@ -285,6 +296,20 @@ labTest(
     expect(answer.status, answer.body).toBe(200);
     expect(answer.providerKey).toBe(second.keyId);
     expect(answer.attempts).toBe("2");
+    // The member read the prompt before we stopped waiting, so its row keeps
+    // an estimate of that input, priced as that member.
+    const [cutOff] = await db
+      .select()
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.attemptOutcome, "failed_over"));
+    expect(cutOff).toMatchObject({
+      providerApiKeyId: first.keyId,
+      failureReason: "timeout (408)",
+      inputTokensEstimated: true,
+      outputTokens: 0,
+    });
+    expect(cutOff.inputTokens).toBeGreaterThan(0);
+    expect(Number(cutOff.cost)).toBeGreaterThan(0);
   },
 );
 

@@ -57,6 +57,11 @@ export interface UpstreamAttempt {
   attempt?: number;
   attemptOutcome?: "answered" | "failed_over" | "failed";
   failureReason?: string;
+  /**
+   * We stopped waiting on this member. Unlike a refusal, it had read the
+   * prompt, and the provider bills that input whether or not we kept the answer.
+   */
+  cutOff?: boolean;
   /** The answering member's provider and model id, which price the attempt. */
   provider?: SupportedProvider;
   modelId?: string;
@@ -276,6 +281,7 @@ export async function openThroughModelPool<T>(params: {
     attempt.modelId = member.modelId;
     attempt.attempt = index + 1;
     attempt.failureReason = undefined;
+    attempt.cutOff = undefined;
     const isLast = index === plan.members.length - 1;
     const abort = new AbortController();
     try {
@@ -301,6 +307,7 @@ export async function openThroughModelPool<T>(params: {
           ? { reason: "key_unavailable", retryAfterMs: undefined }
           : poolFailoverReason(error);
       attempt.attemptOutcome = "failed";
+      if (error instanceof MemberTimeoutError) attempt.cutOff = true;
       // An error that doesn't fail over still gets a reason; its message is in
       // the row's response.
       attempt.failureReason = failover?.reason ?? "error";

@@ -439,6 +439,6 @@ it("groups proxy usage by provider key and pool and shows failed-over attempts",
   );
   await waitFor(() => expect(byPool.result.current.total).toBe(3));
   expect(byPool.result.current.rows[0].label).toBe("gpt-pool");
-  // Spend has no failed-over column: failed attempts cost nothing.
+  // The failed-over column is a request count, so Spend leaves it out.
   expect(byPool.result.current.extraCols).toEqual([]);
 });

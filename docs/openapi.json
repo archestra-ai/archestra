@@ -231646,7 +231646,7 @@
                           },
                           "failedOverCount": {
                             "type": "number",
-                            "description": "Requests a model pool retried on another member. Each is also counted in requestCount; they carry no tokens or cost."
+                            "description": "Requests a model pool retried on another member. Each is also counted in requestCount. Only one cut off by a timeout carries tokens or cost: an estimate of the input it read."
                           },
                           "totalInputTokens": {
                             "type": "number"

@@ -61722,7 +61722,7 @@ export type GetInteractionSessionsResponses = {
             interactionId: string | null;
             requestCount: number;
             /**
-             * Requests a model pool retried on another member. Each is also counted in requestCount; they carry no tokens or cost.
+             * Requests a model pool retried on another member. Each is also counted in requestCount. Only one cut off by a timeout carries tokens or cost: an estimate of the input it read.
              */
             failedOverCount: number;
             totalInputTokens: number;

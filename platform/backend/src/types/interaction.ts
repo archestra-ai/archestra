@@ -920,7 +920,7 @@ export const SessionSummarySchema = z.object({
   failedOverCount: z
     .number()
     .describe(
-      "Requests a model pool retried on another member. Each is also counted in requestCount; they carry no tokens or cost.",
+      "Requests a model pool retried on another member. Each is also counted in requestCount. Only one cut off by a timeout carries tokens or cost: an estimate of the input it read.",
     ),
   totalInputTokens: z.number(),
   totalOutputTokens: z.number(),

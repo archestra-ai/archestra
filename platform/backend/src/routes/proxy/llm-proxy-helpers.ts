@@ -541,6 +541,44 @@ export function applyInputTokenFallback(params: {
 }
 
 /**
+ * The input a pool member we stopped waiting on is likely billed for, priced
+ * as that member. Marked estimated on the row; undefined when the prompt can't
+ * be counted, so recording the attempt never fails on it.
+ */
+export async function estimateCutOffAttemptUsage(params: {
+  /** The request's own wire, whose message shape the tokenizer reads. */
+  provider: SupportedProvider;
+  providerMessages: unknown;
+  tools: CommonMcpToolDefinition[];
+  member: {
+    provider?: SupportedProvider;
+    modelId?: string;
+    providerApiKeyId?: string;
+  };
+}): Promise<{ inputTokens: number; cost: string | null } | undefined> {
+  const { member } = params;
+  if (!member.provider || !member.modelId) return undefined;
+  let inputTokens: number;
+  try {
+    inputTokens = estimateRequestInputTokens(params);
+  } catch (error) {
+    logger.warn(
+      { err: error, provider: params.provider, model: member.modelId },
+      "Failed to estimate the input of a cut-off model pool attempt",
+    );
+    return undefined;
+  }
+  if (inputTokens <= 0) return undefined;
+  const cost = await calculateUsageCost({
+    model: member.modelId,
+    usage: { inputTokens, outputTokens: 0 },
+    provider: member.provider,
+    providerApiKeyId: member.providerApiKeyId,
+  });
+  return { inputTokens, cost: cost?.toFixed(10) ?? null };
+}
+
+/**
  * Build the InsertInteraction record from proxy context and response data.
  * Pure function — callers handle `InteractionModel.create()` and error handling.
  */

@@ -1019,8 +1019,8 @@ function RequestRow({
   const modelName = row.model ? shortModelName(row.model) : "Unknown model";
   const onPlan = row.billingMode === "subscription";
   const latency = formatLatency(row.durationMs);
-  // A model pool writes one row per attempt; a failed one cost nothing and
-  // its request was retried on the next member, in the row after it.
+  // A model pool writes one row per attempt; a failed one was retried on the
+  // next member, in the row after it.
   const failedOver = row.attemptOutcome === "failed_over";
 
   return (

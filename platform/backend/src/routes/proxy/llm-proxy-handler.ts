@@ -158,6 +158,7 @@ import {
   buildInteractionRecord,
   calculateInteractionCosts,
   calculateUsageCost,
+  estimateCutOffAttemptUsage,
   handleError,
   isRetryableUpstreamConnectionFailure,
   planDispatchModeToolCallRewrites,
@@ -1725,8 +1726,16 @@ export async function handleLLMProxy<
                 }),
               });
             },
-            recordFailedAttempt: (attempt) =>
-              persistProxyInteraction({
+            recordFailedAttempt: async (attempt) => {
+              const cutOff = attempt.cutOff
+                ? await estimateCutOffAttemptUsage({
+                    provider: providerName,
+                    providerMessages: requestAdapter.getProviderMessages(),
+                    tools: requestAdapter.getTools(),
+                    member: attempt,
+                  })
+                : undefined;
+              await persistProxyInteraction({
                 record: {
                   profileId: resolvedAgent.id,
                   externalAgentId,
@@ -1750,16 +1759,20 @@ export async function handleLLMProxy<
                   response: { error: attempt.failureReason ?? "failed" },
                   model: actualModel,
                   baselineModel: actualModel,
-                  inputTokens: 0,
+                  // A refused attempt is free. One we cut off had read the
+                  // prompt, so it carries that input as an estimate.
+                  inputTokens: cutOff?.inputTokens ?? 0,
+                  inputTokensEstimated: cutOff !== undefined,
                   outputTokens: 0,
-                  // The provider answered nothing, so this attempt is free.
-                  cost: "0",
+                  cost: cutOff ? cutOff.cost : "0",
+                  baselineCost: cutOff?.cost,
                 },
                 encryptedChat,
                 streamTiming,
                 attributionLabels,
                 upstreamAttempt: attempt,
-              }),
+              });
+            },
             setResponseHeaders: (attempt) => {
               if (reply.raw.headersSent) return;
               reply.raw.setHeader("x-archestra-pool", modelPoolPlan.poolName);

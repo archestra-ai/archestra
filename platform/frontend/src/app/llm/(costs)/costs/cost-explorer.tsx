@@ -127,7 +127,7 @@ export default function CostExplorer() {
         : q.group === "key"
           ? "Key names and recorded IDs are shown in full. Calls without an individual key ID cannot be distinguished further."
           : q.group === "providerKey" || q.group === "pool"
-            ? "A request a model pool failed over counts once per attempt. Failed attempts cost nothing; pick Requests to see how many there were."
+            ? "A request a model pool failed over counts once per attempt. A failed attempt is free unless a timeout cut it off, which bills an estimate of the input it read. Pick Requests to see how many there were."
             : null;
 
   const headline = useMemo(() => {

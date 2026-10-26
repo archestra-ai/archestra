@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.6](https://github.com/archestra-ai/archestra/compare/platform-v1.4.5...platform-v1.4.6) (2026-10-26)
+
+
+### Bug Fixes
+
+* **mcp:** require patched curl in runtime image (backport release/1.4) ([#9655](https://github.com/archestra-ai/archestra/issues/9655)) ([f44db9c](https://github.com/archestra-ai/archestra/commit/f44db9c272c05bab5fad87ad859f0e55ba14f2b2))
+* **sidebar:** preserve collapsed state on initial page load (1.4) ([#9635](https://github.com/archestra-ai/archestra/issues/9635)) ([fe89637](https://github.com/archestra-ai/archestra/commit/fe89637a4df46de65805f26a84ed0a84cf41dc3e))
+
 ## [1.4.5](https://github.com/archestra-ai/archestra/compare/platform-v1.4.3...platform-v1.4.5) (2026-10-24)
 
 

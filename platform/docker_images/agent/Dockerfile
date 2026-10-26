@@ -1,6 +1,8 @@
 # Curated Agent catalog images. The build context is platform/ so every native
 # CLI shares one hardened execution base.
 FROM ghcr.io/astral-sh/uv:0.9.17@sha256:5cb6b54d2bc3fe2eb9a8483db958a0b9eebf9edff68adedb369df8e7b98711a2 AS uv
+# The uv release Hermes locks its environment with.
+FROM ghcr.io/astral-sh/uv:0.12.3@sha256:2d890623d310b57771ce840f0da5eed5fc6d657da05ffaa45d82797b53fa3abc AS uv-hermes
 
 # One Rust toolchain both builds the review engine and ships in the runtime, so
 # projects with native code (Archestra's addons included) compile in place.
@@ -19,10 +21,14 @@ RUN apt-get update -qq \
 FROM node:24-bookworm-slim AS agent-base
 ARG TARGETARCH
 
+# CVE-2026-84782: require the fixed OpenSSL packages and refresh cached apt layers.
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
       build-essential ca-certificates curl ffmpeg fonts-dejavu-core git jq less libssl-dev libssl3 \
-      openssh-client pkg-config procps python3 python3-pip python3-venv ripgrep tmux \
+      openssh-client openssl pkg-config procps python3 python3-venv ripgrep tmux \
+ && for package in openssl libssl3 libssl-dev; do \
+      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '3.0.22-1~deb12u2' || exit 1; \
+    done \
  && rm -rf /var/lib/apt/lists/*
 
 # A local PostgreSQL with pgvector for projects that need a database. Debian's
@@ -48,20 +54,41 @@ ENV PATH=/home/node/.local/bin:/home/node/.cargo/bin:/usr/local/cargo/bin:/usr/l
 # reader, including when Git invokes its credential helper. Debian's old CLI
 # queries retired Projects fields during PR edits.
 RUN case "$TARGETARCH" in \
-      amd64) checksum=e4d4bb4498e8d007abe545b6568926793ace1b6447da598294a610018cb164be ;; \
-      arm64) checksum=ea4e7a581a32ccad6cc7923cb1576ac5859ba4b9a16ab22eb8f8a96e78e2e961 ;; \
+      amd64) checksum=62ccf747115ddc61237efffdde66a3c8f70ba249433dc64f70801089b59c59c8 ;; \
+      arm64) checksum=4c3e99a50bd8b181a3fe9d69b25dd978bac768148d88f01507c6b4d1ef61a443 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && curl -fsSL --retry 3 \
-      "https://github.com/cli/cli/releases/download/v2.100.0/gh_2.100.0_linux_${TARGETARCH}.tar.gz" \
+      "https://github.com/cli/cli/releases/download/v2.103.2/gh_2.103.2_linux_${TARGETARCH}.tar.gz" \
       -o /tmp/gh.tar.gz \
  && echo "$checksum  /tmp/gh.tar.gz" | sha256sum -c - \
- && tar -xzOf /tmp/gh.tar.gz "gh_2.100.0_linux_${TARGETARCH}/bin/gh" > /usr/bin/gh \
+ && tar -xzOf /tmp/gh.tar.gz "gh_2.103.2_linux_${TARGETARCH}/bin/gh" > /usr/bin/gh \
  && chmod 0755 /usr/bin/gh \
  && rm /tmp/gh.tar.gz
 
 COPY --from=uv /uv /uvx /usr/local/bin/
 COPY --from=nitpicker-build /usr/local/cargo/bin/nitpicker /usr/local/bin/nitpicker
+
+# Bookworm seeds new venvs from an old setuptools wheel. Keep the bootstrap
+# wheel and system pip on fixed, checksum-verified versions.
+RUN curl -fsSL \
+      "https://files.pythonhosted.org/packages/95/9c/c510029fc6ef33a6275cd2c5d3cecd6613dfd6aa401d57c54f1c18852ccf/setuptools-84.0.0-py3-none-any.whl" \
+      -o /usr/share/python-wheels/setuptools-84.0.0-py3-none-any.whl \
+ && echo "51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670  /usr/share/python-wheels/setuptools-84.0.0-py3-none-any.whl" | sha256sum -c - \
+ && rm /usr/share/python-wheels/setuptools-66.1.1-py3-none-any.whl \
+ && curl -fsSL \
+      "https://files.pythonhosted.org/packages/44/3c/d717024885424591d5376220b5e836c2d5293ce2011523c9de23ff7bf068/pip-25.3-py3-none-any.whl" \
+      -o /tmp/pip-25.3-py3-none-any.whl \
+ && echo "9655943313a94722b7774661c21049070f6bbb0a1516bf02f7c8d5d9201514cd  /tmp/pip-25.3-py3-none-any.whl" | sha256sum -c - \
+ && mkdir -p /usr/local/lib/python3.11/dist-packages \
+ && python3 -m zipfile -e /tmp/pip-25.3-py3-none-any.whl /usr/local/lib/python3.11/dist-packages \
+ && rm /tmp/pip-25.3-py3-none-any.whl \
+ && printf '%s\n' '#!/bin/sh' 'exec python3 -m pip "$@"' > /usr/local/bin/pip \
+ && chmod 0755 /usr/local/bin/pip \
+ && ln -s pip /usr/local/bin/pip3 \
+ && python3 -m venv /tmp/agent-python-check \
+ && /tmp/agent-python-check/bin/python -c "import setuptools; assert setuptools.__version__ == '84.0.0'" \
+ && rm -rf /tmp/agent-python-check
 
 # Tool environments and browsers stay outside HOME so a workspace mount cannot
 # hide them. Skills are loaded at run time; no workflow or credentials ship here.
@@ -77,8 +104,20 @@ RUN uv venv --python /usr/bin/python3 /opt/agent-tools \
 
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME/bin:$PNPM_HOME:$PATH
-ENV COREPACK_DEFAULT_TO_LATEST=0
-RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
+RUN corepack disable \
+ && rm -rf /usr/local/lib/node_modules/corepack /usr/local/lib/node_modules/npm \
+ && curl -fsSL https://registry.npmjs.org/npm/-/npm-11.21.1.tgz -o /tmp/npm.tgz \
+ && echo 'dd77c48eb845f4856c2cdba347cfb52bd877a2655a1ea48ff0c4796e3df9dd7b  /tmp/npm.tgz' | sha256sum -c - \
+ && mkdir -p /usr/local/lib/node_modules/npm \
+ && tar -xzf /tmp/npm.tgz --strip-components=1 -C /usr/local/lib/node_modules/npm \
+ && curl -fsSL https://registry.npmjs.org/undici/-/undici-6.29.1.tgz -o /tmp/undici.tgz \
+ && echo '29c4b8e0b2d86cb8795571c1959012ce057a14ecfd34858335f47c31e770a04f  /tmp/undici.tgz' | sha256sum -c - \
+ && rm -rf /usr/local/lib/node_modules/npm/node_modules/undici \
+ && mkdir -p /usr/local/lib/node_modules/npm/node_modules/undici \
+ && tar -xzf /tmp/undici.tgz --strip-components=1 -C /usr/local/lib/node_modules/npm/node_modules/undici \
+ && rm /tmp/npm.tgz /tmp/undici.tgz \
+ && npm install --global --ignore-scripts pnpm@11.28.7 \
+ && node --version && npm --version && pnpm --version
 
 COPY docker_images/agent/bin /usr/local/bin
 # The maintained launchers append this description of the machine to the
@@ -100,7 +139,8 @@ RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/workspace-files.py \
  && python3 /tmp/agent-image-tests/interactive-resume.py \
- && python3 /tmp/agent-image-tests/development-tools.py
+ && python3 /tmp/agent-image-tests/development-tools.py \
+ && node /tmp/agent-image-tests/npm-http.cjs
 
 FROM agent-base AS agent-claude-code
 USER root
@@ -159,17 +199,57 @@ RUN --network=none \
     python3 /tmp/agent-image-tests/mcp-startup.py opencode
 
 FROM agent-base AS agent-hermes
+ARG TARGETARCH
 USER root
-RUN python3 -m venv /opt/hermes \
- && /opt/hermes/bin/pip install --no-cache-dir 'hermes-agent[mcp]==0.19.0' \
- && HERMES_SITE_PACKAGES=$(/opt/hermes/bin/python -c 'import site; print(site.getsitepackages()[0])') \
- && printf '%s\n' docker > "${HERMES_SITE_PACKAGES}/.install_method" \
- && ln -s /opt/hermes/bin/hermes /usr/local/bin/hermes \
+# Hermes ships only from source (PyPI stopped at 0.19.0): build the release
+# commit the way upstream's own image does. Python, uv, and every Python
+# package come from the hash-locked versions in the checkout. Pillow, PyJWT,
+# certifi, and urllib3 are raised past the lock's vulnerable versions; the startup
+# tests below exercise the resulting runtime, including gateway discovery.
+COPY --from=uv-hermes /uv /usr/local/bin/uv-hermes
+RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
+    hermes_version=0.22.2 \
+ && hermes_commit=d923a5eb487a17c0a68801bba9ef0f56c81040a8 \
+ && git clone --quiet --depth 1 --branch "v${hermes_version}" https://github.com/NousResearch/hermes-agent /opt/hermes \
+ && test "$(git -C /opt/hermes rev-parse HEAD)" = "${hermes_commit}" \
+ && case "${TARGETARCH}" in amd64) python_target=linux-x64 ;; arm64) python_target=linux-arm64 ;; *) exit 1 ;; esac \
+ && set -- $(python3 -c 'import json, sys; a = json.load(open("/opt/hermes/pm/lock.json"))["packages"]["python"]["artifacts"][sys.argv[1]]; print(a["url"], a["sha256"])' "${python_target}") \
+ && curl -fsSL "$1" -o /tmp/hermes-python.tgz \
+ && echo "$2  /tmp/hermes-python.tgz" | sha256sum -c - \
+ && mkdir -p /opt/hermes-python \
+ && tar -xzf /tmp/hermes-python.tgz -C /opt/hermes-python --strip-components=1 \
+ && rm /tmp/hermes-python.tgz \
+ && /opt/hermes-python/bin/python3 -c 'import sqlite3, sys; assert sys.version_info[:2] == (3, 14); assert sqlite3.sqlite_version_info >= (3, 51, 3), sqlite3.sqlite_version' \
+ && cd /opt/hermes \
+ # Upstream's source package uses 0.0.0; stamp the verified release into its metadata.
+ && python3 /tmp/agent-image-patches/hermes-release-version.py /opt/hermes "${hermes_version}" \
+ && UV_NO_CONFIG=1 UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy uv-hermes sync --quiet --frozen --no-default-groups --extra mcp \
+      --python /opt/hermes-python/bin/python3 --compile-bytecode \
+ && UV_NO_CONFIG=1 uv-hermes pip install --quiet --python /opt/hermes/.venv/bin/python \
+      Pillow==13.0.0 PyJWT==2.14.0 certifi==2026.10.19 urllib3==2.8.0 \
+ && LEFTHOOK=0 npm_config_install_links=false node scripts/build/node-deps.mjs --source /opt/hermes --workspace ui-tui \
+ && node scripts/build/tui.mjs --source /opt/hermes --out /opt/hermes-tui \
+ && rm -rf node_modules ui-tui/node_modules /root/.npm /root/.cache \
+      website apps tests tests-js evals \
+ && .venv/bin/python scripts/write_install_stamp.py --output install-stamp.json \
+      --commit "${hermes_commit}" --base-version "${hermes_version}" --distance 0 \
+      --source docker --distribution docker --update-mechanism external \
+ && printf '%s\n' docker > .install_method \
+ # Discard superseded wheels and build-only installers, including pip's vendored packages.
+ && rm -rf .git /home/node/.cache/uv /usr/local/bin/uv-hermes \
+      /opt/hermes-python/lib/python3.14/site-packages/pip \
+      /opt/hermes-python/lib/python3.14/site-packages/pip-*.dist-info \
+      /opt/hermes-python/lib/python3.14/ensurepip \
+      /opt/hermes-python/bin/pip* \
+ && ln -s /opt/hermes/.venv/bin/hermes /usr/local/bin/hermes \
  && hermes --version \
  && chown -R 1000:1000 /home/node
+ENV HERMES_TUI_DIR=/opt/hermes-tui
+ENV HERMES_NODE=/usr/local/bin/node
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
-    /opt/hermes/bin/python /tmp/agent-image-patches/hermes-tui-mcp-discovery.py
+    /opt/hermes/.venv/bin/python /tmp/agent-image-patches/hermes-tui-mcp-discovery.py \
+ && /opt/hermes/.venv/bin/python /tmp/agent-image-patches/hermes-no-first-contact-note.py
 USER 1000:1000
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
@@ -181,7 +261,11 @@ RUN --network=none \
 
 FROM agent-base AS agent-openclaw
 USER root
-RUN pnpm add --global openclaw@2026.7.1-2 \
+COPY docker_images/agent/openclaw /opt/agent-openclaw
+# The image pins OpenClaw; skip its startup update checks and notices.
+ENV OPENCLAW_NO_AUTO_UPDATE=1
+RUN pnpm --dir /opt/agent-openclaw install --frozen-lockfile \
+ && ln -s /opt/agent-openclaw/node_modules/.bin/openclaw /usr/local/bin/openclaw \
  && openclaw --version \
  && chown -R 1000:1000 /home/node
 RUN --network=none \
@@ -191,3 +275,35 @@ USER 1000:1000
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/mcp-startup.py openclaw
+
+# The npm package's postinstall only unpacks the platform binary into
+# ~/.grok/bin, under the persisted HOME, and writes ~/.grok/config.toml. Unpack
+# the pinned, checksummed binary into the image instead; the launcher writes
+# Grok's configuration at run time.
+FROM agent-base AS agent-grok
+ARG TARGETARCH
+# Set before the version check below so no Grok process looks for updates.
+ENV GROK_DISABLE_AUTOUPDATER=1
+USER root
+RUN case "$TARGETARCH" in \
+      amd64) grok_arch=x64; checksum=297c002381f4d80246343aef5837c89fd69a759fccc15e549c9adeddd2b0aa52 ;; \
+      arm64) grok_arch=arm64; checksum=05f62db666c802eea7f5aba1c1b3112a28bf345677ff36cb6f69a91ff9e1d02a ;; \
+      *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+ && mkdir -p /tmp/grok /opt/grok/bin \
+ && cd /tmp/grok \
+ && npm pack --silent "@xai-official/grok-linux-${grok_arch}@1.0.67" \
+ && tar -xzf "xai-official-grok-linux-${grok_arch}-1.0.67.tgz" \
+ && echo "$checksum  package/bin/grok.br" | sha256sum -c - \
+ && node -e 'const fs = require("fs"), zlib = require("zlib"); fs.writeFileSync("/opt/grok/bin/grok", zlib.brotliDecompressSync(fs.readFileSync("package/bin/grok.br")));' \
+ && chmod 0755 /opt/grok/bin/grok \
+ && ln -s /opt/grok/bin/grok /usr/local/bin/grok \
+ && cd / && rm -rf /tmp/grok /root/.npm \
+ && HOME=/tmp/grok-version grok --version \
+ && rm -rf /tmp/grok-version \
+ && chown -R 1000:1000 /home/node
+USER 1000:1000
+
+RUN --network=none \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
+    python3 /tmp/agent-image-tests/mcp-startup.py grok

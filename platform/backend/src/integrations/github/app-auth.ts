@@ -82,7 +82,10 @@ export async function resolveInstallationCredential(
         "GitHub App or installation was not found. Check the app ID, installation ID, and private key in Settings → Credentials.",
       );
     }
-    throw new Error(
+    // GitHub's own failure, relayed as such so a caller can tell an outage
+    // from a fault of ours.
+    throw new ApiError(
+      502,
       [
         `Failed to create GitHub App installation token: ${response.status} ${response.statusText}`,
         responseMessage,

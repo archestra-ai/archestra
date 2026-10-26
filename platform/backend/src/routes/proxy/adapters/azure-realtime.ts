@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { getAzureModelKind } from "@archestra/shared";
 import { WebSocket } from "ws";
 import type { z } from "zod";
 import {
@@ -12,6 +11,7 @@ import {
 } from "@/clients/azure-url";
 import { realtimePcmToWav, wavToRealtimePcm } from "@/clients/realtime-audio";
 import config from "@/config";
+import { validateAzureModelOperation } from "@/services/azure-model-capabilities";
 import type { CreateClientOptions, LLMProvider } from "@/types";
 import { ApiError, type Azure } from "@/types";
 import { azureAdapterFactory } from "./azure";
@@ -74,7 +74,17 @@ async function runTurn(
   client: Client,
   request: TurnRequest,
 ): Promise<TurnResponse> {
-  const kind = getAzureModelKind(request.model);
+  const evidence = await validateAzureModelOperation({
+    providerApiKeyId: client.options.llmProviderApiKeyId,
+    modelId: request.model,
+    operation: "realtime-turn",
+  });
+  const kind =
+    evidence.status === "known"
+      ? evidence.kind
+      : request.target_language
+        ? "translation"
+        : "realtime";
   if (kind !== "realtime" && kind !== "translation")
     throw new ApiError(
       400,

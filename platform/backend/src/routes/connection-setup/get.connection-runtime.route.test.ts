@@ -243,10 +243,10 @@ test("runtime artifacts follow live authorized models without provisioning rows 
   const providerKey = await makeLlmProviderApiKey(
     ctx.organizationId,
     secret.id,
-    { provider: "perplexity", isPrimary: true },
+    { provider: "xai", isPrimary: true },
   );
   const first = await ModelModel.create({
-    provider: "perplexity",
+    provider: "xai",
     modelId: "fixture/model/one",
     externalId: "fixture-model-one",
     inputModalities: ["text"],
@@ -255,7 +255,7 @@ test("runtime artifacts follow live authorized models without provisioning rows 
     outputLength: 512,
   });
   const removed = await ModelModel.create({
-    provider: "perplexity",
+    provider: "xai",
     modelId: "fixture/model/removed",
     externalId: "fixture-model-removed",
     inputModalities: ["text"],
@@ -282,9 +282,7 @@ test("runtime artifacts follow live authorized models without provisioning rows 
     name: "Runtime catalog key",
     scope: "personal",
     authorId: ctx.user.id,
-    providerApiKeys: [
-      { provider: "perplexity", providerApiKeyId: providerKey.id },
-    ],
+    providerApiKeys: [{ provider: "xai", providerApiKeyId: providerKey.id }],
   });
   const { setup, rawToken } = await ConnectionSetupModel.create({
     organizationId: ctx.organizationId,
@@ -292,7 +290,7 @@ test("runtime artifacts follow live authorized models without provisioning rows 
     clientId: "opencode",
     baseUrl: "https://deployment.example.com/v1",
     llmProxyId: proxy.id,
-    provider: "perplexity",
+    provider: "xai",
     proxyAuth: "virtual-key",
     virtualApiKeyId: created.virtualKey.id,
     expiresAt: new Date(Date.now() + 60000),
@@ -304,18 +302,23 @@ test("runtime artifacts follow live authorized models without provisioning rows 
   expect(initial.statusCode, initial.body).toBe(200);
   const initialPlugin = initial.json().artifacts["routing-v1.mjs"]
     .source as string;
+  // The catalog rides on the client's own xAI provider: the proxy's xAI
+  // route for this agent, the served model ids, and the id earlier setups
+  // used for it.
   expect(initialPlugin).toContain("fixture/model/one");
-  expect(initialPlugin).toContain("perplexity:fixture/model/one");
-  expect(initialPlugin).toContain(`/v1/model-router/${proxy.id}`);
+  expect(initialPlugin).toContain(
+    `"xai":"https://deployment.example.com/v1/xai/${proxy.id}"`,
+  );
   expect(initialPlugin).not.toContain("/connection-setup/");
-  expect(initialPlugin).toContain('"perplexity":"archestra-perplexity"');
+  expect(initialPlugin).not.toContain("model-router");
+  expect(initialPlugin).toContain('"archestra-xai":"xai"');
   expect(initialPlugin).not.toContain(created.value);
   expect(initialPlugin).not.toContain(credential);
   expect(await rowCounts()).toEqual(before);
 
   await LlmProviderApiKeyModelLinkModel.unlinkModelFromApiKey({
     apiKeyId: providerKey.id,
-    provider: "perplexity",
+    provider: "xai",
     modelId: removed.modelId,
   });
   const revised = await fetchRuntime(credential);
@@ -332,17 +335,21 @@ test("runtime artifacts follow live authorized models without provisioning rows 
   expect(revisedPlugin.source).not.toContain("/connection-setup/");
 
   const added = await ModelModel.create({
-    provider: "cohere",
+    provider: "deepseek",
     modelId: "fixture/vendor/added",
     externalId: "fixture-vendor-added",
     inputModalities: ["text"],
     outputModalities: ["text"],
   });
-  const cohereKey = await makeLlmProviderApiKey(ctx.organizationId, secret.id, {
-    provider: "cohere",
-    isPrimary: true,
-  });
-  await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(cohereKey.id, [
+  const deepseekKey = await makeLlmProviderApiKey(
+    ctx.organizationId,
+    secret.id,
+    {
+      provider: "deepseek",
+      isPrimary: true,
+    },
+  );
+  await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(deepseekKey.id, [
     added.id,
   ]);
   await VirtualApiKeyModel.update({
@@ -352,8 +359,8 @@ test("runtime artifacts follow live authorized models without provisioning rows 
     authorId: ctx.user.id,
     teamIds: [],
     providerApiKeys: [
-      { provider: "perplexity", providerApiKeyId: providerKey.id },
-      { provider: "cohere", providerApiKeyId: cohereKey.id },
+      { provider: "xai", providerApiKeyId: providerKey.id },
+      { provider: "deepseek", providerApiKeyId: deepseekKey.id },
     ],
   });
   await db
@@ -365,8 +372,8 @@ test("runtime artifacts follow live authorized models without provisioning rows 
   const expandedSource = expanded.json().artifacts["routing-v1.mjs"]
     .source as string;
   expect(expandedSource).toContain("fixture/vendor/added");
-  expect(expandedSource).toContain('"cohere":"archestra-cohere"');
-  expect(expandedSource).toContain(`/v1/model-router/${proxy.id}`);
+  expect(expandedSource).toContain('"archestra-deepseek":"deepseek"');
+  expect(expandedSource).toContain(`/v1/deepseek/${proxy.id}`);
   expect(expandedSource).not.toContain(created.value);
   expect(await rowCounts()).toEqual(before);
 
@@ -398,9 +405,7 @@ test("runtime artifacts follow live authorized models without provisioning rows 
     name: "Foreign catalog key",
     scope: "personal",
     authorId: outsider.id,
-    providerApiKeys: [
-      { provider: "perplexity", providerApiKeyId: providerKey.id },
-    ],
+    providerApiKeys: [{ provider: "xai", providerApiKeyId: providerKey.id }],
   });
   await db
     .update(schema.connectionSetupsTable)
@@ -436,13 +441,13 @@ test("a provider key outside the installation user's teams retires models withou
     ctx.organizationId,
     secret.id,
     {
-      provider: "perplexity",
+      provider: "xai",
       isPrimary: true,
       access: { teams: [{ id: team.id, level: "use" }] },
     },
   );
   const model = await ModelModel.create({
-    provider: "perplexity",
+    provider: "xai",
     modelId: "fixture/team/hidden",
     externalId: "fixture-team-hidden",
     inputModalities: ["text"],
@@ -456,9 +461,7 @@ test("a provider key outside the installation user's teams retires models withou
     name: "Team scoped catalog key",
     scope: "personal",
     authorId: ctx.user.id,
-    providerApiKeys: [
-      { provider: "perplexity", providerApiKeyId: providerKey.id },
-    ],
+    providerApiKeys: [{ provider: "xai", providerApiKeyId: providerKey.id }],
   });
   const { setup, rawToken } = await ConnectionSetupModel.create({
     organizationId: ctx.organizationId,
@@ -466,7 +469,7 @@ test("a provider key outside the installation user's teams retires models withou
     clientId: "kilo",
     baseUrl: "https://deployment.example.com/v1",
     llmProxyId: proxy.id,
-    provider: "perplexity",
+    provider: "xai",
     proxyAuth: "virtual-key",
     virtualApiKeyId: created.virtualKey.id,
     expiresAt: new Date(Date.now() + 60000),
@@ -504,12 +507,12 @@ test("revoking the last model publishes an empty catalog instead of the installe
     ctx.organizationId,
     secret.id,
     {
-      provider: "perplexity",
+      provider: "xai",
       isPrimary: true,
     },
   );
   const model = await ModelModel.create({
-    provider: "perplexity",
+    provider: "xai",
     modelId: "fixture/model/last",
     externalId: "fixture-model-last",
     inputModalities: ["text"],
@@ -537,9 +540,7 @@ test("revoking the last model publishes an empty catalog instead of the installe
     name: "Last model catalog key",
     scope: "personal",
     authorId: ctx.user.id,
-    providerApiKeys: [
-      { provider: "perplexity", providerApiKeyId: providerKey.id },
-    ],
+    providerApiKeys: [{ provider: "xai", providerApiKeyId: providerKey.id }],
   });
   const { setup, rawToken } = await ConnectionSetupModel.create({
     organizationId: ctx.organizationId,
@@ -547,7 +548,7 @@ test("revoking the last model publishes an empty catalog instead of the installe
     clientId: "opencode",
     baseUrl: "https://deployment.example.com/v1",
     llmProxyId: proxy.id,
-    provider: "perplexity",
+    provider: "xai",
     proxyAuth: "virtual-key",
     virtualApiKeyId: created.virtualKey.id,
     expiresAt: new Date(Date.now() + 60000),

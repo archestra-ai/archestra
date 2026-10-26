@@ -106,10 +106,8 @@ describe.each([
           messages: [{ role: "user", content: "Draw a circle." }],
         },
       });
-      expect(wrongSurface.statusCode).toBe(400);
-      expect(wrongSurface.json().error.message).toContain(
-        "/images/generations",
-      );
+      // Authenticate before consulting deployment capabilities; an alias is not evidence.
+      expect(wrongSurface.statusCode).toBe(401);
     } finally {
       await app.close();
     }

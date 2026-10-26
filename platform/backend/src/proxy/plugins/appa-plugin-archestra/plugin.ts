@@ -124,7 +124,11 @@ import {
   startedUnenforced,
   type UnenforcedCalls,
 } from "@/openappa/unenforced";
-import { appaTurnBoundaries, appaWireFamily } from "@/openappa/wire";
+import {
+  type AppaWireFamily,
+  appaTurnBoundaries,
+  appaWireFamily,
+} from "@/openappa/wire";
 import {
   isReportingToolCall,
   rememberYellSession,
@@ -548,9 +552,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         toolCallIds: [...runtimeSpawns],
       },
     );
-    // A call whose annotator gave no answer never ran, and the runtime has no
-    // record of it. Its result is the notice the client ran in its place, so
-    // it is answered with that notice instead of being ruled on as a call.
+    // An undeclared call or one whose annotator gave no answer never ran, and
+    // the runtime has no record of it. Restore the host-held notice instead of
+    // accepting client text or ruling on it as an executed call.
     const unansweredNotices = new Map<string, string>();
     for (const answer of results) {
       const notice = await cacheManager.get<string>(
@@ -649,7 +653,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         outputSource: "runtime",
         denied: true,
       };
-    for (const answer of toolResults) {
+    const carriedKeys = toolResults.map((answer) =>
+      carriedRulingKey({
+        session: this.governedSession(binding),
+        callId: answer.id,
+      }),
+    );
+    const carriedRulings = binding.adapter?.answersUndeclaredCalls
+      ? await cacheManager.getMany<string>(carriedKeys)
+      : new Map<AllowedCacheKey, string>();
+    for (const [index, answer] of toolResults.entries()) {
       // Read, not consumed: the client sends this result on every later
       // request, and the model must read the same text each time.
       const ruling = await cacheManager.get<string>(
@@ -678,6 +691,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           approved.content += NO_REMEDY_PLAN_HINT;
         }
       }
+      // Already complete, and with no plan this client could act on.
+      const carried = carriedRulings.get(carriedKeys[index]);
+      if (typeof carried === "string")
+        result.toolResultUpdates[answer.id] = {
+          content: carried,
+          outputSource: "runtime",
+          denied: true,
+          offers: [],
+        };
     }
     binding.requiresRemedyContinuation = await hasRemedyOfferResult({
       binding,
@@ -1653,30 +1675,32 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           released.push({ id: call.id, name: wait, arguments: "{}" });
           continue;
         }
-        // Refuses the call and cancels admitted calls when the client declares no notice tool.
-        await cancelCalls(
-          session,
-          rest.flatMap((each) =>
-            decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
-          ),
-          policy,
-        );
         // Clients connect MCP servers in the background, so a session's first
         // request often leaves before the gateway's tool list arrives. One
         // resend normally carries the tools; only a repeat within the same
         // session is a client that cannot receive remedies.
-        const transient =
-          !binding.request.defersTools &&
-          binding.request.declaredTools.length > 0 &&
-          !(await this.remedyToolsMissingBefore(session));
-        // A client that defers tools has not failed to receive remedies: it
-        // has not loaded the tools yet.
-        if (!transient && !binding.request.defersTools) {
-          await recordOpenAppaClientFailure({
-            session,
-            toolCallId: call.id,
-            ruling: decision.feedback,
-          });
+        const admitted = rest.flatMap((each) =>
+          decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
+        );
+        let transient: boolean;
+        try {
+          transient =
+            !binding.request.defersTools &&
+            binding.request.declaredTools.length > 0 &&
+            !(await this.remedyToolsMissingBefore(session));
+          // A client that defers tools has not failed to receive remedies: it
+          // has not loaded the tools yet.
+          if (!transient && !binding.request.defersTools) {
+            await recordOpenAppaClientFailure({
+              session,
+              toolCallId: call.id,
+              ruling: decision.feedback,
+            });
+          }
+        } catch (error) {
+          // The batch never reaches the client, so its admitted calls never run.
+          await cancelCalls(session, admitted, policy);
+          throw error;
         }
         // A call that only needs loading gets that one instruction. A client
         // that defers tools can still load the remedy tools and act on the
@@ -1694,6 +1718,40 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             : noPlan
               ? `${withoutRemedySections(decision.feedback)}${clarification}${NO_REMEDY_PLAN_HINT}`
               : `${withoutRemedySections(decision.feedback)}${clarification}\n\n${remedylessRefusalNote({ binding, transient })}`;
+        // The ruling reaches the model as the result of an undeclared notice
+        // call. The client answers it with an error, and the next request
+        // restores the denied call and the ruling from the call's arguments.
+        const carrier = await this.undeclaredNoticeCarrier({
+          binding,
+          context,
+          session,
+          callId: call.id,
+          ruling: contentMessage,
+        });
+        if (carrier) {
+          blocked.push({
+            id: call.id,
+            name: call.name,
+            reason: decision.feedback,
+          });
+          released.push({
+            id: call.id,
+            name: carrier,
+            arguments: JSON.stringify(
+              buildNoticeArguments({
+                id: call.id,
+                tool: identity.name,
+                arguments: identity.arguments,
+                result: contentMessage,
+                custom: identity.custom,
+                namespace: identity.namespace,
+              }),
+            ),
+          });
+          continue;
+        }
+        // Refuses the call and cancels admitted calls when the client declares no notice tool.
+        await cancelCalls(session, admitted, policy);
         return {
           decision: "refuse",
           refusal: {
@@ -2115,6 +2173,47 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
    * Whether this session was already refused once for a request without the
    * gateway remedy tools. Records the current refusal so the next one counts.
    */
+  /**
+   * The notice tool name a denial is released under when the client declares
+   * no notice tool, for a client that answers an undeclared call with an error
+   * result. The ruling the call's result shows is kept first: the runtime
+   * would answer it with the plans this client cannot act on. None when the
+   * client declares that name, where it would run, or the ruling is not kept.
+   */
+  private async undeclaredNoticeCarrier(params: {
+    binding: AppaPluginBinding;
+    context: LlmProxyToolCallsContext;
+    session: OpenAppaSession;
+    callId: string;
+    ruling: string;
+  }): Promise<string | undefined> {
+    const { binding } = params;
+    if (
+      !binding.adapter?.answersUndeclaredCalls ||
+      params.context.interactionType !== "anthropic:messages"
+    )
+      return undefined;
+    const name = archestraMcpBranding.getToolName(
+      TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+    );
+    const declared = [
+      ...binding.request.declaredTools,
+      ...(binding.request.heldTools ?? []),
+    ];
+    if (declared.some((tool) => tool.name === name)) return undefined;
+    try {
+      await cacheManager.set(
+        carriedRulingKey({ session: params.session, callId: params.callId }),
+        params.ruling,
+        TimeInMs.Day,
+      );
+    } catch (error) {
+      logger.warn({ err: error }, "OpenAPPA could not keep a carried ruling");
+      return undefined;
+    }
+    return name;
+  }
+
   private async remedyToolsMissingBefore(
     session: OpenAppaSession,
   ): Promise<boolean> {
@@ -2208,6 +2307,15 @@ function notLoadedRulingKey(params: {
   callId: string;
 }): AllowedCacheKey {
   return `${CacheKey.OpenAppaNotLoadedRuling}-${Buffer.from(
+    `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
+  ).toString("base64url")}`;
+}
+
+function carriedRulingKey(params: {
+  session: OpenAppaSession;
+  callId: string;
+}): AllowedCacheKey {
+  return `${CacheKey.OpenAppaCarriedRuling}-${Buffer.from(
     `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
   ).toString("base64url")}`;
 }
@@ -6230,19 +6338,91 @@ function deliverReturnContract(params: {
   interactionType: string;
   contract: string;
 }): void {
-  appendQuestionContinuation({
-    request: params.request,
-    interactionType: params.interactionType,
-    guidance: params.contract,
-  });
-  if (
-    !requestCarriesInstruction({
-      request: params.request,
-      interactionType: params.interactionType,
-      text: params.contract,
-    })
-  ) {
+  const { request, contract } = params;
+  const family = appaWireFamily(params.interactionType);
+  switch (family) {
+    case "openai:chatCompletions":
+      mergeLeadingSystemMessage(request, contract);
+      break;
+    case "openai:responses":
+    case "anthropic:messages":
+      appendQuestionContinuation({
+        request,
+        interactionType: family,
+        guidance: contract,
+        scope: "request",
+      });
+      break;
+  }
+  if (!family || !requestCarriesContract({ request, family, contract })) {
     throw new ApiError(409, UNDELIVERABLE_RETURN_CONTRACT);
+  }
+}
+
+/**
+ * Chat Completions templates of many providers (vLLM, Mistral, Ollama, …)
+ * accept a single system message only, and only first.
+ */
+function mergeLeadingSystemMessage(request: unknown, contract: string): void {
+  if (!isRecord(request) || !Array.isArray(request.messages)) return;
+  if (leadingSystemCarries(request.messages, contract)) return;
+  const first = leadingSystemMessage(request.messages);
+  if (!first) {
+    request.messages.unshift({ role: "system", content: contract });
+    return;
+  }
+  if (typeof first.content === "string" && first.content.length > 0) {
+    first.content = `${first.content}\n\n${contract}`;
+  } else if (Array.isArray(first.content)) {
+    first.content.push({ type: "text", text: contract });
+  } else {
+    first.content = contract;
+  }
+}
+
+function leadingSystemMessage(
+  messages: unknown[],
+): Record<string, unknown> | undefined {
+  const [first] = messages;
+  return isRecord(first) &&
+    (first.role === "system" || first.role === "developer")
+    ? first
+    : undefined;
+}
+
+function leadingSystemCarries(messages: unknown[], contract: string): boolean {
+  const first = leadingSystemMessage(messages);
+  if (typeof first?.content === "string")
+    return first.content.includes(contract);
+  return (
+    Array.isArray(first?.content) &&
+    first.content.some(
+      (part) =>
+        isRecord(part) && part.type === "text" && part.text === contract,
+    )
+  );
+}
+
+function requestCarriesContract(params: {
+  request: unknown;
+  family: AppaWireFamily;
+  contract: string;
+}): boolean {
+  const { request, family, contract } = params;
+  switch (family) {
+    case "openai:chatCompletions":
+      return (
+        isRecord(request) &&
+        Array.isArray(request.messages) &&
+        leadingSystemCarries(request.messages, contract)
+      );
+    case "openai:responses":
+    case "anthropic:messages":
+      return requestCarriesInstruction({
+        request,
+        interactionType: family,
+        text: contract,
+      });
   }
 }
 
@@ -6267,17 +6447,6 @@ function requestCarriesInstruction(params: {
               block.type === "input_text" &&
               block.text === text,
           ),
-      )
-    );
-  }
-  if (interactionType === "openai:chatCompletions") {
-    return (
-      Array.isArray(request.messages) &&
-      request.messages.some(
-        (message) =>
-          isRecord(message) &&
-          message.role === "developer" &&
-          message.content === text,
       )
     );
   }
@@ -6313,7 +6482,7 @@ function insertRequestGuidance(params: {
     !isRecord(request) ||
     !Array.isArray(request.input)
   ) {
-    appendQuestionContinuation(params);
+    appendQuestionContinuation({ ...params, scope: "request" });
     return;
   }
   if (requestCarriesInstruction({ request, interactionType, text: guidance })) {
@@ -6340,6 +6509,8 @@ function appendQuestionContinuation(params: {
   request: unknown;
   interactionType: string;
   guidance?: string;
+  /** Fixed request instructions precede history; turn guidance follows it. */
+  scope?: "request" | "turn";
   /**
    * On a provider-thread continue: `skip` guidance the thread already holds
    * (fixed for the session), or deliver `turn` guidance in the new user turn,
@@ -6413,6 +6584,12 @@ function appendQuestionContinuation(params: {
     return;
   }
   if (params.interactionType === "anthropic:messages") {
+    // Keep transient guidance after the cached prefix. Changing system would
+    // invalidate all cached messages, including signed thinking blocks.
+    if (params.scope !== "request") {
+      appendToLastUserTurn(params.request, guidance);
+      return;
+    }
     if (Array.isArray(params.request.system)) {
       if (
         !params.request.system.some(
@@ -6431,25 +6608,45 @@ function appendQuestionContinuation(params: {
   }
 }
 
-/** Adds a text block to the newest user message of a Messages request. */
+/** Adds turn guidance without placing user text after native SDK control frames. */
 function appendToLastUserTurn(
   request: Record<string, unknown>,
   text: string,
 ): void {
   const messages = request.messages;
   if (!Array.isArray(messages)) return;
-  const last = messages.findLast(
-    (message) => isRecord(message) && message.role === "user",
-  );
-  if (!isRecord(last)) return;
+  let index = messages.length - 1;
+  // Native SDKs can end a turn with system control messages. They must remain
+  // last (or immediately before an assistant); they are not conversation turns.
+  while (
+    index >= 0 &&
+    isRecord(messages[index]) &&
+    messages[index].role === "system"
+  )
+    index--;
+  const last = messages[index];
+  if (!isRecord(last) || last.role !== "user") {
+    messages.splice(index + 1, 0, {
+      role: "user",
+      content: [{ type: "text", text }],
+    });
+    return;
+  }
+  if (last.content === text) return;
   if (typeof last.content === "string")
     last.content = [
       { type: "text", text: last.content },
       { type: "text", text },
     ];
-  else if (Array.isArray(last.content))
-    last.content.push({ type: "text", text });
-  else last.content = [{ type: "text", text }];
+  else if (Array.isArray(last.content)) {
+    if (
+      !last.content.some(
+        (block) =>
+          isRecord(block) && block.type === "text" && block.text === text,
+      )
+    )
+      last.content.push({ type: "text", text });
+  } else last.content = [{ type: "text", text }];
 }
 
 /** Prevents Codex from converting a required HITL workflow step into prose. */

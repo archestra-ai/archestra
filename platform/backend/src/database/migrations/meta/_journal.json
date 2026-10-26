@@ -4149,8 +4149,43 @@
     {
       "idx": 592,
       "version": "7",
-      "when": 1792698005115,
-      "tag": "0592_model-pools",
+      "when": 1792695120941,
+      "tag": "0592_azure_media_local_integration",
+      "breakpoints": true
+    },
+    {
+      "idx": 593,
+      "version": "7",
+      "when": 1792711620694,
+      "tag": "0593_big_the_leader",
+      "breakpoints": true
+    },
+    {
+      "idx": 594,
+      "version": "7",
+      "when": 1792841857847,
+      "tag": "0594_prepare-interaction-appends",
+      "breakpoints": true
+    },
+    {
+      "idx": 595,
+      "version": "7",
+      "when": 1792873668058,
+      "tag": "0595_notify-proxy-config-changes",
+      "breakpoints": true
+    },
+    {
+      "idx": 596,
+      "version": "7",
+      "when": 1792892060968,
+      "tag": "0596_notify-mcp-gateway-config",
+      "breakpoints": true
+    },
+    {
+      "idx": 597,
+      "version": "7",
+      "when": 1793033009700,
+      "tag": "0597_model-pools",
       "breakpoints": true
     }
   ]

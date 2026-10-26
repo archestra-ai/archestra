@@ -49,6 +49,7 @@ import {
 } from "@/components/agent-pages/row-click-shield";
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
 import { AgentProviderIndicator } from "@/components/agent-provider-indicator";
+import { AgentScheduleIndicator } from "@/components/agent-schedules-indicator";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
@@ -782,6 +783,14 @@ function Agents() {
             description={agent.description}
             owner={{ resource: agent, currentUserId }}
             labels={agent.labels}
+            nameIndicator={
+              !agent.deletedAt && (
+                <AgentScheduleIndicator
+                  agentId={agent.id}
+                  agentName={agent.name}
+                />
+              )
+            }
             extraBadges={
               <>
                 {agent.runtime != null && (

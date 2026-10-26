@@ -1,3 +1,4 @@
+import { azureModelEvidence } from "@archestra/shared/azure-models";
 import { describe, expect, test } from "@/test";
 import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "./llm-provider-api-key-model";
@@ -1138,8 +1139,17 @@ describe("ModelModel", () => {
         supportsToolCalling: true,
         lastSyncedAt: new Date(),
       });
-      expect(ModelModel.supportsTextChat(model)).toBe(true);
-      expect(ModelModel.toCapabilities(model).supportsToolCalling).toBe(false);
+      const scopedModel = {
+        ...model,
+        azureCapabilities: azureModelEvidence({
+          underlyingModelName: modelId,
+          source: "deployment",
+        }),
+      };
+      expect(ModelModel.supportsTextChat(scopedModel)).toBe(true);
+      expect(ModelModel.toCapabilities(scopedModel).supportsToolCalling).toBe(
+        false,
+      );
     });
   });
 

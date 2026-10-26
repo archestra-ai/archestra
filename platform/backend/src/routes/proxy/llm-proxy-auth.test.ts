@@ -2,28 +2,34 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
 } from "@archestra/shared";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import { vi } from "vitest";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
-import db from "@/database";
+import db, { schema } from "@/database";
 import {
   AgentLabelModel,
   AgentModel,
   LlmProviderApiKeyModelLinkModel,
+  MemberModel,
   ModelModel,
+  OAuthAccessTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { accessGrants, afterEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
+import { recordQueries } from "@/test/query-counter";
 import { ApiError } from "@/types";
+import { drainBackgroundWork } from "@/utils/background-work";
 import {
   assertConsistentUserCredentials,
   assertPlatformAuthenticated,
   attemptJwksAuth,
+  readPassthroughAuthenticationSnapshot,
   resolveAgent,
   VirtualKeyRateLimiter,
+  validateLlmOAuthAccessToken,
   validatePassthroughVirtualKey,
   validateVirtualApiKey,
 } from "./llm-proxy-auth";
@@ -1304,6 +1310,27 @@ describe("VirtualKeyRateLimiter", () => {
     ).rejects.toThrow("Too many failed virtual API key attempts");
   });
 
+  test("skips the shared bucket read for a credential this process just validated", async () => {
+    const reads = vi.spyOn(cacheManager, "getMany");
+    await limiter.recordSuccess({ credential: KEY_A });
+
+    await limiter.check({ ip: "1.2.3.4", credential: KEY_A });
+    expect(reads).not.toHaveBeenCalled();
+    // A credential that has not validated here still reads the buckets.
+    await limiter.check({ ip: "1.2.3.4", credential: KEY_B });
+    expect(reads).toHaveBeenCalledTimes(1);
+  });
+
+  test("a failure ends the skip, so a revoked credential is throttled again", async () => {
+    await limiter.recordSuccess({ credential: KEY_A });
+    for (let i = 0; i < 10; i++) {
+      await limiter.recordFailure({ ip: "5.6.7.8", credential: KEY_A });
+    }
+    await expect(
+      limiter.check({ ip: "5.6.7.8", credential: KEY_A }),
+    ).rejects.toThrow("Too many failed virtual API key attempts");
+  });
+
   test("never writes the credential into the recently-validated cache key", async () => {
     await limiter.recordSuccess({ credential: KEY_A });
     const keys = (await storedEntries()).map((entry) => entry.key);
@@ -1320,6 +1347,30 @@ describe("VirtualKeyRateLimiter", () => {
     await expect(
       limiter.recordSuccess({ credential: KEY_A }),
     ).resolves.toBeUndefined();
+  });
+
+  test("coalesces successful bursts, refreshes the shared mark, and retries failures", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(1_000_000);
+    const burstLimiter = new VirtualKeyRateLimiter(cacheManager);
+    const writes = vi.spyOn(cacheManager, "set");
+    await Promise.all(
+      Array.from({ length: 50 }, () =>
+        burstLimiter.recordSuccess({ credential: KEY_A }),
+      ),
+    );
+    await burstLimiter.recordSuccess({ credential: KEY_A });
+    expect(writes).toHaveBeenCalledTimes(1);
+    const [first] = await storedEntries();
+    expect(first.value.expires).toBe(1_300_000);
+
+    vi.setSystemTime(1_001_001);
+    writes.mockRejectedValueOnce(new Error("cache unavailable"));
+    await burstLimiter.recordSuccess({ credential: KEY_A });
+    await burstLimiter.recordSuccess({ credential: KEY_A });
+    expect(writes).toHaveBeenCalledTimes(3);
+    const [refreshed] = await storedEntries();
+    expect(refreshed.value.expires).toBe(1_301_001);
   });
 });
 
@@ -1371,6 +1422,343 @@ async function mustRead(
 // =========================================================================
 
 describe("validatePassthroughVirtualKey", () => {
+  test("combined authentication reads preserve gateway data and see membership and key revocation", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const member = await makeMember(owner.id, org.id);
+    await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    const { value, virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "Synthetic combined lookup",
+      keyType: "passthrough",
+      authorId: owner.id,
+    });
+    const agent = await resolveAgent(undefined);
+    const expected = await validatePassthroughVirtualKey({
+      tokenValue: value,
+      agent,
+    });
+    await drainBackgroundWork();
+    const combined = await recordQueries(() =>
+      readPassthroughAuthenticationSnapshot({ tokenValue: value }),
+    );
+    expect(combined.statements).toHaveLength(1);
+    const snapshot = combined.result;
+    expect(snapshot).toBeDefined();
+    if (!snapshot) throw new Error("Expected the deployment proxy lookup");
+    expect(snapshot.agent).toEqual(agent);
+    expect(snapshot.agent.createdAt).toBeInstanceOf(Date);
+    const validation = await recordQueries(() =>
+      validatePassthroughVirtualKey({
+        tokenValue: value,
+        agent: snapshot.agent,
+        authenticationSnapshot: snapshot,
+      }),
+    );
+    expect(validation.result).toEqual(expected);
+    expect(validation.statements).toHaveLength(0);
+
+    await db
+      .delete(schema.membersTable)
+      .where(eq(schema.membersTable.id, member.id));
+    const afterRemoval = await readPassthroughAuthenticationSnapshot({
+      tokenValue: value,
+    });
+    await expect(
+      validatePassthroughVirtualKey({
+        tokenValue: value,
+        agent,
+        authenticationSnapshot: afterRemoval,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    await VirtualApiKeyModel.delete(virtualKey.id);
+    expect(
+      await readPassthroughAuthenticationSnapshot({ tokenValue: value }),
+    ).toBeUndefined();
+    await expect(
+      validatePassthroughVirtualKey({ tokenValue: value, agent }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  test("combined authentication snapshots still verify token bytes, scope and expiry", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, org.id);
+    await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    const { value, virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "Synthetic scoped lookup",
+      keyType: "passthrough",
+      authorId: owner.id,
+    });
+    const snapshot = await readPassthroughAuthenticationSnapshot({
+      tokenValue: value,
+      oauthTokenCandidate: "provider-one",
+    });
+    if (!snapshot) throw new Error("Expected the deployment proxy lookup");
+    const agent = snapshot.agent;
+    const parameters = {
+      tokenValue: value,
+      agent,
+      oauthTokenCandidate: "provider-one",
+      authenticationSnapshot: snapshot,
+    };
+    await validatePassthroughVirtualKey(parameters);
+    await drainBackgroundWork();
+    const wrongToken = value.slice(0, -1) + (value.endsWith("a") ? "b" : "a");
+    await expect(
+      validatePassthroughVirtualKey({ ...parameters, tokenValue: wrongToken }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+    const otherBearer = await recordQueries(() =>
+      validatePassthroughVirtualKey({
+        ...parameters,
+        oauthTokenCandidate: "provider-two",
+      }),
+    );
+    expect(otherBearer.statements).toHaveLength(1);
+    expect(otherBearer.result.nonOAuthTokenHash).toBe(
+      OAuthAccessTokenModel.hashTokenForLookup("provider-two"),
+    );
+    const foreign = await makeOrganization();
+    const foreignAgent = await makeAgent({
+      organizationId: foreign.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    await expect(
+      validatePassthroughVirtualKey({ ...parameters, agent: foreignAgent }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    await db
+      .update(schema.virtualApiKeysTable)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(schema.virtualApiKeysTable.id, virtualKey.id));
+    const expired = await readPassthroughAuthenticationSnapshot({
+      tokenValue: value,
+    });
+    await expect(
+      validatePassthroughVirtualKey({
+        tokenValue: value,
+        agent,
+        authenticationSnapshot: expired,
+      }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  test("negative OAuth lookups apply only to that token and are refreshed on the next request", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, org.id);
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "Synthetic passthrough",
+      keyType: "passthrough",
+      authorId: owner.id,
+    });
+    const token = "synthetic-provider-token";
+    const validate = () =>
+      validatePassthroughVirtualKey({
+        tokenValue: value,
+        agent: proxy,
+        oauthTokenCandidate: token,
+      });
+    const first = await validate();
+    expect(first.nonOAuthTokenHash).toBe(
+      OAuthAccessTokenModel.hashTokenForLookup(token),
+    );
+    const negative = await recordQueries(() =>
+      validateLlmOAuthAccessToken({
+        tokenValue: token,
+        expectedProvider: "openai",
+        agent: proxy,
+        nonOAuthTokenHash: first.nonOAuthTokenHash,
+      }),
+    );
+    expect(negative.result).toBeNull();
+    expect(negative.statements).toHaveLength(0);
+    const other = await recordQueries(() =>
+      validateLlmOAuthAccessToken({
+        tokenValue: "another-provider-token",
+        expectedProvider: "openai",
+        agent: proxy,
+        nonOAuthTokenHash: first.nonOAuthTokenHash,
+      }),
+    );
+    expect(other.result).toBeNull();
+    expect(other.statements).toHaveLength(1);
+
+    const client = await makeOAuthClient({ userId: owner.id });
+    await makeOAuthAccessToken(client.clientId, owner.id, {
+      token: OAuthAccessTokenModel.hashTokenForLookup(token),
+      scopes: [],
+    });
+    const next = await validate();
+    expect(next.nonOAuthTokenHash).toBeUndefined();
+    await expect(
+      validateLlmOAuthAccessToken({
+        tokenValue: token,
+        expectedProvider: "openai",
+        agent: proxy,
+        nonOAuthTokenHash: next.nonOAuthTokenHash,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    // A negative result for another bearer cannot bypass a present token.
+    await expect(
+      validateLlmOAuthAccessToken({
+        tokenValue: token,
+        expectedProvider: "openai",
+        agent: proxy,
+        nonOAuthTokenHash: OAuthAccessTokenModel.hashTokenForLookup(
+          "another-provider-token",
+        ),
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  test("present OAuth tokens retain expiry, refresh revocation and scope checks", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+    makeOAuthRefreshToken,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, org.id);
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "Synthetic passthrough",
+      keyType: "passthrough",
+      authorId: owner.id,
+    });
+    const client = await makeOAuthClient({ userId: owner.id });
+    const refresh = await makeOAuthRefreshToken(client.clientId, owner.id, {
+      revoked: new Date(),
+    });
+    for (const [token, overrides, statusCode] of [
+      [
+        "expired-synthetic-token",
+        { expiresAt: new Date(Date.now() - 60_000), scopes: [] },
+        401,
+      ],
+      ["revoked-synthetic-token", { refreshId: refresh.id, scopes: [] }, 401],
+      ["unscoped-synthetic-token", { scopes: [] }, 403],
+    ] as const) {
+      await makeOAuthAccessToken(client.clientId, owner.id, {
+        ...overrides,
+        scopes: [],
+        token: OAuthAccessTokenModel.hashTokenForLookup(token),
+      });
+      const identity = await validatePassthroughVirtualKey({
+        tokenValue: value,
+        agent: proxy,
+        oauthTokenCandidate: token,
+      });
+      expect(identity.nonOAuthTokenHash).toBeUndefined();
+      await expect(
+        validateLlmOAuthAccessToken({
+          tokenValue: token,
+          expectedProvider: "openai",
+          agent: proxy,
+          nonOAuthTokenHash: identity.nonOAuthTokenHash,
+        }),
+      ).rejects.toMatchObject({ statusCode });
+    }
+  });
+
+  test("default proxy access observes membership removal and key deletion on the next request", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, org.id, { role: "member" });
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    const { value, virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "revocable proxy credential",
+      keyType: "passthrough",
+      authorId: owner.id,
+    });
+    const validate = () =>
+      validatePassthroughVirtualKey({ tokenValue: value, agent: proxy });
+    await expect(validate()).resolves.toMatchObject({ userId: owner.id });
+    await MemberModel.deleteAllByUserId(owner.id);
+    await expect(validate()).rejects.toMatchObject({ statusCode: 403 });
+    await makeMember(owner.id, org.id, { role: "member" });
+    await expect(validate()).resolves.toMatchObject({ userId: owner.id });
+    await VirtualApiKeyModel.delete(virtualKey.id);
+    await expect(validate()).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  test("a default proxy rejects a valid key issued by another organization", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const other = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, org.id);
+    await makeMember(owner.id, other.id);
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: other.id,
+      name: "foreign proxy credential",
+      keyType: "passthrough",
+      authorId: owner.id,
+    });
+    await expect(
+      validatePassthroughVirtualKey({ tokenValue: value, agent: proxy }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
   test("returns owner + key id when the owner can access the proxy", async ({
     makeOrganization,
     makeUser,
@@ -1398,6 +1786,11 @@ describe("validatePassthroughVirtualKey", () => {
       agent: proxy,
     });
     expect(result.userId).toBe(owner.id);
+    expect(result.user).toEqual({
+      id: owner.id,
+      email: owner.email,
+      name: owner.name,
+    });
   });
 
   test("403 when the owner cannot access the proxy", async ({

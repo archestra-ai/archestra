@@ -1,22 +1,12 @@
 ---
 title: Integrations
-description: Connect AI clients and agent frameworks to the LLM Proxy and MCP Gateway
+description: Connect your AI clients and frameworks to Archestra
 order: 8
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-22
 ---
 
-<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+Keep your existing client and route its model requests, tool calls, or both through Archestra.
 
-An integration connects your existing AI client to Archestra. Model requests route through the LLM Proxy for central authentication, audit logging, spending controls, and security guardrails. Clients that support MCP can also use the MCP Gateway to invoke tools assigned to an Archestra agent or gateway.
+The **LLM Proxy** adds usage logs, spending limits, and Guardrails to model requests. The **MCP Gateway** gives your client the tools it can access. Connect both to apply Guardrails to tool use.
 
-Choose the guide for your client:
-
-- **Coding Clients:** start with [Connect Your Agents](/docs/get-started/connect) for quick setup. [Claude Code](/docs/integrations/claude-code) covers subscription and API-key inference routing.
-- **Claude Desktop:** use the [Claude Desktop](/docs/integrations/claude-desktop) setup helper for guided installation, conversation import, and recovery.
-- **Hosted Agents:** connect a [Microsoft Foundry](/docs/integrations/foundry) agent to an MCP Gateway for enterprise tool execution.
-- **Web UIs & Automation:** connect [n8n and Open WebUI](/docs/integrations/web-ui-and-automation) to the proxy and gateway.
-- **AI SDKs & Frameworks:** route [Vercel AI SDK, Pydantic AI, and Mastra](/docs/integrations/sdks-and-frameworks) model calls through Archestra.
-
-An LLM virtual key authenticates model requests. A gateway token authenticates MCP calls. Use each with its matching endpoint.
-
-To use Guardrails with custom clients or workflows, send an [`X-Appa-Session-ID`](/docs/agents/guardrails/clients#session-headers) header to link requests to the same conversation.
+For coding clients, start with [Connect Your Agents](/docs/get-started/connect). Choose a guide below for client-specific setup.

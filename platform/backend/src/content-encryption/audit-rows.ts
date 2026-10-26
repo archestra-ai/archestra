@@ -56,8 +56,8 @@ export function encryptMcpToolCallContent<T extends object>(
  * throws, and one such row would otherwise 500 an entire logs page. Ordinary
  * rows decrypt as before.
  *
- * Use this at EVERY read site. `decryptInteractionContent` is only for callers
- * that hold the conversation key.
+ * Use this at EVERY read site. `restoreWrittenInteractionContent` is only for
+ * the write path, which holds the conversation key.
  */
 export function readInteractionRow<T extends object>(row: T): T {
   const lockedTo = lockedConversationId(row);
@@ -73,18 +73,35 @@ export function readMcpToolCallRow<T extends object>(row: T): T {
 }
 
 /**
- * Decrypt an interaction row that was written under a known audit context.
- * Only for callers that hold the conversation key (the write path's RETURNING
- * row, and break-glass recovery). Read paths that may encounter a row whose
- * key they do NOT hold must use the locked-row guards instead — decrypting
- * without the right key throws by design.
+ * Decrypt the RETURNING row of an interaction write made under a known audit
+ * context, in place. A column still holding the envelope this write produced
+ * gets back the plaintext it was encrypted from, so the write path does not
+ * decrypt what it just encrypted; any other column (a row an earlier write
+ * stored) is decrypted. Only for the write path, which holds the conversation
+ * key. Read paths that may encounter a row whose key they do NOT hold must use
+ * the locked-row guards instead — decrypting without the right key throws by
+ * design.
  */
-export function decryptInteractionContent<T extends object>(
+export function restoreWrittenInteractionContent<T extends object>(
   row: T,
-  audit: EncryptedChatAuditContext | null,
+  params: {
+    written: object;
+    plaintext: object;
+    audit: EncryptedChatAuditContext | null;
+  },
 ): T {
-  if (!audit) return decryptInteractionRow(row);
-  return decryptUnderDek(row, INTERACTION_COLUMN_CONTEXTS, audit);
+  const target = row as Record<string, unknown>;
+  const written = params.written as Record<string, unknown>;
+  const plaintext = params.plaintext as Record<string, unknown>;
+  const restored = INTERACTION_COLUMN_CONTEXTS.flatMap(([key]) =>
+    key in target && sameEnvelope(target[key], written[key]) ? [key] : [],
+  );
+  for (const key of restored) target[key] = null;
+  if (params.audit)
+    decryptUnderDek(row, INTERACTION_COLUMN_CONTEXTS, params.audit);
+  else decryptInteractionRow(row);
+  for (const key of restored) target[key] = plaintext[key];
+  return row;
 }
 
 /** Decrypt an MCP tool-call row written under a known audit context. */
@@ -190,4 +207,18 @@ function decryptUnderDek<T extends object>(
     }
   }
   return row;
+}
+
+/** Envelopes carry a random IV, so equal ciphertext means this write stored it. */
+function sameEnvelope(stored: unknown, written: unknown): boolean {
+  return (
+    typeof stored === "object" &&
+    stored !== null &&
+    "__encrypted" in stored &&
+    typeof stored.__encrypted === "string" &&
+    typeof written === "object" &&
+    written !== null &&
+    "__encrypted" in written &&
+    stored.__encrypted === written.__encrypted
+  );
 }

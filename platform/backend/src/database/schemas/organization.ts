@@ -21,10 +21,10 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type {
+  BudgetCleanupInterval,
   ConnectionBaseUrl,
   ConnectionClientFutureProviders,
   ConnectionClientProviderKeys,
-  LimitCleanupInterval,
   NetworkPolicy,
   OnboardingWizard,
   OrganizationChatLink,
@@ -210,7 +210,7 @@ const organizationsTable = pgTable("organization", {
   /** Cleanup interval used by default user limits. Null falls back to weekly. */
   defaultUserLimitCleanupInterval: varchar(
     "default_user_limit_cleanup_interval",
-  ).$type<LimitCleanupInterval>(),
+  ).$type<BudgetCleanupInterval>(),
 
   /**
    * Default role assigned to newly provisioned members who don't get an

@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { agentRuntimeFailureReason } from "./failure-reason";
+import {
+  agentRuntimeFailureReason,
+  agentRuntimeTurnFailure,
+} from "./failure-reason";
 
 describe("image-owned failure envelopes", () => {
   const envelope = {
@@ -43,5 +46,57 @@ describe("image-owned failure envelopes", () => {
     expect(agentRuntimeFailureReason(result)).toBe(
       "The Agent Runtime turn exited with status 78",
     );
+  });
+});
+
+describe("turn failure classification", () => {
+  const result = (code: string) =>
+    `75\n${JSON.stringify({ version: 1, code, message: "Safe message." })}`;
+
+  test.each([
+    // Platform-owned supervisor and credential-projection envelopes.
+    ["runtime.interrupted", "turn.interrupted", true],
+    ["runtime.recording_failed", "turn.recording_failed", true],
+    ["runtime.pane_exited", "turn.process_exited", false],
+    [
+      "runtime.credential_projection_timeout",
+      "launch.credentials_timeout",
+      true,
+    ],
+    // Maintained images: transient provider, proxy and startup problems.
+    ["claude_rate_limit", "image.claude_rate_limit", true],
+    ["claude_unavailable", "image.claude_unavailable", true],
+    ["proxy_unavailable", "image.proxy_unavailable", true],
+    ["mcp_startup", "image.mcp_startup", true],
+    ["task_submission", "image.task_submission", true],
+    // Maintained images: credential, account, request and protocol errors.
+    ["claude_authentication", "image.claude_authentication", false],
+    ["claude_billing", "image.claude_billing", false],
+    ["claude_request", "image.claude_request", false],
+    ["claude_api_error", "image.claude_api_error", false],
+    ["github_configuration", "image.github_configuration", false],
+    ["github_credential_rejected", "image.github_credential_rejected", false],
+    ["codex_protocol", "image.codex_protocol", false],
+    ["codex_startup", "image.codex_startup", false],
+    ["codex_turn_failed", "image.codex_turn_failed", false],
+    ["opencode_session_error", "image.opencode_session_error", false],
+    // Custom images own their vocabulary; unknown codes are not retriable.
+    ["my_agent.input_missing", "image.my_agent.input_missing", false],
+  ])("classifies envelope %s as %s", (envelopeCode, code, retriable) => {
+    expect(agentRuntimeTurnFailure(result(envelopeCode))).toEqual({
+      code,
+      retriable,
+    });
+  });
+
+  test.each([
+    "78",
+    "78\nnot-json",
+    `78\n${JSON.stringify({ version: 2, code: "claude_rate_limit", message: "x" })}`,
+  ])("an exit without a valid envelope is turn.exit_status: %s", (value) => {
+    expect(agentRuntimeTurnFailure(value)).toEqual({
+      code: "turn.exit_status",
+      retriable: false,
+    });
   });
 });

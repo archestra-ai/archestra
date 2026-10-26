@@ -1,12 +1,15 @@
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import type { UnsupportedAppaClientAction } from "@/types/guardrails-policy";
 
 const table = schema.guardrailsDeploymentTable;
 const id = "global";
 class GuardrailsDeploymentModel {
-  static async get() {
-    const [row] = await db.select().from(table).where(eq(table.id, id));
+  static async get(snapshot?: { row: typeof table.$inferSelect | null }) {
+    const row = snapshot
+      ? snapshot.row
+      : (await GuardrailsDeploymentModel.read.get().execute())[0];
     return (
       row ?? {
         id,
@@ -18,6 +21,7 @@ class GuardrailsDeploymentModel {
       }
     );
   }
+
   static async isEnabled(): Promise<boolean> {
     return (await GuardrailsDeploymentModel.get()).enabled;
   }
@@ -39,5 +43,13 @@ class GuardrailsDeploymentModel {
   static async findByIdForAudit() {
     return GuardrailsDeploymentModel.get();
   }
+
+  private static readonly read = new PreparedQuery((database) =>
+    database
+      .select()
+      .from(table)
+      .where(eq(table.id, id))
+      .prepare("archestra_guardrails_deployment"),
+  );
 }
 export default GuardrailsDeploymentModel;

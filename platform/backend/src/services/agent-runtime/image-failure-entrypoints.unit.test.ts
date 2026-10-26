@@ -23,6 +23,7 @@ test.each([
   "hermes",
   "opencode",
   "openclaw",
+  "grok",
 ])("%s reports incompatible protocols before starting the client", async (image) => {
   const root = await mkdtemp(path.join(tmpdir(), "image-protocol-"));
   try {

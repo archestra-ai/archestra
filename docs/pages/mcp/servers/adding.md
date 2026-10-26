@@ -48,7 +48,7 @@ For a server that ships as a package or an image, such as one you start with `np
 1. Follow the remote steps, but pick **Self-hosted** instead of **Remote**.
 2. Enter the command and its arguments, or a Docker image. For `npx -y @acme/mcp-server`, the command is `npx` and the arguments are `-y @acme/mcp-server`.
 3. Pick the transport: **stdio** for most packages, or **streamable-http** for a server that listens on a port. For HTTP, enter the port and MCP path.
-4. Add its environment variables. To make each person enter their own value, such as an API key, mark it for installation. To fill it from a saved [credential](/docs/admin/security/credentials), pick that credential.
+4. Add its environment variables. To make each person enter their own value, such as an API key, mark it for installation. To fill it from a saved [credential](/docs/admin/credentials), pick that credential.
 5. Click **Add Server**, then install and test it. Archestra starts the pod when you install.
 
 ## Headers and OAuth Settings

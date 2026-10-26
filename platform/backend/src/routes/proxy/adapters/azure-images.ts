@@ -25,6 +25,7 @@ export const azureImagesAdapterFactory: LLMProvider<
 > = {
   provider: "azure",
   interactionType: "azure:images",
+  unavailableUsageAccounting: true,
   spanName: "generate_content",
   getBaseUrl: azureAdapterFactory.getBaseUrl,
   extractApiKey: azureAdapterFactory.extractApiKey,
@@ -123,6 +124,8 @@ class ImageResponseAdapter implements LLMResponseAdapter<ImageResponse> {
   }
   getUsage() {
     return {
+      usageUnavailable: !this.response.usage,
+      costUnavailable: true,
       inputTokens: this.response.usage?.input_tokens ?? 0,
       outputTokens: this.response.usage?.output_tokens ?? 0,
     };

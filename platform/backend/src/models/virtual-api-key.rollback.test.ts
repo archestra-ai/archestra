@@ -3,9 +3,10 @@ import {
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
-import { describe } from "vitest";
+import { describe, vi } from "vitest";
 import db, { schema } from "@/database";
 import { expect, test } from "@/test";
+import AgentModel from "./agent";
 import LimitModel from "./limit";
 import VirtualApiKeyModel from "./virtual-api-key";
 
@@ -295,6 +296,37 @@ describe("VirtualApiKeyModel", () => {
     const result = await VirtualApiKeyModel.validateToken(value);
     expect(result).not.toBeNull();
     expect(result?.virtualKey.name).toBe("Validate Me");
+  });
+
+  test("validateTokenWithOwner: a reused snapshot refreshes lastUsedAt once", async ({
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    await AgentModel.getOrgLlmProxy(org.id);
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      authorId: user.id,
+      keyType: "passthrough",
+      providerApiKeys: [],
+      name: "Cached",
+    });
+    const snapshot =
+      await VirtualApiKeyModel.readDeploymentProxyAndTokenOwner(value);
+    expect(snapshot?.candidates).toHaveLength(1);
+    const refresh = vi.spyOn(VirtualApiKeyModel, "updateLastUsed");
+
+    // Cached rows keep the timestamp they were read with.
+    for (let i = 0; i < 3; i++) {
+      await expect(
+        VirtualApiKeyModel.validateTokenWithOwner(value, undefined, snapshot),
+      ).resolves.not.toBeNull();
+    }
+
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 
   test("validateToken: returns null for invalid token", async () => {

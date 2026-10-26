@@ -1,10 +1,12 @@
 import { priceBillingUsage } from "@/services/billable-usage";
+import { ThroughputError } from "@/services/llm-throughput";
 import { asRecord } from "@/utils/as-record";
 import type {
   BillingAttribution,
   PricedBillingUsage,
 } from "@/utils/billable-usage";
 import { componentCacheCosts } from "@/utils/billable-usage";
+import { withMediaUsageAvailability } from "@/utils/media-usage";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 /**
  * LLM Proxy Helpers
@@ -359,6 +361,7 @@ export async function calculateUsageCost(params: {
   providerApiKeyId?: string;
 }): Promise<number | undefined> {
   const { model, usage, provider } = params;
+  if (usage.usageUnavailable || usage.costUnavailable) return undefined;
   if (params.usageAccountingMode === "enforce")
     return Number(
       (
@@ -404,6 +407,14 @@ export async function calculateInteractionCosts(params: {
   cacheSavings: number | undefined;
   cacheReadSavings: number | undefined;
 }> {
+  if (params.usage.usageUnavailable || params.usage.costUnavailable) {
+    return {
+      actualCost: undefined,
+      cacheCost: undefined,
+      cacheSavings: undefined,
+      cacheReadSavings: undefined,
+    };
+  }
   const billingUsage =
     params.usageAccountingMode && params.usageAccountingMode !== "off"
       ? await priceBillingUsage({
@@ -486,6 +497,7 @@ export function applyInputTokenFallback(params: {
   model: string;
 }): UsageView {
   const { usage } = params;
+  if (usage.usageUnavailable || usage.costUnavailable) return usage;
   const hasCacheTokens =
     (usage.cacheReadTokens ?? 0) !== 0 ||
     (usage.cacheWriteTokens ?? 0) !== 0 ||
@@ -641,7 +653,10 @@ export function buildInteractionRecord(params: {
     type: params.providerType,
     request: params.request as InteractionRequest,
     processedRequest: params.processedRequest as InteractionRequest,
-    response: params.response as InteractionResponse,
+    response: withMediaUsageAvailability(
+      params.response,
+      params.usage,
+    ) as InteractionResponse,
     toolCallBlock: params.toolCallBlock,
     model: params.actualModel,
     // `baseline_model` / `baseline_cost` predate the removal of optimization
@@ -652,9 +667,13 @@ export function buildInteractionRecord(params: {
     // optimization saving instead of a negative one, and so historical rows
     // written while rules existed keep their meaning.
     baselineModel: params.actualModel,
-    inputTokens: params.usage.inputTokens,
+    inputTokens: params.usage.usageUnavailable
+      ? null
+      : params.usage.inputTokens,
     inputTokensEstimated: params.usage.inputTokensEstimated ?? false,
-    outputTokens: params.usage.outputTokens,
+    outputTokens: params.usage.usageUnavailable
+      ? null
+      : params.usage.outputTokens,
     cacheReadTokens: params.usage.cacheReadTokens ?? null,
     cacheWriteTokens: params.usage.cacheWriteTokens ?? null,
     cacheWrite1hTokens: params.usage.cacheWrite1hTokens ?? null,
@@ -886,6 +905,18 @@ export function handleError(
    */
   translatesWireFormat?: boolean,
 ): FastifyReply | never {
+  if (error instanceof ThroughputError && !reply.raw.headersSent) {
+    if (error.quota?.retryAfter != null && !error.quota.oversized)
+      reply.header("Retry-After", error.quota.retryAfter);
+    return reply.code(error.status).send({
+      error: {
+        message: error.message,
+        type: "archestra_throughput_error",
+        code: error.code,
+        quota: error.quota,
+      },
+    });
+  }
   logger.error(error);
 
   // Extract status code from error, checking multiple common property names

@@ -91,5 +91,5 @@ Makes scanned PDFs searchable. A vision model reads each PDF page that has no te
 Before you turn it on:
 
 - Cost: each page is a model call, and the provider charges for it.
-- Page limit: at most 100 pages per document, by default. Change it with [`ARCHESTRA_KNOWLEDGE_BASE_OCR_MAX_PAGES_PER_DOCUMENT`](/docs/reference/configuration#ARCHESTRA_KNOWLEDGE_BASE_OCR_MAX_PAGES_PER_DOCUMENT). The run details show the pages left unread.
+- Page limit: at most 100 pages per document, by default. Change it with [`ARCHESTRA_KNOWLEDGE_BASE_OCR_MAX_PAGES_PER_DOCUMENT`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_OCR_MAX_PAGES_PER_DOCUMENT). The run details show the pages left unread.
 - Self-hosted model missing? Set its input types under **LLM Providers → Models**.

@@ -15,11 +15,17 @@ import {
   shouldRenderBrowserApiDocument,
 } from "@/middleware/browser-api-document";
 import OrganizationModel from "@/models/organization";
+import {
+  applyAzureProxyDeployment,
+  prepareAzureProxyIngress,
+  rewriteAzureProxyUrl,
+} from "@/routes/proxy/utils/azure-ingress";
 import { rewriteConnectionProxySetupUrl } from "@/services/connection-proxy-setup-context";
 import type { ApiError } from "@/types";
 import { incomingRequestAbortTracker } from "@/utils/incoming-request-abort";
 import { handleServerError } from "./server/error-handler";
 import { registerLlmProxyDrain } from "./server/llm-proxy-drain";
+import { llmProxyTiming } from "./server/llm-proxy-timing";
 import { parseLoadedSourceMaps } from "./server/source-maps";
 
 const BROWSER_API_FAVICON_HREF = Symbol("browserApiFaviconHref");
@@ -35,7 +41,8 @@ export const createFastifyInstance = () => {
     logController: new LogController({ disableRequestLogging: true }),
     trustProxy: config.api.trustProxy,
     bodyLimit: config.api.bodyLimit,
-    rewriteUrl: rewriteConnectionProxySetupUrl,
+    rewriteUrl: (request) =>
+      rewriteAzureProxyUrl(request, rewriteConnectionProxySetupUrl(request)),
     // Held above the keep-alive timeout of any proxy or load balancer in front
     // of us, so the proxy never reuses a socket we are closing at that instant
     // (which reaches the client as an intermittent dropped request). See
@@ -53,9 +60,13 @@ export const createFastifyInstance = () => {
     .setValidatorCompiler(validatorCompiler)
     .setSerializerCompiler(serializerCompiler)
     .addHook("onRequest", (request, _reply, done) => {
+      prepareAzureProxyIngress(request);
       internalCallProvenance(request);
       incomingRequestAbortTracker.observe(request.raw);
       done();
+    })
+    .addHook("preValidation", async (request) => {
+      applyAzureProxyDeployment(request);
     })
     // Resolve white-label branding before a top-level API navigation reaches
     // onSend. Keeping onSend synchronous is required for routes (Better Auth)
@@ -121,6 +132,7 @@ export const createFastifyInstance = () => {
     })
     .setErrorHandler<ApiError | Error>(handleServerError);
 
+  llmProxyTiming.register(fastify);
   registerLlmProxyDrain(fastify);
   return fastify;
 };

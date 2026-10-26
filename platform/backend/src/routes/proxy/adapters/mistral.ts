@@ -28,6 +28,7 @@ import type {
   Mistral,
   StreamAccumulatorState,
 } from "@/types";
+import { streamChatCompletionChunks } from "./chat-completions-stream";
 import {
   OpenAIRequestAdapter,
   OpenAIResponseAdapter,
@@ -277,15 +278,9 @@ export const mistralAdapterFactory: LLMProvider<
       stream: true,
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
-    const stream = await mistralClient.chat.completions.create(mistralRequest);
-
-    return {
-      [Symbol.asyncIterator]: async function* () {
-        for await (const chunk of stream) {
-          yield chunk as MistralStreamChunk;
-        }
-      },
-    };
+    return streamChatCompletionChunks<MistralStreamChunk>(
+      mistralClient.chat.completions.create(mistralRequest),
+    );
   },
 
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {

@@ -149,6 +149,21 @@ describe("content encryption", () => {
       });
       // Public return value is plaintext…
       expect(created.request).toEqual(request);
+      expect(created.response).toEqual(response);
+      expect(created.sessionPreview).toMatchObject({
+        lastUserMessagePreview: "top secret question",
+      });
+      // …also when the id was already written and the stored row comes back,
+      // which keeps the persisted content rather than the retry's.
+      const replayed = await InteractionModel.create({
+        id: created.id,
+        profileId: null,
+        request: { ...request, model: "retry-model" },
+        response: { ...response, id: "retry-response" },
+        type: "anthropic:messages",
+      });
+      expect(replayed.request).toEqual(request);
+      expect(replayed.response).toEqual(response);
 
       // …while the stored row is an envelope.
       const raw = await rawInteraction(created.id);

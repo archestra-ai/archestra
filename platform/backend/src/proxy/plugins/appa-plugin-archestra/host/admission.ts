@@ -3,6 +3,7 @@ import type { FastifyRequest } from "fastify";
 import config from "@/config";
 import logger from "@/logging";
 import { ConversationModel } from "@/models";
+import type { RuntimeIdentitySnapshot } from "@/models/proxy-request-context";
 import { scopedSessionId } from "@/openappa/actor";
 import { forkedSession } from "@/openappa/lineage";
 import {
@@ -142,6 +143,7 @@ export async function admitOpenappaRequest(params: {
   installerSetupBypass: boolean;
   ingress: OpenappaIngress;
   toolIdentity: GatewayToolIdentity;
+  runtimeSnapshot?: RuntimeIdentitySnapshot;
 }): Promise<OpenappaAdmission> {
   const { request, body, agent, principal, chatSource, ingress } = params;
   const headers = request.headers as Record<
@@ -220,6 +222,7 @@ export async function admitOpenappaRequest(params: {
       ? await resolveRuntimeIdentityByVirtualKeys({
           virtualKeyIds: [virtualKeyId, passthroughVirtualKeyId],
           organizationId: agent.organizationId,
+          snapshot: params.runtimeSnapshot,
         })
       : { status: "unbound" as const };
   if (

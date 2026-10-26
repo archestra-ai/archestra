@@ -1129,3 +1129,23 @@ Examples:
 {{- printf "%s:%s" $image $imageTag -}}
 {{- end -}}
 {{- end }}
+
+{{/*
+Resolve each scheduling field independently. A missing/null tier value inherits
+archestra.*, while an explicit empty map/list clears it. Do not use `default`:
+it treats empty collections as unset and would restore global constraints.
+*/}}
+{{- define "archestra-platform.scheduling" -}}
+{{- $tier := .tier | default dict -}}
+{{- range $field := list "nodeSelector" "tolerations" "affinity" -}}
+  {{- $value := index $.global $field -}}
+  {{- $override := index $tier $field -}}
+  {{- if ne $override nil -}}
+    {{- $value = $override -}}
+  {{- end -}}
+  {{- with $value }}
+{{ $field }}:
+  {{- toYaml . | nindent 2 }}
+  {{- end -}}
+{{- end -}}
+{{- end -}}

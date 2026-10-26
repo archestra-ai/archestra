@@ -15,6 +15,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { requestScope } from "@/auth/request-scope";
 import { syncSystemRoleWithOrgPermissions } from "@/auth/system-role-sync";
 import db, { schema, type Transaction } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import {
   createCursorPaginatedResult,
   createPaginatedResult,
@@ -109,17 +110,9 @@ class MemberModel {
     const member = await requestScope.memo(
       `member\0${organizationId}\0${userId}`,
       async () => {
-        const [row] = await db
-          .select()
-          .from(schema.membersTable)
-          .where(
-            and(
-              eq(schema.membersTable.userId, userId),
-              eq(schema.membersTable.organizationId, organizationId),
-            ),
-          )
-          .orderBy(schema.membersTable.createdAt, schema.membersTable.id)
-          .limit(1);
+        const [row] = await MemberModel.byUserAndOrganization
+          .get()
+          .execute({ userId, organizationId });
         return row;
       },
     );
@@ -768,6 +761,25 @@ class MemberModel {
       .set({ defaultAgentId: null })
       .where(eq(schema.membersTable.defaultAgentId, agentId));
   }
+
+  private static readonly byUserAndOrganization = new PreparedQuery(
+    (database) =>
+      database
+        .select()
+        .from(schema.membersTable)
+        .where(
+          and(
+            eq(schema.membersTable.userId, sql.placeholder("userId")),
+            eq(
+              schema.membersTable.organizationId,
+              sql.placeholder("organizationId"),
+            ),
+          ),
+        )
+        .orderBy(schema.membersTable.createdAt, schema.membersTable.id)
+        .limit(1)
+        .prepare("archestra_member_by_user_and_organization"),
+  );
 }
 
 export default MemberModel;

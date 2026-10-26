@@ -983,6 +983,7 @@ async function ensureModelRouterAgentAccess(params: {
       !(await AgentTeamModel.userHasAgentAccess({
         userId,
         agentId: params.agent.id,
+        agentAccessContext: params.agent,
         action: "use",
         isAgentAdmin: await ResourcePermissions.allows({
           userId,

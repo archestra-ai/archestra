@@ -272,6 +272,63 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("record", () => {
+    test("stores the same row create would, for users and non-users", async ({
+      makeUser,
+    }) => {
+      const user = await makeUser();
+      const request = {
+        model: "gpt-4",
+        messages: [{ role: "user" as const, content: "Hello \u0000 there" }],
+      };
+      const ids = [crypto.randomUUID(), crypto.randomUUID()];
+      await InteractionModel.record({
+        id: ids[0],
+        profileId,
+        userId: user.id,
+        request,
+        response: {
+          id: "r",
+          object: "chat.completion",
+          created: 0,
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+        model: "gpt-4",
+        inputTokens: 3,
+        outputTokens: 5,
+      });
+      await InteractionModel.record({
+        id: ids[1],
+        profileId,
+        request,
+        response: {
+          id: "r",
+          object: "chat.completion",
+          created: 0,
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const [withUser, withoutUser] = await Promise.all(
+        ids.map((id) => InteractionModel.findById(id)),
+      );
+      expect(withUser).toMatchObject({
+        userId: user.id,
+        profileId,
+        inputTokens: 3,
+        outputTokens: 5,
+        request: { messages: [{ content: "Hello  there" }] },
+      });
+      expect(withoutUser).toMatchObject({ userId: null, profileId });
+      // Sanitizing copies only what it changes; the caller's payload is intact.
+      expect(request.messages[0].content).toBe("Hello \u0000 there");
+    });
+  });
+
   describe("create - null byte sanitization", () => {
     test("strips null bytes from JSONB fields to avoid PostgreSQL rejection", async () => {
       // PostgreSQL JSONB rejects \u0000 (null byte) Unicode escape sequences.

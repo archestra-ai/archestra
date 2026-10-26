@@ -22,8 +22,8 @@ const PAGE_CONFIG: Record<
     title: "Costs",
     description: (
       <>
-        Monitor usage costs and savings across teams, agents, and models. View
-        and edit model token prices in{" "}
+        Track spend, token usage and requests across your organization. View and
+        edit model token prices in{" "}
         <Link href="/llm/models" className="text-primary hover:underline">
           Model Settings
         </Link>
@@ -33,8 +33,7 @@ const PAGE_CONFIG: Record<
   },
   "/llm/limits": {
     title: "Limits",
-    description:
-      "Control LLM spend with token-cost limits scoped to the organization, teams, agents, users, virtual keys, or environments.",
+    description: "Set spend and rate limits for LLM traffic.",
   },
 };
 

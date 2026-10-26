@@ -62,6 +62,8 @@ export const ProxyCostTotalsSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
+  totalTokens: z.number(),
   billedCost: z.number(),
   subscriptionCost: z.number(),
   failedOverAttempts: z
@@ -132,6 +134,8 @@ export const StatisticsTimeSeriesPointSchema = z.object({
   inputTokens: z.number().optional(),
   outputTokens: z.number().optional(),
   cacheReadTokens: z.number().optional(),
+  cacheWriteTokens: z.number().optional(),
+  totalTokens: z.number().optional(),
   billedCost: z.number().optional(),
   subscriptionCost: z.number().optional(),
 });
@@ -144,6 +148,9 @@ export const TeamStatisticsSchema = z.object({
   requests: z.number(),
   inputTokens: z.number(),
   outputTokens: z.number(),
+  cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
+  totalTokens: z.number(),
   cost: z.number(),
   timeSeries: z.array(StatisticsTimeSeriesPointSchema),
 });
@@ -157,6 +164,8 @@ export const AgentStatisticsSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
+  totalTokens: z.number(),
   cost: z.number(),
   timeSeries: z.array(StatisticsTimeSeriesPointSchema),
 });
@@ -167,6 +176,8 @@ export const ModelStatisticsSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
+  totalTokens: z.number(),
   cost: z.number(),
   percentage: z.number(),
   timeSeries: z.array(StatisticsTimeSeriesPointSchema),
@@ -182,8 +193,9 @@ export const UserModelUsageSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
   totalTokens: z.number(),
-  /** Share of this user's input + output tokens. */
+  /** Share of this user's reported tokens. */
   percentage: z.number(),
   billedCost: z.number(),
   subscriptionCost: z.number(),
@@ -199,8 +211,9 @@ export const MyClientUsageSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
   totalTokens: z.number(),
-  /** Share of the caller's input + output tokens. */
+  /** Share of the caller's reported tokens. */
   percentage: z.number(),
   billedCost: z.number(),
   subscriptionCost: z.number(),
@@ -225,6 +238,7 @@ export const UserStatisticsSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
   totalTokens: z.number(),
   /** Billed spend: list-price `cost` of metered rows only. */
   billedCost: z.number(),
@@ -258,6 +272,7 @@ export const MyStatisticsSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
   totalTokens: z.number(),
   /** Billed spend: list-price `cost` of metered rows only. */
   billedCost: z.number(),

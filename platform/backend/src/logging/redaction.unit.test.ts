@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { Writable } from "node:stream";
 import { describe, expect, test } from "vitest";
 import { createLogger } from "./create-logger";
@@ -22,6 +23,41 @@ function createCapturingLogger() {
 }
 
 describe("log redaction", () => {
+  test("compiled paths preserve mutable function-censor arguments across records", () => {
+    const require = createRequire(import.meta.url);
+    const redact = createRequire(require.resolve("pino"))("@pinojs/redact");
+    const paths: string[][] = [];
+    const censor = redact({
+      paths: ["secret"],
+      censor: (_value: unknown, path: string[]) => {
+        paths.push([...path]);
+        path[0] = "other";
+        return "[Redacted]";
+      },
+    });
+    censor({ secret: "synthetic", other: "public" });
+    censor({ secret: "synthetic", other: "public" });
+    expect(paths).toEqual([["secret"], ["secret"]]);
+  });
+  test("censors native Azure and platform credentials in raw and parsed headers", () => {
+    const { logger, records } = createCapturingLogger();
+    for (const name of [
+      "api-key",
+      "Api-Key",
+      "API-Key",
+      "x-api-key",
+      "x-archestra-virtual-key",
+    ]) {
+      logger.info({
+        [name]: "sensitive-credential",
+        headers: { [name]: "sensitive-credential" },
+        request: { headers: { [name]: "sensitive-credential" } },
+      });
+    }
+    expect(records).toHaveLength(5);
+    expect(JSON.stringify(records)).not.toContain("sensitive-credential");
+    expect(JSON.stringify(records)).toContain("[Redacted]");
+  });
   test("censors runtime bindings in request headers and launch secrets", () => {
     const { logger, records } = createCapturingLogger();
     logger.info({

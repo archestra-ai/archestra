@@ -40,6 +40,7 @@ import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourcePermissions } from "@/components/resource-permissions";
+import { AgentSchedulesSection } from "@/components/scheduled-tasks/agent-schedules-section";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -750,6 +751,12 @@ function AgentDetails({
                 agent={agent}
                 editHref={agentEditHref(agent.id)}
                 canEdit={canEdit}
+              />
+            )}
+            {overviewOnly && section === "general" && kind === "agent" && (
+              <AgentSchedulesSection
+                agentId={agent.id}
+                agentName={agent.name}
               />
             )}
             {activeFormGroups.length > 0 && (

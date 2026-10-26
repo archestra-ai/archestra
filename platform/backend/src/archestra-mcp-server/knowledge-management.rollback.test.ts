@@ -18,10 +18,11 @@ import {
   AgentKnowledgeBaseModel,
   KbChunkModel,
   KbDocumentModel,
+  KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   TeamModel,
 } from "@/models";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent, KnowledgeBase, KnowledgeBaseConnector } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 import { archestraMcpBranding } from "./branding";
@@ -1905,6 +1906,48 @@ describe("knowledge-management tool execution", () => {
       expect((deleteResult.content[0] as any).text).toContain(
         "Knowledge connector not found",
       );
+    });
+
+    test("a connector reader cannot update or delete it through MCP tools", async ({
+      makeKnowledgeBaseConnector,
+    }) => {
+      const sharedConnector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        connectorType: "github",
+        access: { users: [memberContext.userId ?? ""], preset: "view" },
+      });
+
+      const readResult = await executeArchestraTool(
+        t("get_knowledge_connector"),
+        { id: sharedConnector.id },
+        memberContext,
+      );
+      expect(readResult.isError).toBe(false);
+
+      const updateResult = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        { id: sharedConnector.id, name: "Changed Connector" },
+        memberContext,
+      );
+      expect(updateResult.isError).toBe(true);
+      expect((updateResult.content[0] as any).text).toContain(
+        "Knowledge connector not found",
+      );
+      expect(
+        (await KnowledgeBaseConnectorModel.findById(sharedConnector.id))?.name,
+      ).toBe(sharedConnector.name);
+
+      const deleteResult = await executeArchestraTool(
+        t("delete_knowledge_connector"),
+        { id: sharedConnector.id },
+        memberContext,
+      );
+      expect(deleteResult.isError).toBe(true);
+      expect((deleteResult.content[0] as any).text).toContain(
+        "Knowledge connector not found",
+      );
+      expect(
+        await KnowledgeBaseConnectorModel.findById(sharedConnector.id),
+      ).not.toBeNull();
     });
 
     test("connector creators and editors can enable permission sync", async ({

@@ -345,7 +345,9 @@ const extendedFields = {
   defaultLlmProvider: SupportedProvidersSchema.nullable(),
   defaultUserLimitValue: z.number().int().positive().nullable(),
   defaultUserLimitModel: z.array(z.string()).nullable(),
-  defaultUserLimitCleanupInterval: LimitCleanupIntervalSchema.nullable(),
+  defaultUserLimitCleanupInterval: LimitCleanupIntervalSchema.exclude([
+    "minute",
+  ]).nullable(),
   defaultMemberRole: z.string().nullable(),
   defaultAgentId: z.string().uuid().nullable(),
   favicon: z.string().nullable(),

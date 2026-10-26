@@ -5,10 +5,16 @@ ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.9.26@sha256:9a23023be68b2ed09750ae636228e903
 # community repo lags upstream Go patch releases. Stays binary-compatible since
 # both images share the Alpine base.
 ARG GOLANG_IMAGE=golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0
+# TODO: return to Alpine's `nodejs` apk once v3.23 aarch64 ships nodejs>=24.22.1-r0
+# (CVE-2026-111497); it lagged at 24.18.1-r0 while x86_64 already had the fix.
+# Same 24.22.1 digest as platform/Dockerfile; it bundles its own Brotli.
+ARG NODE_RUNTIME_IMAGE=node:24-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2
 
 FROM ${GOLANG_IMAGE} AS go-bin
 
 FROM ${UV_IMAGE} AS uv-bin
+
+FROM ${NODE_RUNTIME_IMAGE} AS node-runtime
 
 # Multi-stage build for minimal final image
 FROM ${PYTHON_IMAGE} AS python-builder
@@ -34,12 +40,13 @@ RUN chmod +x /usr/local/bin/uv
 RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 COPY pyproject.toml requirements.lock /tmp/python-deps/
+# Resolve wheels for the target stage's interpreter on both supported architectures.
 RUN uv pip sync \
    --no-cache \
    --require-hashes \
    --python-version 3.12 \
-   --python-platform x86_64-unknown-linux-musl \
-   /tmp/python-deps/requirements.lock
+   /tmp/python-deps/requirements.lock && \
+   python -c "import mcp; import pydantic_core"
 
 # Node.js stage
 FROM ${NODE_IMAGE} AS node-builder
@@ -60,8 +67,9 @@ FROM ${NODE_IMAGE} AS node-builder
 #     5.0.11 fixes CVE-2026-102276 and CVE-2026-102278 and keeps
 #     `balanced-match: ^4.0.2` (satisfied by the bundled 4.0.4)
 #     and declares `node: 20 || >=22`.
-#   undici CVE-2026-19534 (uncaught exception) requires 6.28.1 rather than
-#     the bundled 6.27.0. The replacement stays on the Node 18-compatible 6.x line.
+#   undici CVE-2026-19534 and CVE-2026-109869 (uncaught exceptions) require
+#     6.29.1 rather than the bundled 6.27.0. The replacement stays on the
+#     Node 18-compatible 6.x line and has cleared the seven-day age window.
 #   ip-address  CVE-2026-69192 (improper input validation, affects <=10.3.0). The
 #     bundle ships 10.2.0 via socks 2.8.9, which asks ^10.1.1; 10.3.1 is in range and
 #     declares `node: >= 12`. The package.json override next to this file only governs
@@ -85,11 +93,11 @@ RUN npm install -g npm@11.18.0 && \
     tar -xzf brace-expansion-5.0.11.tgz && \
     mv package brace-expansion && \
     rm brace-expansion-5.0.11.tgz && \
-    npm pack undici@6.28.1 && \
+    npm pack undici@6.29.1 && \
     rm -rf undici && \
-    tar -xzf undici-6.28.1.tgz && \
+    tar -xzf undici-6.29.1.tgz && \
     mv package undici && \
-    rm undici-6.28.1.tgz && \
+    rm undici-6.29.1.tgz && \
     npm pack ip-address@10.3.1 && \
     rm -rf ip-address && \
     tar -xzf ip-address-10.3.1.tgz && \
@@ -115,7 +123,6 @@ FROM ${PYTHON_IMAGE}
 
 # Install runtime dependencies only (npm copied from node-builder stage to avoid Alpine CVE)
 RUN apk add --no-cache \
-   nodejs \
    libstdc++ \
    libgcc \
    openssl \
@@ -141,7 +148,7 @@ RUN apk add --no-cache \
    # CVE-2026-22184: zlib vulnerability fixed in 1.3.2-r0
    # CVE-2026-32767: expat XML parser vulnerability
    # CVE-2026-40200 (musl 1.2.5-r23) is covered by the pinned base image digest
-   # Fixed-version-available curl/libcurl vulnerabilities are resolved in 8.22.0-r0.
+   # CVE-2026-92392: curl/libcurl vulnerabilities are resolved in 8.23.0-r0.
    # The explicit `apk add curl` above installs them, so explicit floors below ensure
    # a cached layer cannot retain the older packages.
    # Fixed-version-available util-linux vulnerabilities are resolved in 2.41.6-r1.
@@ -150,11 +157,14 @@ RUN apk add --no-cache \
    # runtime dependency), so it must be upgraded explicitly here.
    # Copy the same Go 1.26.9 toolchain used by the platform builders for the
    # October 2026 stdlib security fixes; Alpine packages can lag upstream patches.
-   apk upgrade --no-cache nodejs bind openssl zlib expat sqlite-libs && \
+   apk upgrade --no-cache bind openssl zlib expat sqlite-libs && \
+   # CVE-2026-111497: libcurl links the shared Brotli decoder.
+   apk add --no-cache --upgrade "brotli-libs>=1.2.1-r0" && \
    # The pinned build can keep bind 9.20.26-r0 after Alpine publishes security
-   # fixes. Require the 9.20.29-r0 release that fixes its seven HIGH CVEs.
-   apk add --no-cache --upgrade "bind>=9.20.29-r0" && \
-   apk add --no-cache --upgrade "curl>=8.22.0-r0" "libcurl>=8.22.0-r0" \
+   # fixes. Require 9.20.30-r0 for CVE-2026-94300, CVE-2026-97313,
+   # CVE-2026-96888 and CVE-2026-19630 in addition to the earlier fixes.
+   apk add --no-cache --upgrade "bind>=9.20.30-r0" && \
+   apk add --no-cache --upgrade "curl>=8.23.0-r0" "libcurl>=8.23.0-r0" \
        "util-linux>=2.41.6-r1" && \
    # CVE-2026-63076, CVE-2026-63075, CVE-2026-63072, CVE-2026-54874, CVE-2026-18798,
    # CVE-2026-14457, CVE-2026-14456: OpenSSL vulnerabilities (HIGH) fixed in 3.5.8-r0.
@@ -175,11 +185,10 @@ RUN apk add --no-cache \
    # CVE-2026-103111: require the fixed pcre2 release and invalidate the cached
    # package layer, which otherwise retains the vulnerable 10.48-r0 build.
    apk add --no-cache --upgrade "pcre2>=10.49-r0" && \
-   # CVE-2026-81736, CVE-2026-81563, CVE-2026-80274, CVE-2026-77692, CVE-2026-76163,
-   # CVE-2026-19667, CVE-2026-19666: BIND vulnerabilities (HIGH) fixed in 9.20.29-r0.
+   # Match the fixed bind version above for its installed tools and libraries.
    # `bind` in the bare `apk upgrade` above has the same cached-layer problem as openssl,
    # so both installed bind-origin packages get explicit floors.
-   apk add --no-cache --upgrade "bind-tools>=9.20.29-r0" "bind-libs>=9.20.29-r0" && \
+   apk add --no-cache --upgrade "bind-tools>=9.20.30-r0" "bind-libs>=9.20.30-r0" && \
    # CVE-2026-85091: zlib vulnerability (HIGH) fixed in 1.3.2-r1. `zlib` is in the bare
    # `apk upgrade` list above, which cannot express a version floor, so the cached layer
    # kept 1.3.2-r0.
@@ -187,6 +196,8 @@ RUN apk add --no-cache \
 
 # Go toolchain sourced from upstream Alpine-based image (Alpine apk currently ships go-1.25.9-r0)
 COPY --from=go-bin /usr/local/go /usr/local/go
+
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 
 # Copy npm from node-builder stage to avoid Alpine's vulnerable npm package
 # node:20-alpine has npm in /usr/local/lib/node_modules/npm

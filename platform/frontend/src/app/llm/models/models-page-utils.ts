@@ -308,6 +308,7 @@ export const OBSERVED_MODEL_SOURCE_DESCRIPTION =
 
 export type ModelsPageFilterableModel = {
   modelId: string;
+  description?: string | null;
   provider: string;
   apiKeys: readonly { id: string }[];
   embeddingDimensions: number | null;
@@ -378,9 +379,14 @@ export function filterModelsForPage<
   let result = models;
 
   if (search) {
-    const query = search.toLowerCase();
-    result = result.filter((model) =>
-      model.modelId.toLowerCase().includes(query),
+    // Marketing names and API ids often differ only in word separators.
+    const normalize = (value: string) =>
+      value.toLowerCase().replace(/[\s_-]+/g, "");
+    const query = normalize(search);
+    result = result.filter(
+      (model) =>
+        normalize(model.modelId).includes(query) ||
+        (model.description && normalize(model.description).includes(query)),
     );
   }
   if (apiKeyFilter !== "all") {

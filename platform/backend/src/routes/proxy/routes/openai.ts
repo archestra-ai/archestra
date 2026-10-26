@@ -35,6 +35,7 @@ import {
   virtualKeyRateLimiter,
 } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import { registerAudioRoutes } from "./audio";
 import {
   extractBearerToken,
   OpenAiModelsHeadersSchema,
@@ -60,6 +61,7 @@ const CodexModelsSchema = z.object({
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
+  await registerAudioRoutes(fastify, "openai");
 
   logger.debug("[UnifiedProxy] Registering unified OpenAI routes");
 

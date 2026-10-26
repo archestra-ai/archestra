@@ -2,16 +2,18 @@
 title: "Microsoft Entra ID"
 description: "Configure Microsoft Entra ID for SSO sign-in and On-Behalf-Of token exchange for MCP tools"
 order: 2
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Connect Microsoft Entra ID to sign users in with Microsoft accounts and run MCP tools with per-user Graph and API permissions using On-Behalf-Of (OBO) token exchange.
 
-For sign-in alone, complete sections 1–3. For per-user tool access, complete sections 4–6.
+Set up sign-in first. Continue with token exchange only if MCP tools need to call downstream APIs as each person.
 
-## 1. Register the Entra Application
+<span id="1-register-the-entra-application"></span>
+
+## Register the Entra Application
 
 1. In the Microsoft Entra admin center, go to **Identity → Applications → App registrations** and click **New registration**.
 2. Set **Name** to `Archestra`.
@@ -23,7 +25,9 @@ For sign-in alone, complete sections 1–3. For per-user tool access, complete s
 6. Under **Certificates & secrets**, click **New client secret**, name it, click **Add**, and copy the secret **Value**.
 7. Under **API permissions**, click **Add a permission → Microsoft Graph → Delegated permissions**, check `User.Read`, and click **Grant admin consent**.
 
-## 2. Configure SSO in Archestra
+<span id="2-configure-sso-in-archestra"></span>
+
+## Configure SSO in Archestra
 
 1. In Archestra, navigate to **Settings → Identity Providers** and click **Enable** on **Microsoft Entra ID**.
 2. Replace `{tenant-id}` in the pre-filled URLs with your Entra Directory (tenant) ID.
@@ -34,7 +38,9 @@ For sign-in alone, complete sections 1–3. For per-user tool access, complete s
 
 Test sign-in in an incognito window using your Microsoft credentials.
 
-## 3. Map Roles and Sync Teams
+<span id="3-map-roles-and-sync-teams"></span>
+
+## Map Roles and Sync Teams
 
 Configure how Entra claims map to Archestra roles and teams:
 
@@ -43,7 +49,9 @@ Configure how Entra claims map to Archestra roles and teams:
 
 If your deployment only requires sign-in, setup is complete.
 
-## 4. Configure Entra for On-Behalf-Of (OBO)
+<span id="4-configure-entra-for-on-behalf-of-obo"></span>
+
+## Configure Entra for On-Behalf-Of (OBO)
 
 OBO allows Archestra to swap the user's login access token for a token scoped to downstream APIs (like Microsoft Graph, SharePoint, or internal APIs).
 
@@ -59,7 +67,9 @@ OBO allows Archestra to swap the user's login access token for a token scoped to
    - Check the `api://<client-id>/access_as_user` scope and click **Add application**.
 5. Under **API permissions**, add delegated scopes for any downstream APIs the MCP tools will call (such as `Mail.Read` or `Calendars.Read`), then click **Grant admin consent**.
 
-## 5. Enable OBO in Archestra
+<span id="5-enable-obo-in-archestra"></span>
+
+## Enable OBO in Archestra
 
 1. In **Settings → Identity Providers**, edit **Microsoft Entra ID** and expand **Enterprise-Managed Credentials**.
 2. Under **Scopes**, ensure `access_as_user` is included:
@@ -70,7 +80,9 @@ OBO allows Archestra to swap the user's login access token for a token scoped to
 5. Set **User Token To Exchange** to **Access token**.
 6. Save the provider.
 
-## 6. Configure MCP Server Multitenant Auth
+<span id="6-configure-mcp-server-multitenant-auth"></span>
+
+## Configure MCP Server Multitenant Auth
 
 Enable per-user downstream credentials on target MCP servers:
 

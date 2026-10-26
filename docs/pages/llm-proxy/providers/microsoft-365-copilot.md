@@ -21,8 +21,8 @@ The sign-in flow needs an [Entra ID app registration](https://learn.microsoft.co
 1. Register an application in the Microsoft Entra admin center. The device flow runs as a public client — skip the client secret and redirect URI.
 2. Enable **Allow public client flows** (Authentication → Advanced settings). Without it, sign-in fails after the code is entered.
 3. Add these **delegated** Microsoft Graph permissions and grant admin consent: `Sites.Read.All`, `Mail.Read`, `People.Read.All`, `OnlineMeetingTranscript.Read.All`, `Chat.Read`, `ChannelMessage.Read.All`, `ExternalItem.Read.All`. The Chat API requires all seven — one per data source Copilot searches.
-4. Set [`ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID`](/docs/reference/configuration#ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID) to the Application (client) ID.
-5. For a **single-tenant** registration, also set [`ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID`](/docs/reference/configuration#ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID) to your tenant ID. The default (`organizations`) only works for multi-tenant registrations.
+4. Set [`ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID`](/docs/admin/deployment/configuration#ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID) to the Application (client) ID.
+5. For a **single-tenant** registration, also set [`ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID`](/docs/admin/deployment/configuration#ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID) to your tenant ID. The default (`organizations`) only works for multi-tenant registrations.
 
 With a multi-tenant registration, users from another organization can sign in once their own tenant admin consents to the app.
 

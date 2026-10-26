@@ -21,15 +21,10 @@ describe("OpenCode routing plugin", () => {
       openai: "https://example.com/v1/openai",
       cerebras: "https://example.com/v1/cerebras",
       zhipuai: "https://example.com/v1/zhipuai",
-      "archestra-kimi": "https://example.com/v1/kimi",
     };
     const headers = {
       "X-Archestra-Agent-Id": "opencode",
       "X-Archestra-Virtual-Key": "arch_passthroughcafe",
-    };
-    const providerTwins = {
-      moonshotai: "archestra-kimi",
-      "kimi-code-plan-global": "archestra-kimi",
     };
     const originalFetch = globalThis.fetch;
     const originalDataHome = process.env.XDG_DATA_HOME;
@@ -57,10 +52,7 @@ describe("OpenCode routing plugin", () => {
           },
         }),
       );
-      await writeFile(
-        file,
-        renderOpenCodeRoutingPlugin({ routes, headers, providerTwins }),
-      );
+      await writeFile(file, renderOpenCodeRoutingPlugin({ routes, headers }));
       const module = await import(
         `${pathToFileURL(file).href}?t=${Date.now()}`
       );
@@ -70,10 +62,11 @@ describe("OpenCode routing plugin", () => {
         disabled_providers: ["google", "direct"],
         model: "zhipuai/glm-model",
         small_model: "google/gemini-model",
-        // Kilo Code pins its compaction agent to a Kimi Code plan provider,
-        // which moves to the routed Kimi twin; a subagent pinned to a routed
-        // provider without a credential would fail its turn with "Model not
-        // found", so that pin goes; a pin on an active route stays.
+        // Kilo Code pins its compaction agent to a Kimi Code plan provider
+        // the connection does not route, so that pin goes; a subagent pinned
+        // to a routed provider without a credential would fail its turn with
+        // "Model not found", so that pin goes too; a pin on an active route
+        // stays.
         agent: {
           compaction: { model: "kimi-code-plan-global/k3" },
           general: { model: "zhipuai/glm-model", prompt: "research" },
@@ -81,7 +74,14 @@ describe("OpenCode routing plugin", () => {
         },
         provider: {
           anthropic: { options: { apiKey: "configured-key" } },
-          "archestra-kimi": { options: { apiKey: "arch_virtualkey" } },
+          // Written by an earlier setup for the proxy: the client's own
+          // providers serve its models now.
+          "archestra-kimi": {
+            options: {
+              baseURL: "https://example.com/v1/kimi",
+              apiKey: "arch_virtualkey",
+            },
+          },
           google: {
             options: {
               baseURL: "https://generativelanguage.googleapis.com/v1beta",
@@ -101,7 +101,6 @@ describe("OpenCode routing plugin", () => {
           "openai",
           "cerebras",
           "zhipuai",
-          "archestra-kimi",
         ],
         disabled_providers: ["direct"],
         small_model: "google/gemini-model",
@@ -119,11 +118,12 @@ describe("OpenCode routing plugin", () => {
       });
       expect(config).not.toHaveProperty("model");
       expect(config.agent).toEqual({
-        compaction: { model: "archestra-kimi/k3" },
+        compaction: {},
         general: { prompt: "research" },
         build: { model: "anthropic/claude-model" },
       });
       expect(config.provider).not.toHaveProperty("zhipuai");
+      expect(config.provider).not.toHaveProperty("archestra-kimi");
       expect(
         (
           config.provider as Record<
@@ -294,7 +294,6 @@ describe("OpenCode routing plugin", () => {
     const file = path.join(root, "archestra-llm-proxy.mjs");
     const dataDir = path.join(root, "data");
     const routes = {
-      "archestra-anthropic": "https://example.com/v1/model-router",
       anthropic: "https://example.com/v1/anthropic/v1",
       openai: "https://example.com/v1/openai",
     };
@@ -331,44 +330,20 @@ describe("OpenCode routing plugin", () => {
         provider: Record<string, { options: Record<string, unknown> }>;
       } = {
         provider: {
+          // An earlier setup's provider for the proxy goes; nothing serves it.
           "archestra-anthropic": {
             options: {
               apiKey: "{file:~/.archestra/kilo-primary.key}",
-              baseURL: routes["archestra-anthropic"],
+              baseURL: "https://example.com/v1/model-router",
             },
           },
         },
       };
       await hooks.config(config);
       // Every routed provider is listed so the user can connect one from the
-      // client; only the one with a credential is configured.
-      expect(config.enabled_providers).toEqual([
-        "archestra-anthropic",
-        "anthropic",
-        "openai",
-      ]);
-      expect(config.provider).not.toHaveProperty("anthropic");
-      expect(config.provider).not.toHaveProperty("openai");
-      expect(config.provider["archestra-anthropic"].options.headers).toEqual(
-        headers,
-      );
-      const archestraOutput: { headers: Record<string, string> } = {
-        headers: {},
-      };
-      await hooks["chat.headers"](
-        {
-          sessionID: "ses_1",
-          agent: "build",
-          provider: {
-            id: "archestra-anthropic",
-            options: { baseURL: routes["archestra-anthropic"] },
-          },
-        },
-        archestraOutput,
-      );
-      expect(archestraOutput.headers).not.toHaveProperty(
-        "X-Archestra-Virtual-Key",
-      );
+      // client; none has a credential yet, so none is configured.
+      expect(config.enabled_providers).toEqual(["anthropic", "openai"]);
+      expect(config.provider).toEqual({});
       await expect(
         hooks["chat.params"]({ provider: { id: "openai", options: {} } }),
       ).rejects.toThrow("is not supported");

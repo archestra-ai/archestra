@@ -3,6 +3,26 @@ import { describe, expect, it } from "vitest";
 import { enrichOpenApiWithRbac } from "./enrich-openapi-with-rbac";
 
 describe("enrichOpenApiWithRbac", () => {
+  it.each([
+    RouteId.AzureCreateFile,
+    RouteId.AzureFileContentWithAgent,
+    RouteId.AzureDeleteFile,
+  ])("documents %s as requiring a principal and a configured account", (operationId) => {
+    const spec = {
+      paths: {
+        "/v1/azure/files": { post: { operationId, tags: ["LLM Proxy"] } },
+      },
+    };
+    const operation = enrichOpenApiWithRbac(spec).paths["/v1/azure/files"]
+      .post as { description?: string };
+    expect(operation.description).toContain("authenticated platform principal");
+    expect(operation.description).toContain(
+      "provider key alone is insufficient",
+    );
+    expect(operation.description).not.toContain(
+      "either an LLM provider API key",
+    );
+  });
   it("adds permission metadata plus authentication and RBAC guidance for routes with static requirements", () => {
     const spec = {
       paths: {

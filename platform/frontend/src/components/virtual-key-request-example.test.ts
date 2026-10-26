@@ -6,6 +6,114 @@ const base = "https://archestra.example.com/v1";
 const key = "arch_test123";
 
 describe("buildCurlExample", () => {
+  it.each([
+    "standard",
+    "passthrough",
+    "token",
+  ] as const)("shows native Gemini image generation with %s authentication", (keyType) => {
+    const example = buildCurlExample({
+      connectionBaseUrl: base,
+      target: { kind: "provider", provider: "gemini" },
+      keyType,
+      keyValue: key,
+      model: "gemini-nano-banana-2.1",
+      imageOperation: "generate",
+    });
+    expect(example).toContain(
+      `${base}/gemini/v1beta/models/gemini-nano-banana-2.1:generateContent`,
+    );
+    const credential = keyType === "passthrough" ? "$GEMINI_API_KEY" : key;
+    expect(example).toContain(
+      keyType === "token"
+        ? `Authorization: Bearer ${credential}`
+        : `x-goog-api-key: ${credential}`,
+    );
+    if (keyType === "passthrough")
+      expect(example).toContain(`X-Archestra-Virtual-Key: ${key}`);
+    const match = example?.match(/-d '([\s\S]*)'$/);
+    const body = JSON.parse(match?.[1] ?? "null");
+    expect(body.generationConfig).toEqual({
+      responseModalities: ["TEXT", "IMAGE"],
+    });
+    expect(body.contents[0].parts[0].text).toContain("Draw");
+    expect(body).not.toHaveProperty("messages");
+    expect(body).not.toHaveProperty("model");
+    expect(body.generationConfig).not.toHaveProperty("temperature");
+  });
+
+  it("does not offer an unimplemented Gemini edit example", () => {
+    expect(
+      buildCurlExample({
+        connectionBaseUrl: base,
+        target: { kind: "provider", provider: "gemini" },
+        keyType: "standard",
+        keyValue: key,
+        model: "gemini-nano-banana-2.1",
+        imageOperation: "edit",
+      }),
+    ).toBeNull();
+  });
+
+  it.each([
+    "standard",
+    "passthrough",
+    "token",
+  ] as const)("shows native Azure image generation and multipart edits for %s credentials", (keyType) => {
+    const params = {
+      connectionBaseUrl: base,
+      target: { kind: "provider" as const, provider: "azure" as const },
+      keyType,
+      keyValue: key,
+      model: "gpt-image-1",
+    };
+    const generation = buildCurlExample({
+      ...params,
+      imageOperation: "generate",
+    });
+    expect(generation).toContain(`${base}/azure/images/generations`);
+    expect(generation).toContain('"prompt":');
+    expect(generation).not.toContain('"messages"');
+    const edit = buildCurlExample({ ...params, imageOperation: "edit" });
+    expect(edit).toContain(`${base}/azure/images/edits`);
+    expect(edit).toContain("--form-string 'model=gpt-image-1'");
+    expect(edit).toContain('-F "image[]=@edit.png"');
+    expect(edit).not.toContain("Content-Type:");
+    expect(edit).toContain(
+      `Authorization: Bearer ${keyType === "passthrough" ? "$AZURE_API_KEY" : key}`,
+    );
+    if (keyType === "passthrough")
+      expect(edit).toContain(`X-Archestra-Virtual-Key: ${key}`);
+  });
+
+  it("does not advertise an Azure image request on the Model Router or another provider", () => {
+    for (const target of [
+      { kind: "model-router" as const },
+      { kind: "provider" as const, provider: "openai" as const },
+    ]) {
+      expect(
+        buildCurlExample({
+          connectionBaseUrl: base,
+          target,
+          keyType: "standard",
+          keyValue: key,
+          model: "gpt-image-1",
+          imageOperation: "edit",
+        }),
+      ).toBeNull();
+    }
+  });
+
+  it("quotes deployment names as literal multipart fields", () => {
+    const edit = buildCurlExample({
+      connectionBaseUrl: base,
+      target: { kind: "provider", provider: "azure" },
+      keyType: "standard",
+      keyValue: key,
+      model: "studio's-image",
+      imageOperation: "edit",
+    });
+    expect(edit).toContain("--form-string 'model=studio'\\''s-image'");
+  });
   it("sends a standard key as the bearer token on the Model Router", () => {
     expect(
       buildCurlExample({

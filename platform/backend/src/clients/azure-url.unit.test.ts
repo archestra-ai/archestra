@@ -7,6 +7,7 @@ import {
   buildAzureResponsesBaseUrl,
   buildAzureV1DeploymentsUrl,
   createAzureFetchWithApiVersion,
+  createAzureFetchWithRequestQuery,
   extractAzureDeploymentName,
   isAzureAiFoundryBaseUrl,
   isAzureOpenAiFirstPartyModelName,
@@ -14,6 +15,52 @@ import {
   isAzureThinkingModelName,
   normalizeAzureApiKey,
 } from "./azure-url";
+
+describe("Azure request query transport", () => {
+  it("preserves original query bytes and repeats while overriding generated defaults", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(new Response("{}"));
+    await createAzureFetchWithRequestQuery({
+      fetch,
+      rawQuery: "api-version=2025-01-01-preview&tag=a%2Fb&tag=a+b&empty=",
+    })("https://example.test/openai/responses?api-version=configured&keep=1");
+    expect(fetch.mock.calls[0][0]).toBe(
+      "https://example.test/openai/responses?keep=1&api-version=2025-01-01-preview&tag=a%2Fb&tag=a+b&empty=",
+    );
+  });
+  it("combines downstream cancellation with the SDK's request signal", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(new Response("{}"));
+    const downstream = new AbortController();
+    const sdk = new AbortController();
+    await createAzureFetchWithRequestQuery({
+      fetch,
+      abortSignal: downstream.signal,
+    })("https://example.test/openai/responses", { signal: sdk.signal });
+    const signal = fetch.mock.calls[0][1]?.signal;
+    expect(signal?.aborted).toBe(false);
+    downstream.abort();
+    expect(signal?.aborted).toBe(true);
+  });
+  it("keeps Request method, body and headers when adding a query", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(new Response("{}"));
+    await createAzureFetchWithRequestQuery({ fetch, rawQuery: "probe=1" })(
+      new Request("https://example.test/openai/responses", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      }),
+    );
+    const request = fetch.mock.calls[0][0] as Request;
+    expect(request.url).toBe("https://example.test/openai/responses?probe=1");
+    expect(request.method).toBe("POST");
+    expect(await request.text()).toBe("{}");
+  });
+});
 
 describe("buildAzureDeploymentsUrl", () => {
   it("builds a deployments URL from an Azure deployment base URL", () => {
@@ -243,6 +290,18 @@ describe("buildAzureDeploymentBaseUrl", () => {
         deploymentName: "gpt-4o",
       }),
     ).toBe("https://my-resource.services.ai.azure.com/openai/v1");
+  });
+
+  it("uses the classic deployment surface for an explicit native SDK path", () => {
+    expect(
+      buildAzureDeploymentBaseUrl({
+        baseUrl: "https://my-resource.services.ai.azure.com/openai/v1/",
+        deploymentName: "custom deployment",
+        overrideDeployment: true,
+      }),
+    ).toBe(
+      "https://my-resource.services.ai.azure.com/openai/deployments/custom%20deployment",
+    );
   });
 
   it("returns null for invalid base URLs", () => {

@@ -41,6 +41,41 @@ describe("auth routes", () => {
     await app.close();
   });
 
+  test("does not forward direct SSO provider registration", async () => {
+    vi.mocked(betterAuth.handler).mockResolvedValue(
+      new Response("{}", { status: 200 }),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/sso/register",
+      payload: { providerId: "personal-provider" },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(betterAuth.handler).not.toHaveBeenCalled();
+  });
+
+  test("does not relay session cookies from a rejected SSO callback", async () => {
+    vi.mocked(betterAuth.handler).mockResolvedValue(
+      new Response(JSON.stringify({ message: "Sign-in denied" }), {
+        status: 403,
+        headers: {
+          "content-type": "application/json",
+          "set-cookie": "archestra.session_token=fake; HttpOnly; Path=/",
+        },
+      }),
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/auth/sso/callback/test-provider?code=fake",
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.headers["set-cookie"]).toBeUndefined();
+  });
+
   test("applies organization OAuth token lifetime to OAuth 2.1 token responses", async ({
     makeAgent,
     makeOAuthAccessToken,

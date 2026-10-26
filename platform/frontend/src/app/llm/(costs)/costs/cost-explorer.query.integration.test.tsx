@@ -131,6 +131,9 @@ it("distinguishes app opens from inference and includes all groups", async () =>
             llmRequests: 2,
             inputTokens: 20,
             outputTokens: 10,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            totalTokens: 30,
             billedCost: 1,
             subscriptionCost: 0,
           },
@@ -141,6 +144,9 @@ it("distinguishes app opens from inference and includes all groups", async () =>
           llmRequests: 2,
           inputTokens: 20,
           outputTokens: 10,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 30,
           billedCost: 1,
           subscriptionCost: 0,
         },
@@ -158,6 +164,53 @@ it("distinguishes app opens from inference and includes all groups", async () =>
     llmRequests: 2,
     toolCalls: 3,
   });
+});
+
+it("uses the reported app token total without cache reads instead of adding raw input and output", async () => {
+  server.use(
+    http.get(`${origin}/api/statistics/app-usage`, () =>
+      HttpResponse.json({
+        ...response([
+          {
+            day: "2026-01-01",
+            appId: "demo-app",
+            appName: "Demo App",
+            runs: 1,
+            toolCalls: 0,
+            llmRequests: 1,
+            inputTokens: 900,
+            outputTokens: 10,
+            cacheReadTokens: 30,
+            cacheWriteTokens: 40,
+            totalTokens: 80,
+            billedCost: 0,
+            subscriptionCost: 0,
+          },
+        ]),
+        totals: {
+          runs: 1,
+          llmRequests: 1,
+          inputTokens: 900,
+          outputTokens: 10,
+          cacheReadTokens: 30,
+          cacheWriteTokens: 40,
+          totalTokens: 80,
+        },
+      }),
+    ),
+  );
+  const { result } = renderHook(
+    () =>
+      usePivotCube(
+        { metric: "tokens", group: "app", split: "none", chart: "bars" },
+        "30d",
+        true,
+      ),
+    { wrapper },
+  );
+  await waitFor(() => expect(result.current.total).toBe(80));
+  expect(result.current.rows[0].total).toBe(80);
+  expect(result.current.rows[0].series).toEqual([80]);
 });
 
 it("keeps skill reach distinct from activation counts", async () => {
@@ -232,7 +285,7 @@ it.each([
   expect(result.current.isLoading).toBe(false);
 });
 
-it("aligns uneven model series by timestamp without crashing the overview", async () => {
+it("aligns reported token totals with cache writes and without cache reads or estimated input", async () => {
   server.use(
     http.get(`${origin}/api/statistics/costs`, () =>
       HttpResponse.json({
@@ -248,31 +301,38 @@ it("aligns uneven model series by timestamp without crashing the overview", asyn
             requests: 9,
             inputTokens: 90,
             outputTokens: 9,
-            cacheReadTokens: 0,
+            cacheReadTokens: 20,
+            cacheWriteTokens: 5,
+            totalTokens: 104,
             timeSeries: [
               {
                 timestamp: "2026-01-01T00:00:00Z",
                 requests: 4,
                 inputTokens: 40,
+                totalTokens: 36,
               },
               {
                 timestamp: "2026-01-02T00:00:00Z",
                 requests: 5,
                 inputTokens: 50,
+                totalTokens: 48,
               },
             ],
           },
           {
             model: "second",
             requests: 3,
-            inputTokens: 30,
+            inputTokens: 100,
             outputTokens: 3,
-            cacheReadTokens: 0,
+            cacheReadTokens: 7,
+            cacheWriteTokens: 11,
+            totalTokens: 14,
             timeSeries: [
               {
                 timestamp: "2026-01-02T00:00:00Z",
                 requests: 3,
-                inputTokens: 30,
+                inputTokens: 100,
+                totalTokens: 14,
               },
             ],
           },
@@ -287,7 +347,7 @@ it("aligns uneven model series by timestamp without crashing the overview", asyn
   await waitFor(() => expect(result.current.isUsagePending).toBe(false));
   expect(result.current.people.value).toBe(53);
   expect(result.current.requests).toEqual({ value: 12, series: [4, 8] });
-  expect(result.current.tokens).toEqual({ value: 132, series: [40, 80] });
+  expect(result.current.tokens).toEqual({ value: 118, series: [36, 62] });
 });
 
 it("deduplicates overview and model chart requests without eagerly fetching user details", async () => {
@@ -306,7 +366,11 @@ it("deduplicates overview and model chart requests without eagerly fetching user
             inputTokens: 10,
             outputTokens: 2,
             cacheReadTokens: 0,
-            timeSeries: [{ timestamp: "2026-01-01", value: 2 }],
+            cacheWriteTokens: 0,
+            totalTokens: 12,
+            timeSeries: [
+              { timestamp: "2026-01-01", value: 2, totalTokens: 12 },
+            ],
           },
         ],
       });

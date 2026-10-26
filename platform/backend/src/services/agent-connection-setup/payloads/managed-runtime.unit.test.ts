@@ -15,6 +15,7 @@ import { promisify } from "node:util";
 import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { KILO_CLIENT, OPENCODE_CLIENT } from "../opencode-family";
+import type { SetupScriptProxySection } from "../types";
 import { managedRuntimeManifest } from "./managed-runtime";
 import { MANAGED_RUNTIME_BOOTSTRAP } from "./managed-runtime-bootstrap";
 import { managedRuntimeInstall } from "./managed-runtime-install";
@@ -32,10 +33,12 @@ async function fixture({
   client = KILO_CLIENT,
   apiMajor = 1,
   version,
+  proxy = null,
 }: {
   client?: typeof KILO_CLIENT;
   apiMajor?: number;
   version?: string;
+  proxy?: SetupScriptProxySection | null;
 } = {}) {
   const home = await mkdtemp(path.join(tmpdir(), "managed-runtime-"));
   roots.push(home);
@@ -44,7 +47,7 @@ async function fixture({
     platform: "linux" as const,
     appName: "Test Platform",
     mcp: { serverName: name, url, toolPrefix: name },
-    proxy: null,
+    proxy,
     skills: null,
     managedRuntimeSource: {
       url: "https://deployment.example.com/api/connection-setups/runtime",
@@ -140,11 +143,12 @@ describe("managed runtime trust boundary", () => {
     expect(original.plugin[0]).toContain("/tui.mjs");
     await writeFile(
       tui,
-      JSON.stringify({
-        ...original,
-        theme: "custom",
-        plugin: ["other-plugin", ...original.plugin],
-      }),
+      "\uFEFF" +
+        JSON.stringify({
+          ...original,
+          theme: "custom",
+          plugin: ["other-plugin", ...original.plugin],
+        }),
     );
     await exec(process.execPath, [files.installPath], { env: files.env });
     expect(JSON.parse(await readFile(tui, "utf8"))).toEqual({
@@ -155,6 +159,33 @@ describe("managed runtime trust boundary", () => {
       await readFile(path.join(files.root, "params.json"), "utf8"),
     );
     expect(parameters.questionCards).toBe(true);
+  });
+
+  test("stores the passthrough key apart from any route", async () => {
+    // A setup that knew no passthrough route still keeps the key, so a route
+    // the deployment's catalog lists later can carry it.
+    const files = await fixture({
+      proxy: {
+        baseUrl: "https://deployment.example.com/v1/proxy",
+        routingAgentId: "agent",
+        primaryProviders: [],
+        passthroughProviders: [],
+        virtualKey: null,
+        passthroughVirtualKey: "passthrough-secret",
+      } as unknown as SetupScriptProxySection,
+    });
+    const parameters = JSON.parse(
+      await readFile(path.join(files.root, "params.json"), "utf8"),
+    );
+    expect(parameters.passthroughHeaders).toEqual({
+      "X-Archestra-Virtual-Key": "passthrough-secret",
+    });
+    const withoutKey = await fixture();
+    expect(
+      JSON.parse(
+        await readFile(path.join(withoutKey.root, "params.json"), "utf8"),
+      ),
+    ).not.toHaveProperty("passthroughHeaders");
   });
 
   test.each([
@@ -351,6 +382,16 @@ console.log(JSON.stringify({ updated: cfg.updatedGeneration, headers: output.hea
     );
   });
 
+  test("reconnect refuses a retained file that would fail launcher ownership checks", async () => {
+    const files = await fixture();
+    const checked = path.join(files.root, "last-check.json");
+    await writeFile(checked, "{}", { mode: 0o666 });
+    await chmod(checked, 0o666);
+    await expect(
+      exec(process.execPath, ["-e", files.install.script], { env: files.env }),
+    ).rejects.toThrow("Unsafe managed runtime ownership");
+  });
+
   test("serializes concurrent launches and never exposes a partially-written generation", async () => {
     const files = await fixture();
     const fetch = vi.fn().mockImplementation(async () => {
@@ -495,12 +536,12 @@ describe("pre-bind local repair", () => {
   test.each([
     KILO_CLIENT,
     OPENCODE_CLIENT,
-  ])("$label repairs offline and preserves JSONC authentication/comments and snapshots", async (client) => {
+  ])("$label repairs BOM-prefixed JSON offline and preserves JSONC authentication/comments and snapshots", async (client) => {
     const files = await fixture({ client });
     const canonical = { type: "remote", url };
     await writeFile(
       files.configPath,
-      JSON.stringify({ mcp: { [name]: canonical } }),
+      `\uFEFF${JSON.stringify({ mcp: { [name]: canonical } })}`,
       { mode: 0o600 },
     );
     const sibling = `// preserved\n{"mcp":{"my_gateway":{"type":"remote","url":"${url}","headers":{"Authorization":"Bearer example-token"},"oauth":false}}}`;

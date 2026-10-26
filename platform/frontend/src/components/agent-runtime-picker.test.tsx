@@ -148,6 +148,19 @@ describe("AgentRuntimePicker", () => {
     expect(savedRuntime().inferenceProtocol).toBe("openai_chat");
   });
 
+  it("keeps Grok Build on Chat Completions without offering a protocol choice", async () => {
+    const user = userEvent.setup();
+    await renderPicker("codex");
+    await user.click(screen.getByRole("radio", { name: "Grok Build" }));
+    expect(
+      screen.queryByRole("button", { name: /^Inference API/ }),
+    ).not.toBeInTheDocument();
+    expect(savedRuntime()).toMatchObject({
+      command: ["archestra-grok"],
+      inferenceProtocol: "openai_chat",
+    });
+  });
+
   it("corrects incompatible protocols when a custom command changes harnesses, retaining compatible choices", async () => {
     const user = userEvent.setup();
     await renderPicker("custom");

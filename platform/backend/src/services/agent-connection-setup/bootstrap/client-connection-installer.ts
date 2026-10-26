@@ -10,7 +10,7 @@ const { spawn, spawnSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { closeSync, openSync, readSync } = require('node:fs');
 const { mkdtemp, open, writeFile, readFile, rm, access } = require('node:fs/promises');
-const { hostname, tmpdir } = require('node:os');
+const { hostname, tmpdir, homedir } = require('node:os');
 const { join } = require('node:path');
 
 async function main() {
@@ -244,7 +244,10 @@ const installerEnv = { ...process.env, ARCHESTRA_CONNECT_INSTALLER: '1' };
 function finishSetup(ending, platform) {
   if (!ending) return;
   const paint = (code, text) => process.stdout.isTTY && !process.env.NO_COLOR ? '\x1b[' + code + 'm' + text + '\x1b[0m' : text;
-  console.log('\n' + paint('1;32', ending.label + ' is connected to ' + ending.appName + '.'));
+  const summary = ending.signIn
+    ? ending.label + ' connection settings are saved. MCP sign-in is still required.'
+    : ending.label + ' is connected to ' + ending.appName + '.';
+  console.log('\n' + paint('1;32', summary));
   if (ending.parts.length) {
     const width = Math.max(...ending.parts.map(part => part.name.length));
     console.log('\n' + ending.parts.map(part => '  ' + paint('1', part.name.padEnd(width)) + '   ' + part.detail).join('\n'));
@@ -258,10 +261,16 @@ function finishSetup(ending, platform) {
   try {
     if (ending.signIn) {
       console.log('\n' + paint('1', 'Authorize ' + ending.label + ' for the "' + ending.signIn.gatewayName + '" MCP gateway'));
-      const windowsLine = ending.signIn.command && platform === 'windows' ? windowsCommandLine(ending.signIn.command) : null;
-      const runnable = ending.signIn.command && (platform !== 'windows' || windowsLine !== null);
-      if (runnable && terminal !== null && ask(terminal, '  Authorize now? This opens ' + ending.appName + ' in your browser. [Y/n] ')) {
-        const child = windowsLine !== null
+      const piReconnect = ending.signIn.command?.length === 2 && ending.signIn.command[0] === 'arcpi' && ending.signIn.command[1] === '--reconnect';
+      const windowsLine = !piReconnect && ending.signIn.command && platform === 'windows' ? windowsCommandLine(ending.signIn.command) : null;
+      const runnable = ending.signIn.command && (piReconnect || platform !== 'windows' || windowsLine !== null);
+      const signInQuestion = piReconnect
+        ? '  Authorize now? Keep your existing Pi login or choose to sign in again. [Y/n] '
+        : '  Authorize now? This opens ' + ending.appName + ' in your browser. [Y/n] ';
+      if (runnable && terminal !== null && ask(terminal, signInQuestion)) {
+        const child = piReconnect
+          ? spawnSync(process.execPath, [join(homedir(), '.archestra', 'pi', 'launch.cjs'), '--reconnect'], { stdio: [terminal, 'inherit', 'inherit'], shell: false })
+          : windowsLine !== null
           ? spawnSync(windowsLine, { stdio: [terminal, 'inherit', 'inherit'], shell: true })
           : spawnSync(ending.signIn.command[0], ending.signIn.command.slice(1), { stdio: [terminal, 'inherit', 'inherit'] });
         console.log(!child.error && child.status === 0 ? paint('1;32', '  Signed in.') : '  Sign-in did not finish. ' + ending.signIn.howTo);

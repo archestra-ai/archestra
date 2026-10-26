@@ -162,6 +162,113 @@ describe("LlmProxyPage connect steps", () => {
     );
   });
 
+  it.each([
+    "standard",
+    "passthrough",
+  ] as const)("selects image examples by capabilities for %s credentials and restores text requests", async (keyType) => {
+    const mapping = {
+      provider: "gemini",
+      providerApiKeyId: "pk-gemini",
+      providerApiKeyName: "Studio",
+    };
+    const models = [
+      {
+        modelId: "gemini-nano-banana-2.1",
+        outputModalities: ["text", "image"],
+        isBest: true,
+      },
+      { modelId: "gemini-2.5-flash-image", outputModalities: ["image"] },
+      { modelId: "gemini-3-pro-image", outputModalities: ["text", "image"] },
+      { modelId: "gemini-3.1-flash-image", outputModalities: ["image"] },
+      { modelId: "gemini-3.8-flash", outputModalities: ["text"] },
+      {
+        modelId: "gemini-other-key",
+        outputModalities: ["image"],
+        unmapped: true,
+      },
+    ].map(({ unmapped, ...model }) => ({
+      ...model,
+      provider: "gemini",
+      ignored: false,
+      embeddingDimensions: null,
+      inputModalities: ["text", "image"],
+      apiKeys: [{ id: unmapped ? "other-key" : mapping.providerApiKeyId }],
+    }));
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json([
+          {
+            ...JEV_PROVIDER_KEY,
+            id: mapping.providerApiKeyId,
+            name: "Studio",
+            provider: "gemini",
+          },
+        ]),
+      ),
+      http.get(`${API_ORIGIN}/api/llm-virtual-keys`, ({ request }) =>
+        HttpResponse.json(
+          page(
+            new URL(request.url).searchParams.get("keyType") === "passthrough"
+              ? [PASSTHROUGH_KEY]
+              : [{ ...JUDGE_KEY, providerApiKeys: [mapping] }],
+          ),
+        ),
+      ),
+      http.get(`${API_ORIGIN}/api/llm-models`, () => HttpResponse.json(models)),
+      http.get(`${API_ORIGIN}/api/llm-models/available`, () =>
+        HttpResponse.json(
+          models
+            .filter((model) => model.modelId !== "gemini-other-key")
+            .map((model) => ({
+              id: model.modelId,
+              provider: model.provider,
+              isBest: model.isBest,
+              capabilities: { outputModalities: model.outputModalities },
+            })),
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "Gemini" }));
+    if (keyType === "passthrough") {
+      await user.click(screen.getByRole("radio", { name: /Passthrough/ }));
+    }
+    const requestBlock = (
+      await screen.findByText(/gemini-nano-banana-2.1:generateContent/)
+    ).closest("pre");
+    expect(requestBlock).toHaveTextContent('"responseModalities": [');
+    expect(requestBlock).toHaveTextContent('"IMAGE"');
+    expect(requestBlock).not.toHaveTextContent("Hello!");
+    if (keyType === "passthrough") {
+      expect(requestBlock).toHaveTextContent("x-goog-api-key: $GEMINI_API_KEY");
+      expect(requestBlock).toHaveTextContent("X-Archestra-Virtual-Key:");
+    }
+    expect(screen.getByText(/base64 image data/)).toBeVisible();
+    expect(screen.queryByLabelText("Image operation")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("combobox", { name: "Model" }));
+    expect(
+      screen.getByRole("option", { name: "gemini-2.5-flash-image" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("option", { name: "gemini-3-pro-image" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("option", { name: "gemini-3.1-flash-image" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("option", { name: "gemini-other-key" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "gemini-3.8-flash" }));
+    const textBlock = (
+      await screen.findByText(/gemini-3.8-flash:generateContent/)
+    ).closest("pre");
+    expect(textBlock).toHaveTextContent("Hello!");
+    expect(textBlock).not.toHaveTextContent("responseModalities");
+    expect(screen.queryByText(/base64 image data/)).not.toBeInTheDocument();
+  });
+
   it("connects to Jev with the existing virtual key that maps the Jev key", async () => {
     server.use(
       http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>

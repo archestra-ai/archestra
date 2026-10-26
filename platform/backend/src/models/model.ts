@@ -1,9 +1,9 @@
 import {
   CACHE_PRICE_MULTIPLIERS,
-  getAzureModelKind,
   PROVIDERS_BILLING_NO_TOKEN_RATE,
   type SupportedProvider,
 } from "@archestra/shared";
+import type { AzureModelEvidence } from "@archestra/shared/azure-models";
 import {
   and,
   count,
@@ -16,6 +16,7 @@ import {
 } from "drizzle-orm";
 import { sanitizeOutputLimit } from "@/clients/models-dev-client";
 import db, { schema, withDbTransaction } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import logger from "@/logging";
 import { resolveBedrockAwsPrices } from "@/services/bedrock-aws-pricing";
 import type {
@@ -303,17 +304,22 @@ class ModelModel {
     provider: SupportedProvider,
     modelId: string,
   ): Promise<Model | null> {
-    const [result] = await db
-      .select()
-      .from(schema.modelsTable)
-      .where(
-        and(
-          eq(schema.modelsTable.provider, provider),
-          eq(schema.modelsTable.modelId, modelId),
-        ),
-      );
+    const [result] = await ModelModel.byProviderAndModel
+      .get()
+      .execute({ provider, modelId });
 
     return result || null;
+  }
+
+  /** Proxy discovery and authorization need identity, not pricing/capability payloads. */
+  static async findIdentityByProviderAndModelId(
+    provider: SupportedProvider,
+    modelId: string,
+  ) {
+    const [model] = await ModelModel.identityByProviderAndModel
+      .get()
+      .execute({ provider, modelId });
+    return model ?? null;
   }
 
   /**
@@ -794,6 +800,10 @@ class ModelModel {
     modelId: string,
     provider: SupportedProvider,
   ): Promise<Model | null> {
+    // Most calls refer to a catalogued model. Read it without opening a
+    // transaction or attempting a conflicting INSERT on every request.
+    if (await ModelModel.findByProviderAndModelId(provider, modelId))
+      return null;
     return withDbTransaction(async (tx) => {
       // RETURNING yields a row only when this call did the insert, which is what
       // tells the caller a model was seen for the first time and still needs its
@@ -1249,17 +1259,23 @@ class ModelModel {
 
     return {
       contextLength: ModelModel.resolveEffectiveContextLength(model),
-      inputModalities: model.inputModalities,
-      outputModalities: model.outputModalities,
+      inputModalities: model.azureCapabilities
+        ? (model.azureCapabilities.inputModalities ?? null)
+        : model.inputModalities,
+      outputModalities: model.azureCapabilities
+        ? (model.azureCapabilities.outputModalities ?? null)
+        : model.outputModalities,
       // Chat's Azure media bridge produces files without running agent tools,
       // even when the upstream model registry advertises native tool support.
       supportsToolCalling:
         model.provider === "azure" &&
         ["image", "audio", "realtime", "translation"].includes(
-          getAzureModelKind(model.modelId),
+          model.azureCapabilities?.kind ?? "text",
         )
           ? false
-          : model.supportsToolCalling,
+          : model.azureCapabilities
+            ? (model.azureCapabilities.supportsToolCalling ?? null)
+            : model.supportsToolCalling,
       supportsReasoningEffort: model.supportsReasoningEffort,
       supportedEndpoints: model.supportedEndpoints,
       recommendedForAgents,
@@ -1273,9 +1289,19 @@ class ModelModel {
     };
   }
 
-  static supportsTextChat(model: Model): boolean {
+  static supportsTextChat(
+    model: Model & { azureCapabilities?: AzureModelEvidence | null },
+  ): boolean {
     if (model.ignored) {
       return false;
+    }
+
+    if (model.provider === "azure" && model.azureCapabilities) {
+      return model.azureCapabilities.operations.some((operation) =>
+        ["chat", "responses", "image-generation", "realtime-turn"].includes(
+          operation,
+        ),
+      );
     }
 
     if (model.embeddingDimensions !== null) {
@@ -1285,7 +1311,7 @@ class ModelModel {
     // Translation uses typed text as a language setting and a WAV upload as input.
     if (
       model.provider === "azure" &&
-      getAzureModelKind(model.modelId) === "translation"
+      model.azureCapabilities?.kind === "translation"
     )
       return true;
 
@@ -1295,7 +1321,7 @@ class ModelModel {
 
     if (
       model.provider === "azure" &&
-      getAzureModelKind(model.modelId) === "image"
+      model.azureCapabilities?.kind === "image"
     ) {
       return true;
     }
@@ -1307,10 +1333,13 @@ class ModelModel {
     return true;
   }
 
-  static supportsEmbeddings(model: Model): boolean {
+  static supportsEmbeddings(model: ProviderPricedModel): boolean {
     if (model.ignored) {
       return false;
     }
+
+    if (model.provider === "azure" && model.azureCapabilities)
+      return model.azureCapabilities.kind === "embedding";
 
     return model.embeddingDimensions !== null;
   }
@@ -1379,6 +1408,37 @@ class ModelModel {
   > {
     return { llmModelRowCount: await ModelModel.countAll() };
   }
+
+  private static readonly byProviderAndModel = new PreparedQuery((database) =>
+    database
+      .select()
+      .from(schema.modelsTable)
+      .where(
+        and(
+          eq(schema.modelsTable.provider, sql.placeholder("provider")),
+          eq(schema.modelsTable.modelId, sql.placeholder("modelId")),
+        ),
+      )
+      .prepare("archestra_model_by_provider_and_model"),
+  );
+
+  private static readonly identityByProviderAndModel = new PreparedQuery(
+    (database) =>
+      database
+        .select({
+          id: schema.modelsTable.id,
+          provider: schema.modelsTable.provider,
+          modelId: schema.modelsTable.modelId,
+        })
+        .from(schema.modelsTable)
+        .where(
+          and(
+            eq(schema.modelsTable.provider, sql.placeholder("provider")),
+            eq(schema.modelsTable.modelId, sql.placeholder("modelId")),
+          ),
+        )
+        .prepare("archestra_proxy_model_identity"),
+  );
 }
 
 export default ModelModel;

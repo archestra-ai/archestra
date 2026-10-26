@@ -97,7 +97,7 @@ export const METRICS: Record<
   tokens: {
     label: "Tokens",
     money: false,
-    note: "Input, output and cached tokens. Includes cached tokens.",
+    note: "Counts newly processed input and output. Reused cached input is shown separately and is not included. Requests in flight may not appear yet.",
   },
   toolCalls: {
     label: "Tool calls",
@@ -336,6 +336,7 @@ export type CubeChild = {
 };
 
 export type CubeRow = {
+  limitTarget?: { entityType: "virtual_key"; entityId: string };
   key: string;
   label: string;
   sub?: string;
@@ -610,7 +611,7 @@ export function usePivotCube(
             : metric === "requests"
               ? r.llmRequests
               : metric === "tokens"
-                ? r.inputTokens + r.outputTokens
+                ? r.totalTokens
                 : metric === "toolCalls"
                   ? r.toolCalls
                   : r.runs;
@@ -816,6 +817,7 @@ export function usePivotCube(
             gLabel: item.label,
             gSub: item.sub,
             gTag: item.tag,
+            limitTarget: "limitTarget" in item ? item.limitTarget : undefined,
           });
           const series = itemQs[i]?.data?.timeSeries ?? [];
           for (const p of series) {
@@ -824,6 +826,7 @@ export function usePivotCube(
               gLabel: item.label,
               gSub: item.sub,
               gTag: item.tag,
+              limitTarget: "limitTarget" in item ? item.limitTarget : undefined,
               b: p.timestamp,
               v: pointValue(metric, p),
             });
@@ -983,6 +986,7 @@ function apiFor(src: Source, tf: string, q: PivotQuery) {
 }
 
 type Fact = {
+  limitTarget?: CubeRow["limitTarget"];
   g: string;
   gLabel: string;
   gSub?: string;
@@ -995,6 +999,7 @@ type Fact = {
 };
 
 type SeriesPointLike = {
+  totalTokens?: number;
   value?: number;
   requests?: number;
   inputTokens?: number;
@@ -1013,9 +1018,7 @@ function pointValue(metric: MetricId, p: SeriesPointLike) {
     case "requests":
       return p.requests ?? 0;
     case "tokens":
-      return (
-        (p.inputTokens ?? 0) + (p.outputTokens ?? 0) + (p.cacheReadTokens ?? 0)
-      );
+      return p.totalTokens ?? 0;
     default:
       return 0;
   }
@@ -1073,6 +1076,7 @@ function assemble(
         label: m.gLabel,
         sub: m.gSub,
         tag: m.gTag,
+        limitTarget: m.limitTarget,
         total: 0,
         series: buckets.map(() => 0),
         hasSeries: false,
@@ -1186,6 +1190,7 @@ function proxyItemsFor(
       label: METHOD_NAMES[m.authMethod] ?? m.authMethod,
       sub: undefined as string | undefined,
       tag: undefined as string | undefined,
+      limitTarget: undefined as CubeRow["limitTarget"],
       totals: m,
       filter: { authMethod: m.authMethod } as ProxyFilter | null,
     }));
@@ -1204,6 +1209,12 @@ function proxyItemsFor(
         : null;
     return {
       key: c.credentialId ?? `${c.authMethod}#${i}`,
+      limitTarget:
+        c.credentialId &&
+        (c.authMethod === "virtual_key" ||
+          c.authMethod === "passthrough_virtual_key")
+          ? { entityType: "virtual_key" as const, entityId: c.credentialId }
+          : undefined,
       label: c.credentialName ?? method,
       sub: c.credentialId
         ? `ID ${c.credentialId}`

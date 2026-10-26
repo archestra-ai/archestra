@@ -7,6 +7,7 @@ import {
   encodeCursor,
 } from "@/database/utils/pagination";
 import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
+import { openPlainJson } from "@/openappa/plaintext-envelope";
 import type {
   ExternalConsult,
   ExternalConsultOutcome,
@@ -55,7 +56,7 @@ class OpenappaExternalConsultModel {
       .from(table)
       .where(and(...conditions))
       .limit(1);
-    return row ?? null;
+    return row ? readable(row) : null;
   }
 
   /** The cursor that continues right after `row`, for a page cut short. */
@@ -209,12 +210,13 @@ class OpenappaExternalConsultModel {
       );
     }
 
-    return db
+    const rows = await db
       .select()
       .from(table)
       .where(and(...conditions))
       .orderBy(desc(table.createdAt), desc(table.id))
       .limit(params.size);
+    return rows.map(readable);
   }
 }
 
@@ -235,6 +237,18 @@ export interface ExternalConsultFilters {
 
 function cursorPosition(row: ExternalConsult) {
   return { value: row.createdAt.toISOString(), id: row.id };
+}
+
+/**
+ * A consult as the runtime recorded it: a request or answer holding a NUL
+ * character is stored in the plaintext escape envelope and read through it.
+ */
+function readable(row: ExternalConsult): ExternalConsult {
+  return {
+    ...row,
+    request: openPlainJson(row.request),
+    answer: openPlainJson(row.answer),
+  };
 }
 
 const EXPORT_PAGE_SIZE = 500;

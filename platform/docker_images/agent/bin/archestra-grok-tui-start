@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+"""Submit the task only after this Grok Build TUI has loaded its MCP catalog.
+
+Grok's startup prompt is sent about two seconds after launch whether or not the
+gateway's tools have loaded. The TUI's session records the gateway's outcome in
+its own `events.jsonl` once tools/list returned: connected with a tool count,
+or failed. Wait for that record and for the prompt before sending the task. No
+separate connection or sleep establishes readiness. Real-client image tests pin
+the supported CLI's record.
+"""
+
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import time
+
+DISCOVERY_TIMEOUT_SECONDS = 35
+
+
+def screen(pane: str) -> str:
+    return subprocess.check_output(["tmux", "capture-pane", "-p", "-t", pane], text=True)
+
+
+def gateway_state(since: float) -> str:
+    runtime_dir = Path(os.environ.get("ARCHESTRA_AGENT_RUNTIME_DIR", "/var/run/archestra"))
+    session_file = runtime_dir / "grok-main-session"
+    session = session_file.read_text().strip() if session_file.exists() else ""
+    command = [str(Path(__file__).with_name("archestra-grok-gateway-state")), str(since)]
+    result = subprocess.run(command + ([session] if session else []), capture_output=True, text=True, check=False)
+    return result.stdout.strip() or "pending"
+
+
+def submit_task(pane: str, task: str) -> None:
+    # A tmux command is limited to about 16 KB, so `send-keys -l` refuses
+    # long tasks. A buffer has no such limit. -p keeps bracketed paste so a
+    # multiline task stays one submitted prompt; -r keeps its line feeds.
+    buffer = f"archestra-task-{os.getpid()}"
+    subprocess.run(["tmux", "load-buffer", "-b", buffer, "-"], input=task.encode(), check=True)
+    try:
+        subprocess.run(["tmux", "paste-buffer", "-p", "-r", "-b", buffer, "-t", pane], check=True)
+    finally:
+        subprocess.run(["tmux", "delete-buffer", "-b", buffer], stderr=subprocess.DEVNULL, check=False)
+    time.sleep(0.3)
+    subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], check=True)
+
+
+def main() -> int:
+    pane = os.environ.get("TMUX_PANE")
+    child = None
+    failure = "archestra-mcp-startup-failure"
+    # The record's timestamps have millisecond precision.
+    since = time.time() - 1
+    try:
+        if not pane:
+            raise RuntimeError("The Grok Build TUI requires the runtime tmux pane")
+        child = subprocess.Popen(sys.argv[1:])
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(signum, lambda number, _frame: child.send_signal(number))
+        deadline = time.monotonic() + DISCOVERY_TIMEOUT_SECONDS
+        ready = False
+        while child.poll() is None and time.monotonic() < deadline:
+            state = gateway_state(since)
+            if state == "failed":
+                break
+            if state.startswith("ready "):
+                tools = int(state.split()[1])
+                # OpenAPPA always lists its recovery tools; an empty catalog
+                # is a failure. Without OpenAPPA an Agent may have no tools.
+                if tools == 0 and os.environ.get("ARCHESTRA_AGENT_RUNTIME_OPENAPPA") == "1":
+                    break
+                text = screen(pane)
+                if "╭" in text and "❯" in text:
+                    ready = True
+                    break
+            time.sleep(0.2)
+        if ready:
+            task = os.environ.get("ARCHESTRA_AGENT_RUNTIME_TASK", "")
+            if not task:
+                # An interactive restore opens the saved session for input.
+                return child.wait()
+            try:
+                submit_task(pane, task)
+            except (OSError, subprocess.SubprocessError) as error:
+                print(f"archestra: task submission failed: {error}", file=sys.stderr)
+                failure = "archestra-task-submission-failure"
+            else:
+                return child.wait()
+    except (OSError, subprocess.SubprocessError, RuntimeError, ValueError) as error:
+        # The run fails through the startup-failure helper below; say why here.
+        print(f"archestra: Grok Build terminal start failed: {type(error).__name__}: {error}", file=sys.stderr)
+    finally:
+        if child and child.poll() is None:
+            child.terminate()
+            try:
+                child.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait()
+    subprocess.run([str(Path(__file__).with_name(failure))], check=False)
+    return 78
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

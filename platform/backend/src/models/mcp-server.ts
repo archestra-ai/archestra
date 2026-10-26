@@ -1472,6 +1472,32 @@ class McpServerModel {
     return null;
   }
 
+  static async hasSecretReference(secretId: string): Promise<boolean> {
+    const [reference] = await db
+      .select({ id: schema.mcpServersTable.id })
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.secretId, secretId))
+      .limit(1);
+    return reference !== undefined;
+  }
+
+  static async hasOtherSecretReference(params: {
+    secretId: string;
+    mcpServerId: string;
+  }): Promise<boolean> {
+    const [reference] = await db
+      .select({ id: schema.mcpServersTable.id })
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          eq(schema.mcpServersTable.secretId, params.secretId),
+          ne(schema.mcpServersTable.id, params.mcpServerId),
+        ),
+      )
+      .limit(1);
+    return reference !== undefined;
+  }
+
   static async findById(
     id: string,
     userId?: string,
@@ -2806,12 +2832,15 @@ class McpServerModel {
       await McpServerModel.hardDelete(server.id);
       purgedIds.push(server.id);
 
-      if (server.secretId) {
+      if (
+        server.secretId &&
+        !(await McpServerModel.hasSecretReference(server.secretId))
+      ) {
         try {
           await secretManager().deleteSecret(server.secretId);
         } catch (error) {
-          // The install is already gone, so nothing points at this secret
-          // anymore. Log the id loudly — it needs a manual sweep.
+          // The install is already gone, so nothing points at this secret.
+          // Log the id loudly — it needs a manual sweep.
           logger.error(
             { err: error, userId, secretId: server.secretId },
             "McpServerModel.purgeInstallRows: failed to delete credential secret; it is now orphaned",

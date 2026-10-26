@@ -318,6 +318,7 @@ function createRun(endedAt: string | null): AgentRunListItem {
     endedAt,
     state: endedAt ? "TASK_STATE_COMPLETED" : "TASK_STATE_WORKING",
     statusReason: null,
+    failure: null,
     stateChangedAt: "2026-09-03T20:00:05.000Z",
     initiatorName: "Alex Rivera",
     shareVisibility: null,

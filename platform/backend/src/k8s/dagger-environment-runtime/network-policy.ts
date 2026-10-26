@@ -1,4 +1,5 @@
 import type * as k8s from "@kubernetes/client-node";
+import type { ClusterIpFamily } from "@/k8s/cluster-ip-families";
 import {
   buildManagedAwsApplicationNetworkPolicy,
   buildManagedCiliumNetworkPolicy,
@@ -90,6 +91,8 @@ export function buildDaggerEgressPolicies(params: {
    * ClusterIP services. Only consumed by the floor.
    */
   additionalDeniedCidrs?: string[];
+  /** Families the cluster serves; only consumed by the floor. */
+  clusterIpFamilies?: ClusterIpFamily[];
 }): DaggerEgressPolicyObject[] {
   const { environmentId, effectivePolicy, capabilities } = params;
   const clusterDnsIps = params.clusterDnsIps ?? [];
@@ -119,6 +122,7 @@ export function buildDaggerEgressPolicies(params: {
           clusterDnsIps,
           additionalDeniedCidrs: params.additionalDeniedCidrs ?? [],
           allowedCidrs,
+          clusterIpFamilies: params.clusterIpFamilies ?? [],
         }),
       },
     ];

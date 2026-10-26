@@ -121,7 +121,9 @@ test("a transient API failure never breaks startup and a later pass retries", as
   expect(writes).toBe(0);
   server.use(http.get(API, () => HttpResponse.json({ items: [] })));
   await agentImagePrefetcher.reconcile();
-  expect(fleet.size).toBe(5);
+  expect(fleet.size).toBe(
+    Object.keys(config.agentRuntime.catalogImages).length,
+  );
 });
 
 test("refreshes floating catalog images when the stable platform version advances", async () => {

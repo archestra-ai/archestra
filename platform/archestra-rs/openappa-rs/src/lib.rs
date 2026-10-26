@@ -15,6 +15,7 @@ mod lease;
 mod peer;
 mod policy;
 mod replay;
+mod sealed;
 
 use appa_eventlog::{
     Backend, LogStore, OperationClaim, OperationKey, OperationRequest, ProcessedResultClaim,
@@ -475,6 +476,44 @@ fn invalid_input(message: impl ToString) -> napi::Error {
 
 fn storage(message: impl ToString) -> napi::Error {
     failure(Failure::Binding(BindingFailure::Storage), message)
+}
+
+/// A stored log the binding read directly could not be read, under the class a
+/// dispatch that read it would be refused with, so the host classifies the cause
+/// rather than reporting every read as storage.
+fn read_failure(read: appa_eventlog::ReadError) -> napi::Error {
+    use appa_eventlog::ReadError;
+    let class = match &read {
+        ReadError::Undecodable { .. } | ReadError::UndecodableKey { .. } => {
+            RefusalClass::UntrustedLog
+        }
+        ReadError::PolicyFileMissing { .. }
+        | ReadError::PolicyFileMismatch { .. }
+        | ReadError::UnknownRevision { .. } => RefusalClass::PolicyUnavailable,
+        ReadError::LegacyFamily { .. } => RefusalClass::LegacyFamily,
+        // The session names a root whose log is gone: as `read_refused`
+        // classes it, a trajectory that cannot continue.
+        ReadError::UnknownRoot { .. } => RefusalClass::Trajectory,
+        _ => return storage(read),
+    };
+    failure(Failure::Refused(class), read)
+}
+
+/// A session's label could not be read, under the class of its cause: the log's
+/// own read failure, an opening policy that no longer resolves, or a log that no
+/// longer replays.
+fn status_read_failure(read: appa_runtime::api::StatusReadError) -> napi::Error {
+    use appa_runtime::api::StatusReadError;
+    match read {
+        StatusReadError::Read(read) => read_failure(read),
+        StatusReadError::Policy(_) => {
+            failure(Failure::Refused(RefusalClass::PolicyUnavailable), read)
+        }
+        StatusReadError::Replay(_) => failure(Failure::Refused(RefusalClass::UntrustedLog), read),
+        StatusReadError::UnknownRoot { .. } => {
+            failure(Failure::Refused(RefusalClass::Trajectory), read)
+        }
+    }
 }
 
 fn panicked(message: impl ToString) -> napi::Error {
@@ -1374,7 +1413,7 @@ pub async fn openappa_root_kinds(roots: Vec<String>) -> napi::Result<Vec<Option<
                 Err(read) if read.to_string().contains("requires its conversation key") => {
                     Ok(Some("encrypted".to_owned()))
                 }
-                Err(read) => Err(storage(read)),
+                Err(read) => Err(read_failure(read)),
             })
             .collect()
     })
@@ -1470,7 +1509,7 @@ async fn session_status(state: State, key: SessionKey) -> napi::Result<Option<Op
             Err(appa_runtime::api::StatusReadError::Read(
                 appa_eventlog::ReadError::LegacyFamily { .. },
             )) => return Ok(None),
-            Err(read) => return Err(storage(read)),
+            Err(read) => return Err(status_read_failure(read)),
         };
         Ok(Some(OpenappaStatus {
             trust: status.trust,
@@ -1736,7 +1775,6 @@ pub async fn load_offer_review(
     offer_id: String,
     encryption: Option<ContentEncryption>,
 ) -> napi::Result<Option<OfferReviewOutput>> {
-    let session_id_for_output = session_id.clone();
     // Mirror execute_remedy_by_offer: clone state, drop the mutex, then lease
     // a connection before host SQL so review loads never contend with
     // dispatches on the runtime state mutex.
@@ -1744,27 +1782,8 @@ pub async fn load_offer_review(
     let leased = state.lease().await?;
     let pg = &Sql(&leased.state.store);
     if pg.0.cipher().is_encrypted() {
-        for (input, decision) in encrypted_receipts(pg, &organization_id, &session_id)? {
-            let Some(review) = decision["review"].as_array().and_then(|entries| {
-                entries
-                    .iter()
-                    .find(|entry| entry["offer_id"].as_str() == Some(&offer_id))
-            }) else {
-                continue;
-            };
-            let source = input
-                .get("context")
-                .or_else(|| input.get("semantic"))
-                .unwrap_or(&input);
-            return Ok(Some(OfferReviewOutput {
-                offer_id,
-                session_id,
-                text: review["text"].as_str().unwrap_or_default().to_owned(),
-                tool: source["tool"].as_str().map(str::to_owned),
-                arguments: source.get("arguments").map(Value::to_string),
-            }));
-        }
-        return Ok(None);
+        let receipts = encrypted_receipts(pg, &organization_id, &session_id)?;
+        return Ok(review_in(receipts, &offer_id, &session_id));
     }
     // The SQL closure needs its own offer id copy because it must be 'static.
     let target_offer_id = offer_id.clone();
@@ -1781,35 +1800,72 @@ pub async fn load_offer_review(
             // its host context, or the semantic input of a receipt that
             // predates context.
             let row = client.query_opt(
-                "SELECT entry->>'text' AS text, \
-                 COALESCE(o.input->'context'->>'tool', o.input->'semantic'->>'tool') AS tool, \
-                 COALESCE(o.input->'context'->'arguments', o.input->'semantic'->'arguments')::text AS arguments \
-                 FROM openappa_operations o \
-                 CROSS JOIN LATERAL jsonb_array_elements(o.decision->'review') AS entry \
-                 WHERE o.organization_id=$1 AND o.session_id=$2 AND o.status='complete' \
-                 AND o.decision->'review' IS NOT NULL \
-                 AND entry->>'offer_id' = $3 \
-                 ORDER BY o.created_at DESC \
-                 LIMIT 1",
+                &format!(
+                    "SELECT entry->>'text' AS text, \
+                     COALESCE(o.input->'context'->>'tool', o.input->'semantic'->>'tool') AS tool, \
+                     COALESCE(o.input->'context'->'arguments', o.input->'semantic'->'arguments')::text AS arguments \
+                     FROM openappa_operations o \
+                     CROSS JOIN LATERAL jsonb_array_elements(o.decision->'review') AS entry \
+                     WHERE o.organization_id=$1 AND o.session_id=$2 AND o.status='complete' \
+                     AND NOT {} \
+                     AND o.decision->'review' IS NOT NULL \
+                     AND entry->>'offer_id' = $3 \
+                     ORDER BY o.created_at DESC \
+                     LIMIT 1",
+                    sealed::ESCAPED
+                ),
                 &[&organization_id, &session_id, &target_offer_id],
             )?;
-            Ok(row.map(|row| {
-                (
-                    row.get::<_, String>("text"),
-                    row.get::<_, Option<String>>("tool"),
-                    row.get::<_, Option<String>>("arguments"),
-                )
-            }))
+            if let Some(row) = row {
+                return Ok(Some(OfferReviewOutput {
+                    offer_id: target_offer_id,
+                    text: row.get("text"),
+                    session_id,
+                    tool: row.get("tool"),
+                    arguments: row.get("arguments"),
+                }));
+            }
+            let opened = sealed::read(
+                client,
+                &StorageCipher::Plain,
+                sealed::Receipts::Escaped,
+                "o.organization_id=$1 AND o.session_id=$2",
+                &[&organization_id, &session_id],
+            )?;
+            Ok(review_in(
+                opened.into_iter().map(|receipt| (receipt.input, receipt.decision)),
+                &target_offer_id,
+                &session_id,
+            ))
         })
         ?;
+    Ok(review)
+}
 
-    Ok(review.map(|(text, tool, arguments)| OfferReviewOutput {
-        offer_id,
-        text,
-        session_id: session_id_for_output,
-        tool,
-        arguments,
-    }))
+/// The review entry for `offer_id` among a session's receipts, newest first,
+/// with the reviewed call's tool and arguments.
+fn review_in(
+    receipts: impl IntoIterator<Item = (Value, Value)>,
+    offer_id: &str,
+    session_id: &str,
+) -> Option<OfferReviewOutput> {
+    receipts.into_iter().find_map(|(input, decision)| {
+        let review = decision["review"]
+            .as_array()?
+            .iter()
+            .find(|entry| entry["offer_id"].as_str() == Some(offer_id))?;
+        let source = input
+            .get("context")
+            .or_else(|| input.get("semantic"))
+            .unwrap_or(&input);
+        Some(OfferReviewOutput {
+            offer_id: offer_id.to_owned(),
+            session_id: session_id.to_owned(),
+            text: review["text"].as_str().unwrap_or_default().to_owned(),
+            tool: source["tool"].as_str().map(str::to_owned),
+            arguments: source.get("arguments").map(Value::to_string),
+        })
+    })
 }
 
 #[napi(object)]
@@ -1876,8 +1932,8 @@ pub async fn load_child_returns(
             &lookup.operation_prefix, &limit,
         ];
         let mut rows = client.query_raw(
-            "SELECT o.session_id AS child_session_id, \
-              o.operation_id, \
+            &format!("SELECT o.session_id AS child_session_id, \
+              o.operation_id, o.created_at, \
               COALESCE(o.input->'semantic'->>'event', o.input->>'event') AS event, \
               o.decision->>'decision' AS decision, \
               o.decision->>'value' AS decision_value, \
@@ -1885,7 +1941,7 @@ pub async fn load_child_returns(
               COALESCE(o.input->'semantic'->>'child_native_id', o.input->>'child_native_id') AS child_native_id, \
               COALESCE(o.input->'semantic'->>'output', o.input->>'output') AS output \
               FROM openappa_operations o \
-              WHERE o.organization_id=$1 AND o.status='complete' \
+              WHERE o.organization_id=$1 AND o.status='complete' AND NOT {ESCAPED} \
               AND EXISTS (SELECT 1 FROM openappa_sessions s \
                 WHERE s.session_id=o.session_id AND s.organization_id=$1 AND s.parent_id=$2) \
               AND COALESCE(o.input->'semantic'->>'event', o.input->>'event') IN ('child_end', 'child_return') \
@@ -1902,9 +1958,10 @@ pub async fn load_child_returns(
               AND ($3::text IS NULL OR o.session_id=$3) \
               AND ($4::text IS NULL OR left(o.operation_id,length($4))=$4) \
               ORDER BY o.created_at DESC, o.session_id, o.operation_id DESC LIMIT $5",
+                ESCAPED = sealed::ESCAPED),
             params.iter().copied(),
         )?;
-        let mut records = Vec::new();
+        let mut records: Vec<(SystemTime, ChildReturnRecord)> = Vec::new();
         let mut budget = ReceiptLookupBudget::default();
         while let Some(row) = rows.next()? {
             let event: Option<String> = row.get("event");
@@ -1923,15 +1980,61 @@ pub async fn load_child_returns(
             }) else {
                 continue;
             };
-            records.push(ChildReturnRecord {
+            records.push((row.get("created_at"), ChildReturnRecord {
                 child_session_id: row.get("child_session_id"),
                 spawn_call_id: row.get("spawn_call_id"),
                 child_native_id: row.get("child_native_id"),
                 operation_id: Some(crossed.operation_id),
                 value: crossed.value,
-            });
+            }));
         }
-        Ok(records)
+        drop(rows);
+        // The same lookup over the receipts SQL cannot read inside; crossed_return
+        // decides for them as for the rows above.
+        let opened = sealed::read(
+            client,
+            &StorageCipher::Plain,
+            sealed::Receipts::Escaped,
+            "o.organization_id=$1 \
+             AND EXISTS (SELECT 1 FROM openappa_sessions s \
+               WHERE s.session_id=o.session_id AND s.organization_id=$1 AND s.parent_id=$2) \
+             AND ($3::text IS NULL OR o.session_id=$3) \
+             AND ($4::text IS NULL OR left(o.operation_id,length($4))=$4)",
+            &params[..4],
+        )?;
+        let unsealed = records.len();
+        for receipt in opened {
+            let event = receipt.input_text("event");
+            let decision = receipt.decision_text("decision");
+            let decision_value = receipt.decision_text("value");
+            let output = receipt.input_text("output");
+            let Some(crossed) = crossed_return(ReturnReceipt {
+                event: event.as_deref().unwrap_or(""),
+                operation_id: &receipt.operation_id,
+                decision: decision.as_deref().unwrap_or(""),
+                decision_value: decision_value.as_deref(),
+                output: output.as_deref(),
+            }) else {
+                continue;
+            };
+            budget.take(crossed.value.len())?;
+            records.push((receipt.created_at, ChildReturnRecord {
+                spawn_call_id: receipt.input_text("spawn_call_id"),
+                child_native_id: receipt.input_text("child_native_id"),
+                child_session_id: receipt.session_id,
+                operation_id: Some(crossed.operation_id),
+                value: crossed.value,
+            }));
+        }
+        if records.len() > unsealed {
+            records.sort_by(|(a_at, a), (b_at, b)| {
+                b_at.cmp(a_at)
+                    .then_with(|| a.child_session_id.cmp(&b.child_session_id))
+                    .then_with(|| b.operation_id.cmp(&a.operation_id))
+            });
+            records.truncate(usize::try_from(limit).unwrap_or(usize::MAX));
+        }
+        Ok(records.into_iter().map(|(_, record)| record).collect())
     })
     .map_err(sql_failure)
 }
@@ -1969,10 +2072,11 @@ pub async fn load_child_addresses(
         use postgres::{fallible_iterator::FallibleIterator, types::ToSql};
         let params: &[&(dyn ToSql + Sync)] = &[&organization_id, &child_session_id];
         let mut rows = client.query_raw(
-            "SELECT o.session_id AS parent_session_id, \
+            &format!(
+                "SELECT o.session_id AS parent_session_id, o.created_at, \
               COALESCE(o.input->'semantic'->>'output', o.input->>'output') AS value \
               FROM openappa_operations o \
-              WHERE o.organization_id=$1 AND o.status='complete' \
+              WHERE o.organization_id=$1 AND o.status='complete' AND NOT {ESCAPED} \
               AND EXISTS (SELECT 1 FROM openappa_sessions s \
                 WHERE s.organization_id=$1 AND s.session_id=$2 AND s.parent_id=o.session_id) \
               AND COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'child_address' \
@@ -1980,23 +2084,67 @@ pub async fn load_child_addresses(
               AND o.decision->>'decision' = 'ack' \
               AND COALESCE(o.input->'semantic'->>'output', o.input->>'output') IS NOT NULL \
               ORDER BY o.created_at LIMIT 10001",
+                ESCAPED = sealed::ESCAPED
+            ),
             params.iter().copied(),
         )?;
-        let mut records = Vec::new();
+        let mut records: Vec<(SystemTime, ChildAddressRecord)> = Vec::new();
         let mut budget = ReceiptLookupBudget::default();
         while let Some(row) = rows.next()? {
             let value: Option<String> = row.get("value");
             budget.take(value.as_deref().unwrap_or("").len())?;
-            records.push(ChildAddressRecord {
-                parent_session_id: row.get("parent_session_id"),
-                value: value.ok_or_else(|| {
-                    PostgresError("OpenAPPA retained a child address without a value".into())
-                })?,
-            });
+            records.push((
+                row.get("created_at"),
+                ChildAddressRecord {
+                    parent_session_id: row.get("parent_session_id"),
+                    value: value.ok_or_else(|| {
+                        PostgresError("OpenAPPA retained a child address without a value".into())
+                    })?,
+                },
+            ));
         }
-        Ok(records)
+        drop(rows);
+        let opened = sealed::read(
+            client,
+            &StorageCipher::Plain,
+            sealed::Receipts::Escaped,
+            "o.organization_id=$1 AND EXISTS (SELECT 1 FROM openappa_sessions s \
+               WHERE s.organization_id=$1 AND s.session_id=$2 AND s.parent_id=o.session_id)",
+            params,
+        )?;
+        let unsealed = records.len();
+        for receipt in opened {
+            if !addresses(&receipt, &child_session_id)
+                || receipt.decision_text("decision").as_deref() != Some("ack")
+            {
+                continue;
+            }
+            let Some(value) = receipt.input_text("output") else {
+                continue;
+            };
+            budget.take(value.len())?;
+            records.push((
+                receipt.created_at,
+                ChildAddressRecord {
+                    parent_session_id: receipt.session_id,
+                    value,
+                },
+            ));
+        }
+        if records.len() > unsealed {
+            records.sort_by_key(|(created_at, _)| *created_at);
+            // The same bound the SQL applies, over the merged list.
+            records.truncate(10_001);
+        }
+        Ok(records.into_iter().map(|(_, record)| record).collect())
     })
     .map_err(sql_failure)
+}
+
+/// Whether `receipt` is a ChildAddress to `child_session_id`.
+fn addresses(receipt: &sealed::OpenedReceipt, child_session_id: &str) -> bool {
+    receipt.input_text("event").as_deref() == Some("child_address")
+        && receipt.input_text("spawned_id").as_deref() == Some(child_session_id)
 }
 
 /// Whether this child's parent addressed it before the child's first event.
@@ -2006,7 +2154,7 @@ fn addressed_before_start(pg: &Sql<'_>, input: &Input) -> napi::Result<bool> {
     };
     let (organization_id, child) = (input.organization_id.clone(), input.session_id.clone());
     pg.with_client(move |client| {
-        Ok(client
+        let addressed = client
             .query_one(
                 "SELECT EXISTS (SELECT 1 FROM openappa_operations o \
                   WHERE o.organization_id=$1 AND o.session_id=$2 AND o.status='complete' \
@@ -2014,7 +2162,18 @@ fn addressed_before_start(pg: &Sql<'_>, input: &Input) -> napi::Result<bool> {
                   AND COALESCE(o.input->'semantic'->>'spawned_id', o.input->>'spawned_id') = $3)",
                 &[&organization_id, &parent, &child],
             )?
-            .get::<_, bool>(0))
+            .get::<_, bool>(0);
+        if addressed {
+            return Ok(true);
+        }
+        let opened = sealed::read(
+            client,
+            &StorageCipher::Plain,
+            sealed::Receipts::Escaped,
+            "o.organization_id=$1 AND o.session_id=$2",
+            &[&organization_id, &parent],
+        )?;
+        Ok(opened.iter().any(|receipt| addresses(receipt, &child)))
     })
     .map_err(sql_failure)
 }
@@ -2128,9 +2287,9 @@ fn released_spawn_binding(
         if status != "complete" {
             return Ok(None);
         }
-        let input: Value = row.get("input");
+        let input = sealed::unescape(row.get("input"))?;
         let decision: Option<Value> = row.get("decision");
-        let Some(decision) = decision else {
+        let Some(decision) = decision.map(sealed::unescape).transpose()? else {
             return Ok(None);
         };
         let semantic = input.get("semantic").unwrap_or(&input);
@@ -3949,19 +4108,19 @@ fn encrypted_receipts(
     let (organization_id, session_id) = (organization_id.to_owned(), session_id.to_owned());
     let cipher = pg.0.cipher().clone();
     pg.with_client(move |client| {
-        use postgres::fallible_iterator::FallibleIterator;
-        let mut rows = client.query_raw("SELECT operation_id, input, decision FROM openappa_operations WHERE organization_id=$1 AND session_id=$2 AND status='complete' ORDER BY created_at DESC LIMIT 10001", [&organization_id, &session_id])?;
-        let mut budget = ReceiptLookupBudget::default();
-        let mut result = Vec::new();
-        while let Some(row) = rows.next()? {
-            let id: String = row.get(0);
-            let input = cipher.open_json(&field_context(&["openappa_operations", &organization_id, &session_id, &id, "input"]), row.get(1))?;
-            let decision = cipher.open_json(&field_context(&["openappa_operations", &organization_id, &session_id, &id, "decision"]), row.get(2))?;
-            budget.take(input.to_string().len() + decision.to_string().len())?;
-            result.push((input, decision));
-        }
-        Ok(result)
-    }).map_err(sql_failure)
+        let receipts = sealed::read(
+            client,
+            &cipher,
+            sealed::Receipts::All,
+            "o.organization_id=$1 AND o.session_id=$2",
+            &[&organization_id, &session_id],
+        )?;
+        Ok(receipts
+            .into_iter()
+            .map(|receipt| (receipt.input, receipt.decision))
+            .collect())
+    })
+    .map_err(sql_failure)
 }
 
 fn recorded_call_presentation(
@@ -3971,44 +4130,24 @@ fn recorded_call_presentation(
     offer_id: &str,
 ) -> napi::Result<CallPresentation> {
     if pg.0.cipher().is_encrypted() {
-        let rows = encrypted_receipts(pg, organization_id, session_id)?;
-        for (input, decision) in rows {
-            let matches = ["offers", "review"].iter().any(|field| {
-                decision[*field].as_array().is_some_and(|entries| {
-                    entries
-                        .iter()
-                        .any(|entry| entry["offer_id"].as_str() == Some(offer_id))
-                })
-            });
-            if matches {
-                let semantic = input.get("semantic").unwrap_or(&input);
-                return Ok(presentation_from_receipt(
-                    input.get("context"),
-                    input
-                        .get("context")
-                        .and_then(|v| v["tool"].as_str())
-                        .or_else(|| semantic["tool"].as_str())
-                        .map(str::to_owned),
-                    semantic["event"].as_str(),
-                ));
-            }
-        }
-        return Ok(CallPresentation::default());
+        let receipts = encrypted_receipts(pg, organization_id, session_id)?;
+        return Ok(presentation_in(receipts, offer_id).unwrap_or_default());
     }
     let (organization_id, session_id, offer_id) = (
         organization_id.to_owned(),
         session_id.to_owned(),
         offer_id.to_owned(),
     );
-    let row = pg
+    let presentation = pg
         .with_client(move |client| {
-            Ok(client
-                .query_opt(
+            let row = client.query_opt(
+                &format!(
                     "SELECT o.input->'context' AS context, \
                      COALESCE(o.input->'context'->>'tool', o.input->'semantic'->>'tool', o.input->>'tool') AS tool, \
                      COALESCE(o.input->'semantic'->>'event', o.input->>'event') AS event \
                      FROM openappa_operations o \
                      WHERE o.organization_id=$1 AND o.session_id=$2 AND o.status='complete' \
+                     AND NOT {} \
                      AND ( \
                        EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(o.decision->'offers', '[]'::jsonb)) AS offer \
                          WHERE offer->>'offer_id' = $3) \
@@ -4017,22 +4156,61 @@ fn recorded_call_presentation(
                      ) \
                      ORDER BY o.created_at DESC \
                      LIMIT 1",
-                    &[&organization_id, &session_id, &offer_id],
-                )?
-                .map(|row| {
-                    (
-                        row.get::<_, Option<Value>>("context"),
-                        row.get::<_, Option<String>>("tool"),
-                        row.get::<_, Option<String>>("event"),
-                    )
-                }))
+                    sealed::ESCAPED
+                ),
+                &[&organization_id, &session_id, &offer_id],
+            )?;
+            if let Some(row) = row {
+                let context: Option<Value> = row.get("context");
+                return Ok(Some(presentation_from_receipt(
+                    context.as_ref(),
+                    row.get("tool"),
+                    row.get::<_, Option<String>>("event").as_deref(),
+                )));
+            }
+            let opened = sealed::read(
+                client,
+                &StorageCipher::Plain,
+                sealed::Receipts::Escaped,
+                "o.organization_id=$1 AND o.session_id=$2",
+                &[&organization_id, &session_id],
+            )?;
+            Ok(presentation_in(
+                opened.into_iter().map(|receipt| (receipt.input, receipt.decision)),
+                &offer_id,
+            ))
         })
         ?;
-    Ok(match row {
-        Some((context, tool, event)) => {
-            presentation_from_receipt(context.as_ref(), tool, event.as_deref())
+    Ok(presentation.unwrap_or_default())
+}
+
+/// The presentation of the call whose receipt offered or reviewed `offer_id`,
+/// among a session's receipts, newest first.
+fn presentation_in(
+    receipts: impl IntoIterator<Item = (Value, Value)>,
+    offer_id: &str,
+) -> Option<CallPresentation> {
+    receipts.into_iter().find_map(|(input, decision)| {
+        let matches = ["offers", "review"].iter().any(|field| {
+            decision[*field].as_array().is_some_and(|entries| {
+                entries
+                    .iter()
+                    .any(|entry| entry["offer_id"].as_str() == Some(offer_id))
+            })
+        });
+        if !matches {
+            return None;
         }
-        None => CallPresentation::default(),
+        let semantic = input.get("semantic").unwrap_or(&input);
+        Some(presentation_from_receipt(
+            input.get("context"),
+            input
+                .get("context")
+                .and_then(|v| v["tool"].as_str())
+                .or_else(|| semantic["tool"].as_str())
+                .map(str::to_owned),
+            semantic["event"].as_str(),
+        ))
     })
 }
 
@@ -5436,7 +5614,7 @@ mod stored_approved_output_tests {
 mod failure_tests {
     use super::{
         BindingFailure, Failure, RefusalClass, SqlError, failure, is_policy_moved, lease_lost,
-        policy_moved,
+        policy_moved, read_failure, status_read_failure,
     };
     use appa_eventlog::postgres::PostgresError;
     use serde_json::{Value, json};
@@ -5497,6 +5675,66 @@ mod failure_tests {
                 serde_json::to_value(Failure::Binding(binding)).unwrap(),
                 serde_json::to_value(Failure::Refused(runtime)).unwrap(),
             );
+        }
+    }
+
+    /// A log the binding reads directly reports the class a dispatch reading it
+    /// would be refused with; only a failed read is storage.
+    #[test]
+    fn a_direct_log_read_reports_its_class() {
+        use appa_eventlog::ReadError;
+        for (read, expected) in [
+            (
+                ReadError::Undecodable {
+                    seq: 7,
+                    detail: "expected value".into(),
+                },
+                "untrusted_log",
+            ),
+            (
+                ReadError::PolicyFileMissing { key: "0a1b".into() },
+                "policy_unavailable",
+            ),
+            (
+                ReadError::LegacyFamily {
+                    root: "root".into(),
+                },
+                "legacy_family",
+            ),
+            (
+                ReadError::UnknownRoot {
+                    root: "gone".into(),
+                },
+                "trajectory",
+            ),
+            (
+                ReadError::Postgres(PostgresError("PostgreSQL ERROR (SQLSTATE 08006)".into())),
+                "storage",
+            ),
+        ] {
+            assert_eq!(code(&read_failure(read)), json!(expected));
+        }
+        use appa_runtime::api::StatusReadError;
+        for (read, expected) in [
+            (
+                StatusReadError::Policy("missing".into()),
+                "policy_unavailable",
+            ),
+            (StatusReadError::Replay("diverged".into()), "untrusted_log"),
+            (
+                StatusReadError::UnknownRoot {
+                    root: "gone".into(),
+                },
+                "trajectory",
+            ),
+            (
+                StatusReadError::Read(ReadError::Postgres(PostgresError(
+                    "PostgreSQL ERROR (SQLSTATE 57P01)".into(),
+                ))),
+                "storage",
+            ),
+        ] {
+            assert_eq!(code(&status_read_failure(read)), json!(expected));
         }
     }
 

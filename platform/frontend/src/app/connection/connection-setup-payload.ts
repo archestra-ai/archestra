@@ -2,7 +2,6 @@ import {
   ManagedResourceSchema,
   OPENCODE_PRIMARY_PROVIDERS,
   type Permissions,
-  PROVIDER_MODEL_TIERS,
   PROVIDERS_REQUIRING_BASE_URL,
   providerRequiresPerUserCredential,
   ResourcePermissionActionSchema,
@@ -10,6 +9,7 @@ import {
 } from "@archestra/shared";
 import {
   CONNECTION_SETUP_MAX_SKILLS,
+  defaultConnectionModel,
   INSTALLER_CLIENT_KEY_PROVIDERS,
   type InstallerClientId,
   isInstallerClientId,
@@ -113,7 +113,7 @@ export function connectionSetupBody(
     mcpGatewayId: inputs.gatewayId ?? undefined,
     llmProxyId: inputs.proxyId ?? undefined,
     provider:
-      inputs.proxyAuth === "primary-providers"
+      inputs.proxyAuth === "primary-providers" && inputs.clientId !== "pi"
         ? undefined
         : (inputs.provider ?? undefined),
     proxyAuth: inputs.proxyAuth ?? undefined,
@@ -167,6 +167,7 @@ export function firstConnectionSetupInputs(params: {
   llmProxyId: string | null;
   skillNames: { data: { id: string }[]; total: number } | null;
   plugins: PluginListItem[] | null;
+  models?: readonly { id: string; provider: SupportedProvider }[];
   availableKeys:
     | {
         id: string;
@@ -179,6 +180,9 @@ export function firstConnectionSetupInputs(params: {
 }): ConnectionSetupInputs | null {
   const { client, organization, request } = params;
   if (!isInstallerClientId(client.id)) return null;
+  // Pi must first load the selected connection key's catalog in the browser.
+  // The server seed contains all visible keys' models, which can overstate it.
+  if (client.id === "pi") return null;
   // Choices the installer's request carries change the selection after the
   // first render; the browser prepares those itself.
   if (
@@ -334,7 +338,12 @@ export function firstConnectionSetupInputs(params: {
     supportsModelChoice && provider
       ? client.id === "claude-desktop"
         ? "claude-haiku-4-5-20251001"
-        : PROVIDER_MODEL_TIERS[provider].normal
+        : defaultConnectionModel({
+            provider,
+            modelIds: (params.models ?? [])
+              .filter((model) => model.provider === provider)
+              .map((model) => model.id),
+          })
       : null;
   const effectiveProxyAuth: ConnectProxyAuth = providerIsPerUser
     ? "virtual-key"
@@ -359,7 +368,12 @@ export function firstConnectionSetupInputs(params: {
   const selectionProblem =
     (pluginsEnabled && selectedPlugins.length > PLUGIN_DELIVERY_MAX_COUNT) ||
     (includeSkills && skillsTotal > CONNECTION_SETUP_MAX_SKILLS);
-  if (!hasRunnableAnything || needsPerUserConnect || selectionProblem) {
+  if (
+    (supportsModelChoice && proxyActive && !effectiveModel) ||
+    !hasRunnableAnything ||
+    needsPerUserConnect ||
+    selectionProblem
+  ) {
     return null;
   }
 

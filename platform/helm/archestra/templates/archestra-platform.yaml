@@ -201,18 +201,7 @@ spec:
             timeoutSeconds: {{ .Values.archestra.probes.readiness.timeoutSeconds }}
             failureThreshold: {{ .Values.archestra.probes.readiness.failureThreshold }}
           {{- include "archestra-platform.volumeMounts" . | nindent 10 }}
-      {{- with .Values.archestra.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.archestra.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.archestra.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+      {{- include "archestra-platform.scheduling" (dict "global" .Values.archestra "tier" .Values.archestra.web) | nindent 6 }}
       {{- with .Values.archestra.topologySpreadConstraints }}
       topologySpreadConstraints:
         {{- include "archestra-platform.topologySpreadConstraints" (dict "constraints" . "selectorLabels" (include "archestra-platform.selectorLabels" $)) | nindent 8 }}

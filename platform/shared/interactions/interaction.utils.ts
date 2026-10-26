@@ -1,6 +1,7 @@
 import { isEncryptedChatUnavailableContent } from "../encrypted-chat-content";
 import type { SupportedProvider } from "../index";
 import AnthropicMessagesInteraction from "./llmProviders/anthropic";
+import AudioInteraction from "./llmProviders/audio";
 import AzureChatCompletionInteraction from "./llmProviders/azure";
 import AzureImagesInteraction from "./llmProviders/azure-images";
 import AzureResponsesInteraction from "./llmProviders/azure-responses";
@@ -73,6 +74,8 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "azure:chatCompletions": (i) => new AzureChatCompletionInteraction(i),
   "azure:realtime": (i) => new AzureChatCompletionInteraction(i),
   "azure:images": (i) => new AzureImagesInteraction(i),
+  "azure:audio": (i) => new AudioInteraction(i),
+  "openai:audio": (i) => new AudioInteraction(i),
   "azure:responses": (i) => new AzureResponsesInteraction(i),
   "jev:decisions": (i) => new JevDecisionsInteraction(i),
 };

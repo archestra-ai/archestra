@@ -2,16 +2,18 @@
 title: "Okta"
 description: "Configure Okta for SSO sign-in and RFC 8693 token exchange for MCP tools"
 order: 3
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Connect Okta to sign users in with Okta credentials and exchange tokens so MCP tools call downstream APIs under each user's identity.
 
-For sign-in alone, complete sections 1–3. For per-user tool access, complete sections 4–6.
+Set up sign-in first. Continue with token exchange only if MCP tools need to call downstream APIs as each person.
 
-## 1. Register the Okta Application
+<span id="1-register-the-okta-application"></span>
+
+## Register the Okta Application
 
 Use the published Okta Integration Network (OIN) app or create a custom OIDC integration.
 
@@ -34,7 +36,9 @@ Use the published Okta Integration Network (OIN) app or create a custom OIDC int
    `https://<archestra-domain>/auth/sign-in`
 5. Under **Assignments**, assign allowed users or groups, save, and copy the **Client ID** and **Client Secret**.
 
-## 2. Configure SSO in Archestra
+<span id="2-configure-sso-in-archestra"></span>
+
+## Configure SSO in Archestra
 
 1. In Archestra, go to **Settings → Identity Providers** and click **Enable** on **Okta**.
 2. Set **Issuer** to your Okta organization URL (e.g. `https://example.okta.com`).
@@ -44,14 +48,18 @@ Use the published Okta Integration Network (OIN) app or create a custom OIDC int
 
 Test sign-in in an incognito browser window.
 
-## 3. Map Roles and Sync Teams
+<span id="3-map-roles-and-sync-teams"></span>
+
+## Map Roles and Sync Teams
 
 Configure claim mapping to assign roles and teams on sign-in:
 
 - **Role Mapping:** In Okta, include the `groups` claim in ID tokens. In Archestra, create rules matching groups like `Archestra_Admins` to target roles. See [Role Mapping](/docs/admin/identity/sso#role-mapping).
 - **Team Sync:** Link Archestra teams to Okta group names in **Settings → Teams**. See [Team Sync](/docs/admin/identity/sso#team-sync).
 
-## 4. Configure Okta for Token Exchange
+<span id="4-configure-okta-for-token-exchange"></span>
+
+## Configure Okta for Token Exchange
 
 To call downstream APIs as the calling user, configure Okta to accept signed token-exchange requests:
 
@@ -61,7 +69,9 @@ To call downstream APIs as the calling user, configure Okta to accept signed tok
 4. Enable the token-exchange grant type: `urn:ietf:params:oauth:grant-type:token-exchange`.
 5. In your authorization server policies, allow the Archestra app to request tokens for downstream API audiences.
 
-## 5. Enable Token Exchange in Archestra
+<span id="5-enable-token-exchange-in-archestra"></span>
+
+## Enable Token Exchange in Archestra
 
 1. In **Settings → Identity Providers**, edit **Okta** and expand **Enterprise-Managed Credentials**.
 2. Set **Exchange Token Endpoint** to `https://<org>.okta.com/oauth2/v1/token`.
@@ -70,7 +80,9 @@ To call downstream APIs as the calling user, configure Okta to accept signed tok
 5. Set **User Token To Exchange** to **ID token**.
 6. Save the provider.
 
-## 6. Configure MCP Server Multitenant Auth
+<span id="6-configure-mcp-server-multitenant-auth"></span>
+
+## Configure MCP Server Multitenant Auth
 
 1. In **MCP Servers**, open target catalog item and select **Multitenant Authorization**.
 2. Choose **Identity Provider Token Exchange** and select **Okta**.

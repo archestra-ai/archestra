@@ -24,6 +24,7 @@ import {
 } from "@/clients/azure-openai-credentials";
 import {
   buildAzureDeploymentBaseUrl,
+  createAzureFetchWithRequestQuery,
   isAzureOpenAiFirstPartyModelName,
   isAzureThinkingModelName,
   normalizeAzureApiKey,
@@ -43,6 +44,7 @@ import type {
 } from "@/types";
 import { ApiError } from "@/types";
 import type { ReasoningEffort } from "@/types/model";
+import { streamChatCompletionChunks } from "./chat-completions-stream";
 import {
   makeOpenAiCompatibleEmbeddingsAdapterFactory,
   OpenAIRequestAdapter,
@@ -64,6 +66,7 @@ type AzureStreamChunk = Azure.Types.ChatCompletionChunk;
 type AzureClient = {
   apiKey: string | undefined;
   baseUrl: string | undefined;
+  apiVersion: string;
   defaultHeaders: Record<string, string> | undefined;
   fetch: typeof globalThis.fetch | undefined;
   openai: OpenAIProvider;
@@ -320,22 +323,38 @@ export const azureAdapterFactory: LLMProvider<
     apiKey: string | undefined,
     options: CreateClientOptions,
   ): AzureClient {
-    const customFetch = options.agent
+    const baseUrl = options.azureRequest?.deployment
+      ? (buildAzureDeploymentBaseUrl({
+          baseUrl: options.baseUrl,
+          deploymentName: options.azureRequest.deployment,
+          overrideDeployment: true,
+        }) ?? options.baseUrl)
+      : options.baseUrl;
+    const observableFetch = options.agent
       ? metrics.llm.getObservableFetch("azure", options.agent, options.source)
       : undefined;
+    const customFetch = createAzureFetchWithRequestQuery({
+      fetch: observableFetch,
+      rawQuery: options.azureRequest?.rawQuery,
+      abortSignal: options.abortSignal,
+    });
+    const apiVersion =
+      new URLSearchParams(options.azureRequest?.rawQuery).get("api-version") ??
+      config.llm.azure.apiVersion;
 
     if (!apiKey && isAzureOpenAiEntraIdEnabled()) {
       const client = new OpenAIProvider({
         maxRetries: PROXY_SDK_MAX_RETRIES,
-        apiKey: getAzureOpenAiBearerTokenProvider(options.baseUrl),
-        baseURL: options.baseUrl,
-        defaultQuery: getAzureDefaultQuery(options.baseUrl),
+        apiKey: getAzureOpenAiBearerTokenProvider(baseUrl),
+        baseURL: baseUrl,
+        defaultQuery: getAzureDefaultQuery(baseUrl),
         fetch: customFetch,
         defaultHeaders: options.defaultHeaders,
       });
       return {
         apiKey,
-        baseUrl: options.baseUrl,
+        baseUrl: baseUrl,
+        apiVersion,
         defaultHeaders: options.defaultHeaders,
         fetch: customFetch,
         openai: client,
@@ -359,15 +378,16 @@ export const azureAdapterFactory: LLMProvider<
     const client = new OpenAIProvider({
       maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey: normalizedApiKey,
-      baseURL: options.baseUrl,
-      defaultQuery: getAzureDefaultQuery(options.baseUrl),
+      baseURL: baseUrl,
+      defaultQuery: getAzureDefaultQuery(baseUrl),
       fetch: customFetch,
       defaultHeaders,
     });
 
     return {
       apiKey: normalizedApiKey,
-      baseUrl: options.baseUrl,
+      baseUrl: baseUrl,
+      apiVersion,
       defaultHeaders,
       fetch: customFetch,
       openai: client,
@@ -380,7 +400,7 @@ export const azureAdapterFactory: LLMProvider<
   ): Promise<AzureResponse> {
     const azureClient = getAzureClientForRequest(client, request.model);
     const azureRequest = {
-      ...withAzureMaxCompletionTokens(request, (client as AzureClient).baseUrl),
+      ...withAzureMaxCompletionTokens(request, client as AzureClient),
       ...defaultAzureReasoningEffort(request),
       stream: false,
     } as unknown as ChatCompletionCreateParamsNonStreaming;
@@ -396,21 +416,15 @@ export const azureAdapterFactory: LLMProvider<
   ): Promise<AsyncIterable<AzureStreamChunk>> {
     const azureClient = getAzureClientForRequest(client, request.model);
     const azureRequest = {
-      ...withAzureMaxCompletionTokens(request, (client as AzureClient).baseUrl),
+      ...withAzureMaxCompletionTokens(request, client as AzureClient),
       ...defaultAzureReasoningEffort(request),
       stream: true,
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
 
-    const stream = await azureClient.chat.completions.create(azureRequest);
-
-    return {
-      [Symbol.asyncIterator]: async function* () {
-        for await (const chunk of stream) {
-          yield chunk as AzureStreamChunk;
-        }
-      },
-    };
+    return streamChatCompletionChunks<AzureStreamChunk>(
+      azureClient.chat.completions.create(azureRequest),
+    );
   },
 
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
@@ -511,26 +525,26 @@ const DEFAULT_AZURE_REASONING_EFFORT: ReasoningEffort = "medium";
  */
 function withAzureMaxCompletionTokens(
   request: AzureRequest,
-  baseUrl: string | undefined,
+  client: AzureClient,
 ): AzureRequest {
   const { max_tokens: maxTokens, ...rest } = request;
   if (
     maxTokens == null ||
     request.max_completion_tokens != null ||
     !isAzureOpenAiFirstPartyModelName(request.model) ||
-    !azureAcceptsMaxCompletionTokens(baseUrl)
+    !azureAcceptsMaxCompletionTokens(client)
   ) {
     return request;
   }
   return { ...rest, max_completion_tokens: maxTokens };
 }
 
-function azureAcceptsMaxCompletionTokens(baseUrl: string | undefined): boolean {
+function azureAcceptsMaxCompletionTokens(client: AzureClient): boolean {
   // v1 URLs carry no api-version and always accept the field. Dated
   // api-versions compare lexically; the field shipped in 2024-09-01-preview.
   return (
-    !shouldUseAzureOpenAiApiVersion(baseUrl) ||
-    config.llm.azure.apiVersion >= MAX_COMPLETION_TOKENS_API_VERSION
+    !shouldUseAzureOpenAiApiVersion(client.baseUrl) ||
+    client.apiVersion >= MAX_COMPLETION_TOKENS_API_VERSION
   );
 }
 

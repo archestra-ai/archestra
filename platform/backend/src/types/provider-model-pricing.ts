@@ -1,3 +1,4 @@
+import type { AzureModelEvidence } from "@archestra/shared/azure-models";
 import { z } from "zod";
 import type { Model } from "./model";
 
@@ -13,4 +14,5 @@ export type ProviderModelPricing = z.infer<typeof ProviderModelPricingSchema>;
 /** A model projected through one instance, or a merged view with no single rate. */
 export type ProviderPricedModel = Model & {
   providerPricing?: ProviderModelPricing | "conflicting";
+  azureCapabilities?: AzureModelEvidence | null;
 };

@@ -258,6 +258,8 @@ describe("GET /api/statistics/users", () => {
           inputTokens: 600,
           outputTokens: 120,
           cacheReadTokens: 180,
+          cacheWriteTokens: 0,
+          totalTokens: 720,
           subscriptionCost: 5,
         })),
       );
@@ -271,6 +273,8 @@ describe("GET /api/statistics/users", () => {
             inputTokens: 300,
             outputTokens: 60,
             cacheReadTokens: 90,
+            cacheWriteTokens: 0,
+            totalTokens: 360,
             subscriptionCost: 2.5,
           })),
         );
@@ -279,6 +283,8 @@ describe("GET /api/statistics/users", () => {
           "inputTokens",
           "outputTokens",
           "cacheReadTokens",
+          "cacheWriteTokens",
+          "totalTokens",
           "billedCost",
           "subscriptionCost",
         ] as const) {
@@ -310,6 +316,8 @@ describe("GET /api/statistics/users", () => {
             inputTokens: model.inputTokens,
             outputTokens: model.outputTokens,
             cacheReadTokens: model.cacheReadTokens,
+            cacheWriteTokens: model.cacheWriteTokens,
+            totalTokens: model.totalTokens,
             billedCost: model.billedCost,
             subscriptionCost: model.subscriptionCost,
           });
@@ -350,6 +358,8 @@ describe("GET /api/statistics/users", () => {
         inputTokens: 0,
         outputTokens: 0,
         cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 0,
       },
     ]);
     expect(user.models).toHaveLength(1);
@@ -433,6 +443,8 @@ describe("GET /api/statistics/users", () => {
           inputTokens: 600 * multiplier,
           outputTokens: 80,
           cacheReadTokens: 120,
+          cacheWriteTokens: 0,
+          totalTokens: 600 * multiplier + 80,
           subscriptionCost: 5,
         },
       ]);
@@ -447,6 +459,9 @@ describe("GET /api/statistics/users", () => {
             inputTokens: (model.model === "model-a" ? 200 : 400) * multiplier,
             outputTokens: 40,
             cacheReadTokens: 60,
+            cacheWriteTokens: 0,
+            totalTokens:
+              (model.model === "model-a" ? 200 : 400) * multiplier + 40,
             subscriptionCost: 2.5,
           },
         ]);
@@ -998,6 +1013,7 @@ describe("GET /api/statistics/me", () => {
       inputTokens: 480,
       outputTokens: 120,
       cacheReadTokens: 10,
+      cacheWriteTokens: 0,
       totalTokens: 600,
       activeDays: 1,
     });
@@ -1013,11 +1029,11 @@ describe("GET /api/statistics/me", () => {
     ]);
     expect(body.models[0]).toMatchObject({
       totalTokens: 500,
-      percentage: expect.closeTo(83.333333, 5),
+      percentage: expect.closeTo((500 / 600) * 100, 5),
     });
     expect(body.models[1]).toMatchObject({
       totalTokens: 100,
-      percentage: expect.closeTo(16.666667, 5),
+      percentage: expect.closeTo((100 / 600) * 100, 5),
     });
     expect(body.timeSeries.length).toBeGreaterThan(0);
   });

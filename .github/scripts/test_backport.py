@@ -5,6 +5,7 @@ import json
 import re
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -307,17 +308,74 @@ for (const [job, condition] of Object.entries(conditions)) {
 """
         subprocess.run(["node", "-e", program, json.dumps(conditions)], check=True)
 
-    def test_backport_bot_prs_receive_reviewers(self):
+    def test_reviewer_assignment_skips_ci_bot_on_scheduled_and_manual_runs(self):
         workflow = Path(__file__).parents[1] / "workflows/random-issue-pr-assignee.yml"
-        condition = re.search(r"if \((exemptLogins\.includes[\s\S]*?)\) \{", workflow.read_text()).group(1)
+        source = workflow.read_text()
+        job = source.split("  request-recent-pr-reviewers:\n", 1)[1]
+        condition = re.search(r"^    if: (.*)$", job, re.MULTILINE).group(1)
+        script = textwrap.dedent(job.split("          script: |\n", 1)[1])
+        env = dict(re.findall(r"^  ([A-Z_]+): '(.*)'$", source, re.MULTILINE))
         program = r"""
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
-for (const [ref, expectedExempt] of [['backport/release-1.3/pr-42', false], ['release-please--main', true]]) {
- assert.equal(vm.runInNewContext(process.argv[1], {exemptLogins:['archestra-ci[bot]'], pr:{user:{login:'archestra-ci[bot]'},head:{ref}}}), expectedExempt);
+const {condition, script, env} = JSON.parse(process.argv[1]);
+const owners = JSON.parse(env.ASSIGNEE_LOGINS);
+const coreTeam = JSON.parse(env.CORE_TEAM_LOGINS);
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+function pr(number, login, ref, extra = {}) {
+  return {number, user: {login, name: 'archestra-ci (bot)'}, draft: false,
+    updated_at: new Date().toISOString(), requested_reviewers: [],
+    head: {ref, repo: {full_name: 'archestra-ai/archestra'}}, ...extra};
 }
+(async () => {
+  for (const eventName of ['schedule', 'workflow_dispatch', 'issues', 'pull_request', 'push']) {
+    const enabled = vm.runInNewContext(condition, {github: {event_name: eventName}});
+    assert.equal(enabled, ['schedule', 'workflow_dispatch'].includes(eventName), eventName);
+    if (!enabled) continue;
+
+    // Neither the triggering actor nor a display name determines the PR author.
+    for (const actor of ['maintainer', 'archestra-ci[bot]']) {
+      const prs = [
+        pr(1, 'archestra-ci[bot]', 'backport/release-1.4/pr-42', {base: {ref: 'release/1.4'}}),
+        pr(2, 'archestra-ci[bot]', 'release-please--branches--main'),
+        pr(3, 'archestra-ci[bot]', 'other/change'),
+        pr(4, 'contributor', 'fix/example'),
+        pr(5, 'contributor', 'backport/manual', {base: {ref: 'release/1.4'}}),
+        pr(6, 'archestra-task-envs[bot]', 'task/example'),
+        pr(7, 'unrelated[bot]', 'backport/other'),
+        pr(8, 'contributor', 'fork/change', {head: {ref: 'fork/change', repo: {full_name: 'contributor/fork'}}}),
+        pr(9, coreTeam[0], 'team/change'),
+        pr(10, 'contributor', 'draft/change', {draft: true}),
+        pr(11, 'contributor', 'assigned/change', {requested_reviewers: [{login: owners[0]}]}),
+        pr(12, 'contributor', 'reviewed/change'),
+        pr(13, 'archestra-ci', 'fix/lookalike'),
+      ];
+      const requests = [];
+      const pulls = {list: 'list', listReviews: 'listReviews',
+        requestReviewers: async (request) => requests.push(request)};
+      const github = {rest: {pulls}, paginate: {iterator: async function* (method, params) {
+        assert.equal(params.owner, 'archestra-ai');
+        assert.equal(params.repo, 'archestra');
+        if (method === pulls.list) yield {data: prs};
+        else if (method === pulls.listReviews) {
+          yield {data: params.pull_number === 12 ? [{user: {login: owners[0]}}] : []};
+        } else assert.fail(`Unexpected API: ${method}`);
+      }}};
+      const context = {eventName, actor, repo: {owner: 'archestra-ai', repo: 'archestra'}};
+      await new AsyncFunction('github', 'context', 'process', 'console', script)(
+        github, context, {env}, {log() {}, error(message) {assert.fail(message);}});
+      assert.deepEqual(requests.map((request) => request.pull_number), [4, 5, 7, 13], `${eventName}: ${actor}`);
+      for (const request of requests) {
+        assert.equal(request.reviewers.length, 1);
+        assert.ok(owners.includes(request.reviewers[0]));
+      }
+    }
+  }
+})().catch((error) => {console.error(error); process.exitCode = 1;});
 """
-        subprocess.run(["node", "-e", program, condition], check=True)
+        subprocess.run(["node", "-e", program, json.dumps({
+            "condition": condition, "script": script, "env": env,
+        })], check=True)
 
 
 if __name__ == "__main__":

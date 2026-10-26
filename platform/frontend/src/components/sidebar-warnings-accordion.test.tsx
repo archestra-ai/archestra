@@ -215,7 +215,7 @@ describe("SidebarWarningsAccordion network policy warning", () => {
     expect(link).toHaveAttribute(
       "href",
       expect.stringContaining(
-        "admin/deployment#ssrf-protection-for-mcp-server-pods",
+        "admin/deployment/networking#enforce-workload-egress",
       ),
     );
     expect(link).toHaveAttribute("target", "_blank");

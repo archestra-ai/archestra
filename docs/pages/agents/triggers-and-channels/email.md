@@ -35,7 +35,7 @@ You need:
 
 ![The incoming email setup steps in Settings](/docs/automated_screenshots/agents-triggers-and-channels-email_setup.webp)
 
-Archestra renews the subscription before it expires. To skip the wizard, set [`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL`](/docs/reference/configuration#ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL) to `https://<your-archestra-host>/api/webhooks/incoming-email`. For another domain in agent addresses, set [`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_EMAIL_DOMAIN`](/docs/reference/configuration#ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_EMAIL_DOMAIN).
+Archestra renews the subscription before it expires. To skip the wizard, set [`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL`](/docs/admin/deployment/configuration#ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL) to `https://<your-archestra-host>/api/webhooks/incoming-email`. For another domain in agent addresses, set [`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_EMAIL_DOMAIN`](/docs/admin/deployment/configuration#ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_EMAIL_DOMAIN).
 
 ## Give an Agent an Address
 

@@ -41,6 +41,12 @@ class Gateway(ThreadingHTTPServer):
         self.discovery_failed = threading.Event()
         self.binding_headers = []
         self.prompts = []
+        # Grok side calls (no gateway tools) that carry the task text.
+        self.aux_task_requests = []
+
+    def inference(self):
+        """Every model request that worked on the task, side calls included."""
+        return self.requests + self.aux_task_requests
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -116,6 +122,15 @@ class Handler(BaseHTTPRequestHandler):
                 names.extend(tool["name"] + "." + item["name"] for item in tool.get("tools", []))
             else:
                 names.append(tool.get("name") or tool.get("function", {}).get("name", ""))
+        if CLIENT == "grok" and not any(name.endswith(TOOLS[0].removeprefix("archestra__")) for name in names):
+            # Session summaries and other side calls declare no gateway tool.
+            # One that carries the task still counts as inference for the
+            # barrier: it must not run before the catalog is loaded.
+            if "recovery tool" in json.dumps(request.get("messages") or ""):
+                self.server.aux_task_requests.append({"names": names, "catalog_sent": self.server.catalog_sent})
+            self.reply_id = "aux"
+            self.chat(None, request)
+            return
         if not names:
             self.respond({"id": "resp_aux", "object": "response", "status": "completed", "output": [], "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}})
             return
@@ -204,6 +219,34 @@ def stop_retained_client(tmux, env):
 
 
 class StartupTest(unittest.TestCase):
+    if CLIENT == "hermes":
+        def test_agent_build_starts_discovery(self):
+            # Exercise the real agent builder before any background thread exists.
+            server = Gateway()
+            server.release.set()
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            try:
+                with tempfile.TemporaryDirectory() as directory:
+                    origin = f"http://127.0.0.1:{server.server_port}"
+                    Path(directory, "config.yaml").write_text(json.dumps({
+                        "model": {"default": "gpt-4.1", "provider": "openai", "base_url": origin + "/v1"},
+                        "mcp_servers": {"archestra": {"url": origin + "/mcp"}},
+                        "mcp_discovery_timeout": 10,
+                    }))
+                    result = subprocess.run(
+                        ["/opt/hermes/.venv/bin/python", "-c",
+                         "from tui_gateway.server import _make_agent; "
+                         "_make_agent('startup-test', 'test-key', model_override='gpt-4.1', provider_override='openai')"],
+                        env={**os.environ, "HERMES_HOME": directory, "OPENAI_API_KEY": "test-key", "OPENAI_BASE_URL": origin + "/v1"},
+                        capture_output=True, text=True, timeout=30,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertTrue(server.catalog_sent)
+                    self.assertFalse(server.inference())
+            finally:
+                server.shutdown()
+                server.server_close()
+
     def test_missing_runtime_binding_is_fail_closed(self):
         self.run_client("one_shot", missing_binding=True)
 
@@ -255,10 +298,15 @@ class StartupTest(unittest.TestCase):
             runtime.mkdir()
             home = root / "home"
             home.mkdir()
+            if CLIENT == "codex":
+                # A cached newer release is what raises Codex's update prompt,
+                # which would hold the pinned image's TUI before the turn.
+                (runtime / "codex").mkdir()
+                (runtime / "codex" / "version.json").write_text(json.dumps({"latest_version": "999.0.0", "last_checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}))
             server = Gateway(failure)
             threading.Thread(target=server.serve_forever, daemon=True).start()
             origin = f"http://127.0.0.1:{server.server_port}"
-            env = {**os.environ, "HOME": str(home), "TERM": "xterm-256color", "PATH": str(BIN) + os.pathsep + os.environ["PATH"], "ARCHESTRA_LLM_PROXY_PROTOCOL": "anthropic" if CLIENT == "claude-code" else "openai_chat" if CLIENT == "hermes" else "openai_responses", "ARCHESTRA_AGENT_RUNTIME_DIR": str(runtime), "ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX": str(runtime / "turn"), "ARCHESTRA_AGENT_RUNTIME_MODE": mode, "ARCHESTRA_AGENT_RUNTIME_PLAIN": "1" if plain else "0", "ARCHESTRA_AGENT_RUNTIME_OPENAPPA": "1", "ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL": "claude-sonnet-4-6" if CLIENT == "claude-code" else "gpt-6-astra" if CLIENT == "codex" else "gpt-4.1", "ARCHESTRA_AGENT_RUNTIME_TASK_ID": "startup-test", "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID": "startup-workspace", "ARCHESTRA_AGENT_RUNTIME_TASK": "Call each recovery tool, then reply STARTUP_OK.", "ARCHESTRA_MCP_GATEWAY_URL": origin + "/mcp", "ARCHESTRA_MCP_GATEWAY_TOKEN": "synthetic-token", "OPENAI_BASE_URL": origin + "/v1", "OPENAI_API_KEY": "synthetic-key", "ANTHROPIC_BASE_URL": origin, "ANTHROPIC_AUTH_TOKEN": "synthetic-key", "DISABLE_AUTOUPDATER": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"}
+            env = {**os.environ, "HOME": str(home), "TERM": "xterm-256color", "PATH": str(BIN) + os.pathsep + os.environ["PATH"], "ARCHESTRA_LLM_PROXY_PROTOCOL": "anthropic" if CLIENT == "claude-code" else "openai_chat" if CLIENT in ("hermes", "grok") else "openai_responses", "ARCHESTRA_AGENT_RUNTIME_DIR": str(runtime), "ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX": str(runtime / "turn"), "ARCHESTRA_AGENT_RUNTIME_MODE": mode, "ARCHESTRA_AGENT_RUNTIME_PLAIN": "1" if plain else "0", "ARCHESTRA_AGENT_RUNTIME_OPENAPPA": "1", "ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL": "claude-sonnet-4-6" if CLIENT == "claude-code" else "gpt-6-astra" if CLIENT == "codex" else "grok-4.7" if CLIENT == "grok" else "gpt-4.1", "ARCHESTRA_AGENT_RUNTIME_TASK_ID": "startup-test", "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID": "startup-workspace", "ARCHESTRA_AGENT_RUNTIME_TASK": "Call each recovery tool, then reply STARTUP_OK.", "ARCHESTRA_MCP_GATEWAY_URL": origin + "/mcp", "ARCHESTRA_MCP_GATEWAY_TOKEN": "synthetic-token", "OPENAI_BASE_URL": origin + "/v1", "OPENAI_API_KEY": "synthetic-key", "ANTHROPIC_BASE_URL": origin, "ANTHROPIC_AUTH_TOKEN": "synthetic-key", "DISABLE_AUTOUPDATER": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"}
             if submission_failure:
                 # Only the task paste fails; the pane and MCP status probes work.
                 shim = root / "shim"
@@ -279,6 +327,7 @@ class StartupTest(unittest.TestCase):
                         env["ARCHESTRA_AGENT_RUNTIME_CONTINUE"] = "1"
                         env["ARCHESTRA_AGENT_RUNTIME_TASK"] = "Call each recovery tool again, then reply STARTUP_OK."
                         server.requests.clear()
+                        server.aux_task_requests.clear()
                         server.calls.clear()
                         server.catalog_sent = False
                         server.list_started.clear()
@@ -323,7 +372,7 @@ class StartupTest(unittest.TestCase):
         started = time.monotonic()
         held_since = None
         try:
-            while time.monotonic() - started < 65:
+            while time.monotonic() - started < (95 if failure else 65):
                 if select.select([fd], [], [], 0.1)[0]:
                     try:
                         chunk = os.read(fd, 65536)
@@ -334,15 +383,24 @@ class StartupTest(unittest.TestCase):
                         os.write(fd, b"\x1b[1;1R")
                     if b"\x1b[c" in chunk:
                         os.write(fd, b"\x1b[?1;2c")
-                if idle and server.requests:
+                if idle and server.inference():
                     self.fail("Idle resume submitted inference without a prompt")
-                if (failure or submission_failure) and server.requests:
-                    self.fail("Inference ran after required gateway discovery failed: " + repr(server.requests[:1]))
-                if failure and server.discovery_failed.is_set() and time.monotonic() - started > (40 if failure in ("timeout", "empty") else 12):
-                    break
+                if (failure or submission_failure) and server.inference():
+                    self.fail("Inference ran after required gateway discovery failed: " + repr(server.inference()[:1]))
+                if failure and server.discovery_failed.is_set():
+                    # Watch for a forbidden model call at least this long, then give
+                    # clients whose own connect retries report later (Hermes takes
+                    # ~10s after a gateway error) bounded time to write the failure.
+                    observed = 40 if failure in ("timeout", "empty") else 12
+                    elapsed = time.monotonic() - started
+                    # The envelope is published before the helper writes its
+                    # completion marker. Wait for both before asserting on them.
+                    completed_failure = Path(turn_prefix + ".failure").exists() and (runtime / "turn-complete.failed").exists()
+                    if elapsed > observed and (completed_failure or elapsed > observed + 30):
+                        break
                 if server.list_started.is_set() and not server.release.is_set():
                     held_since = held_since or time.monotonic()
-                    self.assertFalse(server.requests, "Inference began while tools/list was held")
+                    self.assertFalse(server.inference(), "Inference began while tools/list was held")
                     if not failure and time.monotonic() - held_since >= hold:
                         print(f"{CLIENT}: releasing discovery barrier", flush=True)
                         server.release.set()
@@ -357,11 +415,12 @@ class StartupTest(unittest.TestCase):
                 if mode == "interactive" and len(server.calls) == 3 and len(server.requests) >= 4 and (runtime / "readable-transcript.json").exists():
                     break
             details = output.decode(errors="replace")[-6000:]
+            self.assertNotIn("Update available", output.decode(errors="replace"), details)
             for path, binding in server.binding_headers:
                 self.assertEqual(binding, env["ARCHESTRA_AGENT_RUNTIME_BINDING"], f"{path}: missing or stale workspace binding")
             if failure:
                 self.assertTrue(server.discovery_failed.is_set(), details)
-                self.assertFalse(server.requests, details)
+                self.assertFalse(server.inference(), details)
                 self.assertTrue(Path(turn_prefix + ".failure").exists(), details)
                 envelope = json.loads(Path(turn_prefix + ".failure").read_text())
                 self.assertIn(envelope["code"], ("mcp_startup", "codex_startup"))
@@ -372,7 +431,7 @@ class StartupTest(unittest.TestCase):
                 return
             if submission_failure:
                 self.assertTrue(server.catalog_sent, details)
-                self.assertFalse(server.requests, details)
+                self.assertFalse(server.inference(), details)
                 envelope = json.loads(Path(turn_prefix + ".failure").read_text())
                 self.assertEqual(envelope["code"], "task_submission", details)
                 self.assertNotIn("MCP", envelope["message"])
@@ -386,7 +445,7 @@ class StartupTest(unittest.TestCase):
                 # Claude's terminal gate must finish even for an idle restore.
                 if CLIENT == "claude-code" or server.list_started.is_set():
                     self.assertTrue(server.catalog_sent, details)
-                self.assertFalse(server.requests, details)
+                self.assertFalse(server.inference(), details)
                 self.assertFalse(server.calls, details)
                 self.assertIsNone(status, "Idle resumed client exited")
                 print(f"{CLIENT}: saved session restored with no automatic inference", flush=True)
@@ -394,8 +453,14 @@ class StartupTest(unittest.TestCase):
             self.assertTrue(server.list_started.is_set(), details)
             self.assertEqual(server.calls, TOOLS, details + "\nRequests: " + repr(server.requests[:2]))
             self.assertGreaterEqual(len(server.requests), 4, details)
+            for request in server.aux_task_requests:
+                self.assertTrue(request["catalog_sent"], "A side call worked on the task before catalog discovery")
             for request in server.requests:
                 self.assertTrue(request["catalog_sent"], "Inference preceded catalog discovery")
+                if CLIENT == "grok":
+                    # The wire adapter shows the model the gateway tools, never
+                    # Grok's own dispatcher pair.
+                    self.assertFalse({"search_tool", "use_tool"} & set(request["names"]), request)
                 for tool in TOOLS:
                     self.assertTrue(any(name.endswith(tool.removeprefix("archestra__")) for name in request["names"]), (tool, request))
             if not plain:

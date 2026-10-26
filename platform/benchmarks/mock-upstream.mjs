@@ -2,14 +2,20 @@ import { once } from "node:events";
 import http from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
+import { benchmarkPorts } from "./ports.mjs";
 
 export const MOCK_CONTENT = "archestra-benchmark-ok";
+export const MOCK_MCP_TOOL = "benchmark_lookup";
 
 export function createMockServer({ chunks = 20, intervalMs = 10 } = {}) {
   return http.createServer(async (req, res) => {
     if (req.url === "/health") {
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify({ benchmarkMock: 1, chunks, intervalMs }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/mcp") {
+      await answerMcp(req, res);
       return;
     }
     if (req.method !== "POST" || req.url !== "/v1/chat/completions") {
@@ -100,13 +106,70 @@ export function createMockServer({ chunks = 20, intervalMs = 10 } = {}) {
   });
 }
 
+/** A stateless streamable-HTTP MCP server with one deterministic tool. */
+async function answerMcp(req, res) {
+  const parts = [];
+  for await (const part of req) parts.push(part);
+  let message;
+  try {
+    message = JSON.parse(Buffer.concat(parts).toString() || "{}");
+  } catch {
+    res.writeHead(400).end();
+    return;
+  }
+  if (message.id === undefined) {
+    // Notifications, such as notifications/initialized, get no response.
+    res.writeHead(202).end();
+    return;
+  }
+  const results = {
+    initialize: () => ({
+      protocolVersion: "2025-11-25",
+      capabilities: { tools: {} },
+      serverInfo: { name: "benchmark-mock", version: "1" },
+    }),
+    ping: () => ({}),
+    "tools/list": () => ({
+      tools: [
+        {
+          name: MOCK_MCP_TOOL,
+          description: "Look up a fictional item.",
+          inputSchema: {
+            type: "object",
+            properties: { name: { type: "string" } },
+            required: ["name"],
+          },
+        },
+      ],
+    }),
+    "tools/call": ({ name } = {}) =>
+      name === MOCK_MCP_TOOL
+        ? { content: [{ type: "text", text: MOCK_CONTENT }], isError: false }
+        : null,
+  };
+  const result = results[message.method]?.(message.params);
+  res.setHeader("content-type", "application/json");
+  res.end(
+    JSON.stringify(
+      result
+        ? { jsonrpc: "2.0", id: message.id, result }
+        : {
+            jsonrpc: "2.0",
+            id: message.id,
+            error: { code: -32601, message: "Method not found" },
+          },
+    ),
+  );
+}
+
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   const server = createMockServer();
-  server.listen(19092, "127.0.0.1", () =>
-    console.info("Benchmark mock: http://127.0.0.1:19092"),
+  const { mock } = benchmarkPorts(process.argv[2]);
+  server.listen(mock, "127.0.0.1", () =>
+    console.info(`Benchmark mock: http://127.0.0.1:${mock}`),
   );
   for (const signal of ["SIGINT", "SIGTERM"])
     process.once(signal, () => server.close());

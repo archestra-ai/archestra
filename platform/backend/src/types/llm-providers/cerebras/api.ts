@@ -33,7 +33,8 @@ const CerebrasChoiceSchema = z
     // Some OpenAI-compatible upstreams omit `index` on choices; without
     // optional() the response fails serialization (500).
     index: z.number().optional(),
-    logprobs: z.any().nullable(),
+    // Log probabilities may be omitted when the upstream did not request them.
+    logprobs: z.any().nullable().optional(),
     message: z
       .object({
         // Cerebras: content is optional when tool_calls are present

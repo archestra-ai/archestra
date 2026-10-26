@@ -59,6 +59,7 @@ export type AppaSessionIdentity = {
     | "opencode-hosted-header"
     | "kilo-session-header"
     | "kilo-hosted-header"
+    | "pi-session-header"
     | "prompt-cache-key"
     | "metadata-session-id"
     | "conversation"
@@ -523,7 +524,8 @@ export function appendChildTrajectoryReceiptToResponse(params: {
 /**
  * Removes tools from every declaration container, each by its exact wire name
  * and namespace: a namespace member only from the namespace it names, and a
- * tool with no namespace only outside every namespace.
+ * tool with no namespace only outside every namespace, Anthropic inline tool
+ * changes included.
  */
 export function stripAppaTools(params: {
   body: unknown;
@@ -555,6 +557,10 @@ export function stripAppaTools(params: {
       return !isStripped(tool, undefined);
     });
   }
+  // A change that names a tool no longer declared is rejected by the provider.
+  stripInlineToolChanges(params.body, (change) =>
+    isStripped({ name: change.name }, undefined),
+  );
 }
 
 /**
@@ -836,8 +842,9 @@ export type DeclaredToolSpelling = { name: string; namespace?: string };
 /**
  * Every tool this request declares, in every container and group, in order.
  *
- * Reads `tools`, `additional_tools`, Bedrock Converse's `toolConfig.tools`
- * and the Responses `additional_tools` and `tool_search_output` input items.
+ * Reads `tools`, `additional_tools`, Bedrock Converse's `toolConfig.tools`,
+ * the Responses `additional_tools` and `tool_search_output` input items, and
+ * the Anthropic inline declarations still in force.
  * A Codex namespace and a Gemini `functionDeclarations` entry stand for their
  * members, never for themselves: Codex calls a namespace member by its own
  * name, in the namespace it was declared in, which each member entry carries.
@@ -858,7 +865,96 @@ export function declaredToolEntries(body: unknown): DeclaredToolEntry[] {
       }
     }
   }
+  for (const definition of inlineToolDefinitions(body).values())
+    entries.push(declaredToolEntry(definition));
   return entries;
+}
+
+/**
+ * A tool change an Anthropic request makes inside its messages. Claude Code
+ * declares a tool it loads mid-conversation in a system message, as a
+ * `tool_addition` block that carries the definition; an addition or a
+ * `tool_removal` that names a tool by `tool_reference` loads or unloads one
+ * declared in `tools`.
+ */
+type InlineToolChange = {
+  block: Record<string, unknown>;
+  name: string;
+  /** Present only on an addition that carries its own declaration. */
+  definition?: Record<string, unknown>;
+  removal: boolean;
+};
+
+function inlineToolChanges(body: unknown): InlineToolChange[] {
+  const messages = asRecord(body)?.messages;
+  if (!Array.isArray(messages)) return [];
+  const changes: InlineToolChange[] = [];
+  for (const message of messages) {
+    const content = asRecord(message)?.content;
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      const block = asRecord(part);
+      if (block?.type !== "tool_addition" && block?.type !== "tool_removal")
+        continue;
+      const tool = asRecord(block.tool);
+      const definition =
+        tool?.type === "tool_definition"
+          ? asRecord(tool.definition)
+          : undefined;
+      const name = definition ? definition.name : tool?.name;
+      if (typeof name !== "string") continue;
+      changes.push({
+        block,
+        name,
+        ...(definition && block.type === "tool_addition" ? { definition } : {}),
+        removal: block.type === "tool_removal",
+      });
+    }
+  }
+  return changes;
+}
+
+/**
+ * The inline declarations still in force, by name, in message order: a later
+ * removal takes back an earlier addition, and a later addition replaces it.
+ * Declarations in `tools` stay declared; a removal only unloads them.
+ */
+function inlineToolDefinitions(
+  body: unknown,
+): Map<string, Record<string, unknown>> {
+  const active = new Map<string, Record<string, unknown>>();
+  for (const change of inlineToolChanges(body)) {
+    if (change.removal) active.delete(change.name);
+    else if (change.definition) active.set(change.name, change.definition);
+  }
+  return active;
+}
+
+/**
+ * Takes the inline tool changes `drop` selects out of their messages, and a
+ * message left with no content with them: the provider rejects an empty one.
+ */
+function stripInlineToolChanges(
+  body: unknown,
+  drop: (change: InlineToolChange) => boolean,
+): void {
+  const record = asRecord(body);
+  if (!record || !Array.isArray(record.messages)) return;
+  const dropped = new Set<unknown>(
+    inlineToolChanges(body)
+      .filter(drop)
+      .map((change) => change.block),
+  );
+  if (dropped.size === 0) return;
+  record.messages = record.messages.flatMap((entry) => {
+    const message = asRecord(entry);
+    if (!message || !Array.isArray(message.content)) return [entry];
+    const kept = message.content.filter((block) => !dropped.has(block));
+    if (kept.length === message.content.length) return [entry];
+    if (kept.length === 0) return [];
+    message.content = kept;
+    return [entry];
+  });
 }
 
 // === Internal helpers ===

@@ -6,7 +6,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import { A2ATaskStateSchema } from "./a2a-task";
+import { A2ATaskFailureSchema, A2ATaskStateSchema } from "./a2a-task";
 
 /**
  * Runtime backends an Agent Runtime configuration can name. The enum is the
@@ -294,6 +294,17 @@ export const InsertAgentRunRecordSchema = createInsertSchema(
   })
   .omit({ id: true, startedAt: true, endedAt: true });
 
+/**
+ * Why a FAILED run failed, in machine-readable form. `code` comes from the
+ * vocabulary in `services/agent-runtime/run-failure.ts` (or `image.<code>` for
+ * an image-owned envelope); `retriable` says whether a new run of the same
+ * Agent is likely to succeed unchanged; `message` repeats `statusReason`.
+ */
+export const AgentRunFailureSchema = A2ATaskFailureSchema.extend({
+  message: z.string(),
+});
+export type AgentRunFailure = z.infer<typeof AgentRunFailureSchema>;
+
 export const SelectAgentRunSchema = SelectAgentRunRecordSchema.omit({
   logs: true,
   completionTarget: true,
@@ -303,6 +314,8 @@ export const SelectAgentRunSchema = SelectAgentRunRecordSchema.omit({
 }).extend({
   state: A2ATaskStateSchema,
   statusReason: z.string().nullable(),
+  /** Null unless the run FAILED and its failure was classified. */
+  failure: AgentRunFailureSchema.nullable(),
   stateChangedAt: z.date().nullable(),
   /** Effective Kubernetes lifetime limit, resolved for this run. */
   hardDeadlineAt: z.date(),

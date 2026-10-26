@@ -382,15 +382,15 @@ export default function AgentSettingsPage() {
         >
           Chat File Uploads
         </h2>
-        <InlineNotice variant="error">
+        <InlineNotice variant="warning">
           <AlertTriangle />
           <InlineNoticeBody>
             <span className="font-medium">
-              Security policies only apply to text content.
+              Uploads may contain sensitive information.
             </span>
             <InlineNoticeText>
-              File uploads (images, PDFs) bypass policy checks. File-based
-              policies coming soon.
+              Files and extracted content may be sent to the chat's AI provider.
+              Enable uploads only if your organization's data policies allow it.
             </InlineNoticeText>
           </InlineNoticeBody>
         </InlineNotice>

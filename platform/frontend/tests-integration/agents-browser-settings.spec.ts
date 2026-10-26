@@ -34,7 +34,7 @@ test("upload and browser switches save and cancel, with the upload warning above
       .boundingBox();
     const notice = await page
       .getByRole("alert")
-      .filter({ hasText: "Security policies only apply to text content." })
+      .filter({ hasText: "Uploads may contain sensitive information." })
       .boundingBox();
     const description = await page
       .getByText(/Allow users to upload files in/)

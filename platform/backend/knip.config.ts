@@ -38,6 +38,7 @@ const config: KnipConfig = {
     "@archestra/app-runtime-rs",
     "@archestra/image-rs",
     "@archestra/openappa-rs",
+    "@archestra/router-rs",
   ],
   ignoreBinaries: [
     // biome and concurrently are in root package.json

@@ -2937,6 +2937,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "router_rs"
+version = "0.1.0"
+dependencies = [
+ "napi",
+ "napi-build",
+ "napi-derive",
+ "router_core",
+ "serde_json",
+]
+
+[[package]]
 name = "rusqlite"
 version = "0.40.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

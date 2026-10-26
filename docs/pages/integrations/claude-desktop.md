@@ -2,7 +2,7 @@
 title: Claude Desktop
 description: Route Claude Desktop's inference and tools through Archestra
 order: 2
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-26
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

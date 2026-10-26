@@ -2934,6 +2934,37 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         session_id: `${callerId}|desktop-session`,
       }),
     ]);
+
+    // A Chat-tab tool call with no session header binds the credential's shared root.
+    block = true;
+    const chatTabDenied = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "x-archestra-agent-id": "anthropic_claude_desktop",
+      },
+      payload: payload(false) as Record<string, unknown>,
+    });
+    expect(chatTabDenied.statusCode, chatTabDenied.body).toBe(200);
+    expect(
+      (chatTabDenied.json().content as Array<{ type: string }>).some(
+        (block) => block.type === "tool_use",
+      ),
+    ).toBe(false);
+    expect(events.filter((event) => event.event === "session_start")).toEqual([
+      expect.objectContaining({
+        organization_id: agent.organizationId,
+        caller_id: callerId,
+        session_id: `${callerId}|desktop-session`,
+      }),
+      expect.objectContaining({
+        organization_id: agent.organizationId,
+        caller_id: callerId,
+        session_id: `${callerId}@${agent.id}`,
+      }),
+    ]);
   });
 
   test("an encrypted chat that started while the switch was off stays unenforced; a new one requires a key and escrow", async ({

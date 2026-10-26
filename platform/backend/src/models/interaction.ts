@@ -2569,6 +2569,7 @@ class InteractionModel {
         // For single interactions (no session), return the interaction ID for direct navigation
         interactionId: sql<string>`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
         requestCount: count(),
+        failedOverCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.attemptOutcome} = 'failed_over')`,
         totalInputTokens: sum(schema.interactionsTable.inputTokens),
         totalOutputTokens: sum(schema.interactionsTable.outputTokens),
         totalCacheReadTokens: sum(schema.interactionsTable.cacheReadTokens),
@@ -2723,6 +2724,7 @@ class InteractionModel {
         sources: s.sources ?? [],
         interactionId: s.interactionId, // Only set for single interactions (null session)
         requestCount: Number(s.requestCount),
+        failedOverCount: Number(s.failedOverCount),
         totalInputTokens: Number(s.totalInputTokens) || 0,
         totalOutputTokens: Number(s.totalOutputTokens) || 0,
         totalCacheReadTokens: Number(s.totalCacheReadTokens) || 0,

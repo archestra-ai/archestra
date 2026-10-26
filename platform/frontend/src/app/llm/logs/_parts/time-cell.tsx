@@ -15,10 +15,11 @@ export function TimeCell({
 }: {
   session: Pick<
     LogSession,
-    "firstRequestTime" | "lastRequestTime" | "requestCount"
+    "firstRequestTime" | "lastRequestTime" | "requestCount" | "failedOverCount"
   >;
 }) {
-  const { firstRequestTime, lastRequestTime, requestCount } = session;
+  const { firstRequestTime, lastRequestTime, requestCount, failedOverCount } =
+    session;
   if (!lastRequestTime) {
     return <div className="text-right text-xs text-muted-foreground">—</div>;
   }
@@ -36,6 +37,12 @@ export function TimeCell({
           </time>
           <span className="block text-xs leading-4 whitespace-nowrap text-muted-foreground">
             <span>{requestCount.toLocaleString()} req</span>
+            {failedOverCount > 0 ? (
+              <span className="text-red-700 dark:text-red-400">
+                {" "}
+                ({failedOverCount.toLocaleString()} failed over)
+              </span>
+            ) : null}
             {span ? <span> · {span}</span> : null}
           </span>
         </UnstyledButton>

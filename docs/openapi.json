@@ -231644,6 +231644,10 @@
                           "requestCount": {
                             "type": "number"
                           },
+                          "failedOverCount": {
+                            "type": "number",
+                            "description": "Requests a model pool retried on another member. Each is also counted in requestCount; they carry no tokens or cost."
+                          },
                           "totalInputTokens": {
                             "type": "number"
                           },
@@ -231824,6 +231828,7 @@
                           "sources",
                           "interactionId",
                           "requestCount",
+                          "failedOverCount",
                           "totalInputTokens",
                           "totalOutputTokens",
                           "totalCacheReadTokens",

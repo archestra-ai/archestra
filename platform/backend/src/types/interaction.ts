@@ -917,6 +917,11 @@ export const SessionSummarySchema = z.object({
   sources: z.array(InteractionSourceSchema),
   interactionId: z.string().nullable(), // Only set for single interactions (null session)
   requestCount: z.number(),
+  failedOverCount: z
+    .number()
+    .describe(
+      "Requests a model pool retried on another member. Each is also counted in requestCount; they carry no tokens or cost.",
+    ),
   totalInputTokens: z.number(),
   totalOutputTokens: z.number(),
   totalCacheReadTokens: z.number(),

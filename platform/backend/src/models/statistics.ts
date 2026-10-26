@@ -103,6 +103,8 @@ class StatisticsModel {
       inputTokens: tokenSum(i.inputTokens),
       outputTokens: tokenSum(i.outputTokens),
       cacheReadTokens: tokenSum(i.cacheReadTokens),
+      cacheWriteTokens: tokenSum(i.cacheWriteTokens),
+      totalTokens: reportedTokens(i),
       billedCost: billedSum(i.cost, "DOUBLE PRECISION"),
       subscriptionCost: sql<number>`COALESCE(SUM(${i.cost}) FILTER (WHERE ${i.billingMode} = 'subscription'), 0)::double precision`,
     };
@@ -193,6 +195,8 @@ class StatisticsModel {
       inputTokens: 0,
       outputTokens: 0,
       cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 0,
       billedCost: 0,
       subscriptionCost: 0,
     };
@@ -389,6 +393,20 @@ class StatisticsModel {
                 0,
             }
           : {}),
+        ...("cacheWriteTokens" in row
+          ? {
+              cacheWriteTokens:
+                Number(
+                  (row as { cacheWriteTokens: unknown }).cacheWriteTokens,
+                ) || 0,
+            }
+          : {}),
+        ...("totalTokens" in row
+          ? {
+              totalTokens:
+                Number((row as { totalTokens: unknown }).totalTokens) || 0,
+            }
+          : {}),
       }));
     }
 
@@ -416,6 +434,8 @@ class StatisticsModel {
           // Reset before accumulating; the `...row` spread would otherwise leave
           // the first row's value in place and the merge would never sum it.
           ...("cacheReadTokens" in row ? { cacheReadTokens: 0 } : {}),
+          ...("cacheWriteTokens" in row ? { cacheWriteTokens: 0 } : {}),
+          ...("totalTokens" in row ? { totalTokens: 0 } : {}),
           ...("subscriptionCost" in row ? { subscriptionCost: 0 } : {}),
         } as T);
       }
@@ -439,6 +459,14 @@ class StatisticsModel {
       if ("cacheReadTokens" in row && "cacheReadTokens" in existing) {
         (existing as { cacheReadTokens: number }).cacheReadTokens +=
           Number((row as { cacheReadTokens: number }).cacheReadTokens) || 0;
+      }
+      if ("cacheWriteTokens" in row && "cacheWriteTokens" in existing) {
+        (existing as { cacheWriteTokens: number }).cacheWriteTokens +=
+          Number((row as { cacheWriteTokens: number }).cacheWriteTokens) || 0;
+      }
+      if ("totalTokens" in row && "totalTokens" in existing) {
+        (existing as { totalTokens: number }).totalTokens +=
+          Number((row as { totalTokens: number }).totalTokens) || 0;
       }
     }
 
@@ -470,6 +498,9 @@ class StatisticsModel {
         requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
         inputTokens: tokenSum(schema.interactionsTable.inputTokens),
         outputTokens: tokenSum(schema.interactionsTable.outputTokens),
+        cacheReadTokens: tokenSum(schema.interactionsTable.cacheReadTokens),
+        cacheWriteTokens: tokenSum(schema.interactionsTable.cacheWriteTokens),
+        totalTokens: reportedTokens(),
         // Billed spend: subscription-fulfilled traffic incurs no per-token
         // charge, so its list-price `cost` is excluded from the reported total.
         cost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
@@ -559,6 +590,10 @@ class StatisticsModel {
 
     // Aggregate data by team
     const teamMap = new Map<string, TeamStatistics>();
+    const seriesByTeam = new Map<
+      string,
+      Map<string, StatisticsTimeSeriesPoint>
+    >();
 
     for (const row of timeSeriesData) {
       // Use stored cost from interactions (already calculated per-model)
@@ -576,21 +611,54 @@ class StatisticsModel {
           requests: 0,
           inputTokens: 0,
           outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 0,
           cost: 0,
           timeSeries: [],
         });
+        seriesByTeam.set(row.teamId, new Map());
       }
 
       const team = teamMap.get(row.teamId);
-      if (!team) continue;
+      const series = seriesByTeam.get(row.teamId);
+      if (!team || !series) continue;
       team.requests += Number(row.requests);
       team.inputTokens += Number(row.inputTokens);
       team.outputTokens += Number(row.outputTokens);
+      team.cacheReadTokens += Number(row.cacheReadTokens) || 0;
+      team.cacheWriteTokens += Number(row.cacheWriteTokens) || 0;
+      team.totalTokens += Number(row.totalTokens) || 0;
       team.cost += cost;
-      team.timeSeries.push({
+      const point = series.get(row.timeBucket) ?? {
         timestamp: row.timeBucket,
-        value: cost,
-      });
+        value: 0,
+        requests: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 0,
+      };
+      point.value += cost;
+      point.requests = (point.requests ?? 0) + (Number(row.requests) || 0);
+      point.inputTokens =
+        (point.inputTokens ?? 0) + (Number(row.inputTokens) || 0);
+      point.outputTokens =
+        (point.outputTokens ?? 0) + (Number(row.outputTokens) || 0);
+      point.cacheReadTokens =
+        (point.cacheReadTokens ?? 0) + (Number(row.cacheReadTokens) || 0);
+      point.cacheWriteTokens =
+        (point.cacheWriteTokens ?? 0) + (Number(row.cacheWriteTokens) || 0);
+      point.totalTokens =
+        (point.totalTokens ?? 0) + (Number(row.totalTokens) || 0);
+      series.set(row.timeBucket, point);
+    }
+
+    for (const team of teamMap.values()) {
+      team.timeSeries = Array.from(
+        seriesByTeam.get(team.teamId)?.values() ?? [],
+      ).sort((a, b) => a.timestamp.localeCompare(b.timestamp));
     }
 
     return Array.from(teamMap.values());
@@ -621,6 +689,8 @@ class StatisticsModel {
         inputTokens: tokenSum(schema.interactionsTable.inputTokens),
         outputTokens: tokenSum(schema.interactionsTable.outputTokens),
         cacheReadTokens: tokenSum(schema.interactionsTable.cacheReadTokens),
+        cacheWriteTokens: tokenSum(schema.interactionsTable.cacheWriteTokens),
+        totalTokens: reportedTokens(),
         // Billed spend: subscription-fulfilled traffic incurs no per-token
         // charge, so its list-price `cost` is excluded from the reported total.
         cost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
@@ -675,7 +745,10 @@ class StatisticsModel {
     // originating proxy row), so points are merged by timestamp rather than
     // appended — a series with a duplicate timestamp reads as whichever point
     // a consumer looks up first, not as the bucket's total.
-    const seriesByAgent = new Map<string, Map<string, number>>();
+    const seriesByAgent = new Map<
+      string,
+      Map<string, StatisticsTimeSeriesPoint>
+    >();
 
     for (const row of timeSeriesData) {
       // Use stored cost from interactions (already calculated per-model)
@@ -691,6 +764,8 @@ class StatisticsModel {
           inputTokens: 0,
           outputTokens: 0,
           cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 0,
           cost: 0,
           timeSeries: [],
         });
@@ -704,14 +779,37 @@ class StatisticsModel {
       agent.inputTokens += Number(row.inputTokens);
       agent.outputTokens += Number(row.outputTokens);
       agent.cacheReadTokens += Number(row.cacheReadTokens) || 0;
+      agent.cacheWriteTokens += Number(row.cacheWriteTokens) || 0;
+      agent.totalTokens += Number(row.totalTokens) || 0;
       agent.cost += cost;
-      series.set(row.timeBucket, (series.get(row.timeBucket) ?? 0) + cost);
+      const point = series.get(row.timeBucket) ?? {
+        timestamp: row.timeBucket,
+        value: 0,
+        requests: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 0,
+      };
+      point.value += cost;
+      point.requests = (point.requests ?? 0) + (Number(row.requests) || 0);
+      point.inputTokens =
+        (point.inputTokens ?? 0) + (Number(row.inputTokens) || 0);
+      point.outputTokens =
+        (point.outputTokens ?? 0) + (Number(row.outputTokens) || 0);
+      point.cacheReadTokens =
+        (point.cacheReadTokens ?? 0) + (Number(row.cacheReadTokens) || 0);
+      point.cacheWriteTokens =
+        (point.cacheWriteTokens ?? 0) + (Number(row.cacheWriteTokens) || 0);
+      point.totalTokens =
+        (point.totalTokens ?? 0) + (Number(row.totalTokens) || 0);
+      series.set(row.timeBucket, point);
     }
 
     for (const agent of agentMap.values()) {
       agent.timeSeries = Array.from(
-        seriesByAgent.get(agent.agentId) ?? [],
-        ([timestamp, value]) => ({ timestamp, value }),
+        seriesByAgent.get(agent.agentId)?.values() ?? [],
       )
         // Chronological regardless of the order the rows arrived in: buckets
         // are uniformly formatted within a response, so they sort as strings.
@@ -740,6 +838,8 @@ class StatisticsModel {
         inputTokens: modelInput,
         outputTokens: modelOutput,
         cacheReadTokens: modelCacheRead,
+        cacheWriteTokens: modelCacheWrite,
+        totalTokens: modelReportedTokens,
         // Billed spend: subscription-fulfilled traffic incurs no per-token
         // charge, so its list-price `cost` is excluded from the reported total.
         cost: modelBilledCost,
@@ -830,14 +930,13 @@ class StatisticsModel {
 
     const whereClause = and(...scopeConditions);
 
-    const totalTokensExpr = sql<number>`COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) + COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0)`;
     const billedCostExpr = billedSum(
       schema.interactionsTable.cost,
       "DOUBLE PRECISION",
     );
 
     const sortExpr = {
-      totalTokens: totalTokensExpr,
+      totalTokens: reportedTokens(),
       requests: sql`COUNT(*)`,
       billedCost: billedCostExpr,
       lastActiveAt: sql`MAX(${schema.interactionsTable.createdAt})`,
@@ -855,7 +954,8 @@ class StatisticsModel {
           inputTokens: tokenSum(schema.interactionsTable.inputTokens),
           outputTokens: tokenSum(schema.interactionsTable.outputTokens),
           cacheReadTokens: tokenSum(schema.interactionsTable.cacheReadTokens),
-          totalTokens: sql<number>`CAST(${totalTokensExpr} AS DOUBLE PRECISION)`,
+          cacheWriteTokens: tokenSum(schema.interactionsTable.cacheWriteTokens),
+          totalTokens: reportedTokens(),
           billedCost: billedCostExpr,
           subscriptionCost: subscriptionCostSum("DOUBLE PRECISION"),
           activeDays: sql<number>`CAST(COUNT(DISTINCT DATE(${schema.interactionsTable.createdAt})) AS INTEGER)`,
@@ -925,6 +1025,7 @@ class StatisticsModel {
       inputTokens: Number(row.inputTokens) || 0,
       outputTokens: Number(row.outputTokens) || 0,
       cacheReadTokens: Number(row.cacheReadTokens) || 0,
+      cacheWriteTokens: Number(row.cacheWriteTokens) || 0,
       totalTokens: Number(row.totalTokens) || 0,
       billedCost: Number(row.billedCost) || 0,
       subscriptionCost: Number(row.subscriptionCost) || 0,
@@ -990,8 +1091,6 @@ class StatisticsModel {
       ...StatisticsModel.organizationScopeSubqueryConditions(organizationId),
     );
 
-    const totalTokensExpr = sql<number>`COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) + COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0)`;
-
     const [totals, timeSeriesByUser, modelsByUser] = await Promise.all([
       db
         .select({
@@ -999,7 +1098,8 @@ class StatisticsModel {
           inputTokens: tokenSum(schema.interactionsTable.inputTokens),
           outputTokens: tokenSum(schema.interactionsTable.outputTokens),
           cacheReadTokens: tokenSum(schema.interactionsTable.cacheReadTokens),
-          totalTokens: sql<number>`CAST(${totalTokensExpr} AS DOUBLE PRECISION)`,
+          cacheWriteTokens: tokenSum(schema.interactionsTable.cacheWriteTokens),
+          totalTokens: reportedTokens(),
           billedCost: billedSum(
             schema.interactionsTable.cost,
             "DOUBLE PRECISION",
@@ -1032,6 +1132,7 @@ class StatisticsModel {
       inputTokens: Number(row?.inputTokens) || 0,
       outputTokens: Number(row?.outputTokens) || 0,
       cacheReadTokens: Number(row?.cacheReadTokens) || 0,
+      cacheWriteTokens: Number(row?.cacheWriteTokens) || 0,
       totalTokens: Number(row?.totalTokens) || 0,
       billedCost: Number(row?.billedCost) || 0,
       subscriptionCost: Number(row?.subscriptionCost) || 0,
@@ -1096,7 +1197,7 @@ class StatisticsModel {
     const [[mix], buckets, sessions, clientRows] = await Promise.all([
       db
         .select({
-          freshInputTokens: tokenSum(interactions.inputTokens),
+          freshInputTokens: sql<number>`CAST(COALESCE(SUM(${interactions.inputTokens}) FILTER (WHERE NOT ${interactions.inputTokensEstimated}), 0) AS DOUBLE PRECISION)`,
           cacheReadTokens: tokenSum(interactions.cacheReadTokens),
           cacheWriteTokens: tokenSum(interactions.cacheWriteTokens),
           outputTokens: tokenSum(interactions.outputTokens),
@@ -1141,6 +1242,8 @@ class StatisticsModel {
           inputTokens: tokenSum(interactions.inputTokens),
           outputTokens: tokenSum(interactions.outputTokens),
           cacheReadTokens: tokenSum(interactions.cacheReadTokens),
+          cacheWriteTokens: tokenSum(interactions.cacheWriteTokens),
+          totalTokens: reportedTokens(interactions),
           billedCost: billedSum(interactions.cost, "DOUBLE PRECISION"),
           subscriptionCost: subscriptionCostSum("DOUBLE PRECISION"),
         })
@@ -1210,6 +1313,7 @@ class StatisticsModel {
         inputTokens: 0,
         outputTokens: 0,
         cacheReadTokens: 0,
+        cacheWriteTokens: 0,
         totalTokens: 0,
         percentage: 0,
         billedCost: 0,
@@ -1219,7 +1323,8 @@ class StatisticsModel {
       current.inputTokens += Number(row.inputTokens) || 0;
       current.outputTokens += Number(row.outputTokens) || 0;
       current.cacheReadTokens += Number(row.cacheReadTokens) || 0;
-      current.totalTokens = current.inputTokens + current.outputTokens;
+      current.cacheWriteTokens += Number(row.cacheWriteTokens) || 0;
+      current.totalTokens += Number(row.totalTokens) || 0;
       current.billedCost += Number(row.billedCost) || 0;
       current.subscriptionCost += Number(row.subscriptionCost) || 0;
       clientsByLabel.set(client, current);
@@ -1616,7 +1721,7 @@ class StatisticsModel {
       0,
     );
     const totalTokens = modelStats.reduce(
-      (sum, model) => sum + model.inputTokens + model.outputTokens,
+      (sum, model) => sum + model.totalTokens,
       0,
     );
     const totalCost = modelStats.reduce((sum, model) => sum + model.cost, 0);
@@ -1688,6 +1793,8 @@ class StatisticsModel {
           inputTokens: modelInput,
           outputTokens: modelOutput,
           cacheReadTokens: modelCacheRead,
+          cacheWriteTokens: modelCacheWrite,
+          totalTokens: modelReportedTokens,
           cost: modelBilledCost,
           baselineCost: modelBaselineCost,
           actualCost: modelBilledCost,
@@ -1793,6 +1900,8 @@ class StatisticsModel {
           inputTokens: 0,
           outputTokens: 0,
           cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 0,
           cost: 0,
           percentage: 0,
           timeSeries: [],
@@ -1805,6 +1914,8 @@ class StatisticsModel {
       model.inputTokens += Number(row.inputTokens);
       model.outputTokens += Number(row.outputTokens);
       model.cacheReadTokens += Number(row.cacheReadTokens) || 0;
+      model.cacheWriteTokens += Number(row.cacheWriteTokens) || 0;
+      model.totalTokens += Number(row.totalTokens) || 0;
       model.cost += cost;
       model.timeSeries.push({
         timestamp: row.timeBucket,
@@ -1813,6 +1924,8 @@ class StatisticsModel {
         inputTokens: Number(row.inputTokens),
         outputTokens: Number(row.outputTokens),
         cacheReadTokens: Number(row.cacheReadTokens) || 0,
+        cacheWriteTokens: Number(row.cacheWriteTokens) || 0,
+        totalTokens: Number(row.totalTokens) || 0,
       });
     }
 
@@ -2427,6 +2540,8 @@ class StatisticsModel {
         inputTokens: modelInput,
         outputTokens: modelOutput,
         cacheReadTokens: modelCacheRead,
+        cacheWriteTokens: modelCacheWrite,
+        totalTokens: modelReportedTokens,
         cost: modelBilledCost,
         subscriptionCost: modelSubscriptionCost,
       })
@@ -2472,6 +2587,8 @@ class StatisticsModel {
         inputTokens: modelInput,
         outputTokens: modelOutput,
         cacheReadTokens: modelCacheRead,
+        cacheWriteTokens: modelCacheWrite,
+        totalTokens: modelReportedTokens,
         billedCost: modelBilledCost,
         subscriptionCost: modelSubscriptionCost,
       })
@@ -2486,7 +2603,7 @@ class StatisticsModel {
         ),
       )
       .groupBy(schema.interactionsTable.userId, billedModel)
-      .orderBy(desc(sql`${modelInput} + ${modelOutput}`));
+      .orderBy(desc(modelReportedTokens));
 
     const byUser = new Map<string, UserModelUsage[]>();
     for (const row of rows) {
@@ -2498,8 +2615,8 @@ class StatisticsModel {
         inputTokens: Number(row.inputTokens) || 0,
         outputTokens: Number(row.outputTokens) || 0,
         cacheReadTokens: Number(row.cacheReadTokens) || 0,
-        totalTokens:
-          (Number(row.inputTokens) || 0) + (Number(row.outputTokens) || 0),
+        cacheWriteTokens: Number(row.cacheWriteTokens) || 0,
+        totalTokens: Number(row.totalTokens) || 0,
         percentage: 0,
         billedCost: Number(row.billedCost) || 0,
         subscriptionCost: Number(row.subscriptionCost) || 0,
@@ -2605,6 +2722,25 @@ const PROXY_ATTRIBUTED_AGENT_TYPES: ReadonlySet<string> = new Set([
  */
 function tokenSum(column: AnyColumn): SQL<number> {
   return sql<number>`CAST(COALESCE(SUM(${column}), 0) AS DOUBLE PRECISION)`;
+}
+
+/**
+ * Provider-reported tokens that do not overlap: uncached input, output, cache
+ * reads, and cache writes. A 1-hour cache write is a subset of cache writes,
+ * and reasoning already included in stored output is not added again. Estimated
+ * input is excluded. Estimated output cannot be excluded: the row does not
+ * record which output counts were synthesized. Separate Gemini thoughts are
+ * not persisted in these columns and cannot be reconstructed here.
+ */
+function reportedTokens(
+  table: typeof schema.interactionsTable = schema.interactionsTable,
+): SQL<number> {
+  return sql<number>`CAST(
+    COALESCE(SUM(${table.inputTokens}) FILTER (WHERE NOT ${table.inputTokensEstimated}), 0)
+    + COALESCE(SUM(${table.outputTokens}), 0)
+    + COALESCE(SUM(${table.cacheReadTokens}), 0)
+    + COALESCE(SUM(${table.cacheWriteTokens}), 0)
+    AS DOUBLE PRECISION)`;
 }
 
 /** Resolve the executing agent UUID from a direct id or delegation chain. */
@@ -2736,6 +2872,8 @@ function userUsageTimeSeriesPoint(row: {
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
   cost: number;
   subscriptionCost: number;
 }): StatisticsTimeSeriesPoint {
@@ -2747,6 +2885,8 @@ function userUsageTimeSeriesPoint(row: {
     inputTokens: Number(row.inputTokens) || 0,
     outputTokens: Number(row.outputTokens) || 0,
     cacheReadTokens: Number(row.cacheReadTokens) || 0,
+    cacheWriteTokens: Number(row.cacheWriteTokens) || 0,
+    totalTokens: Number(row.totalTokens) || 0,
     billedCost,
     subscriptionCost: Number(row.subscriptionCost) || 0,
   };
@@ -2760,6 +2900,8 @@ type ModelStatisticsRow = {
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
   cost: number;
 };
 type CostSavingsRow = {
@@ -2785,6 +2927,7 @@ const billingModelFacts = sql`LATERAL (
     sum((component->>'inputTokens')::bigint) AS input_tokens,
     sum((component->>'outputTokens')::bigint) AS output_tokens,
     sum((component->>'cacheReadTokens')::bigint) AS cache_read_tokens,
+    sum((component->>'cacheWriteTokens')::bigint) AS cache_write_tokens,
     sum((component->>'cost')::numeric) AS cost,
     sum(round((
       ((component->>'cacheReadTokens')::numeric + (component->>'cacheWriteTokens')::numeric) * (component->'prices'->>'input')::numeric
@@ -2800,6 +2943,13 @@ const modelRequests = sql<number>`CAST(COUNT(*) FILTER (WHERE billing_model.mode
 const modelInput = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.input_tokens, ${schema.interactionsTable.inputTokens})), 0) AS BIGINT)`;
 const modelOutput = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.output_tokens, ${schema.interactionsTable.outputTokens})), 0) AS BIGINT)`;
 const modelCacheRead = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cache_read_tokens, ${schema.interactionsTable.cacheReadTokens})), 0) AS BIGINT)`;
+const modelCacheWrite = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cache_write_tokens, ${schema.interactionsTable.cacheWriteTokens})), 0) AS BIGINT)`;
+const modelReportedTokens = sql<number>`CAST(
+  COALESCE(SUM(COALESCE(billing_model.input_tokens, CASE WHEN NOT ${schema.interactionsTable.inputTokensEstimated} THEN ${schema.interactionsTable.inputTokens} ELSE 0 END)), 0)
+  + COALESCE(SUM(COALESCE(billing_model.output_tokens, ${schema.interactionsTable.outputTokens})), 0)
+  + COALESCE(SUM(COALESCE(billing_model.cache_read_tokens, ${schema.interactionsTable.cacheReadTokens})), 0)
+  + COALESCE(SUM(COALESCE(billing_model.cache_write_tokens, ${schema.interactionsTable.cacheWriteTokens})), 0)
+  AS BIGINT)`;
 const modelBilledCost = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cost, ${schema.interactionsTable.cost})) FILTER (WHERE ${schema.interactionsTable.billingMode} <> 'subscription'), 0) AS DOUBLE PRECISION)`;
 
 const modelSubscriptionCost = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cost, ${schema.interactionsTable.cost})) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'subscription'), 0) AS DOUBLE PRECISION)`;

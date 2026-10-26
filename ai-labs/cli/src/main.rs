@@ -8,6 +8,7 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use archestra_bench::guardrails_native::{self, GuardrailsError};
 use archestra_bench::lifecycle::shutdown_all;
 use archestra_bench::results::Outcome;
 use archestra_bench::run::{RunError, RunOutcome, run};
@@ -39,6 +40,9 @@ enum Cmd {
     /// Serve a local read-only dashboard over an experiments dir (run list, rubric grids,
     /// rollout details). No LLM, no API key.
     Dashboard(DashboardArgs),
+    /// Opt-in native Guardrails suite. Exits before any side effect unless `--execute` is set.
+    /// Not selected by `benchmark`, nightly, or CI.
+    GuardrailsNative(GuardrailsNativeArgs),
 }
 
 /// Flags shared by `benchmark` and `full` — what to run and where. Flattened into both so the two can
@@ -132,6 +136,13 @@ struct PrepareArgs {
 }
 
 #[derive(Args, Debug)]
+struct GuardrailsNativeArgs {
+    /// Run the native pilots against an isolated local gateway, including temporary policy changes.
+    #[arg(long)]
+    execute: bool,
+}
+
+#[derive(Args, Debug)]
 struct DashboardArgs {
     #[arg(
         long,
@@ -157,6 +168,7 @@ async fn main() -> ExitCode {
     let default_filter = match &cli.cmd {
         Cmd::Analyze(_) | Cmd::Prepare(_) => "warn",
         Cmd::Dashboard(_) => "info,tower_http=info",
+        Cmd::GuardrailsNative(_) => "warn",
         _ => "info,rmcp=warn,nitpicker_agent=warn",
     };
     init_tracing(default_filter);
@@ -167,6 +179,59 @@ async fn main() -> ExitCode {
         Cmd::Full(a) => run_full(a).await,
         Cmd::Prepare(a) => run_prepare(a),
         Cmd::Dashboard(a) => run_dashboard(a).await,
+        Cmd::GuardrailsNative(a) => run_guardrails_native(a).await,
+    }
+}
+
+async fn run_guardrails_native(args: GuardrailsNativeArgs) -> ExitCode {
+    if std::env::var_os("ARCHESTRA_BENCH_GUARDRAILS_PROFILE").is_some() {
+        eprintln!(
+            "✗ {}",
+            guardrails_native::reject_profile_override("ARCHESTRA_BENCH_GUARDRAILS_PROFILE")
+        );
+        return ExitCode::FAILURE;
+    }
+    if std::env::var_os("ARCHESTRA_BENCH_GUARDRAILS_INTERVENTION").is_some() {
+        eprintln!(
+            "✗ {}",
+            guardrails_native::reject_profile_override("ARCHESTRA_BENCH_GUARDRAILS_INTERVENTION")
+        );
+        return ExitCode::FAILURE;
+    }
+    match guardrails_native::prepare(args.execute) {
+        Err(GuardrailsError::NotEnabled) => {
+            let planned = guardrails_native::plan();
+            eprintln!(
+                "guardrails-native disabled: profile {}, order {}. No side effects. --execute runs the restored Claude and Codex native pilots.",
+                planned.profile,
+                planned.order.join("/")
+            );
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("✗ {error}");
+            ExitCode::FAILURE
+        }
+        Ok(prepared) => {
+            let benchmarks = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../platform/benchmarks");
+            let run_id = guardrails_native::fresh_run_id();
+            match guardrails_native::execute(&prepared, &benchmarks, &run_id, &guardrails_native::node_binary()).await {
+                Ok(status) => {
+                    let run_dir = benchmarks.join("results").join(format!("guardrails-native-{run_id}"));
+                    if let Err(error) = guardrails_native::write_run_artifacts(&run_dir, &status) {
+                        eprintln!("✗ {error}");
+                        return ExitCode::FAILURE;
+                    }
+                    println!("{}", status["aggregate"]);
+                    eprintln!("guardrails-native qualified; wrote {}", run_dir.display());
+                    ExitCode::SUCCESS
+                }
+                Err(error) => {
+                    eprintln!("✗ {error}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
     }
 }
 

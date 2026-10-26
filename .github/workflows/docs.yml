@@ -128,7 +128,7 @@ jobs:
           persist-credentials: false
           # Standalone validation checks the selected manual ref.
           fetch-depth: 1
-      - uses: ./.github/actions/capture-docs-screenshots
+      - uses: $/.github/actions/capture-docs-screenshots
         # No filter: every queue commit must exercise the entire manifest.
 
   docs-screenshots:
@@ -156,7 +156,7 @@ jobs:
       # Pushes made with GITHUB_TOKEN don't re-trigger workflows; the app token's do.
       - name: Generate GitHub App token
         id: generate-token
-        uses: ./.github/actions/github-app-token
+        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
@@ -169,11 +169,12 @@ jobs:
           token: ${{ steps.generate-token.outputs.token }}
           fetch-depth: 2
 
-      - uses: ./.github/actions/capture-docs-screenshots
+      - uses: $/.github/actions/capture-docs-screenshots
         with:
           only: ${{ inputs.only }}
 
       - name: Commit updated screenshots
+        id: publish-screenshots
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           EVENT_NAME: ${{ github.event_name }}
@@ -198,7 +199,7 @@ jobs:
           if [ "$EVENT_NAME" = "pull_request" ]; then
             git commit -m "docs: update screenshots"
             # Reject a concurrent release update rather than publishing stale captures.
-            git push origin "HEAD:refs/heads/${HEAD_BRANCH}"
+            python3 .github/scripts/push-docs-screenshots.py "$HEAD_BRANCH"
           else
             branch="docs/screenshots-${RUN_ID}"
             git switch -c "$branch"
@@ -210,3 +211,11 @@ jobs:
               --title "docs: update screenshots" \
               --body "Re-captured every docs screenshot of the app in light and dark mode (workflow run ${RUN_ID})."
           fi
+
+      - name: Retain screenshots when the release head is queued
+        if: steps.publish-screenshots.outputs.queued == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: queued-docs-screenshots
+          path: docs/assets
+          retention-days: 7

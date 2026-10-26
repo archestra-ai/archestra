@@ -111,7 +111,13 @@ describe("Connect page installer command", () => {
       clientId,
       ALL_INCLUDED,
     );
-    expect(argv).toEqual(["--url", origin, "--client", clientId]);
+    expect(argv).toEqual([
+      "--url",
+      origin,
+      "--client",
+      clientId,
+      ...(clientId === "pi" ? ["--exclude", "plugins"] : []),
+    ]);
     expect(leftovers).toEqual([]);
   });
 

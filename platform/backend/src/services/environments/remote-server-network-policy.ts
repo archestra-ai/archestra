@@ -1,4 +1,5 @@
 import { EnvironmentModel, OrganizationModel } from "@/models";
+import { readConfig } from "@/services/config-cache";
 import type { InternalMcpCatalogServerType, NetworkPolicy } from "@/types";
 import { isHostAllowedByNetworkPolicy } from "./network-policy-match";
 
@@ -60,6 +61,17 @@ export async function evaluateRemoteServerUrlAgainstNetworkPolicy(params: {
  * null/undefined one resolves the org default environment's policy.
  */
 async function resolveEnvironmentNetworkPolicy(params: {
+  environmentId: string | null | undefined;
+  organizationId: string;
+}): Promise<{ policy: NetworkPolicy | null; label: string }> {
+  // Every remote tool call checks its URL, so a gateway call reads this once.
+  return readConfig(
+    `network-policy\0${params.organizationId}\0${params.environmentId ?? ""}`,
+    () => loadEnvironmentNetworkPolicy(params),
+  );
+}
+
+async function loadEnvironmentNetworkPolicy(params: {
   environmentId: string | null | undefined;
   organizationId: string;
 }): Promise<{ policy: NetworkPolicy | null; label: string }> {

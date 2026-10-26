@@ -2,7 +2,7 @@
 title: Developer Quickstart
 description: Run Archestra from source with Tilt and a local Kubernetes cluster
 order: 1
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -120,6 +120,4 @@ pnpm also skips package install scripts in this repository. Both settings are in
 pnpm rebuild <package-name>
 ```
 
-## Benchmark the LLM Proxy
-
-Use the [benchmark README](https://github.com/archestra-ai/archestra/tree/main/platform/benchmarks) for the reproducible mock-upstream workload, setup, and stored results. Run it from a clean checkout; its launcher creates and removes a disposable database.
+<span id="benchmark-the-llm-proxy"></span>

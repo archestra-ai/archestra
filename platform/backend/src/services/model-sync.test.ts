@@ -29,6 +29,31 @@ beforeEach(() => modelsDevClient.clearFetchCache());
 afterEach(() => modelsDevClient.clearFetchCache());
 
 describe("ModelSyncService", () => {
+  test("keeps the original Nano Banana name searchable without registry metadata", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "gemini",
+      models: [{ id: "gemini-2.5-flash-image" }],
+      modelsDevData: {},
+    });
+    expect(model.description).toBe("Nano Banana");
+    expect(model.modelId).toBe("gemini-2.5-flash-image");
+  });
+  test("syncs Nano Banana 2.1 as an image model even without registry metadata", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "gemini",
+      models: [{ id: "gemini-nano-banana-2.1" }],
+      modelsDevData: {},
+    });
+
+    expect(model.description).toBe("Nano Banana 2.1");
+    expect(model.inputModalities).toEqual(["text", "image", "video", "pdf"]);
+    expect(model.outputModalities).toEqual(["text", "image"]);
+    expect(model.supportsToolCalling).toBe(false);
+    expect(model.supportsReasoningEffort).toBe(false);
+    expect(model.contextLength).toBe(131_072);
+    expect(model.outputLength).toBe(32_768);
+    expect(model.embeddingDimensions).toBeNull();
+  });
   const originalOpenAiFetcher = modelFetchers.openai;
   const originalAzureFetcher = modelFetchers.azure;
   const originalGeminiFetcher = modelFetchers.gemini;

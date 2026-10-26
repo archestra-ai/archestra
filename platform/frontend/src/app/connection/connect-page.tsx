@@ -180,7 +180,11 @@ export function ConnectPage() {
     // Tools are always included; skills, plugins and model routing can be
     // left out (Choose what to include).
     if (!clientId) return;
-    setChoices({ ...readConnectChoices(clientId), tools: true });
+    setChoices({
+      ...readConnectChoices(clientId),
+      tools: true,
+      ...(clientId === "pi" ? { proxy: true, plugins: false } : {}),
+    });
     setPicks(readConnectPicks(clientId));
   }, [clientId]);
 
@@ -758,8 +762,17 @@ function ConnectArea({
               {script ? (
                 <>
                   Run it in a terminal on the computer where you use{" "}
-                  {nameOf(client)}. It needs Node.js 18 or newer, opens a
-                  browser page, and changes nothing until you approve.
+                  {nameOf(client)}. It needs Node.js{" "}
+                  <span>{client.id === "pi" ? "22.19" : "18"}</span> or newer,
+                  opens a browser page, and changes nothing until you approve.
+                  {client.id === "pi" && (
+                    <span>
+                      {" "}
+                      Install @earendil-works/pi-coding-agent 1.4 or later
+                      first: pnpm add -g @earendil-works/pi-coding-agent. Keep
+                      the MCP gateway and OpenAI model routing enabled.
+                    </span>
+                  )}
                 </>
               ) : (
                 <>
@@ -913,6 +926,13 @@ function scriptNextSteps(client: ConnectClient): string[] {
         "Say yes when the terminal offers to sign you in to the gateway.",
         "Press Enter when it offers to start Codex, or run the codex command it prints in a new terminal.",
         "For skills, run /plugins in Codex and install the plugin.",
+      ];
+    case "pi":
+      return [
+        "Sign in with the pi mcp login command printed by the installer.",
+        "Open a new terminal and run arcpi. It checks proxy access, gateway sign-in and shared skills before starting.",
+        "Use the startup menu or arcpi --disconnect to restore the saved configuration. Shared marketplace files and local skills are preserved.",
+        "Compaction and tree summaries use the connected proxy and retain the policy session. Nested tool calls remain blocked.",
       ];
     case "copilot-cli":
       return [

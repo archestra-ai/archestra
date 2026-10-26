@@ -2,6 +2,7 @@ import { MAX_BULK_IDS, parseLabelsParam, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { LimitLabelModel, LimitModel } from "@/models";
+import LlmThroughputModel from "@/models/llm-throughput";
 import { createLimit, limitReadCleanup } from "@/services/limit";
 import {
   ApiError,
@@ -85,10 +86,15 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .map((limit) => limit.id),
       );
 
+      const throughput = await LlmThroughputModel.usage(limits);
       return reply.send(
         limits.map((limit) => {
           const modelUsage = breakdowns.get(limit.id);
-          return modelUsage ? { ...limit, modelUsage } : limit;
+          return {
+            ...limit,
+            modelUsage,
+            throughputUsage: throughput.get(limit.id),
+          };
         }),
       );
     },
@@ -146,8 +152,15 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Limit not found");
       }
 
-      if (limit.limitType !== "token_cost") {
-        return reply.send(limit);
+      if (
+        limit.limitType !== "token_cost" ||
+        limit.cleanupInterval === "minute"
+      ) {
+        const throughput = await LlmThroughputModel.usage([limit]);
+        return reply.send({
+          ...limit,
+          throughputUsage: throughput.get(limit.id),
+        });
       }
 
       const breakdowns = await LimitModel.getModelUsageBreakdowns([limit.id]);

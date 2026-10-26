@@ -1,6 +1,7 @@
 import { fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConnectedClient } from "@/lib/connected-client.query";
+import { ClientIcon } from "./client-icon";
 import { CONNECT_CLIENTS } from "./clients";
 import type { ConnectPageData } from "./connect-page-data";
 import {
@@ -43,6 +44,28 @@ const data = {
 } as unknown as ConnectPageData;
 
 describe("useConnectedAgents", () => {
+  it("brands native Pi OAuth records without merging their disconnect identities", () => {
+    mockUseConnectedClients.mockReturnValue({
+      data: [
+        record({ clientId: "oauth:pi-first", name: "pi" }),
+        record({ clientId: "oauth:pi-second", name: " PI " }),
+        record({ clientId: "oauth:other", name: "pine" }),
+      ],
+    });
+    const { agents } = renderHook(() => useConnectedAgents()).result.current;
+    expect(agents.map((agent) => agent.client.id)).toEqual([
+      "oauth:pi-first",
+      "oauth:pi-second",
+      "oauth:other",
+    ]);
+    for (const agent of agents) render(<ClientIcon client={agent.client} />);
+    expect(screen.getAllByRole("img", { name: "Pi logo" })).toHaveLength(2);
+    expect(agents[2].client.label).toBe("pine");
+    expect(agents[0].client.mcp).toEqual(
+      CONNECT_CLIENTS.find((client) => client.id === "generic")?.mcp,
+    );
+  });
+
   it("marks the newest connect that has traffic, not a silent setup", () => {
     mockUseConnectedClients.mockReturnValue({
       data: [
@@ -178,6 +201,19 @@ describe("DisconnectLine", () => {
     expect(
       screen.getByText(
         "Read http://localhost:3000/disconnect.md and disconnect this agent from Acme.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("offers Pi's ownership-aware disconnect command instead of a shell-profile guard path", () => {
+    render(<DisconnectLine data={data} picked={client("pi")} agents={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "How it works" }));
+    expect(screen.getByText("arcpi --disconnect")).toBeInTheDocument();
+    expect(screen.queryByText(/pi.*startup-guard/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
+    expect(
+      screen.getByText(
+        "Shared skills association (shared marketplace files are preserved)",
       ),
     ).toBeInTheDocument();
   });

@@ -45,6 +45,8 @@ export function costStatisticsFor(query: URLSearchParams): CostStatistics {
         inputTokens: total.inputTokens,
         outputTokens: total.outputTokens,
         cacheReadTokens: total.cacheReadTokens,
+        cacheWriteTokens: total.cacheWriteTokens,
+        totalTokens: reportedTokens(total),
         cost: money(total.billedCost),
         percentage: totalBilled
           ? round2((total.billedCost / totalBilled) * 100)
@@ -194,6 +196,9 @@ export function teamStatisticsFor(query: URLSearchParams): TeamStatistics {
       requests: total.requests,
       inputTokens: total.inputTokens,
       outputTokens: total.outputTokens,
+      cacheReadTokens: total.cacheReadTokens,
+      cacheWriteTokens: total.cacheWriteTokens,
+      totalTokens: reportedTokens(total),
       cost: money(total.billedCost),
       timeSeries: seriesOf(facts.window, points),
     };
@@ -232,6 +237,8 @@ export function agentStatisticsFor(query: URLSearchParams): AgentStatistics {
         inputTokens: total.inputTokens,
         outputTokens: total.outputTokens,
         cacheReadTokens: total.cacheReadTokens,
+        cacheWriteTokens: total.cacheWriteTokens,
+        totalTokens: reportedTokens(total),
         cost: money(total.billedCost),
         timeSeries: seriesOf(org.window, series[k]),
       };
@@ -583,6 +590,7 @@ export function myStatisticsFor(query: URLSearchParams): MyStatistics {
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,
     cacheReadTokens: row.cacheReadTokens,
+    cacheWriteTokens: row.cacheWriteTokens,
     totalTokens: row.totalTokens,
     billedCost: row.billedCost,
     subscriptionCost: row.subscriptionCost,
@@ -616,7 +624,8 @@ export function myUsageBreakdownFor(query: URLSearchParams): MyUsageBreakdown {
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
       cacheReadTokens: usage.cacheReadTokens,
-      totalTokens: usage.inputTokens + usage.outputTokens,
+      cacheWriteTokens: usage.cacheWriteTokens,
+      totalTokens: reportedTokens(usage),
       percentage: 0,
       billedCost: money(usage.billedCost),
       subscriptionCost: money(usage.subscriptionCost),
@@ -635,13 +644,10 @@ export function myUsageBreakdownFor(query: URLSearchParams): MyUsageBreakdown {
   let cacheSavings = 0;
   for (const { spec, points } of me.models) {
     const usage = sumUsage(points);
-    const writes = Math.round(
-      usage.inputTokens * 0.18 * (spec.avgCache ? 1 : 0),
-    );
-    cacheWriteTokens += writes;
+    cacheWriteTokens += usage.cacheWriteTokens;
     cacheCost +=
       (usage.cacheReadTokens * spec.inPrice * 0.1 +
-        writes * spec.inPrice * 1.25) /
+        usage.cacheWriteTokens * spec.inPrice * 1.25) /
       1e6;
     cacheSavings += (usage.cacheReadTokens * spec.inPrice * 0.9) / 1e6;
   }
@@ -826,9 +832,17 @@ type Usage = {
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
+  cacheWriteTokens: number;
   billedCost: number;
   subscriptionCost: number;
 };
+
+/** Unestimated input + output + cache read + cache write. Mock input is never estimated. */
+function reportedTokens(u: Usage): number {
+  return (
+    u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheWriteTokens
+  );
+}
 
 function emptyUsage(): Usage {
   return {
@@ -836,6 +850,7 @@ function emptyUsage(): Usage {
     inputTokens: 0,
     outputTokens: 0,
     cacheReadTokens: 0,
+    cacheWriteTokens: 0,
     billedCost: 0,
     subscriptionCost: 0,
   };
@@ -847,6 +862,7 @@ function addUsage(a: Usage, b: Usage): Usage {
     inputTokens: a.inputTokens + b.inputTokens,
     outputTokens: a.outputTokens + b.outputTokens,
     cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
+    cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
     billedCost: a.billedCost + b.billedCost,
     subscriptionCost: a.subscriptionCost + b.subscriptionCost,
   };
@@ -856,9 +872,10 @@ function sumUsage(points: Usage[]): Usage {
   return points.reduce(addUsage, emptyUsage());
 }
 
-function roundUsage(u: Usage): Usage {
+function roundUsage(u: Usage): Usage & { totalTokens: number } {
   return {
     ...u,
+    totalTokens: reportedTokens(u),
     billedCost: money(u.billedCost),
     subscriptionCost: money(u.subscriptionCost),
   };
@@ -882,6 +899,7 @@ function splitUsage(
     inputTokens: Math.round(u.inputTokens * volumeShare),
     outputTokens: Math.round(u.outputTokens * volumeShare),
     cacheReadTokens: Math.round(u.cacheReadTokens * volumeShare),
+    cacheWriteTokens: Math.round(u.cacheWriteTokens * volumeShare),
     billedCost: u.billedCost * billedShare,
     subscriptionCost: u.subscriptionCost * subscription,
   };
@@ -895,6 +913,8 @@ function timePoint(start: number, u: Usage): TimePoint {
     inputTokens: u.inputTokens,
     outputTokens: u.outputTokens,
     cacheReadTokens: u.cacheReadTokens,
+    cacheWriteTokens: u.cacheWriteTokens,
+    totalTokens: reportedTokens(u),
     billedCost: money(u.billedCost),
     subscriptionCost: money(u.subscriptionCost),
   };
@@ -959,16 +979,22 @@ function modelUsage(spec: ModelSpec, requests: number, seed: string): Usage {
   const cacheReadTokens = Math.round(
     requests * spec.avgCache * jitter("cache"),
   );
+  const cacheWriteTokens =
+    spec.avgCache > 0
+      ? Math.round(inputTokens * 0.18 * jitter("cache-write"))
+      : 0;
   const cost =
     (inputTokens * spec.inPrice +
       outputTokens * spec.outPrice +
-      cacheReadTokens * spec.inPrice * 0.1) /
+      cacheReadTokens * spec.inPrice * 0.1 +
+      cacheWriteTokens * spec.inPrice * 1.25) /
     1e6;
   return {
     requests,
     inputTokens,
     outputTokens,
     cacheReadTokens,
+    cacheWriteTokens,
     billedCost: cost * (1 - spec.subscription),
     subscriptionCost: cost * spec.subscription,
   };
@@ -1058,7 +1084,7 @@ function userRow(
     user.models.reduce((acc, m) => addUsage(acc, m.points[i]), emptyUsage()),
   );
   const total = sumUsage(points);
-  const totalTokens = total.inputTokens + total.outputTokens;
+  const totalTokens = reportedTokens(total);
   const activeBuckets = window.buckets.filter((_, i) => points[i].requests > 0);
   const activeDays = new Set<number>();
   for (const bucket of activeBuckets) {
@@ -1077,6 +1103,7 @@ function userRow(
     inputTokens: total.inputTokens,
     outputTokens: total.outputTokens,
     cacheReadTokens: total.cacheReadTokens,
+    cacheWriteTokens: total.cacheWriteTokens,
     totalTokens,
     billedCost: money(total.billedCost),
     subscriptionCost: money(total.subscriptionCost),
@@ -1096,13 +1123,14 @@ function userRow(
           models: user.models
             .map(({ spec, points: modelPoints }) => {
               const usage = sumUsage(modelPoints);
-              const tokens = usage.inputTokens + usage.outputTokens;
+              const tokens = reportedTokens(usage);
               return {
                 model: spec.id,
                 requests: usage.requests,
                 inputTokens: usage.inputTokens,
                 outputTokens: usage.outputTokens,
                 cacheReadTokens: usage.cacheReadTokens,
+                cacheWriteTokens: usage.cacheWriteTokens,
                 totalTokens: tokens,
                 percentage: totalTokens
                   ? round2((tokens / totalTokens) * 100)
@@ -1158,9 +1186,7 @@ function topSessionsFor(
   if (total.requests === 0) return [];
   const listCost = total.billedCost + total.subscriptionCost;
   const costPerRequest = listCost / total.requests;
-  const tokensPerRequest =
-    (total.inputTokens + total.outputTokens + total.cacheReadTokens) /
-    total.requests;
+  const tokensPerRequest = reportedTokens(total) / total.requests;
   const models = me.models
     .map((m) => ({ id: m.spec.id, usage: sumUsage(m.points) }))
     .filter((m) => m.usage.requests > 0)
@@ -1276,6 +1302,9 @@ type AppCell = {
   llmRequests: number;
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
   billedCost: number;
   subscriptionCost: number;
 };
@@ -1311,6 +1340,14 @@ function appCells(timeframe: string | null): AppCell[] {
             llmRequests *
             app.costPerLlm *
             (0.75 + 0.5 * rand("app-cost", seed));
+          const inputTokens =
+            llmRequests * Math.round(5_800 + 3_000 * rand("in", seed));
+          const outputTokens =
+            llmRequests * Math.round(650 + 500 * rand("out", seed));
+          const cacheReadTokens =
+            llmRequests * Math.round(1_200 + 800 * rand("cache-read", seed));
+          const cacheWriteTokens =
+            llmRequests * Math.round(400 + 200 * rand("cache-write", seed));
           cells.push({
             day: day.day,
             app,
@@ -1320,10 +1357,12 @@ function appCells(timeframe: string | null): AppCell[] {
               runs * app.toolsPerRun * (0.7 + 0.6 * rand("app-tools", seed)),
             ),
             llmRequests,
-            inputTokens:
-              llmRequests * Math.round(5_800 + 3_000 * rand("in", seed)),
-            outputTokens:
-              llmRequests * Math.round(650 + 500 * rand("out", seed)),
+            inputTokens,
+            outputTokens,
+            cacheReadTokens,
+            cacheWriteTokens,
+            totalTokens:
+              inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens,
             billedCost: cost * (1 - app.subscription),
             subscriptionCost: cost * app.subscription,
           });
@@ -1341,6 +1380,9 @@ function emptyAppMetrics(): AppMetrics {
     llmRequests: 0,
     inputTokens: 0,
     outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    totalTokens: 0,
     billedCost: 0,
     subscriptionCost: 0,
   };
@@ -1352,6 +1394,9 @@ function addAppMetrics(target: AppMetrics, cell: AppMetrics): void {
   target.llmRequests += cell.llmRequests;
   target.inputTokens += cell.inputTokens;
   target.outputTokens += cell.outputTokens;
+  target.cacheReadTokens += cell.cacheReadTokens;
+  target.cacheWriteTokens += cell.cacheWriteTokens;
+  target.totalTokens += cell.totalTokens;
   target.billedCost += cell.billedCost;
   target.subscriptionCost += cell.subscriptionCost;
 }

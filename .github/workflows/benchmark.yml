@@ -36,7 +36,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'schedule'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read # checkout
       id-token: write # Workload Identity Federation + GKE credentials
@@ -49,21 +49,28 @@ jobs:
 
       # docker-container driver — the default docker driver cannot export the registry build cache.
       - name: Set up Docker builder
-        uses: ./.github/actions/setup-docker-builder
+        uses: $/.github/actions/setup-docker-builder
 
       - name: Authenticate to Google Artifact Registry
-        uses: ./.github/actions/auth-to-gar
+        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
-          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: europe-west1-docker.pkg.dev
 
       - name: Install gke-gcloud-auth-plugin
         run: gcloud components install gke-gcloud-auth-plugin
 
       - name: Configure kubectl
+        env:
+          GKE_USE_DNS_ENDPOINT: ${{ vars.GKE_USE_DNS_ENDPOINT }}
         run: |
+          endpoint_args=()
+          if [[ "$GKE_USE_DNS_ENDPOINT" == "true" ]]; then
+            endpoint_args+=(--dns-endpoint)
+          fi
           gcloud container clusters get-credentials "${GKE_CLUSTER}" \
-            --zone "${GKE_ZONE}" --project "${GKE_PROJECT}"
+            --zone "${GKE_ZONE}" --project "${GKE_PROJECT}" "${endpoint_args[@]}"
 
       # Since CI releases at the fail-fast window, a prior run's pod outlives its GitHub job. Refuse to
       # start if a benchmark Job is still active, before spending a build on another run.

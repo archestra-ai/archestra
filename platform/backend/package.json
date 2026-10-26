@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.5.0-rc.5",
+  "version": "1.5.0-rc.8",
   "description": "",
   "author": "",
   "private": true,
@@ -22,6 +22,8 @@
     "benchmark:queries": "vitest run --config vitest.queries.config.ts",
     "test:migration-upgrades": "node --test scripts/migration-upgrades.test.mjs scripts/migration-tag-upgrades.test.mjs scripts/create-statistics-index.test.mjs",
     "test:permission-upgrade": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx --test scripts/resource-permissions-upgrade.test.mjs",
+    "test:llm-limits:postgres": "tsx --tsconfig standalone-scripts.tsconfig.json src/test/llm-limits/postgres.integration.ts",
+    "test:agent-transcripts:postgres": "tsx --tsconfig standalone-scripts.tsconfig.json --test src/test/agent-transcripts.postgres.ts",
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "lint:fix:unsafe": "biome check --write --unsafe",
@@ -35,6 +37,7 @@
     "check:migrations": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/check-drizzle-migration-journal.ts && TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/lint-drizzle-migrations.ts",
     "check:sandbox-base": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/check-sandbox-base-sync.ts",
     "check:test-imports": "dependency-cruiser --config .dependency-cruiser.mjs 'src/**/*.unit.test.ts' src/plugins/github-import.ts src/plugins/github-tree.ts src/plugins/plugin-tree-files.ts --output-type err && TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx src/standalone-scripts/check-test-fixture-imports.ts",
+    "update:agent-runtime-clis": "node scripts/update-agent-runtime-clis.mjs",
     "update:codex-models-client-version": "node scripts/update-codex-models-client-version.mjs",
     "update:copilot-chat-client-version": "node scripts/update-copilot-chat-client-version.mjs",
     "update:grok-client-version": "node scripts/update-grok-client-version.mjs",
@@ -185,7 +188,7 @@
     "sharp": "0.35.5",
     "smol-toml": "1.9.0",
     "tiktoken": "^1.0.22",
-    "undici": "7.29.1",
+    "undici": "7.30.1",
     "ws": "^8.20.1",
     "zod": "catalog:"
   },

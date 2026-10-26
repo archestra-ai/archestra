@@ -2,12 +2,13 @@ import { sql } from "drizzle-orm";
 import {
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { A2ATaskState } from "@/types/a2a-task";
+import type { A2ATaskFailure, A2ATaskState } from "@/types/a2a-task";
 import a2aContextTable from "./a2a-context";
 import agentsTable from "./agent";
 
@@ -31,6 +32,12 @@ const a2aTaskTable = pgTable(
     state: text("state").$type<A2ATaskState>().notNull(),
     /** Human-readable reason for a FAILED or CANCELED terminal state. */
     statusReason: text("status_reason"),
+    /**
+     * Stable code and retry hint for a FAILED Agent Runtime task. Null for
+     * every other state, for non-runtime tasks, and for rows settled before
+     * classification existed.
+     */
+    failure: jsonb("failure").$type<A2ATaskFailure>(),
     /**
      * When `state` last changed. This — not `updatedAt` — is the protocol's
      * `TaskStatus.timestamp` and the ListTasks ordering/cursor key, so

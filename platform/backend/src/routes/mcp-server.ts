@@ -69,6 +69,7 @@ import {
   assertScopedLifecycleAuthorization,
   findMcpServerInOrganization,
 } from "@/services/mcp-installation-access";
+import { consumeMcpOAuthCredentialGrant } from "@/services/mcp-oauth-credential-grant";
 import {
   autoReinstallServer,
   reloadToolsForServer,
@@ -401,7 +402,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ body, user, headers, organizationId }, reply) => {
+    async (request, reply) => {
+      const { body, user, headers, organizationId } = request;
       let {
         agentIds,
         secretId,
@@ -623,6 +625,19 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // secret/deployment work, so a blocked install has no side effects beyond
         // the pending flag.
         await assertInstallAllowedOrBlock({ catalogItem, organizationId });
+      }
+
+      if (
+        secretId &&
+        (!catalogItem?.oauthConfig ||
+          !(await consumeMcpOAuthCredentialGrant({
+            request,
+            secretId,
+            catalogId: catalogItem.id,
+          })) ||
+          (await McpServerModel.hasSecretReference(secretId)))
+      ) {
+        throw new ApiError(400, "Credential references cannot be supplied");
       }
 
       // For REMOTE servers: create secrets and validate connection
@@ -1401,8 +1416,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async (
-      {
+    async (request, reply) => {
+      const {
         params: { id },
         body: {
           secretId: providedSecretId,
@@ -1414,9 +1429,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         user,
         headers,
         organizationId,
-      },
-      reply,
-    ) => {
+      } = request;
       // Validate that at least one credential field is provided
       if (
         !providedSecretId &&
@@ -1456,7 +1469,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
         action: "re-authenticate",
       });
-
       const catalogItem = mcpServer.catalogId
         ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
         : null;
@@ -1482,6 +1494,20 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // which would leave the pod on stale credentials while reporting success.
       if (catalogItem) {
         await assertInstallAllowedOrBlock({ catalogItem, organizationId });
+      }
+
+      if (
+        providedSecretId &&
+        (!catalogItem?.oauthConfig ||
+          !(await consumeMcpOAuthCredentialGrant({
+            request,
+            secretId: providedSecretId,
+            catalogId: catalogItem.id,
+            serverId: id,
+          })) ||
+          (await McpServerModel.hasSecretReference(providedSecretId)))
+      ) {
+        throw new ApiError(400, "Credential references cannot be supplied");
       }
 
       // Resolve the new secret ID: either provided directly, or create from raw credentials
@@ -1634,8 +1660,25 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Could not resolve credentials");
       }
 
-      // Delete the old secret if it exists
-      if (mcpServer.secretId) {
+      // Update the server with new secret and clear OAuth error fields
+      const updatedServer = await McpServerModel.update(id, {
+        secretId: newSecretId,
+        oauthRefreshError: null,
+        oauthRefreshErrorMessage: null,
+        oauthRefreshErrorDescription: null,
+        oauthRefreshFailedAt: null,
+      });
+      if (!updatedServer) {
+        throw new ApiError(500, "Failed to update MCP server");
+      }
+
+      // Delete the old secret only after the install no longer references it.
+      // A pre-existing shared reference must not revoke another connection.
+      if (
+        mcpServer.secretId &&
+        mcpServer.secretId !== newSecretId &&
+        !(await McpServerModel.hasSecretReference(mcpServer.secretId))
+      ) {
         try {
           await secretManager().deleteSecret(mcpServer.secretId);
           logger.info(
@@ -1647,18 +1690,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             { err: error, mcpServerId: id },
             "Failed to delete old secret during re-authentication",
           );
-          // Continue with update even if old secret deletion fails
         }
       }
-
-      // Update the server with new secret and clear OAuth error fields
-      const updatedServer = await McpServerModel.update(id, {
-        secretId: newSecretId,
-        oauthRefreshError: null,
-        oauthRefreshErrorMessage: null,
-        oauthRefreshErrorDescription: null,
-        oauthRefreshFailedAt: null,
-      });
 
       // The failure episode every mute on this connection was pinned to is
       // over, so the mutes go with it. Dropped after the clear, never before:
@@ -1685,10 +1718,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Failed to restart pod after re-authentication (may not be running)",
           );
         }
-      }
-
-      if (!updatedServer) {
-        throw new ApiError(500, "Failed to update MCP server");
       }
 
       logger.info(
@@ -2582,6 +2611,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         (environmentValues && Object.keys(environmentValues).length > 0) ||
         (userConfigValues && Object.keys(userConfigValues).length > 0)
       ) {
+        if (
+          mcpServer.secretId &&
+          (await McpServerModel.hasOtherSecretReference({
+            secretId: mcpServer.secretId,
+            mcpServerId: id,
+          }))
+        ) {
+          throw new ApiError(
+            409,
+            "Re-authenticate this connection before changing its credentials",
+          );
+        }
         const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
           catalogItem.userConfig,
         );

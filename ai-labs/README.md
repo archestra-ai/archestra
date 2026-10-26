@@ -406,6 +406,16 @@ Analysis adds `<env>/<task>__<lane>/trajectory.md` (rendered trajectory),
 by the Claude-skill pipeline), and the `trajectory_analys{es,is}_<ts>.md` docs. Browse it all locally
 with `archestra-bench dashboard [--experiments-dir <dir>] [--port <port>]`.
 
+## Native Guardrails suite (disabled)
+
+`archestra-bench guardrails-native` is additive and is not part of `benchmark`, `BENCH_ENVS`, nightly, or CI. With no `--execute` it prints the fixed plan and exits before any provider, CLI, filesystem, or shared-policy side effect.
+
+The only intervention is distributed: Claude and Codex, each as main recovery and parent/child, compared OFF/ON/ON/OFF. There is no profile flag. `--profile`, `--intervention`, `ARCHESTRA_BENCH_GUARDRAILS_PROFILE`, and `ARCHESTRA_BENCH_GUARDRAILS_INTERVENTION` are rejected.
+
+`--execute` runs `platform/benchmarks/claude-native-project-pilot.mjs` and `codex-native-project-pilot.mjs` with a fresh namespace and their historical arguments: namespace, `off|on`, main or child mode, `sequential`, `distributed`. Those pilots own the real Claude/Codex CLI arguments, loopback gateway setup, MCP project fixture, and the global deployment switch. The launcher reads each `pilot-summary.json` and `restoration.json`; a missing usage counter is a failure, not zero. It writes `aggregate.json`, `report.md`, and per-episode `run.json` only after qualification and restoration. The pilots do write and then restore the deployment switch. Do not pass this command from nightly or CI.
+
+When a finished run contains this suite, `aggregate.json` may include an optional `guardrails_native` object and `report.md` an optional section. Existing runs without that object stay unchanged. Publish and TensorBoard keep the current Slack summary and scalar paths.
+
 ## Prerequisites
 
 - A built backend (`dist/server.mjs`, kept fresh by `tilt up`) and a reachable Dagger engine. The

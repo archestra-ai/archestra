@@ -7,7 +7,8 @@
  * `GET /v1beta/models` returns many models that advertise `generateContent` but
  * need unsupported transports (text-to-speech and audio/live), plus deprecated
  * and non-Gemini families. Text and image Gemini-family models at or above a
- * minimum generation are usable in Chat, alongside first-class embeddings.
+ * minimum generation and known named image releases are usable in Chat,
+ * alongside first-class embeddings.
  */
 
 import type { ThinkingEffort } from "./thinking-effort";
@@ -29,6 +30,11 @@ const GEMINI_FAMILY_LEGACY_MAX_VERSION: GeminiVersion = [3, 0];
 
 const GEMINI_EMBEDDING_PREFIX = "gemini-embedding-";
 const RETIRED_GEMINI_EMBEDDING_MODELS = new Set(["gemini-embedding-2-preview"]);
+
+// Named image releases do not encode a Gemini generation. In particular, the
+// "2.1" in Nano Banana's name must not be compared to Gemini's 2.5 minimum.
+// https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/nano-banana-2-1
+const NAMED_GEMINI_IMAGE_MODELS = new Set(["gemini-nano-banana-2.1"]);
 
 /**
  * Lowest chat generation Vertex AI serves only from its `global` endpoint. The
@@ -76,6 +82,9 @@ export function isUsableGeminiCatalogModel(modelId: string): boolean {
   if (id.startsWith(GEMINI_EMBEDDING_PREFIX)) {
     return true;
   }
+  if (NAMED_GEMINI_IMAGE_MODELS.has(id)) {
+    return true;
+  }
   if (NON_CHAT_GEMINI_PATTERNS.some((pattern) => id.includes(pattern))) {
     return false;
   }
@@ -90,13 +99,14 @@ export function isUsableGeminiCatalogModel(modelId: string): boolean {
  * True when Vertex AI serves this model only from its `global` endpoint, so a
  * request pinned to an ordinary region (`us-central1`, …) would 404.
  *
- * Three families, three answers, each matching what Vertex actually serves:
+ * Location rules follow the serving family:
  * - `gemma-*` — Model Garden MaaS, regional only, absent from the global
  *   catalog entirely. Never global, whatever generation number it carries.
  * - `gemini-embedding-N` — global from
  *   {@link GEMINI_GLOBAL_ENDPOINT_MIN_EMBEDDING_VERSION} on.
  * - `gemini-<major>.<minor>` chat models — global from
  *   {@link GEMINI_GLOBAL_ENDPOINT_MIN_VERSION} on.
+ * - Named Nano Banana image releases — global-only.
  *
  * Only meaningful in Vertex AI mode; the Gemini API (API-key mode) has one
  * global host and no notion of a location.
@@ -106,6 +116,10 @@ export function requiresGlobalVertexEndpoint(modelId: string): boolean {
 
   if (!id.startsWith("gemini-")) {
     return false;
+  }
+
+  if (NAMED_GEMINI_IMAGE_MODELS.has(id)) {
+    return true;
   }
 
   if (id.startsWith(GEMINI_EMBEDDING_PREFIX)) {
@@ -142,6 +156,15 @@ export function isLegacyGeminiModel(modelId: string): boolean {
   return (
     version !== null &&
     compareVersion(version, GEMINI_FAMILY_LEGACY_MAX_VERSION) <= 0
+  );
+}
+
+/** Image-output models also include named releases without "image" in the id. */
+export function isGeminiImageGenerationModel(modelId: string): boolean {
+  const id = modelId.toLowerCase();
+  return (
+    id.startsWith("gemini-") &&
+    (id.includes("image") || NAMED_GEMINI_IMAGE_MODELS.has(id))
   );
 }
 

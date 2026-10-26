@@ -1,0 +1,351 @@
+"""Adversarial fixtures for complete, fresh image/architecture scan evidence."""
+
+import datetime as dt
+import importlib.util
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import textwrap
+import unittest
+from unittest.mock import patch
+
+
+ROOT = Path(__file__).resolve().parents[2]
+SPEC = importlib.util.spec_from_file_location("candidate", ROOT / ".github/scripts/release-candidate.py")
+CANDIDATE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(CANDIDATE)
+IDENTITY = {"source_sha": "a" * 40, "source_tree": "b" * 40,
+            "run_id": "12", "run_attempt": "2", "repository": "example/project"}
+NOW = dt.datetime.now(dt.timezone.utc)
+
+
+def record(image="platform", arch="amd64"):
+    return {"schema": 1, **IDENTITY, "image": image, "arch": arch,
+            "created_at": NOW.isoformat(), "scan_result": "success", "version": "1.4.1",
+            "previous_image": "docker.io/archestra/platform@sha256:" + "3" * 64,
+            "image_id": "sha256:" + "1" * 64, "archive_digest": "sha256:" + "2" * 64,
+            "oci": {"config": "sha256:" + "1" * 64, "runtime_manifest": "sha256:" + "4" * 64,
+                    "attestations": ["sha256:" + "5" * 64], "provenance": ["sha256:" + "6" * 64]}}
+
+
+class EvidenceTests(unittest.TestCase):
+    def validate(self, records):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            for index, value in enumerate(records):
+                (directory / f"{index}.json").write_text(json.dumps(value))
+            with patch.object(CANDIDATE, "identity", return_value=IDENTITY), patch.object(
+                CANDIDATE, "build_inputs", return_value={key: record()[key] for key in ("version", "previous_image")}
+            ):
+                CANDIDATE.validate_evidence(directory, {"include": [{"image": "platform"}]})
+
+    def test_exact_complete_pair_passes_and_no_partial_set_can_pass(self):
+        values = [record(arch=arch) for arch in ("amd64", "arm64")]
+        self.validate(values)
+        for bad in ([], values[:1], values[1:], values + [values[0]], values + [record("extra")]):
+            with self.subTest(records=bad), self.assertRaises(ValueError):
+                self.validate(bad)
+
+    def test_all_unsuccessful_or_missing_scan_results_fail_even_with_other_green_legs(self):
+        for result in ("failure", "skipped", "cancelled", "neutral", "", None):
+            with self.subTest(result=result), self.assertRaises(ValueError):
+                self.validate([record(), record(arch="arm64") | {"scan_result": result}])
+
+    def test_stale_revision_tree_workflow_attempt_repository_and_inputs_fail(self):
+        for key, value in ({"source_sha": "c" * 40, "source_tree": "d" * 40, "run_id": "11",
+                            "run_attempt": "1", "repository": "other/project", "version": "1.4.0",
+                            "previous_image": "docker.io/archestra/platform:latest",
+                            "arch": "ppc64le", "image_id": "mutable", "archive_digest": ""}).items():
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                self.validate([record(), record(arch="arm64") | {key: value}])
+        for offset in (dt.timedelta(hours=-25), dt.timedelta(minutes=5)):
+            with self.assertRaises(ValueError):
+                self.validate([record(), record(arch="arm64") | {"created_at": (NOW + offset).isoformat()}])
+
+    def test_missing_evidence_directory_and_symlink_fail_closed(self):
+        with patch.object(CANDIDATE, "identity", return_value=IDENTITY), tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            with self.assertRaises(OSError):
+                CANDIDATE.validate_evidence(directory / "missing", {"include": [{"image": "platform"}]})
+            source = directory / "source.json"
+            source.write_text(json.dumps(record()))
+            evidence = directory / "evidence"
+            evidence.mkdir()
+            (evidence / "link.json").symlink_to(source)
+            with self.assertRaisesRegex(ValueError, "Unexpected candidate evidence file"):
+                CANDIDATE.validate_evidence(evidence, {"include": [{"image": "platform"}]})
+
+    def test_loaded_image_config_and_architecture_must_match(self):
+        image_id = record()["image_id"]
+        good = {"Id": image_id, "Os": "linux", "Architecture": "arm64"}
+        for row in (good, good | {"Architecture": "amd64"}, good | {"Id": "sha256:" + "f" * 64}, good | {"Os": "windows"}):
+            with patch.object(CANDIDATE, "command", return_value=json.dumps([row])):
+                if row == good:
+                    CANDIDATE.inspect_image(image_id, image_id, "arm64")
+                else:
+                    with self.assertRaises(ValueError):
+                        CANDIDATE.inspect_image(image_id, image_id, "arm64")
+
+
+class BuildInputsTests(unittest.TestCase):
+    def inputs(self, manifests, image="platform", arch="arm64"):
+        manifest = json.dumps({"platform": "1.4.1"})
+        with patch.object(Path, "read_text", return_value=manifest), patch.object(
+            CANDIDATE, "command", side_effect=["platform-v1.4.0", "platform-v1.4.0", json.dumps({"manifests": manifests})]
+        ):
+            return CANDIDATE.build_inputs(image, arch)
+
+    def test_previous_assets_resolve_separately_for_both_architectures(self):
+        rows = [{"digest": "sha256:" + str(i + 1) * 64,
+                 "platform": {"os": "linux", "architecture": arch}}
+                for i, arch in enumerate(("amd64", "arm64"))]
+        for i, arch in enumerate(("amd64", "arm64")):
+            self.assertEqual(self.inputs(rows, arch=arch), {"version": "1.4.1",
+                "previous_image": "docker.io/archestra/platform@sha256:" + str(i + 1) * 64})
+        for rows in ([], rows[:1], rows[1:] * 2, [rows[1] | {"digest": "mutable"}]):
+            with self.assertRaises(ValueError):
+                self.inputs(rows)
+
+    def test_companions_use_release_version_and_initial_release_needs_no_previous_image(self):
+        with patch.object(Path, "read_text", return_value='{"platform":"1.5.0-rc.7"}'), patch.object(
+            CANDIDATE, "command", return_value=""
+        ) as command:
+            self.assertEqual(CANDIDATE.build_inputs("sandbox-base", "amd64"),
+                             {"version": "1.5.0-rc.7", "previous_image": ""})
+            command.assert_not_called()
+            self.assertEqual(CANDIDATE.build_inputs("platform", "arm64")["previous_image"], "")
+        with self.assertRaises(ValueError):
+            CANDIDATE.build_inputs("platform", "ppc64le")
+
+
+class AssetExtractionTests(unittest.TestCase):
+    def test_release_asset_pull_create_and_copy_errors_block_the_build(self):
+        action = (ROOT / ".github/actions/build-docker-image/action.yml").read_text()
+        section = action.split("    - name: Extract previous version static assets\n", 1)[1].split("      env:\n", 1)[0]
+        script = textwrap.dedent(section.split("      run: |\n", 1)[1])
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            docker = root / "docker"
+            docker.write_text('#!/bin/sh\n[ "$1" != "$FAIL_STEP" ] || exit 23\n[ "$1" != create ] || echo container-id\nexit 0\n')
+            docker.chmod(0o755)
+            for step in ("none", "pull", "create", "cp"):
+                result = subprocess.run(["bash", "-c", script], env=os.environ | {
+                    "PATH": f"{root}:{os.environ['PATH']}", "INPUT_PREVIOUS_IMAGE": "image@sha256:digest",
+                    "INPUT_CONTEXT": str(root), "REQUIRE_PREVIOUS_ASSETS": "true", "FAIL_STEP": step},
+                    capture_output=True, text=True)
+                self.assertEqual(result.returncode == 0, step == "none", result.stdout + result.stderr)
+
+
+class ScoutInstallerTests(unittest.TestCase):
+    def test_native_archives_are_checksum_verified_and_unknown_architectures_stop(self):
+        action = (ROOT / ".github/actions/scan-docker-image/action.yml").read_text()
+        section = action.split("    - name: Install Docker Scout CLI\n", 1)[1].split("    - name: Docker Scout CVE Check", 1)[0]
+        script = textwrap.dedent(section.split("      run: |\n", 1)[1])
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name, source in {
+                "uname": '#!/bin/sh\necho "$RUNNER_MACHINE"\n',
+                "gh": '#!/bin/sh\nprintf "%s\\n" "$*" >> "$CALLS"\n',
+                "sha256sum": '#!/bin/sh\ncat >> "$CALLS"\nexit "$CHECKSUM_STATUS"\n',
+                "tar": '#!/bin/sh\necho EXTRACTED >> "$CALLS"\n',
+            }.items():
+                file = root / name
+                file.write_text(source)
+                file.chmod(0o755)
+            for machine, expected_arch in (("x86_64", "amd64"), ("aarch64", "arm64"), ("arm64", "arm64"), ("ppc64le", None)):
+                for status in ("0", "1"):
+                    calls = root / "calls"
+                    calls.unlink(missing_ok=True)
+                    result = subprocess.run(["bash", "-c", script], env=os.environ | {
+                        "PATH": f"{root}:{os.environ['PATH']}", "RUNNER_TEMP": temp,
+                        "SCOUT_VERSION": "1.24.0", "SCOUT_AMD64_SHA256": "AMD64-CHECKSUM",
+                        "SCOUT_ARM64_SHA256": "ARM64-CHECKSUM", "RUNNER_MACHINE": machine,
+                        "CHECKSUM_STATUS": status, "CALLS": str(calls)}, capture_output=True, text=True)
+                    logged = calls.read_text() if calls.exists() else ""
+                    self.assertEqual(result.returncode == 0, expected_arch is not None and status == "0")
+                    if expected_arch:
+                        self.assertIn(f"linux_{expected_arch}.tar.gz", logged)
+                        self.assertIn(f"{expected_arch.upper()}-CHECKSUM", logged)
+                    else:
+                        self.assertEqual(logged, "")
+                    self.assertEqual("EXTRACTED" in logged, expected_arch is not None and status == "0")
+
+
+class GateIntegrationTests(unittest.TestCase):
+    def test_real_gate_cli_needs_the_complete_current_inventory_even_when_jobs_are_green(self):
+        policy_path = ROOT / ".github/scripts/release-image-policy.py"
+        spec = importlib.util.spec_from_file_location("gate", policy_path)
+        policy = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(policy)
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            def git(*args):
+                return subprocess.check_output(["git", "-C", temp, *args], text=True).strip()
+            git("init", "-q")
+            git("config", "user.name", "CI fixture")
+            git("config", "user.email", "fixture@example.invalid")
+            manifest = directory / ".github/release-please/.release-please-manifest.json"
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text('{"platform":"1.4.0"}')
+            git("add", ".")
+            git("commit", "-qm", "base")
+            initial_base = git("rev-parse", "HEAD")
+            manifest.write_text('{"platform":"1.4.1"}')
+            git("commit", "-qam", "release")
+            release_head = git("rev-parse", "HEAD")
+            # The target can advance after Release Please creates its head.
+            # A squash queue commit must match the merge of both exact inputs,
+            # without relying on GitHub's asynchronously computed test merge.
+            git("checkout", "-qb", "target", initial_base)
+            (directory / "ci-policy").write_text("later base change")
+            git("add", ".")
+            git("commit", "-qm", "advance target")
+            base = git("rev-parse", "HEAD")
+            tree = git("merge-tree", "--write-tree", base, release_head)
+            sha = subprocess.check_output(["git", "-C", temp, "commit-tree", tree, "-p", base],
+                                          input="queue release\n", text=True).strip()
+            git("checkout", "-q", "--detach", sha)
+            (directory / "feature").write_text("extra queued source must not pass for the release")
+            git("add", ".")
+            git("commit", "-qm", "mixed source")
+            mixed_head = git("rev-parse", "HEAD")
+            git("checkout", "-q", "--detach", release_head)
+            (directory / "ci-policy").write_text("conflicting release change")
+            git("add", ".")
+            git("commit", "-qm", "conflicting source")
+            conflicting_head = git("rev-parse", "HEAD")
+            git("checkout", "-q", "--detach", sha)
+            pr = {"number": 42, "state": "open", "merge_commit_sha": sha,
+                  "head": {"ref": "release-please--branches--main--components--platform", "sha": release_head,
+                           "repo": {"full_name": IDENTITY["repository"]}},
+                  "base": {"ref": "main", "sha": base, "repo": {"full_name": IDENTITY["repository"]}}}
+            (directory / "current.json").write_text(json.dumps(pr))
+            (directory / "event.json").write_text(json.dumps({"pull_request": pr}))
+            gh = directory / "gh"
+            gh.write_text("#!/usr/bin/env python3\n" +
+                "import json, os, sys\n" +
+                f"pr=json.load(open({str(directory / 'current.json')!r}))\n" +
+                "path=sys.argv[2]\n" +
+                "if '/pulls/' in path and os.environ.get('RECHECK_HEAD'):\n" +
+                "    pr['head']['sha']=os.environ['RECHECK_HEAD']\n" +
+                "if '/pulls/' in path and os.environ.get('RECHECK_BASE'):\n" +
+                "    pr['base']['sha']=os.environ['RECHECK_BASE']\n" +
+                f"counter={str(directory / 'ref-count')!r}\n" +
+                "if '/git/ref/' in path:\n" +
+                "    from pathlib import Path\n" +
+                "    count=int(Path(counter).read_text())+1 if Path(counter).exists() else 1\n" +
+                "    Path(counter).write_text(str(count))\n" +
+                "    if count > 1 and os.environ.get('RECHECK_QUEUE'):\n" +
+                "        print(json.dumps({'object':{'sha':os.environ['RECHECK_QUEUE']}})); sys.exit()\n" +
+                "value=({'object':{'sha':os.environ['GITHUB_SHA']}} if '/git/ref/' in path else\n" +
+                "       {'tree':{'sha':os.environ['API_TREE']}} if '/git/commits/' in path else\n" +
+                "       [pr] if '/pulls?' in path else pr)\nprint(json.dumps(value))\n")
+            gh.chmod(0o755)
+            evidence = directory / "evidence"
+            evidence.mkdir()
+            for row in policy.candidate_matrix(ROOT)["include"]:
+                for arch in ("amd64", "arm64"):
+                    value = record(row["image"], arch) | {"source_sha": sha, "source_tree": tree,
+                                                          "previous_image": ""}
+                    (evidence / f"{row['image']}-{arch}.json").write_text(json.dumps(value))
+            env = os.environ | {"PATH": f"{directory}:{os.environ['PATH']}",
+                "GITHUB_SHA": sha, "GITHUB_RUN_ID": "12", "GITHUB_RUN_ATTEMPT": "2",
+                "GITHUB_REPOSITORY": IDENTITY["repository"], "GITHUB_EVENT_NAME": "pull_request",
+                "GITHUB_EVENT_PATH": str(directory / "event.json"), "EVIDENCE_DIR": str(evidence),
+                "CANDIDATE_INDEX": str(directory / "release-candidate-index.json"),
+                "API_TREE": tree,
+                "CLASSIFY_RESULT": "success", "SCAN_REQUIRED": "true", "SCAN_RESULT": "success"}
+            def gate(overrides=None):
+                (directory / "release-candidate-index.json").unlink(missing_ok=True)
+                (directory / "ref-count").unlink(missing_ok=True)
+                return subprocess.run(["python3", str(policy_path), "gate"], cwd=directory,
+                                      env=env | (overrides or {}), capture_output=True, text=True, timeout=10)
+            for event_name in ("pull_request", "merge_group"):
+                payload = {"pull_request": pr} if event_name == "pull_request" else {"merge_group": {
+                    "head_sha": sha, "base_sha": base, "base_ref": "refs/heads/main",
+                    "head_ref": "refs/heads/gh-readonly-queue/main/pr-42-test"}}
+                (directory / "event.json").write_text(json.dumps(payload))
+                env["GITHUB_EVENT_NAME"] = event_name
+                if event_name == "pull_request":
+                    env["SCAN_REQUIRED"] = "false"
+                    env["SCAN_RESULT"] = "skipped"
+                    result = gate()
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertFalse((directory / "release-candidate-index.json").exists())
+                    self.assertNotEqual(gate({"SCAN_RESULT": "success"}).returncode, 0)
+                    continue
+                env["SCAN_REQUIRED"] = "true"
+                env["SCAN_RESULT"] = "success"
+                result = gate()
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                index = json.loads((directory / "release-candidate-index.json").read_text())
+                self.assertEqual(index["source_tree"], tree)
+                self.assertEqual(len(index["records"]), len(policy.candidate_matrix(ROOT)["include"]) * 2)
+                for scan in ("failure", "skipped", "cancelled", "", "neutral"):
+                    self.assertNotEqual(gate({"SCAN_RESULT": scan}).returncode, 0)
+                self.assertNotEqual(gate({"GITHUB_RUN_ATTEMPT": "3"}).returncode, 0)
+                if event_name == "merge_group":
+                    # Missing, stale and unavailable cached test merges cannot
+                    # reject an otherwise exact queue source reconstruction.
+                    for cached_merge in (None, base, "f" * 40):
+                        (directory / "current.json").write_text(json.dumps(pr | {"merge_commit_sha": cached_merge}))
+                        result = gate({"API_TREE": git("rev-parse", f"{base}^{{tree}}")})
+                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                        index = json.loads((directory / "release-candidate-index.json").read_text())
+                        self.assertEqual(index["queue_release_source"], {"number": 42,
+                            "head_sha": release_head, "base_sha": base, "tree": tree})
+                    # REST base.sha can lag the actual queue base during high
+                    # volume merges. The queue event's immutable base wins.
+                    for cached_base in (initial_base, None):
+                        stale = json.loads(json.dumps(pr))
+                        stale["base"]["sha"] = cached_base
+                        (directory / "current.json").write_text(json.dumps(stale))
+                        result = gate({"RECHECK_BASE": initial_base if cached_base is None else base})
+                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                        index = json.loads((directory / "release-candidate-index.json").read_text())
+                        self.assertEqual(index["queue_release_source"]["base_sha"], base)
+                    (directory / "current.json").write_text(json.dumps(pr))
+                    for overrides, message in (({"RECHECK_HEAD": mixed_head}, "Release PR changed"),
+                                               ({"RECHECK_QUEUE": "e" * 40}, "Merge group changed")):
+                        result = gate(overrides)
+                        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertIn(message, result.stderr)
+                        self.assertFalse((directory / "release-candidate-index.json").exists())
+                    for head, message in ((mixed_head, "Mixed queue group"),
+                                          (conflicting_head, "Cannot reconstruct release PR"),
+                                          ("e" * 40, "Cannot reconstruct release PR")):
+                        changed = json.loads(json.dumps(pr))
+                        changed["head"]["sha"] = head
+                        (directory / "current.json").write_text(json.dumps(changed))
+                        result = gate()
+                        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertIn(message, result.stderr)
+                        self.assertFalse((directory / "release-candidate-index.json").exists())
+                    (directory / "current.json").write_text(json.dumps(pr))
+                    # A genuine mixed group must still fail even when its own
+                    # scan jobs report success. Do not substitute its bytes for
+                    # the release-only commit that would actually publish.
+                    git("checkout", "-q", "--detach", mixed_head)
+                    mixed_event = json.loads(json.dumps(payload))
+                    mixed_event["merge_group"]["head_sha"] = mixed_head
+                    (directory / "event.json").write_text(json.dumps(mixed_event))
+                    result = gate({"GITHUB_SHA": mixed_head})
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("Mixed queue group", result.stderr)
+                    self.assertIn(f"release_tree={tree}", result.stderr)
+                    self.assertFalse((directory / "release-candidate-index.json").exists())
+                    git("checkout", "-q", "--detach", sha)
+                    (directory / "event.json").write_text(json.dumps(payload))
+                missing = next(evidence.iterdir())
+                original = missing.read_text()
+                missing.unlink()
+                result = gate()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Incomplete scan inventory", result.stderr)
+                missing.write_text(original)
+
+
+if __name__ == "__main__":
+    unittest.main()

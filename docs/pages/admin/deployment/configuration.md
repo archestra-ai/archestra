@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 5
-lastUpdated: 2026-10-21
+lastUpdated: 2026-10-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -114,7 +114,7 @@ Archestra reads these environment variables at startup. Pass them with `-e` to `
   - Values: `json` (one JSON object per line), `pretty` (colorized text)
   - The OTLP log exporter always receives structured records.
 
-- **`ARCHESTRA_ANALYTICS`** - Sends product analytics to Archestra, and forwards [Guardrails](#guardrails) diagnostic reports to the shared OpenAPPA reporting service.
+- **`ARCHESTRA_ANALYTICS`** - Sends product analytics, instance heartbeats, and backend error reports to Archestra. Guardrails diagnostic forwarding has a separate [opt-in](#ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED).
   - Default: on in production builds, including the released Docker images; off in development
   - Values: `disabled` turns it off. Any other value turns it on.
 
@@ -376,10 +376,11 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Values: a Vertex AI location, for example `europe-west1` or `global`
   - Some regions, including `us-east1`, list an incomplete model catalog. `us-central1` and `global` list the full catalog.
 
-- **`ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT`** - Sends requests for models that Vertex AI serves only from `global`, such as Gemini 3 and newer, to the global endpoint.
+- **`ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT`** - Sends requests for models that Vertex AI serves only from `global`, such as Gemini 3 and newer and Nano Banana 2.1, to the global endpoint.
   - Default: `false`
   - Values: `true`, `false`
-  - While `false`, those models do not appear in the model list. Other models keep using [`ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`](/docs/admin/deployment/configuration#ARCHESTRA_GEMINI_VERTEX_AI_LOCATION).
+  - With a regional location and this set to `false`, those models do not appear in the model list. When enabled, their discovery and requests use `global`. Other models keep using [`ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`](/docs/admin/deployment/configuration#ARCHESTRA_GEMINI_VERTEX_AI_LOCATION).
+  - A configured location of `global` already sends all Gemini requests there, regardless of this setting.
   - Leave it `false` when your region is a data residency requirement. Google routes global-endpoint requests to any region.
 
 - **`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`** - Path to a Google Cloud service account JSON key for Gemini on Vertex AI.
@@ -690,7 +691,7 @@ At startup, Archestra creates an organization-wide key from each `ARCHESTRA_CHAT
 
 ### Active Run Updates
 
-Chat streams and A2A task streams wake through PostgreSQL `LISTEN/NOTIFY` across replicas, with polling as a fallback. Change these only to tune database load or to work behind a connection pooler.
+Chat streams, A2A task streams and LLM proxy settings stay in sync across replicas through PostgreSQL `LISTEN/NOTIFY`, with polling as a fallback. While notifications arrive, the LLM proxy keeps gateway, credential and limit settings in memory, so a revoked key or a changed limit reaches every replica within seconds. Change these only to tune database load or to work behind a connection pooler.
 
 - **`ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS`** - How often a reconnecting client checks for new events of a running chat, in milliseconds.
   - Default: `500`
@@ -702,7 +703,7 @@ Chat streams and A2A task streams wake through PostgreSQL `LISTEN/NOTIFY` across
   - Default: [`ARCHESTRA_DATABASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_URL)
   - Set it when regular traffic uses PgBouncer transaction pooling, which cannot hold a listener. Point it at a direct or session-pooled connection.
 
-- **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Turns off the `LISTEN/NOTIFY` listener, so chat and A2A task streams use polling only.
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Turns off the `LISTEN/NOTIFY` listener, so chat and A2A task streams use polling only and the LLM proxy reads its settings from the database on every request.
   - Default: `false`
   - Values: `true`, `false`
   - Archestra detects an endpoint that cannot deliver notifications and polls faster on its own. Set this only to avoid opening a listener connection that cannot work.
@@ -962,7 +963,7 @@ Archestra creates one Dagger engine per organization and per environment. Each e
 
 Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox controller installed. Agents can override the settings described as defaults. See [Agent Runtime](/docs/agents/runtime) for cluster setup.
 
-- **`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`** - Registry the maintained Claude Code, Codex, OpenCode, Hermes, and OpenClaw images are pulled from.
+- **`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`** - Registry the maintained Claude Code, Codex, OpenCode, Hermes, OpenClaw, and Grok Build images are pulled from.
   - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public`
   - Set it when you mirror these images to a private registry.
 
@@ -1258,6 +1259,11 @@ These variables connect an Outlook mailbox so people can [email agents](/docs/ag
 
 The Microsoft Teams, Slack, and Telegram variables apply only on first startup, when no channel settings exist yet. After that, change a channel in **Settings → Messaging Channels**.
 
+- **`ARCHESTRA_CHATOPS_WEBHOOK_BASE_URL`** - Public base URL for Slack events, interactive actions, and slash commands when the web app is private.
+  - Default: the ngrok tunnel URL, or the frontend URL when no tunnel is active.
+  - Values: an HTTP(S) base URL, for example `https://hooks.example.com`.
+  - Used when creating or retargeting Slack apps. Existing app URLs require a separate update. Browser OAuth redirects keep using the frontend or tunnel URL.
+
 - **`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED`** - Sends a welcome message to users who are created automatically when they first message an agent.
   - Default: `true`
   - Values: `true`, `false`. With `false`, users are still created.
@@ -1463,9 +1469,13 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Values: at least 32 characters, the same on every replica. A shorter value stops startup.
   - Set it to rotate this key separately from the session secret.
 
-- **`ARCHESTRA_OPENAPPA_YELL_ENABLED`** - Lets agents report confusing blocks with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. Reports are stored locally. They also go to the shared OpenAPPA reporting service when [`ARCHESTRA_ANALYTICS`](/docs/admin/deployment/configuration#ARCHESTRA_ANALYTICS) is enabled.
+- **`ARCHESTRA_OPENAPPA_YELL_ENABLED`** - Lets agents report confusing blocks with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. Reports are stored locally.
   - Default: `true`
   - Values: `true`, `false`
+
+- **`ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED`** - Forwards agent reports to the shared OpenAPPA reporting service, independently of [`ARCHESTRA_ANALYTICS`](/docs/admin/deployment/configuration#ARCHESTRA_ANALYTICS). Requires [`ARCHESTRA_OPENAPPA_YELL_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED).
+  - Default: `false`, including after upgrades. Values: `true`, `false`; unset or empty means off, and invalid values stop startup.
+  - Encrypted-chat and automatic client-failure reports stay local. Messages are sent verbatim; exclude secrets and conversation content.
 
 - **`ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`** - PostgreSQL connections each backend process opens for guardrail checks.
   - Default: `4`

@@ -175,11 +175,20 @@ export const SHOTS: Shot[] = [
       const convId = "c0000000-0000-4000-8000-000000000099";
       const appId = "7b8e1a20-0000-4000-8000-000000000099";
 
-      await page.addInitScript(({ id }) => {
-        window.localStorage.setItem(`archestra-chat-right-panel-open-${id}`, "true");
-        window.localStorage.setItem(`archestra-chat-right-panel-tab-${id}`, "apps");
-        window.localStorage.setItem("archestra-right-panel-width", "560");
-      }, { id: convId });
+      await page.addInitScript(
+        ({ id }) => {
+          window.localStorage.setItem(
+            `archestra-chat-right-panel-open-${id}`,
+            "true",
+          );
+          window.localStorage.setItem(
+            `archestra-chat-right-panel-tab-${id}`,
+            "apps",
+          );
+          window.localStorage.setItem("archestra-right-panel-width", "560");
+        },
+        { id: convId },
+      );
 
       await page.route("**/api/llm-models/available*", async (route) => {
         await route.fulfill({
@@ -217,75 +226,78 @@ export const SHOTS: Shot[] = [
         },
       );
 
-      await page.route(`**/api/chat/conversations/${convId}*`, async (route) => {
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({
-            id: convId,
-            userId: "u0000000-0000-4000-8000-000000000001",
-            organizationId: "o0000000-0000-4000-8000-000000000001",
-            title: "Incident INC-4091 Command Center",
-            selectedModel: "m0000000-0000-4000-8000-000000000001",
-            selectedProvider: "anthropic",
-            modelId: "claude-3-5-sonnet-20241022",
-            thinkingEffort: "medium",
-            hasCustomToolSelection: false,
-            hooksDebugEnabled: false,
-            todoList: null,
-            artifact: null,
-            projectId: null,
-            origin: "user",
-            titleIsPlaceholder: false,
-            encryptedChat: false,
-            pinnedAt: null,
-            lastMessageAt: "2026-10-12T12:00:00.000Z",
-            createdAt: "2026-10-12T12:00:00.000Z",
-            updatedAt: "2026-10-12T12:00:00.000Z",
-            deletedAt: null,
-            chatErrors: [],
-            compactions: [],
-            messages: [
-              {
-                id: "msg-user-1",
-                role: "user",
-                parts: [
-                  {
-                    type: "text",
-                    text: "Deploy the Incident Command Center for INC-4091 to coordinate remediation.",
-                  },
-                ],
-              },
-              {
-                id: "msg-assistant-1",
-                role: "assistant",
-                parts: [
-                  {
-                    type: "text",
-                    text: "I've launched the Incident Command Center for INC-4091. Real-time telemetry, blast radius metrics, and remediation controls are ready in the right panel.",
-                  },
-                  {
-                    type: "dynamic-tool",
-                    toolName: "archestra__render_app",
-                    toolCallId: "call_render_app_1",
-                    state: "output-available",
-                    input: { app_id: appId },
-                    output: {
-                      content: "Rendered Incident Command Center",
-                      structuredContent: {
-                        id: appId,
-                        name: "Incident Command Center",
-                        latestVersion: 1,
+      await page.route(
+        `**/api/chat/conversations/${convId}*`,
+        async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              id: convId,
+              userId: "u0000000-0000-4000-8000-000000000001",
+              organizationId: "o0000000-0000-4000-8000-000000000001",
+              title: "Incident INC-4091 Command Center",
+              selectedModel: "m0000000-0000-4000-8000-000000000001",
+              selectedProvider: "anthropic",
+              modelId: "claude-3-5-sonnet-20241022",
+              thinkingEffort: "medium",
+              hasCustomToolSelection: false,
+              hooksDebugEnabled: false,
+              todoList: null,
+              artifact: null,
+              projectId: null,
+              origin: "user",
+              titleIsPlaceholder: false,
+              encryptedChat: false,
+              pinnedAt: null,
+              lastMessageAt: "2026-10-12T12:00:00.000Z",
+              createdAt: "2026-10-12T12:00:00.000Z",
+              updatedAt: "2026-10-12T12:00:00.000Z",
+              deletedAt: null,
+              chatErrors: [],
+              compactions: [],
+              messages: [
+                {
+                  id: "msg-user-1",
+                  role: "user",
+                  parts: [
+                    {
+                      type: "text",
+                      text: "Deploy the Incident Command Center for INC-4091 to coordinate remediation.",
+                    },
+                  ],
+                },
+                {
+                  id: "msg-assistant-1",
+                  role: "assistant",
+                  parts: [
+                    {
+                      type: "text",
+                      text: "I've launched the Incident Command Center for INC-4091. Real-time telemetry, blast radius metrics, and remediation controls are ready in the right panel.",
+                    },
+                    {
+                      type: "dynamic-tool",
+                      toolName: "archestra__render_app",
+                      toolCallId: "call_render_app_1",
+                      state: "output-available",
+                      input: { app_id: appId },
+                      output: {
+                        content: "Rendered Incident Command Center",
+                        structuredContent: {
+                          id: appId,
+                          name: "Incident Command Center",
+                          latestVersion: 1,
+                        },
                       },
                     },
-                  },
-                ],
-                metadata: { createdAt: "2026-10-12T12:00:00.000Z" },
-              },
-            ],
-          }),
-        });
-      });
+                  ],
+                  metadata: { createdAt: "2026-10-12T12:00:00.000Z" },
+                },
+              ],
+            }),
+          });
+        },
+      );
 
       await page.route(`**/api/apps/${appId}*`, async (route) => {
         await route.fulfill({
@@ -470,7 +482,7 @@ export const SHOTS: Shot[] = [
     route: () => `/llm/costs?timeframe=${encodeURIComponent(USAGE_TIMEFRAME)}`,
     viewport: { width: 1440, height: 780 },
     prepare: async (page) => {
-      await page.getByText("Billed spend").first().waitFor();
+      await page.getByText("Billed spend", { exact: true }).first().waitFor();
       await page.waitForLoadState("networkidle");
     },
   },
@@ -481,6 +493,18 @@ export const SHOTS: Shot[] = [
     prepare: async (page) => {
       await page.getByText("Platform Engineering").first().waitFor();
     },
+  },
+  {
+    asset: "automated_screenshots/llm-proxy_throughput",
+    route: () => "/llm/limits",
+    viewport: { width: 1440, height: 1000 },
+    prepare: prepareThroughputLimit,
+  },
+  {
+    asset: "automated_screenshots/llm-proxy_throughput-mobile",
+    route: () => "/llm/limits",
+    viewport: { width: 390, height: 844 },
+    prepare: prepareThroughputLimit,
   },
   {
     asset: "automated_screenshots/platform-agent-plugins_catalog",
@@ -633,24 +657,37 @@ export const SHOTS: Shot[] = [
       // The docs' rules are at the end of the file: jump there, then drop focus
       // so no cursor shows.
       await page.locator(".monaco-editor .view-line").first().click();
-      await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End");
-      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await page.keyboard.press(
+        process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End",
+      );
+      await page.evaluate(() =>
+        (document.activeElement as HTMLElement | null)?.blur(),
+      );
       // Monaco renders spaces as non-breaking spaces, so match a token without one.
-      await page.locator(".view-line").filter({ hasText: "acme/sdk" }).first().waitFor();
+      await page
+        .locator(".view-line")
+        .filter({ hasText: "acme/sdk" })
+        .first()
+        .waitFor();
     },
   },
   {
     asset: "automated_screenshots/platform-openappa_validations",
     route: () => "/openappa/validation",
     prepare: async (page) => {
-      await page.getByText("Slack data can't go into a public GitHub issue").first().waitFor();
+      await page
+        .getByText("Slack data can't go into a public GitHub issue")
+        .first()
+        .waitFor();
     },
   },
   {
     asset: "automated_screenshots/platform-openappa_yells",
     route: () => "/openappa/yells",
     prepare: async (page) => {
-      await page.getByText("Blocked from opening an issue in acme/sdk").waitFor();
+      await page
+        .getByText("Blocked from opening an issue in acme/sdk")
+        .waitFor();
     },
   },
 ];
@@ -666,6 +703,15 @@ export const SHOTS: Shot[] = [
  * - platform-projects_*: project files, instructions, schedules, and chats
  * - chat and orchestrator shots: conversations and a hibernated MCP server
  */
+
+async function prepareThroughputLimit(page: Page) {
+  await page.getByRole("button", { name: "Add Limit", exact: true }).click();
+  await page.getByRole("combobox", { name: "Limit kind", exact: true }).click();
+  await page.getByRole("option", { name: "Tokens", exact: true }).click();
+  await page.getByLabel("Limit value", { exact: true }).fill("100000");
+  await page.getByRole("combobox", { name: "Interval", exact: true }).click();
+  await page.getByRole("option", { name: "Calendar day", exact: true }).click();
+}
 
 async function showGuardrailsEnforced(page: Page) {
   const response = await page.request.put("/api/guardrails-deployment", {

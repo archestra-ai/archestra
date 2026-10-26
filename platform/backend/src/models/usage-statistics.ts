@@ -145,6 +145,9 @@ class UsageStatisticsModel {
       llmRequests: 0,
       inputTokens: 0,
       outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 0,
       billedCost: 0,
       subscriptionCost: 0,
     };
@@ -183,6 +186,9 @@ class UsageStatisticsModel {
         0 AS llm_requests,
         0::bigint AS input_tokens,
         0::bigint AS output_tokens,
+        0::bigint AS cache_read_tokens,
+        0::bigint AS cache_write_tokens,
+        0::bigint AS total_tokens,
         0::double precision AS billed_cost,
         0::double precision AS subscription_cost
       FROM ${calls}
@@ -200,6 +206,12 @@ class UsageStatisticsModel {
         0, 0, 1,
         COALESCE(${interactions.inputTokens}, 0),
         COALESCE(${interactions.outputTokens}, 0),
+        COALESCE(${interactions.cacheReadTokens}, 0),
+        COALESCE(${interactions.cacheWriteTokens}, 0),
+        (CASE WHEN NOT ${interactions.inputTokensEstimated} THEN COALESCE(${interactions.inputTokens}, 0) ELSE 0 END)
+          + COALESCE(${interactions.outputTokens}, 0)
+          + COALESCE(${interactions.cacheReadTokens}, 0)
+          + COALESCE(${interactions.cacheWriteTokens}, 0),
         CASE WHEN ${interactions.billingMode} = 'metered' THEN COALESCE(${interactions.cost}, 0) ELSE 0 END,
         CASE WHEN ${interactions.billingMode} = 'subscription' THEN COALESCE(${interactions.cost}, 0) ELSE 0 END
       FROM ${interactions}
@@ -229,6 +241,9 @@ class UsageStatisticsModel {
       CAST(COALESCE(SUM(facts.llm_requests), 0) AS INTEGER) AS llm_requests,
       CAST(COALESCE(SUM(facts.input_tokens), 0) AS BIGINT) AS input_tokens,
       CAST(COALESCE(SUM(facts.output_tokens), 0) AS BIGINT) AS output_tokens,
+      CAST(COALESCE(SUM(facts.cache_read_tokens), 0) AS BIGINT) AS cache_read_tokens,
+      CAST(COALESCE(SUM(facts.cache_write_tokens), 0) AS BIGINT) AS cache_write_tokens,
+      CAST(COALESCE(SUM(facts.total_tokens), 0) AS BIGINT) AS total_tokens,
       CAST(COALESCE(SUM(facts.billed_cost), 0) AS DOUBLE PRECISION) AS billed_cost,
       CAST(COALESCE(SUM(facts.subscription_cost), 0) AS DOUBLE PRECISION) AS subscription_cost`;
 
@@ -271,6 +286,9 @@ class UsageStatisticsModel {
       llmRequests: Number(row.llm_requests ?? 0),
       inputTokens: Number(row.input_tokens ?? 0),
       outputTokens: Number(row.output_tokens ?? 0),
+      cacheReadTokens: Number(row.cache_read_tokens ?? 0),
+      cacheWriteTokens: Number(row.cache_write_tokens ?? 0),
+      totalTokens: Number(row.total_tokens ?? 0),
       billedCost: Number(row.billed_cost ?? 0),
       subscriptionCost: Number(row.subscription_cost ?? 0),
     });

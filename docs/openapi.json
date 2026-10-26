@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.5.0-rc.5"
+    "version": "1.5.0-rc.8"
   },
   "components": {
     "schemas": {
@@ -1249,6 +1249,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -1492,7 +1493,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
@@ -5792,6 +5792,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -6033,7 +6034,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://github.com/Cerebras/cerebras-cloud-sdk-node/blob/main/src/resources/chat/completions.ts"
@@ -7675,6 +7675,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -7918,7 +7919,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
@@ -8978,6 +8978,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -9228,7 +9229,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
@@ -10288,6 +10288,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -10531,7 +10532,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
@@ -11789,6 +11789,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -11884,6 +11885,7 @@
               },
               "max_tokens": {
                 "type": "integer",
+                "minimum": 0,
                 "exclusiveMinimum": true,
                 "maximum": 9007199254740991
               },
@@ -12068,7 +12070,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
@@ -13466,7 +13467,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "A choice in the chat completion response"
@@ -14723,7 +14723,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "A choice in the chat completion response"
@@ -15659,7 +15658,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://docs.z.ai/api-reference/llm/chat-completion#response"
@@ -16760,6 +16758,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -17004,7 +17003,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
@@ -18064,6 +18062,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -18308,7 +18307,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
@@ -20859,6 +20857,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -21102,7 +21101,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L311"
@@ -22602,6 +22600,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -22854,7 +22853,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -27319,6 +27317,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -27569,7 +27568,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -29288,6 +29286,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -29540,7 +29539,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -30649,6 +30647,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -30908,7 +30907,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -32017,6 +32015,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -32269,7 +32268,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -33586,6 +33584,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -33683,6 +33682,7 @@
               },
               "max_tokens": {
                 "type": "integer",
+                "minimum": 0,
                 "exclusiveMinimum": true,
                 "maximum": 9007199254740991
               },
@@ -33875,7 +33875,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -35329,7 +35328,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -36643,7 +36641,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -37596,7 +37593,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -38749,6 +38745,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -39001,7 +38998,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -40110,6 +40106,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -40362,7 +40359,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -43033,6 +43029,7 @@
           "max_completion_tokens": {
             "nullable": true,
             "type": "integer",
+            "minimum": 0,
             "exclusiveMinimum": true,
             "maximum": 9007199254740991
           },
@@ -43285,7 +43282,6 @@
               },
               "required": [
                 "finish_reason",
-                "logprobs",
                 "message"
               ],
               "additionalProperties": false,
@@ -63922,6 +63918,7 @@
           {
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "exclusiveMinimum": true,
               "maximum": 2147483647
             },
@@ -64610,6 +64607,7 @@
                 "properties": {
                   "baseVersion": {
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   }
@@ -64632,6 +64630,7 @@
           {
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "exclusiveMinimum": true,
               "maximum": 2147483647
             },
@@ -67520,7 +67519,7 @@
                             "observedAt": {
                               "type": "string",
                               "format": "date-time",
-                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                             }
                           },
                           "required": [
@@ -77504,7 +77503,7 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
                     "flowId": {
                       "type": "string",
@@ -77826,7 +77825,7 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
                     "flowId": {
                       "type": "string",
@@ -78130,7 +78129,7 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
                     "flowId": {
                       "type": "string",
@@ -78461,7 +78460,7 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
                     "flowId": {
                       "type": "string",
@@ -79774,6 +79773,29 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "failure": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160
+                          },
+                          "retriable": {
+                            "type": "boolean"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "retriable",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      },
                       "stateChangedAt": {
                         "nullable": true,
                         "type": "string",
@@ -79849,6 +79871,7 @@
                       "endedAt",
                       "state",
                       "statusReason",
+                      "failure",
                       "stateChangedAt",
                       "hardDeadlineAt",
                       "lastModelActivityAt",
@@ -80674,6 +80697,29 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "failure": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 160
+                              },
+                              "retriable": {
+                                "type": "boolean"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "retriable",
+                              "message"
+                            ],
+                            "additionalProperties": false
+                          },
                           "stateChangedAt": {
                             "nullable": true,
                             "type": "string",
@@ -80752,6 +80798,7 @@
                           "endedAt",
                           "state",
                           "statusReason",
+                          "failure",
                           "stateChangedAt",
                           "hardDeadlineAt",
                           "lastModelActivityAt",
@@ -81201,6 +81248,29 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "failure": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160
+                        },
+                        "retriable": {
+                          "type": "boolean"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "retriable",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
                     "stateChangedAt": {
                       "nullable": true,
                       "type": "string",
@@ -81375,6 +81445,7 @@
                     "endedAt",
                     "state",
                     "statusReason",
+                    "failure",
                     "stateChangedAt",
                     "hardDeadlineAt",
                     "lastModelActivityAt",
@@ -81652,7 +81723,7 @@
                     "nullable": true,
                     "type": "string",
                     "format": "date-time",
-                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                   },
                   "projectId": {
                     "nullable": true,
@@ -81804,6 +81875,29 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "failure": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160
+                        },
+                        "retriable": {
+                          "type": "boolean"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "retriable",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
                     "stateChangedAt": {
                       "nullable": true,
                       "type": "string",
@@ -81879,6 +81973,7 @@
                     "endedAt",
                     "state",
                     "statusReason",
+                    "failure",
                     "stateChangedAt",
                     "hardDeadlineAt",
                     "lastModelActivityAt",
@@ -83191,6 +83286,7 @@
                     },
                     "expiresInSeconds": {
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     }
@@ -96302,6 +96398,7 @@
                   "baseVersion": {
                     "description": "Expected current content version. A stale value rejects the entire update with 409 before any changes persist.",
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -100350,6 +100447,7 @@
           {
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "exclusiveMinimum": true,
               "maximum": 9007199254740991
             },
@@ -100731,6 +100829,7 @@
                 "properties": {
                   "baseVersion": {
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   }
@@ -100757,6 +100856,7 @@
           {
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "exclusiveMinimum": true,
               "maximum": 9007199254740991
             },
@@ -101654,6 +101754,7 @@
                 "properties": {
                   "version": {
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -101975,6 +102076,7 @@
                 "properties": {
                   "version": {
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -103454,7 +103556,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "startDate",
@@ -103465,7 +103567,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "endDate",
@@ -105991,6 +106093,7 @@
                     },
                     "expires_at": {
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -106363,6 +106466,7 @@
                           },
                           "expires_at": {
                             "type": "integer",
+                            "minimum": 0,
                             "exclusiveMinimum": true,
                             "maximum": 9007199254740991
                           },
@@ -106706,6 +106810,7 @@
                     },
                     "expires_at": {
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -107385,6 +107490,7 @@
                     },
                     "expires_at": {
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -107767,6 +107873,7 @@
                           },
                           "expires_at": {
                             "type": "integer",
+                            "minimum": 0,
                             "exclusiveMinimum": true,
                             "maximum": 9007199254740991
                           },
@@ -108120,6 +108227,7 @@
                     },
                     "expires_at": {
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -109659,13 +109767,9 @@
                     "type": "string"
                   },
                   "safety_identifier": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "n": {
@@ -110170,13 +110274,9 @@
                     "type": "string"
                   },
                   "safety_identifier": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "n": {
@@ -111600,6 +111700,7 @@
                   "max_completion_tokens": {
                     "nullable": true,
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -111892,7 +111993,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -113203,6 +113303,7 @@
                   "max_completion_tokens": {
                     "nullable": true,
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -113505,7 +113606,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -115727,7 +115827,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -117467,7 +117566,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -131925,6 +132023,7 @@
                         "defaultUserLimitValue": {
                           "nullable": true,
                           "type": "integer",
+                          "minimum": 0,
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },
@@ -144803,7 +144902,7 @@
                     "nullable": true,
                     "type": "string",
                     "format": "date-time",
-                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                   },
                   "thinkingEffort": {
                     "nullable": true,
@@ -155014,12 +155113,12 @@
                           "createdAt": {
                             "type": "string",
                             "format": "date-time",
-                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                           },
                           "updatedAt": {
                             "type": "string",
                             "format": "date-time",
-                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                           }
                         },
                         "required": [
@@ -155511,12 +155610,12 @@
                       "createdAt": {
                         "type": "string",
                         "format": "date-time",
-                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                       },
                       "updatedAt": {
                         "type": "string",
                         "format": "date-time",
-                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                       }
                     },
                     "required": [
@@ -156172,12 +156271,12 @@
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     }
                   },
                   "required": [
@@ -156552,12 +156651,12 @@
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     }
                   },
                   "required": [
@@ -156979,12 +157078,12 @@
                       "createdAt": {
                         "type": "string",
                         "format": "date-time",
-                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                       },
                       "updatedAt": {
                         "type": "string",
                         "format": "date-time",
-                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                       }
                     },
                     "required": [
@@ -164772,7 +164871,8 @@
                       "claude-desktop",
                       "copilot-cli",
                       "opencode",
-                      "kilo"
+                      "kilo",
+                      "pi"
                     ]
                   },
                   "platform": {
@@ -165429,7 +165529,8 @@
                         "claude-desktop",
                         "copilot-cli",
                         "opencode",
-                        "kilo"
+                        "kilo",
+                        "pi"
                       ]
                     },
                     "platform": {
@@ -165816,7 +165917,8 @@
                         "claude-desktop",
                         "copilot-cli",
                         "opencode",
-                        "kilo"
+                        "kilo",
+                        "pi"
                       ]
                     },
                     "platform": {
@@ -167505,7 +167607,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "startDate",
@@ -167516,7 +167618,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "endDate",
@@ -167963,7 +168065,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "startDate",
@@ -167974,7 +168076,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "endDate",
@@ -168477,7 +168579,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "startDate",
@@ -168488,7 +168590,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "endDate",
@@ -170470,7 +170572,8 @@
                       "claude-desktop",
                       "copilot-cli",
                       "opencode",
-                      "kilo"
+                      "kilo",
+                      "pi"
                     ]
                   },
                   "platform": {
@@ -170561,6 +170664,7 @@
                       "ttlDays": {
                         "nullable": true,
                         "type": "integer",
+                        "minimum": 0,
                         "exclusiveMinimum": true,
                         "maximum": 3650
                       }
@@ -170659,7 +170763,8 @@
                               "claude-desktop",
                               "copilot-cli",
                               "opencode",
-                              "kilo"
+                              "kilo",
+                              "pi"
                             ]
                           }
                         },
@@ -172511,6 +172616,7 @@
                   },
                   "limitValue": {
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -172871,6 +172977,7 @@
                 "properties": {
                   "limitValue": {
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -187222,6 +187329,7 @@
                   "max_completion_tokens": {
                     "nullable": true,
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -187500,7 +187608,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -188806,6 +188913,7 @@
                   "max_completion_tokens": {
                     "nullable": true,
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -189094,7 +189202,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -196803,7 +196910,7 @@
                         "expiresAt": {
                           "type": "string",
                           "format": "date-time",
-                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                         }
                       },
                       "required": [
@@ -197109,7 +197216,7 @@
                     "expiresAt": {
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
                     "message": {
                       "type": "string"
@@ -197388,7 +197495,7 @@
                     "expiresAt": {
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
                     "message": {
                       "type": "string"
@@ -197961,7 +198068,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "startDate",
@@ -197972,7 +198079,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "endDate",
@@ -217619,6 +217726,7 @@
                                       "max_completion_tokens": {
                                         "nullable": true,
                                         "type": "integer",
+                                        "minimum": 0,
                                         "exclusiveMinimum": true,
                                         "maximum": 9007199254740991
                                       },
@@ -218750,6 +218858,7 @@
                                       "max_completion_tokens": {
                                         "nullable": true,
                                         "type": "integer",
+                                        "minimum": 0,
                                         "exclusiveMinimum": true,
                                         "maximum": 9007199254740991
                                       },
@@ -219010,7 +219119,6 @@
                                           },
                                           "required": [
                                             "finish_reason",
-                                            "logprobs",
                                             "message"
                                           ],
                                           "additionalProperties": false,
@@ -220659,6 +220767,7 @@
                                       "max_completion_tokens": {
                                         "nullable": true,
                                         "type": "integer",
+                                        "minimum": 0,
                                         "exclusiveMinimum": true,
                                         "maximum": 9007199254740991
                                       },
@@ -221790,6 +221899,7 @@
                                       "max_completion_tokens": {
                                         "nullable": true,
                                         "type": "integer",
+                                        "minimum": 0,
                                         "exclusiveMinimum": true,
                                         "maximum": 9007199254740991
                                       },
@@ -222050,7 +222160,6 @@
                                           },
                                           "required": [
                                             "finish_reason",
-                                            "logprobs",
                                             "message"
                                           ],
                                           "additionalProperties": false,
@@ -223694,6 +223803,7 @@
                                       "max_completion_tokens": {
                                         "nullable": true,
                                         "type": "integer",
+                                        "minimum": 0,
                                         "exclusiveMinimum": true,
                                         "maximum": 9007199254740991
                                       },
@@ -224825,6 +224935,7 @@
                                       "max_completion_tokens": {
                                         "nullable": true,
                                         "type": "integer",
+                                        "minimum": 0,
                                         "exclusiveMinimum": true,
                                         "maximum": 9007199254740991
                                       },
@@ -225085,7 +225196,6 @@
                                           },
                                           "required": [
                                             "finish_reason",
-                                            "logprobs",
                                             "message"
                                           ],
                                           "additionalProperties": false,
@@ -226453,7 +226563,6 @@
                                           },
                                           "required": [
                                             "finish_reason",
-                                            "logprobs",
                                             "message"
                                           ],
                                           "additionalProperties": false,
@@ -228102,6 +228211,7 @@
                                       "max_completion_tokens": {
                                         "nullable": true,
                                         "type": "integer",
+                                        "minimum": 0,
                                         "exclusiveMinimum": true,
                                         "maximum": 9007199254740991
                                       },
@@ -229238,6 +229348,7 @@
                                       "max_completion_tokens": {
                                         "nullable": true,
                                         "type": "integer",
+                                        "minimum": 0,
                                         "exclusiveMinimum": true,
                                         "maximum": 9007199254740991
                                       },
@@ -229503,7 +229614,6 @@
                                           },
                                           "required": [
                                             "finish_reason",
-                                            "logprobs",
                                             "message"
                                           ],
                                           "additionalProperties": false,
@@ -236061,7 +236171,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "startDate",
@@ -236071,7 +236181,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "endDate",
@@ -236728,7 +236838,8 @@
                 "copilot-cli",
                 "cursor",
                 "opencode",
-                "kilo"
+                "kilo",
+                "pi"
               ]
             },
             "in": "query",
@@ -236749,7 +236860,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "startDate",
@@ -236760,7 +236871,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "endDate",
@@ -257872,6 +257983,7 @@
                                 "max_completion_tokens": {
                                   "nullable": true,
                                   "type": "integer",
+                                  "minimum": 0,
                                   "exclusiveMinimum": true,
                                   "maximum": 9007199254740991
                                 },
@@ -259003,6 +259115,7 @@
                                 "max_completion_tokens": {
                                   "nullable": true,
                                   "type": "integer",
+                                  "minimum": 0,
                                   "exclusiveMinimum": true,
                                   "maximum": 9007199254740991
                                 },
@@ -259263,7 +259376,6 @@
                                     },
                                     "required": [
                                       "finish_reason",
-                                      "logprobs",
                                       "message"
                                     ],
                                     "additionalProperties": false,
@@ -260912,6 +261024,7 @@
                                 "max_completion_tokens": {
                                   "nullable": true,
                                   "type": "integer",
+                                  "minimum": 0,
                                   "exclusiveMinimum": true,
                                   "maximum": 9007199254740991
                                 },
@@ -262043,6 +262156,7 @@
                                 "max_completion_tokens": {
                                   "nullable": true,
                                   "type": "integer",
+                                  "minimum": 0,
                                   "exclusiveMinimum": true,
                                   "maximum": 9007199254740991
                                 },
@@ -262303,7 +262417,6 @@
                                     },
                                     "required": [
                                       "finish_reason",
-                                      "logprobs",
                                       "message"
                                     ],
                                     "additionalProperties": false,
@@ -263947,6 +264060,7 @@
                                 "max_completion_tokens": {
                                   "nullable": true,
                                   "type": "integer",
+                                  "minimum": 0,
                                   "exclusiveMinimum": true,
                                   "maximum": 9007199254740991
                                 },
@@ -265078,6 +265192,7 @@
                                 "max_completion_tokens": {
                                   "nullable": true,
                                   "type": "integer",
+                                  "minimum": 0,
                                   "exclusiveMinimum": true,
                                   "maximum": 9007199254740991
                                 },
@@ -265338,7 +265453,6 @@
                                     },
                                     "required": [
                                       "finish_reason",
-                                      "logprobs",
                                       "message"
                                     ],
                                     "additionalProperties": false,
@@ -266706,7 +266820,6 @@
                                     },
                                     "required": [
                                       "finish_reason",
-                                      "logprobs",
                                       "message"
                                     ],
                                     "additionalProperties": false,
@@ -268355,6 +268468,7 @@
                                 "max_completion_tokens": {
                                   "nullable": true,
                                   "type": "integer",
+                                  "minimum": 0,
                                   "exclusiveMinimum": true,
                                   "maximum": 9007199254740991
                                 },
@@ -269491,6 +269605,7 @@
                                 "max_completion_tokens": {
                                   "nullable": true,
                                   "type": "integer",
+                                  "minimum": 0,
                                   "exclusiveMinimum": true,
                                   "maximum": 9007199254740991
                                 },
@@ -269756,7 +269871,6 @@
                                     },
                                     "required": [
                                       "finish_reason",
-                                      "logprobs",
                                       "message"
                                     ],
                                     "additionalProperties": false,
@@ -277886,6 +278000,7 @@
                       },
                       "httpPath": {
                         "type": "string",
+                        "format": "starts_with",
                         "pattern": "^\\/.*"
                       },
                       "nodePort": {
@@ -283345,6 +283460,7 @@
                       },
                       "httpPath": {
                         "type": "string",
+                        "format": "starts_with",
                         "pattern": "^\\/.*"
                       },
                       "nodePort": {
@@ -290727,7 +290843,7 @@
                         "email": {
                           "type": "string",
                           "format": "email",
-                          "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                          "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
                         },
                         "organizationId": {
                           "type": "string"
@@ -292957,6 +293073,7 @@
                   "max_completion_tokens": {
                     "nullable": true,
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -293235,7 +293352,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -294546,6 +294662,7 @@
                   "max_completion_tokens": {
                     "nullable": true,
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -294834,7 +294951,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -300857,6 +300973,7 @@
                                       },
                                       "batchSize": {
                                         "type": "integer",
+                                        "minimum": 0,
                                         "exclusiveMinimum": true,
                                         "maximum": 9007199254740991
                                       }
@@ -302411,6 +302528,7 @@
                           },
                           "batchSize": {
                             "type": "integer",
+                            "minimum": 0,
                             "exclusiveMinimum": true,
                             "maximum": 9007199254740991
                           }
@@ -303694,6 +303812,7 @@
                             },
                             "batchSize": {
                               "type": "integer",
+                              "minimum": 0,
                               "exclusiveMinimum": true,
                               "maximum": 9007199254740991
                             }
@@ -305202,6 +305321,7 @@
                                 },
                                 "batchSize": {
                                   "type": "integer",
+                                  "minimum": 0,
                                   "exclusiveMinimum": true,
                                   "maximum": 9007199254740991
                                 }
@@ -306582,6 +306702,7 @@
                           },
                           "batchSize": {
                             "type": "integer",
+                            "minimum": 0,
                             "exclusiveMinimum": true,
                             "maximum": 9007199254740991
                           }
@@ -307731,6 +307852,7 @@
                             },
                             "batchSize": {
                               "type": "integer",
+                              "minimum": 0,
                               "exclusiveMinimum": true,
                               "maximum": 9007199254740991
                             }
@@ -323173,6 +323295,10 @@
               "type": "string",
               "enum": [
                 "token_cost",
+                "requests",
+                "tokens",
+                "requests_per_minute",
+                "tokens_per_minute",
                 "mcp_server_calls",
                 "tool_calls"
               ]
@@ -323225,6 +323351,10 @@
                         "type": "string",
                         "enum": [
                           "token_cost",
+                          "requests",
+                          "tokens",
+                          "requests_per_minute",
+                          "tokens_per_minute",
                           "mcp_server_calls",
                           "tool_calls"
                         ]
@@ -323254,6 +323384,7 @@
                       "cleanupInterval": {
                         "type": "string",
                         "enum": [
+                          "minute",
                           "1h",
                           "12h",
                           "24h",
@@ -323277,6 +323408,24 @@
                       "updatedAt": {
                         "type": "string",
                         "format": "date-time"
+                      },
+                      "throughputUsage": {
+                        "type": "object",
+                        "properties": {
+                          "currentUsage": {
+                            "type": "number",
+                            "description": "Recorded usage. Token limits count only provider-reported tokens; requests already in flight can exceed the cap."
+                          },
+                          "resetsAt": {
+                            "type": "string",
+                            "description": "Minute: projected full allowance recovery without new traffic. Other intervals: next reset."
+                          }
+                        },
+                        "required": [
+                          "currentUsage",
+                          "resetsAt"
+                        ],
+                        "additionalProperties": false
                       },
                       "labels": {
                         "type": "array",
@@ -323628,6 +323777,10 @@
                     "type": "string",
                     "enum": [
                       "token_cost",
+                      "requests",
+                      "tokens",
+                      "requests_per_minute",
+                      "tokens_per_minute",
                       "mcp_server_calls",
                       "tool_calls"
                     ]
@@ -323657,6 +323810,7 @@
                   "cleanupInterval": {
                     "type": "string",
                     "enum": [
+                      "minute",
                       "1h",
                       "12h",
                       "24h",
@@ -323744,6 +323898,10 @@
                       "type": "string",
                       "enum": [
                         "token_cost",
+                        "requests",
+                        "tokens",
+                        "requests_per_minute",
+                        "tokens_per_minute",
                         "mcp_server_calls",
                         "tool_calls"
                       ]
@@ -323773,6 +323931,7 @@
                     "cleanupInterval": {
                       "type": "string",
                       "enum": [
+                        "minute",
                         "1h",
                         "12h",
                         "24h",
@@ -324107,6 +324266,10 @@
                       "type": "string",
                       "enum": [
                         "token_cost",
+                        "requests",
+                        "tokens",
+                        "requests_per_minute",
+                        "tokens_per_minute",
                         "mcp_server_calls",
                         "tool_calls"
                       ]
@@ -324136,6 +324299,7 @@
                     "cleanupInterval": {
                       "type": "string",
                       "enum": [
+                        "minute",
                         "1h",
                         "12h",
                         "24h",
@@ -324159,6 +324323,24 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "throughputUsage": {
+                      "type": "object",
+                      "properties": {
+                        "currentUsage": {
+                          "type": "number",
+                          "description": "Recorded usage. Token limits count only provider-reported tokens; requests already in flight can exceed the cap."
+                        },
+                        "resetsAt": {
+                          "type": "string",
+                          "description": "Minute: projected full allowance recovery without new traffic. Other intervals: next reset."
+                        }
+                      },
+                      "required": [
+                        "currentUsage",
+                        "resetsAt"
+                      ],
+                      "additionalProperties": false
                     },
                     "labels": {
                       "type": "array",
@@ -324494,6 +324676,10 @@
                     "type": "string",
                     "enum": [
                       "token_cost",
+                      "requests",
+                      "tokens",
+                      "requests_per_minute",
+                      "tokens_per_minute",
                       "mcp_server_calls",
                       "tool_calls"
                     ]
@@ -324523,6 +324709,7 @@
                   "cleanupInterval": {
                     "type": "string",
                     "enum": [
+                      "minute",
                       "1h",
                       "12h",
                       "24h",
@@ -324616,6 +324803,10 @@
                       "type": "string",
                       "enum": [
                         "token_cost",
+                        "requests",
+                        "tokens",
+                        "requests_per_minute",
+                        "tokens_per_minute",
                         "mcp_server_calls",
                         "tool_calls"
                       ]
@@ -324645,6 +324836,7 @@
                     "cleanupInterval": {
                       "type": "string",
                       "enum": [
+                        "minute",
                         "1h",
                         "12h",
                         "24h",
@@ -330253,6 +330445,7 @@
                             "properties": {
                               "limitValue": {
                                 "type": "integer",
+                                "minimum": 0,
                                 "exclusiveMinimum": true,
                                 "maximum": 9007199254740991
                               },
@@ -330725,6 +330918,7 @@
                     "properties": {
                       "limitValue": {
                         "type": "integer",
+                        "minimum": 0,
                         "exclusiveMinimum": true,
                         "maximum": 9007199254740991
                       },
@@ -331080,6 +331274,7 @@
                       "properties": {
                         "limitValue": {
                           "type": "integer",
+                          "minimum": 0,
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },
@@ -331511,6 +331706,7 @@
                     "properties": {
                       "limitValue": {
                         "type": "integer",
+                        "minimum": 0,
                         "exclusiveMinimum": true,
                         "maximum": 9007199254740991
                       },
@@ -331744,6 +331940,7 @@
                       "properties": {
                         "limitValue": {
                           "type": "integer",
+                          "minimum": 0,
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },
@@ -332524,6 +332721,7 @@
                       "properties": {
                         "limitValue": {
                           "type": "integer",
+                          "minimum": 0,
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },
@@ -349303,7 +349501,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "startDate",
@@ -349314,7 +349512,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "endDate",
@@ -353060,6 +353258,7 @@
                   "max_completion_tokens": {
                     "nullable": true,
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -353338,7 +353537,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -354649,6 +354847,7 @@
                   "max_completion_tokens": {
                     "nullable": true,
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
@@ -354937,7 +355136,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -360526,7 +360724,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -361050,7 +361247,6 @@
                         },
                         "required": [
                           "finish_reason",
-                          "logprobs",
                           "message"
                         ],
                         "additionalProperties": false,
@@ -362219,6 +362415,7 @@
                             "properties": {
                               "limitValue": {
                                 "type": "integer",
+                                "minimum": 0,
                                 "exclusiveMinimum": true,
                                 "maximum": 9007199254740991
                               },
@@ -362741,6 +362938,7 @@
                     "properties": {
                       "limitValue": {
                         "type": "integer",
+                        "minimum": 0,
                         "exclusiveMinimum": true,
                         "maximum": 9007199254740991
                       },
@@ -363097,6 +363295,7 @@
                       "properties": {
                         "limitValue": {
                           "type": "integer",
+                          "minimum": 0,
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },
@@ -363578,6 +363777,7 @@
                     "properties": {
                       "limitValue": {
                         "type": "integer",
+                        "minimum": 0,
                         "exclusiveMinimum": true,
                         "maximum": 9007199254740991
                       },
@@ -363812,6 +364012,7 @@
                       "properties": {
                         "limitValue": {
                           "type": "integer",
+                          "minimum": 0,
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },
@@ -364617,6 +364818,7 @@
                       "properties": {
                         "limitValue": {
                           "type": "integer",
+                          "minimum": 0,
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },
@@ -368816,7 +369018,7 @@
                     "type": "string",
                     "maxLength": 320,
                     "format": "email",
-                    "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                    "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
                   }
                 },
                 "required": [
@@ -382551,7 +382753,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "from",
@@ -382562,7 +382764,7 @@
             "schema": {
               "type": "string",
               "format": "date-time",
-              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "in": "query",
             "name": "to",
@@ -396563,6 +396765,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -397731,6 +397934,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -399140,6 +399344,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -400163,6 +400368,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -401183,6 +401389,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -402227,6 +402434,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -403378,6 +403586,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -404234,6 +404443,20 @@
                           }
                         },
                         "additionalProperties": false
+                      },
+                      "grok": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "additionalProperties": false
                       }
                     },
                     "additionalProperties": false
@@ -404513,6 +404736,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -405603,6 +405827,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -406637,6 +406862,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -407702,6 +407928,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -408704,6 +408931,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -410092,13 +410320,13 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
                     "nextRefreshAt": {
                       "nullable": true,
                       "type": "string",
                       "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
                     "refreshing": {
                       "type": "boolean"
@@ -410910,6 +411138,7 @@
                     "defaultUserLimitValue": {
                       "nullable": true,
                       "type": "integer",
+                      "minimum": 0,
                       "exclusiveMinimum": true,
                       "maximum": 9007199254740991
                     },
@@ -419286,245 +419515,234 @@
           "content": {
             "application/json": {
               "schema": {
-                "allOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "repoUrl": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "ref": {
-                        "nullable": true,
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "subdir": {
-                        "default": "",
-                        "type": "string"
-                      },
-                      "exclude": {
-                        "default": [],
-                        "maxItems": 50,
-                        "type": "array",
-                        "items": {
-                          "type": "string",
-                          "minLength": 1
-                        }
-                      },
-                      "provider": {
-                        "description": "Git host of a public repository; defaults to github. Ignored when a credential is given.",
-                        "type": "string",
-                        "enum": [
-                          "github",
-                          "gitlab"
-                        ]
-                      },
-                      "githubToken": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "githubAppConfigId": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "githubPatId": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "gitlabTokenId": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      }
-                    },
-                    "required": [
-                      "repoUrl"
+                "type": "object",
+                "properties": {
+                  "repoUrl": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "ref": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "subdir": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "exclude": {
+                    "default": [],
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "provider": {
+                    "description": "Git host of a public repository; defaults to github. Ignored when a credential is given.",
+                    "type": "string",
+                    "enum": [
+                      "github",
+                      "gitlab"
                     ]
                   },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "displayName": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 120
-                      },
-                      "description": {
-                        "default": "",
-                        "type": "string",
-                        "maxLength": 1000
-                      },
-                      "clientType": {
-                        "type": "string",
-                        "enum": [
-                          "claude-code",
-                          "claude-desktop",
-                          "copilot-cli",
-                          "codex",
-                          "cursor"
-                        ]
-                      },
-                      "supportedPlatforms": {
-                        "minItems": 1,
-                        "type": "array",
-                        "items": {
-                          "type": "string",
-                          "enum": [
-                            "posix",
-                            "windows"
-                          ]
-                        }
-                      },
-                      "initialGrants": {
-                        "maxItems": 200,
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "subject": {
-                              "oneOf": [
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "type": {
-                                      "type": "string",
-                                      "enum": [
-                                        "user"
-                                      ]
-                                    },
-                                    "id": {
-                                      "type": "string",
-                                      "minLength": 1
-                                    }
-                                  },
-                                  "required": [
-                                    "type",
-                                    "id"
+                  "githubToken": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "githubAppConfigId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "githubPatId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "gitlabTokenId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  "clientType": {
+                    "type": "string",
+                    "enum": [
+                      "claude-code",
+                      "claude-desktop",
+                      "copilot-cli",
+                      "codex",
+                      "cursor"
+                    ]
+                  },
+                  "supportedPlatforms": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "posix",
+                        "windows"
+                      ]
+                    }
+                  },
+                  "initialGrants": {
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "subject": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "user"
                                   ]
                                 },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "type": {
-                                      "type": "string",
-                                      "enum": [
-                                        "team"
-                                      ]
-                                    },
-                                    "id": {
-                                      "type": "string",
-                                      "minLength": 1
-                                    }
-                                  },
-                                  "required": [
-                                    "type",
-                                    "id"
-                                  ]
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "type": {
-                                      "type": "string",
-                                      "enum": [
-                                        "serviceAccount"
-                                      ]
-                                    },
-                                    "id": {
-                                      "type": "string",
-                                      "format": "uuid",
-                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                                    }
-                                  },
-                                  "required": [
-                                    "type",
-                                    "id"
-                                  ]
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "type": {
-                                      "type": "string",
-                                      "enum": [
-                                        "role"
-                                      ]
-                                    },
-                                    "id": {
-                                      "type": "string",
-                                      "minLength": 1
-                                    }
-                                  },
-                                  "required": [
-                                    "type",
-                                    "id"
-                                  ]
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "type": {
-                                      "type": "string",
-                                      "enum": [
-                                        "organization"
-                                      ]
-                                    },
-                                    "id": {
-                                      "type": "string",
-                                      "enum": [
-                                        "*"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "type",
-                                    "id"
-                                  ]
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
                                 }
+                              },
+                              "required": [
+                                "type",
+                                "id"
                               ]
                             },
-                            "actions": {
-                              "minItems": 1,
-                              "maxItems": 6,
-                              "type": "array",
-                              "items": {
-                                "type": "string",
-                                "enum": [
-                                  "read",
-                                  "use",
-                                  "update",
-                                  "delete",
-                                  "manage-permissions",
-                                  "configure-deployment-spec"
-                                ]
-                              }
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "team"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "serviceAccount"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "role"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "organization"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "enum": [
+                                    "*"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
                             }
-                          },
-                          "required": [
-                            "subject",
-                            "actions"
                           ]
+                        },
+                        "actions": {
+                          "minItems": 1,
+                          "maxItems": 6,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "use",
+                              "update",
+                              "delete",
+                              "manage-permissions",
+                              "configure-deployment-spec"
+                            ]
+                          }
                         }
                       },
-                      "approvedCommitSha": {
-                        "type": "string",
-                        "pattern": "^[a-f0-9]{40}$"
-                      },
-                      "trackingRef": {
-                        "nullable": true,
-                        "type": "string",
-                        "minLength": 1
-                      }
-                    },
-                    "required": [
-                      "displayName",
-                      "clientType",
-                      "approvedCommitSha"
-                    ]
+                      "required": [
+                        "subject",
+                        "actions"
+                      ]
+                    }
+                  },
+                  "approvedCommitSha": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{40}$"
+                  },
+                  "trackingRef": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1
                   }
+                },
+                "required": [
+                  "repoUrl",
+                  "displayName",
+                  "clientType",
+                  "approvedCommitSha"
                 ]
               }
             }
@@ -420609,51 +420827,42 @@
           "content": {
             "application/json": {
               "schema": {
-                "allOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "provider": {
-                        "description": "Git host of a public repository; defaults to github. Ignored when a credential is given.",
-                        "type": "string",
-                        "enum": [
-                          "github",
-                          "gitlab"
-                        ]
-                      },
-                      "githubToken": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "githubAppConfigId": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "githubPatId": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "gitlabTokenId": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      }
-                    }
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "approvedCommitSha": {
-                        "type": "string",
-                        "pattern": "^[a-f0-9]{40}$"
-                      }
-                    },
-                    "required": [
-                      "approvedCommitSha"
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "description": "Git host of a public repository; defaults to github. Ignored when a credential is given.",
+                    "type": "string",
+                    "enum": [
+                      "github",
+                      "gitlab"
                     ]
+                  },
+                  "githubToken": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "githubAppConfigId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "githubPatId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "gitlabTokenId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "approvedCommitSha": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{40}$"
                   }
+                },
+                "required": [
+                  "approvedCommitSha"
                 ]
               }
             }
@@ -431810,6 +432019,29 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "failure": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160
+                          },
+                          "retriable": {
+                            "type": "boolean"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "retriable",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      },
                       "stateChangedAt": {
                         "nullable": true,
                         "type": "string",
@@ -431984,6 +432216,7 @@
                       "endedAt",
                       "state",
                       "statusReason",
+                      "failure",
                       "stateChangedAt",
                       "hardDeadlineAt",
                       "lastModelActivityAt",
@@ -440294,7 +440527,7 @@
                         "startedAt": {
                           "type": "string",
                           "format": "date-time",
-                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                         },
                         "elapsedSeconds": {
                           "type": "integer",
@@ -440305,11 +440538,12 @@
                           "nullable": true,
                           "type": "string",
                           "format": "date-time",
-                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                         },
                         "maximumDurationSeconds": {
                           "nullable": true,
                           "type": "integer",
+                          "minimum": 0,
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         }
@@ -440643,6 +440877,18 @@
           {
             "schema": {
               "type": "string",
+              "enum": [
+                "due",
+                "manual"
+              ]
+            },
+            "in": "query",
+            "name": "runKind",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
             },
@@ -440750,7 +440996,7 @@
                               "startedAt": {
                                 "type": "string",
                                 "format": "date-time",
-                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                               },
                               "elapsedSeconds": {
                                 "type": "integer",
@@ -440761,11 +441007,12 @@
                                 "nullable": true,
                                 "type": "string",
                                 "format": "date-time",
-                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                               },
                               "maximumDurationSeconds": {
                                 "nullable": true,
                                 "type": "integer",
+                                "minimum": 0,
                                 "exclusiveMinimum": true,
                                 "maximum": 9007199254740991
                               }
@@ -441223,7 +441470,7 @@
                         "startedAt": {
                           "type": "string",
                           "format": "date-time",
-                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                         },
                         "elapsedSeconds": {
                           "type": "integer",
@@ -441234,11 +441481,12 @@
                           "nullable": true,
                           "type": "string",
                           "format": "date-time",
-                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                         },
                         "maximumDurationSeconds": {
                           "nullable": true,
                           "type": "integer",
+                          "minimum": 0,
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         }
@@ -446699,6 +446947,7 @@
                   "expiresIn": {
                     "nullable": true,
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   }
@@ -448289,7 +448538,7 @@
                   "expiresAt": {
                     "type": "string",
                     "format": "date-time",
-                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                   },
                   "isActive": {
                     "type": "boolean"
@@ -448888,7 +449137,7 @@
                     "nullable": true,
                     "type": "string",
                     "format": "date-time",
-                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                   },
                   "isActive": {
                     "type": "boolean"
@@ -453188,6 +453437,7 @@
                   "baseVersion": {
                     "description": "The skill's `latestVersion` when this edit was composed. Rejected with 409 if the skill has moved past it. Omit only when the payload owes nothing to a prior read of the skill.",
                     "type": "integer",
+                    "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   }
@@ -454891,6 +455141,7 @@
           {
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "exclusiveMinimum": true,
               "maximum": 2147483647
             },
@@ -462089,7 +462340,7 @@
                     "nullable": true,
                     "type": "string",
                     "format": "date-time",
-                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                   }
                 }
               }
@@ -462558,7 +462809,7 @@
                     "nullable": true,
                     "type": "string",
                     "format": "date-time",
-                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                   }
                 }
               }
@@ -463434,6 +463685,12 @@
                         "cacheReadTokens": {
                           "type": "number"
                         },
+                        "cacheWriteTokens": {
+                          "type": "number"
+                        },
+                        "totalTokens": {
+                          "type": "number"
+                        },
                         "billedCost": {
                           "type": "number"
                         },
@@ -463446,6 +463703,8 @@
                         "inputTokens",
                         "outputTokens",
                         "cacheReadTokens",
+                        "cacheWriteTokens",
+                        "totalTokens",
                         "billedCost",
                         "subscriptionCost"
                       ],
@@ -463468,6 +463727,12 @@
                           "cacheReadTokens": {
                             "type": "number"
                           },
+                          "cacheWriteTokens": {
+                            "type": "number"
+                          },
+                          "totalTokens": {
+                            "type": "number"
+                          },
                           "billedCost": {
                             "type": "number"
                           },
@@ -463483,6 +463748,8 @@
                           "inputTokens",
                           "outputTokens",
                           "cacheReadTokens",
+                          "cacheWriteTokens",
+                          "totalTokens",
                           "billedCost",
                           "subscriptionCost",
                           "timestamp"
@@ -463505,6 +463772,12 @@
                             "type": "number"
                           },
                           "cacheReadTokens": {
+                            "type": "number"
+                          },
+                          "cacheWriteTokens": {
+                            "type": "number"
+                          },
+                          "totalTokens": {
                             "type": "number"
                           },
                           "billedCost": {
@@ -463533,6 +463806,8 @@
                           "inputTokens",
                           "outputTokens",
                           "cacheReadTokens",
+                          "cacheWriteTokens",
+                          "totalTokens",
                           "billedCost",
                           "subscriptionCost",
                           "authMethod"
@@ -463555,6 +463830,12 @@
                             "type": "number"
                           },
                           "cacheReadTokens": {
+                            "type": "number"
+                          },
+                          "cacheWriteTokens": {
+                            "type": "number"
+                          },
+                          "totalTokens": {
                             "type": "number"
                           },
                           "billedCost": {
@@ -463591,6 +463872,8 @@
                           "inputTokens",
                           "outputTokens",
                           "cacheReadTokens",
+                          "cacheWriteTokens",
+                          "totalTokens",
                           "billedCost",
                           "subscriptionCost",
                           "authMethod",
@@ -463649,6 +463932,12 @@
                               "cacheReadTokens": {
                                 "type": "number"
                               },
+                              "cacheWriteTokens": {
+                                "type": "number"
+                              },
+                              "totalTokens": {
+                                "type": "number"
+                              },
                               "billedCost": {
                                 "type": "number"
                               },
@@ -463665,6 +463954,8 @@
                               "inputTokens",
                               "outputTokens",
                               "cacheReadTokens",
+                              "cacheWriteTokens",
+                              "totalTokens",
                               "billedCost",
                               "subscriptionCost",
                               "value"
@@ -464024,6 +464315,15 @@
                       "outputTokens": {
                         "type": "number"
                       },
+                      "cacheReadTokens": {
+                        "type": "number"
+                      },
+                      "cacheWriteTokens": {
+                        "type": "number"
+                      },
+                      "totalTokens": {
+                        "type": "number"
+                      },
                       "cost": {
                         "type": "number"
                       },
@@ -464050,6 +464350,12 @@
                             "cacheReadTokens": {
                               "type": "number"
                             },
+                            "cacheWriteTokens": {
+                              "type": "number"
+                            },
+                            "totalTokens": {
+                              "type": "number"
+                            },
                             "billedCost": {
                               "type": "number"
                             },
@@ -464073,6 +464379,9 @@
                       "requests",
                       "inputTokens",
                       "outputTokens",
+                      "cacheReadTokens",
+                      "cacheWriteTokens",
+                      "totalTokens",
                       "cost",
                       "timeSeries"
                     ],
@@ -464397,6 +464706,12 @@
                       "cacheReadTokens": {
                         "type": "number"
                       },
+                      "cacheWriteTokens": {
+                        "type": "number"
+                      },
+                      "totalTokens": {
+                        "type": "number"
+                      },
                       "cost": {
                         "type": "number"
                       },
@@ -464423,6 +464738,12 @@
                             "cacheReadTokens": {
                               "type": "number"
                             },
+                            "cacheWriteTokens": {
+                              "type": "number"
+                            },
+                            "totalTokens": {
+                              "type": "number"
+                            },
                             "billedCost": {
                               "type": "number"
                             },
@@ -464447,6 +464768,8 @@
                       "inputTokens",
                       "outputTokens",
                       "cacheReadTokens",
+                      "cacheWriteTokens",
+                      "totalTokens",
                       "cost",
                       "timeSeries"
                     ],
@@ -464762,6 +465085,12 @@
                       "cacheReadTokens": {
                         "type": "number"
                       },
+                      "cacheWriteTokens": {
+                        "type": "number"
+                      },
+                      "totalTokens": {
+                        "type": "number"
+                      },
                       "cost": {
                         "type": "number"
                       },
@@ -464791,6 +465120,12 @@
                             "cacheReadTokens": {
                               "type": "number"
                             },
+                            "cacheWriteTokens": {
+                              "type": "number"
+                            },
+                            "totalTokens": {
+                              "type": "number"
+                            },
                             "billedCost": {
                               "type": "number"
                             },
@@ -464812,6 +465147,8 @@
                       "inputTokens",
                       "outputTokens",
                       "cacheReadTokens",
+                      "cacheWriteTokens",
+                      "totalTokens",
                       "cost",
                       "percentage",
                       "timeSeries"
@@ -465104,7 +465441,6 @@
           },
           {
             "schema": {
-              "default": false,
               "type": "string"
             },
             "in": "query",
@@ -465114,7 +465450,6 @@
           },
           {
             "schema": {
-              "default": false,
               "type": "string"
             },
             "in": "query",
@@ -465124,7 +465459,6 @@
           },
           {
             "schema": {
-              "default": false,
               "type": "string"
             },
             "in": "query",
@@ -465217,6 +465551,9 @@
                           "cacheReadTokens": {
                             "type": "number"
                           },
+                          "cacheWriteTokens": {
+                            "type": "number"
+                          },
                           "totalTokens": {
                             "type": "number"
                           },
@@ -465251,6 +465588,9 @@
                                   "type": "number"
                                 },
                                 "cacheReadTokens": {
+                                  "type": "number"
+                                },
+                                "cacheWriteTokens": {
                                   "type": "number"
                                 },
                                 "totalTokens": {
@@ -465288,6 +465628,12 @@
                                       "cacheReadTokens": {
                                         "type": "number"
                                       },
+                                      "cacheWriteTokens": {
+                                        "type": "number"
+                                      },
+                                      "totalTokens": {
+                                        "type": "number"
+                                      },
                                       "billedCost": {
                                         "type": "number"
                                       },
@@ -465309,6 +465655,7 @@
                                 "inputTokens",
                                 "outputTokens",
                                 "cacheReadTokens",
+                                "cacheWriteTokens",
                                 "totalTokens",
                                 "percentage",
                                 "billedCost",
@@ -465340,6 +465687,12 @@
                                 "cacheReadTokens": {
                                   "type": "number"
                                 },
+                                "cacheWriteTokens": {
+                                  "type": "number"
+                                },
+                                "totalTokens": {
+                                  "type": "number"
+                                },
                                 "billedCost": {
                                   "type": "number"
                                 },
@@ -465363,6 +465716,7 @@
                           "inputTokens",
                           "outputTokens",
                           "cacheReadTokens",
+                          "cacheWriteTokens",
                           "totalTokens",
                           "billedCost",
                           "subscriptionCost",
@@ -465723,6 +466077,9 @@
                     "cacheReadTokens": {
                       "type": "number"
                     },
+                    "cacheWriteTokens": {
+                      "type": "number"
+                    },
                     "totalTokens": {
                       "type": "number"
                     },
@@ -465757,6 +466114,9 @@
                             "type": "number"
                           },
                           "cacheReadTokens": {
+                            "type": "number"
+                          },
+                          "cacheWriteTokens": {
                             "type": "number"
                           },
                           "totalTokens": {
@@ -465794,6 +466154,12 @@
                                 "cacheReadTokens": {
                                   "type": "number"
                                 },
+                                "cacheWriteTokens": {
+                                  "type": "number"
+                                },
+                                "totalTokens": {
+                                  "type": "number"
+                                },
                                 "billedCost": {
                                   "type": "number"
                                 },
@@ -465815,6 +466181,7 @@
                           "inputTokens",
                           "outputTokens",
                           "cacheReadTokens",
+                          "cacheWriteTokens",
                           "totalTokens",
                           "percentage",
                           "billedCost",
@@ -465846,6 +466213,12 @@
                           "cacheReadTokens": {
                             "type": "number"
                           },
+                          "cacheWriteTokens": {
+                            "type": "number"
+                          },
+                          "totalTokens": {
+                            "type": "number"
+                          },
                           "billedCost": {
                             "type": "number"
                           },
@@ -465866,6 +466239,7 @@
                     "inputTokens",
                     "outputTokens",
                     "cacheReadTokens",
+                    "cacheWriteTokens",
                     "totalTokens",
                     "billedCost",
                     "subscriptionCost",
@@ -466219,6 +466593,9 @@
                           "cacheReadTokens": {
                             "type": "number"
                           },
+                          "cacheWriteTokens": {
+                            "type": "number"
+                          },
                           "totalTokens": {
                             "type": "number"
                           },
@@ -466238,6 +466615,7 @@
                           "inputTokens",
                           "outputTokens",
                           "cacheReadTokens",
+                          "cacheWriteTokens",
                           "totalTokens",
                           "percentage",
                           "billedCost",
@@ -467912,6 +468290,12 @@
                           "cacheReadTokens": {
                             "type": "number"
                           },
+                          "cacheWriteTokens": {
+                            "type": "number"
+                          },
+                          "totalTokens": {
+                            "type": "number"
+                          },
                           "cost": {
                             "type": "number"
                           },
@@ -467941,6 +468325,12 @@
                                 "cacheReadTokens": {
                                   "type": "number"
                                 },
+                                "cacheWriteTokens": {
+                                  "type": "number"
+                                },
+                                "totalTokens": {
+                                  "type": "number"
+                                },
                                 "billedCost": {
                                   "type": "number"
                                 },
@@ -467962,6 +468352,8 @@
                           "inputTokens",
                           "outputTokens",
                           "cacheReadTokens",
+                          "cacheWriteTokens",
+                          "totalTokens",
                           "cost",
                           "percentage",
                           "timeSeries"
@@ -469310,6 +469702,15 @@
                           "outputTokens": {
                             "type": "number"
                           },
+                          "cacheReadTokens": {
+                            "type": "number"
+                          },
+                          "cacheWriteTokens": {
+                            "type": "number"
+                          },
+                          "totalTokens": {
+                            "type": "number"
+                          },
                           "billedCost": {
                             "type": "number"
                           },
@@ -469323,6 +469724,9 @@
                           "llmRequests",
                           "inputTokens",
                           "outputTokens",
+                          "cacheReadTokens",
+                          "cacheWriteTokens",
+                          "totalTokens",
                           "billedCost",
                           "subscriptionCost"
                         ],
@@ -476299,7 +476703,8 @@
                 "copilot-cli",
                 "cursor",
                 "opencode",
-                "kilo"
+                "kilo",
+                "pi"
               ]
             },
             "in": "query",
@@ -479475,6 +479880,7 @@
                             "properties": {
                               "limitValue": {
                                 "type": "integer",
+                                "minimum": 0,
                                 "exclusiveMinimum": true,
                                 "maximum": 9007199254740991
                               },
@@ -479942,6 +480348,7 @@
                     "properties": {
                       "limitValue": {
                         "type": "integer",
+                        "minimum": 0,
                         "exclusiveMinimum": true,
                         "maximum": 9007199254740991
                       },
@@ -480344,6 +480751,7 @@
                       "properties": {
                         "limitValue": {
                           "type": "integer",
+                          "minimum": 0,
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },
@@ -480899,6 +481307,7 @@
                       "properties": {
                         "limitValue": {
                           "type": "integer",
+                          "minimum": 0,
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },
@@ -481318,6 +481727,7 @@
                     "properties": {
                       "limitValue": {
                         "type": "integer",
+                        "minimum": 0,
                         "exclusiveMinimum": true,
                         "maximum": 9007199254740991
                       },
@@ -481594,6 +482004,7 @@
                       "properties": {
                         "limitValue": {
                           "type": "integer",
+                          "minimum": 0,
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },
@@ -484463,6 +484874,1190 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/XaiChatCompletionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/xai/responses": {
+      "post": {
+        "operationId": "xaiResponsesWithDefaultAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Create a response with xAI (uses default agent). Served over xAI's chat completions.\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "input": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
+                        }
+                      }
+                    ]
+                  },
+                  "instructions": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "max_output_tokens": {
+                    "nullable": true,
+                    "type": "number"
+                  },
+                  "metadata": {
+                    "nullable": true,
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "previous_response_id": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "stream": {
+                    "nullable": true,
+                    "type": "boolean"
+                  },
+                  "temperature": {
+                    "nullable": true,
+                    "type": "number"
+                  },
+                  "text": {},
+                  "tool_choice": {},
+                  "tools": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "function"
+                              ]
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "parameters": {
+                              "nullable": true,
+                              "type": "object",
+                              "additionalProperties": {}
+                            },
+                            "strict": {
+                              "nullable": true,
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "name"
+                          ],
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
+                        }
+                      ]
+                    }
+                  },
+                  "top_p": {
+                    "nullable": true,
+                    "type": "number"
+                  },
+                  "user": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "model"
+                ],
+                "additionalProperties": {},
+                "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
+              }
+            }
+          },
+          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "enum": [
+                        "response"
+                      ]
+                    },
+                    "created_at": {
+                      "type": "number"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "output": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "message"
+                                ]
+                              },
+                              "role": {
+                                "type": "string",
+                                "enum": [
+                                  "assistant"
+                                ]
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "output_text"
+                                          ]
+                                        },
+                                        "text": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "text"
+                                      ],
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "refusal"
+                                          ]
+                                        },
+                                        "refusal": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "refusal"
+                                      ],
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type",
+                              "role",
+                              "status",
+                              "content"
+                            ],
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "function_call"
+                                ]
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "call_id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "arguments": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "call_id",
+                              "name",
+                              "arguments"
+                            ],
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": {}
+                          }
+                        ]
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "usage": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "input_tokens": {
+                          "type": "number"
+                        },
+                        "output_tokens": {
+                          "type": "number"
+                        },
+                        "total_tokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "input_tokens",
+                        "output_tokens",
+                        "total_tokens"
+                      ],
+                      "additionalProperties": {},
+                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "object",
+                    "created_at",
+                    "model",
+                    "output",
+                    "status"
+                  ],
+                  "additionalProperties": {},
+                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/xai/{agentId}/responses": {
+      "post": {
+        "operationId": "xaiResponsesWithAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Create a response with xAI for a specific agent. Served over xAI's chat completions.\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "input": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
+                        }
+                      }
+                    ]
+                  },
+                  "instructions": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "max_output_tokens": {
+                    "nullable": true,
+                    "type": "number"
+                  },
+                  "metadata": {
+                    "nullable": true,
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "previous_response_id": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "stream": {
+                    "nullable": true,
+                    "type": "boolean"
+                  },
+                  "temperature": {
+                    "nullable": true,
+                    "type": "number"
+                  },
+                  "text": {},
+                  "tool_choice": {},
+                  "tools": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "function"
+                              ]
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "parameters": {
+                              "nullable": true,
+                              "type": "object",
+                              "additionalProperties": {}
+                            },
+                            "strict": {
+                              "nullable": true,
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "name"
+                          ],
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
+                        }
+                      ]
+                    }
+                  },
+                  "top_p": {
+                    "nullable": true,
+                    "type": "number"
+                  },
+                  "user": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "model"
+                ],
+                "additionalProperties": {},
+                "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
+              }
+            }
+          },
+          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "enum": [
+                        "response"
+                      ]
+                    },
+                    "created_at": {
+                      "type": "number"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "output": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "message"
+                                ]
+                              },
+                              "role": {
+                                "type": "string",
+                                "enum": [
+                                  "assistant"
+                                ]
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "output_text"
+                                          ]
+                                        },
+                                        "text": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "text"
+                                      ],
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "refusal"
+                                          ]
+                                        },
+                                        "refusal": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "refusal"
+                                      ],
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type",
+                              "role",
+                              "status",
+                              "content"
+                            ],
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "function_call"
+                                ]
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "call_id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "arguments": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "call_id",
+                              "name",
+                              "arguments"
+                            ],
+                            "additionalProperties": {},
+                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": {}
+                          }
+                        ]
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "usage": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "input_tokens": {
+                          "type": "number"
+                        },
+                        "output_tokens": {
+                          "type": "number"
+                        },
+                        "total_tokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "input_tokens",
+                        "output_tokens",
+                        "total_tokens"
+                      ],
+                      "additionalProperties": {},
+                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "object",
+                    "created_at",
+                    "model",
+                    "output",
+                    "status"
+                  ],
+                  "additionalProperties": {},
+                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
                 }
               }
             }
@@ -495180,6 +496775,7 @@
                         },
                         "timestampMs": {
                           "type": "integer",
+                          "minimum": 0,
                           "exclusiveMinimum": true,
                           "maximum": 9007199254740991
                         },

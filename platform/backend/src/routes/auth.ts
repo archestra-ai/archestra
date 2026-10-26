@@ -1055,6 +1055,21 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async handler(request, reply) {
       const url = new URL(request.url, `http://${request.headers.host}`);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (
+        request.method === "POST" &&
+        [
+          "/api/auth/sso/register",
+          "/api/auth/sso/verify-domain",
+          "/api/auth/sso/update-provider",
+          "/api/auth/sso/delete-provider",
+        ].includes(url.pathname)
+      ) {
+        throw new ApiError(404, "Not found");
+      }
+      // SPDX-SnippetEnd
       const headers = buildBetterAuthForwardedHeaders(request);
 
       // Handle body based on content type
@@ -1080,6 +1095,20 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const response = await betterAuth.handler(req);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (
+        response.status >= 400 &&
+        [
+          "/api/auth/sso/callback/",
+          "/api/auth/sso/saml2/callback/",
+          "/api/auth/sso/saml2/sp/acs/",
+        ].some((prefix) => url.pathname.startsWith(prefix))
+      ) {
+        response.headers.delete("set-cookie");
+      }
+      // SPDX-SnippetEnd
 
       // Check for "Invalid origin" errors and enhance with helpful guidance
       if (response.status === 403 && response.body) {

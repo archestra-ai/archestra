@@ -112,10 +112,7 @@ export function ProxyCostPanel({
                   dollars(totals.subscriptionCost),
                 ],
                 ["Requests", totals.requests.toLocaleString()],
-                [
-                  "Tokens (input + output)",
-                  (totals.inputTokens + totals.outputTokens).toLocaleString(),
-                ],
+                ["Tokens", totals.totalTokens.toLocaleString()],
               ].map(([label, value]) => (
                 <div key={label}>
                   <p className="text-xs text-muted-foreground">{label}</p>
@@ -228,7 +225,7 @@ export function ProxyCostPanel({
                         {row.requests.toLocaleString()}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {(row.inputTokens + row.outputTokens).toLocaleString()}
+                        {row.totalTokens.toLocaleString()}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {dollars(row.billedCost)}

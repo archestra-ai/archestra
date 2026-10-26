@@ -113,6 +113,7 @@ describe("outbound OAuth integration", () => {
       if (req.url?.includes("oauth-protected-resource")) {
         res.end(
           JSON.stringify({
+            resource: base,
             authorization_servers: [base],
             scopes_supported: ["read"],
           }),
@@ -197,7 +198,12 @@ describe("outbound OAuth integration", () => {
       }
       const host = base.replace("127.0.0.1", "denied.example");
       if (req.url?.includes("oauth-protected-resource"))
-        res.end(JSON.stringify({ authorization_servers: [`${host}/canary`] }));
+        res.end(
+          JSON.stringify({
+            resource: base,
+            authorization_servers: [`${host}/canary`],
+          }),
+        );
       else res.end(JSON.stringify(metadata(base)));
     });
     const env = await EnvironmentModel.create({
@@ -349,7 +355,8 @@ describe("outbound OAuth integration", () => {
       paths.push(req.url ?? "");
       if (req.url === "/.well-known/oauth-authorization-server/mcp")
         req.socket.destroy();
-      else res.end(JSON.stringify(metadata(`${base}/mcp`)));
+      else
+        res.end(JSON.stringify({ ...metadata(`${base}/mcp`), issuer: base }));
     });
     const catalog = await makeInternalMcpCatalog();
     const endpoints = await discoverOAuthEndpoints(
@@ -450,6 +457,7 @@ function oauth(base: string) {
 }
 function metadata(base: string) {
   return {
+    resource: base,
     issuer: base,
     authorization_endpoint: `${base}/authorize`,
     token_endpoint: `${base}/token`,

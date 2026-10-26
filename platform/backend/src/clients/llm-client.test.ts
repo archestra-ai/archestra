@@ -1231,6 +1231,7 @@ describe("createLLMModel", () => {
       ...config.openappa,
       enabled,
       yellEnabled: false,
+      yellForwardingEnabled: false,
       offerSigningSecret: "",
     };
     createLLMModel({
@@ -1257,6 +1258,7 @@ describe("createLLMModel", () => {
       ...config.openappa,
       enabled: true,
       yellEnabled: false,
+      yellForwardingEnabled: false,
       offerSigningSecret: "",
     };
     createLLMModel({

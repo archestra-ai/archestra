@@ -1656,6 +1656,28 @@ esac
   });
 
   test.each([
+    "linux",
+    "windows",
+  ] as const)("opencode (%s): reconnecting a Kimi key clears the model an older connection pinned", (platform) => {
+    const script = renderSetupScript({
+      ...fullContext("opencode", platform),
+      proxy: {
+        ...OPENAI_PASSTHROUGH_PROXY,
+        provider: "kimi",
+        providerLabel: "Moonshot (Kimi)",
+        url: "https://archestra.example.com/v1/kimi",
+      },
+    });
+
+    // Older connections pinned the Kimi default of their time; a later
+    // default must not stop the cleanup from recognizing that pin.
+    expect(script).toContain("moonshotai/kimi-k2-0711-preview");
+    expect(script).not.toContain(
+      `moonshotai/${PROVIDER_MODEL_TIERS.kimi.normal}`,
+    );
+  });
+
+  test.each([
     ["opencode v2.0.25", 'id: "archestra.llm-proxy"'],
     ["1.18.30", "export const ArchestraLlmProxy"],
     ["", "export const ArchestraLlmProxy"],
@@ -1878,24 +1900,24 @@ esac
     {
       major: 1,
       authMode: "primary-providers" as const,
-      provider: "vllm" as const,
+      provider: "xai" as const,
     },
     {
       major: 2,
       authMode: "primary-providers" as const,
-      provider: "vllm" as const,
+      provider: "xai" as const,
     },
     {
       major: 1,
       authMode: "virtual-key" as const,
-      provider: "bedrock" as const,
+      provider: "anthropic" as const,
     },
     {
       major: 2,
       authMode: "virtual-key" as const,
-      provider: "bedrock" as const,
+      provider: "anthropic" as const,
     },
-  ])("OpenCode $major $authMode setup installs a large catalog and every plugin route", async ({
+  ])("OpenCode $major $authMode setup carries a large catalog in the plugin and writes no provider", async ({
     major,
     authMode,
     provider,
@@ -1951,39 +1973,36 @@ ${script.slice(start, end)}
           XDG_CONFIG_HOME: path.join(home, ".config"),
         },
       });
-      const config = JSON.parse(
-        await readFile(
-          path.join(home, ".config/opencode/opencode.json"),
-          "utf8",
-        ),
-      );
-      const providers = config[major === 2 ? "providers" : "provider"];
-      expect(
-        Object.keys(providers[`archestra-${provider}`].models),
-      ).toHaveLength(1500);
-      expect(Object.keys(providers)).toHaveLength(
-        authMode === "primary-providers" ? 2 : 1,
-      );
+      // The client's config gains no provider: the plugin filters the
+      // client's own catalog from the routes and model lists it carries.
+      await expect(
+        readFile(path.join(home, ".config/opencode/opencode.json")),
+      ).rejects.toThrow();
       const plugin = await readFile(
         path.join(home, ".config/opencode/plugins/archestra-llm-proxy.js"),
         "utf8",
       );
-      expect(plugin).toContain(
-        `"archestra-${provider}":"https://archestra.example.com/v1/model-router"`,
+      const embedded = (name: string) =>
+        JSON.parse(
+          plugin.match(new RegExp(`const ${name} = (.*);`))?.[1] ?? "null",
+        ) as Record<string, unknown>;
+      const routes = embedded("catalogRoutes");
+      const managed = embedded("catalogManaged") as Record<string, string[]>;
+      const suffix = provider === "anthropic" ? "/v1" : "";
+      expect(routes[provider]).toBe(
+        `https://archestra.example.com/v1/${provider}${suffix}`,
       );
+      expect(managed[provider]).toHaveLength(1500);
+      expect(managed[provider][0]).toBe(models[0].id);
+      expect(
+        Object.keys(routes).some((id) => id.startsWith("archestra-")),
+      ).toBe(false);
       if (authMode === "primary-providers") {
-        expect(plugin).toContain(
-          '"archestra-openai":"https://archestra.example.com/v1/model-router"',
-        );
+        expect(routes.openai).toBe("https://archestra.example.com/v1/openai");
+        expect(managed.openai).toEqual([models[0].id]);
       } else {
-        expect(plugin).not.toContain('"archestra-openai"');
-        expect(
-          providers[`archestra-${provider}`].models[models[0].id],
-        ).toMatchObject(
-          major === 2
-            ? { modelID: `${provider}:${models[0].id}` }
-            : { id: `${provider}:${models[0].id}` },
-        );
+        expect(routes).not.toHaveProperty("openai");
+        expect(Object.keys(routes)).toEqual([provider]);
       }
     } finally {
       await rm(home, { recursive: true, force: true });

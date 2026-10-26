@@ -69,6 +69,19 @@ vi.mock("@/lib/agent-runtime.query", () => ({
 vi.mock("./agent-runs", () => ({
   AgentRuns: () => <div>run history</div>,
 }));
+vi.mock("@/components/scheduled-tasks/agent-schedules-section", () => ({
+  AgentSchedulesSection: ({
+    agentId,
+    agentName,
+  }: {
+    agentId: string;
+    agentName: string;
+  }) => (
+    <section aria-label="Scheduled runs" data-agent-id={agentId}>
+      Schedules for {agentName}
+    </section>
+  ),
+}));
 vi.mock("./agent-work-sources", () => ({
   AgentWorkSources: ({
     hasRuntime,
@@ -272,6 +285,14 @@ describe("AgentDetailPage", () => {
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     expect(screen.getByText("Answer support tickets.")).toBeVisible();
+    const instructions = screen.getByRole("region", { name: "Instructions" });
+    const schedules = screen.getByRole("region", { name: "Scheduled runs" });
+    expect(schedules).toHaveAttribute("data-agent-id", "a1");
+    expect(schedules).toHaveTextContent("Schedules for Support Agent");
+    expect(
+      instructions.compareDocumentPosition(schedules) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.queryByText(/form section/)).toBeNull();
     expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
     // Who can use it is a setting, so it lives on the edit page.

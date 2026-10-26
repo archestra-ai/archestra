@@ -11,6 +11,7 @@ non-root working directory and the invoking user's Agent-scoped MCP gateway endp
 | `agent-opencode` | `archestra-opencode` | OpenAI Responses |
 | `agent-hermes` | `archestra-hermes` | OpenAI Chat Completions |
 | `agent-openclaw` | `archestra-openclaw` | OpenAI Chat Completions or OpenAI Responses |
+| `agent-grok` | `archestra-grok` | OpenAI Chat Completions |
 
 All targets inherit the same tools from `agent-base`:
 
@@ -74,7 +75,7 @@ docker build -f docker_images/agent/Dockerfile --target agent-codex -t agent-cod
 ```
 
 Tilt pulls the public GAR images by default. Set
-`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG=dev` to build all five targets locally and
+`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG=dev` to build all six targets locally and
 use them for Agent Runtime workspaces.
 
 The native wrappers create client configuration at run time under `/var/run/archestra`. Credentials are never baked into images. On the provider path, the runtime receives a temporary virtual key and routes inference through the Agent-scoped LLM proxy. The upstream provider credential stays in the backend.
@@ -87,7 +88,7 @@ Delegated Claude Code assignments stay open until registered background work fin
 
 Maintained clients send `ARCHESTRA_AGENT_RUNTIME_TASK_ID` as `X-Archestra-Run-Id` to label one turn. They send `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` as both `X-Archestra-Session-Id` and `X-Appa-Session-ID` to keep the conversation together across turns and follow-ups. New wrappers must use the same stable session ID on proxy and MCP gateway requests; see the [runtime image contract](runtime-contract.md#runtime-environment).
 
-All five targets also export their native message and tool history to
+All six targets also export their native message and tool history to
 `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json`. The control plane
 validates and persists this provider-neutral artifact independently of the
 terminal recording. Custom images can opt into the same completed-run view by
@@ -123,6 +124,41 @@ that account. A rejected credential stops the run with
 profile, such as GitHub App installation tokens, and an unreachable API leave
 the author unset and do not block the run.
 
-The five public catalog targets are built for development deployments and
+Grok Build differs from the other clients in three ways:
+
+- Grok sends its first prompt before its MCP tools load. The wrapper sends
+  the task only after the session's own record (`events.jsonl`) shows the
+  gateway connected with its tools; a failed tools/list fails the run.
+  Delegated and interactive runs both use the native terminal, so terminal
+  steering reaches the running turn. Plain runs, which have no terminal, use
+  Grok's Agent Client Protocol server (`grok agent stdio`) instead.
+- Grok drops every MCP tool whose name contains `__`, and every gateway tool
+  does. `archestra-grok-mcp` connects Grok to the gateway over stdio and shows
+  `__` as `--` in tool names. The model calls gateway tools through Grok's
+  `use_tool` dispatcher, so the LLM proxy sees `use_tool` calls. The gateway
+  still applies policy to each tool call.
+- Title, summary and suggestion calls use the Agent's model through the proxy.
+  Telemetry, auto-update, remote configuration and xAI-hosted tools are off.
+- A turn the model itself ended early (output limit, request limit, refusal,
+  cancellation) fails with `grok_turn_failed`. A turn the provider or the CLI
+  broke fails with the retriable `grok_unavailable`. A plain run whose ACP
+  server sent a malformed reply fails with `grok_turn_failed` and quotes the
+  reason `protocol_error` in its message.
+
+The six public catalog targets are built for development deployments and
 releases. Keep native CLI versions exact and review their published package
 scripts before updating them.
+
+The daily `agent-runtime` job in `.github/workflows/update-client-versions.yml`
+proposes those updates as one pull request on `automation/agent-runtime-clis`.
+It runs `pnpm --dir backend update:agent-runtime-clis`, which picks each CLI's
+newest stable release that has been public for 7 days, and refreshes the
+OpenClaw lockfile. The pull request does not merge itself: merge it once the
+`Validate agent-*` builds pass. A new catalog target fails that script until it
+is registered there. Every CLI's own update check is off in the image, so an
+older session never stops on an update prompt.
+
+Hermes no longer publishes to PyPI. The image builds a GitHub release from
+source, the way upstream's own image does: Python, uv, and every package come
+from the versions locked in that checkout. Its pin is a `hermes_version` and
+`hermes_commit` pair, and the build fails unless the tag resolves to that commit.

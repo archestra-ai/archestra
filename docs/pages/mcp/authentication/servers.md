@@ -3,7 +3,7 @@ title: MCP Server Credentials
 sidebarTitle: Server Credentials
 description: Set how Archestra signs in to each MCP server, and whose account each call uses
 order: 3
-lastUpdated: 2026-10-16
+lastUpdated: 2026-10-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -65,6 +65,6 @@ The person must sign in through OAuth, an identity provider JWT, or a personal t
 
 ## What to Know
 
-- OAuth refresh failed? Click **Re-authenticate** on the install.
+- Sign-in expired? Your client asks you to sign in again, then the tool call finishes. Claude Code opens the page from a prompt. Cursor is the exception: its agent shows the link in its reply. You can also click **Re-authenticate** on the install.
 - Changed the OAuth scopes? Reconnect to get tokens with the new scopes.
 - Every call records its account. See **Identity** in the [MCP Gateway logs](/docs/admin/logs).

@@ -18,8 +18,10 @@ import {
 import { actorFromUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import type {
+  AgentRunFailure,
   AgentRunListItem,
   AgentRunRecord,
   AgentRunSession,
@@ -104,11 +106,9 @@ class AgentRunModel {
   static async findByVirtualApiKeyId(
     virtualApiKeyId: string,
   ): Promise<AgentRunRecord | "ambiguous" | null> {
-    const rows = await db
-      .select()
-      .from(schema.agentRunsTable)
-      .where(eq(schema.agentRunsTable.virtualApiKeyId, virtualApiKeyId))
-      .limit(2);
+    const rows = await AgentRunModel.byVirtualApiKey
+      .get()
+      .execute({ virtualApiKeyId });
     if (rows.length === 1) return rows[0];
     return rows.length === 0 ? null : "ambiguous";
   }
@@ -479,6 +479,7 @@ class AgentRunModel {
         ...runColumns,
         state: schema.a2aTasksTable.state,
         statusReason: schema.a2aTasksTable.statusReason,
+        failure: failureExpression(),
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
@@ -543,6 +544,7 @@ class AgentRunModel {
         endedAt: schema.agentRunsTable.endedAt,
         state: schema.a2aTasksTable.state,
         statusReason: schema.a2aTasksTable.statusReason,
+        failure: failureExpression(),
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
@@ -899,6 +901,7 @@ class AgentRunModel {
         ...runColumns,
         state: schema.a2aTasksTable.state,
         statusReason: schema.a2aTasksTable.statusReason,
+        failure: failureExpression(),
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
@@ -970,6 +973,19 @@ class AgentRunModel {
       prompt: extractPrompt(prompts.get(row.taskId) ?? []),
     }));
   }
+  private static readonly byVirtualApiKey = new PreparedQuery((database) =>
+    database
+      .select()
+      .from(schema.agentRunsTable)
+      .where(
+        eq(
+          schema.agentRunsTable.virtualApiKeyId,
+          sql.placeholder("virtualApiKeyId"),
+        ),
+      )
+      .limit(2)
+      .prepare("archestra_agent_run_by_virtual_key"),
+  );
 }
 
 export default AgentRunModel;
@@ -987,6 +1003,20 @@ function extractPrompt(parts: unknown[]): string {
     )
     .join("")
     .trim();
+}
+
+/** A FAILED task's stored classification plus its status reason. */
+function failureExpression(): SQL<AgentRunFailure | null> {
+  const failure = schema.a2aTasksTable.failure;
+  return sql<AgentRunFailure | null>`
+    CASE WHEN ${schema.a2aTasksTable.state} = 'TASK_STATE_FAILED'
+      AND ${failure} IS NOT NULL
+    THEN jsonb_build_object(
+      'code', ${failure}->>'code',
+      'retriable', (${failure}->>'retriable')::boolean,
+      'message', COALESCE(${schema.a2aTasksTable.statusReason}, '')
+    ) END
+  `;
 }
 
 function hardDeadlineAtExpression(): SQL<Date> {

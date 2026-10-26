@@ -1029,6 +1029,8 @@ class MinimaxStreamAdapter
     this.state.usage = {
       inputTokens,
       outputTokens,
+      inputTokensEstimated: true,
+      outputTokensEstimated: true,
     };
 
     return {

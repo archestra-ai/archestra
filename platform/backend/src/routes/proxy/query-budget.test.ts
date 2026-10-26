@@ -56,6 +56,47 @@ describe("LLM proxy query budget", () => {
     await app.close();
   });
 
+  test("warm authenticated organization proxy avoids redundant bookkeeping", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      authorId: user.id,
+      name: "proxy budget",
+      keyType: "passthrough",
+    });
+    const call = () =>
+      app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/chat/completions`,
+        headers: {
+          authorization: "Bearer sk-provider",
+          "x-archestra-virtual-key": value,
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "hello" }],
+          stream: false,
+        },
+      });
+    const warm = await call();
+    expect(warm.statusCode, warm.body).toBe(200);
+    const { result, statements } = await recordQueries(call);
+    expect(result.statusCode, result.body).toBe(200);
+    expect(statements.length).toBeLessThanOrEqual(24);
+  });
+
   test("virtual-key chat completion with token limits", async ({
     makeOrganization,
     makeUser,

@@ -111,6 +111,16 @@ export function getAgentCatalogTemplates(
       platformName: appName,
       image: images.openclaw,
     }),
+    template({
+      id: "grok",
+      name: AGENT_CATALOG_TEMPLATE_NAMES.grok,
+      summary:
+        "xAI's coding agent. Runs on each person's SuperGrok subscription or an xAI API key.",
+      icon: CATALOG_AGENT_ICONS.grok,
+      description: `xAI's coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
+      platformName: appName,
+      image: images.grok,
+    }),
   ] as const;
 }
 

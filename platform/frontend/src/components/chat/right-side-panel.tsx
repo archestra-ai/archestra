@@ -1,22 +1,13 @@
 "use client";
 
-import { AppWindow, Loader2, Play } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { AppWindow } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { useApps } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { McpAppSection } from "@/components/chat/mcp-app-container";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
-import { ScheduleRunsList } from "@/components/scheduled-tasks/schedule-runs-list";
-import { useStartScheduleRun } from "@/components/scheduled-tasks/use-start-schedule-run";
-import { Button } from "@/components/ui/button";
-import {
-  useHasPermissions,
-  useScopedCapabilities,
-  useSession,
-} from "@/lib/auth/auth.query";
-import { useScheduleTrigger } from "@/lib/schedule-trigger.query";
-
+import { ScheduleRunsPanel } from "@/components/scheduled-tasks/schedule-runs-panel";
 export type RightPanelTab = "runs" | "files" | "browser" | "apps";
 
 interface RightSidePanelProps {
@@ -92,10 +83,9 @@ export function RightSidePanel({
     <ResizableRightPanel>
       <div className="flex-1 min-h-0 overflow-hidden relative">
         {resolvedTab === "runs" && scheduledRun && (
-          <RunsPanel
+          <ScheduleRunsPanel
             triggerId={scheduledRun.triggerId}
             currentRunId={scheduledRun.runId}
-            projectId={projectId ?? null}
           />
         )}
         {resolvedTab === "files" && (
@@ -205,99 +195,3 @@ function PanelAppHost({ agentId }: { agentId?: string }) {
 // run's conversation; the page re-renders (and the panel can remount), which
 // resets the list to the top. Remembering scrollTop here (module scope survives
 // both) lets us restore it so the list stays where you left it after picking a run.
-const runsScrollTopByTrigger = new Map<string, number>();
-
-/** The Runs tab content: the schedule's runs, with the current run highlighted. */
-function RunsPanel({
-  triggerId,
-  currentRunId,
-  projectId,
-}: {
-  triggerId: string;
-  currentRunId: string | null;
-  projectId: string | null;
-}) {
-  const { data: trigger } = useScheduleTrigger(triggerId);
-  const runNow = useStartScheduleRun(triggerId);
-  const { data: session } = useSession();
-  const { data: canCreateRuns } = useHasPermissions({
-    project: ["create"],
-  });
-  const { data: scheduleCapabilities } = useScopedCapabilities();
-  const isScheduleAdmin = scheduleCapabilities?.some(
-    (grant) =>
-      grant.resource === "project" &&
-      grant.scope === "*" &&
-      grant.action === "use",
-  );
-  const canRun =
-    canCreateRuns &&
-    trigger &&
-    (trigger.actorUserId === session?.user?.id || isScheduleAdmin);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-
-  // Restore the saved scroll position whenever the panel (re)mounts OR the
-  // selected run changes — selecting a run re-renders without remounting, so a
-  // mount-only effect would miss it. Restore before paint, then re-assert next
-  // frame in case the reset lands a frame late (content relayout).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: currentRunId is a deliberate re-run trigger (restore on run selection), not read in the body.
-  useLayoutEffect(() => {
-    const saved = runsScrollTopByTrigger.get(triggerId);
-    if (saved == null) {
-      return;
-    }
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = saved;
-    }
-    const raf = requestAnimationFrame(() => {
-      if (scrollRef.current) {
-        scrollRef.current.scrollTop = saved;
-      }
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [triggerId, currentRunId]);
-
-  if (!projectId) {
-    return (
-      <div className="p-4 text-xs text-muted-foreground">
-        Runs are available for project schedules.
-      </div>
-    );
-  }
-
-  return (
-    <div
-      ref={scrollRef}
-      onScroll={(e) => {
-        runsScrollTopByTrigger.set(triggerId, e.currentTarget.scrollTop);
-      }}
-      className="flex h-full flex-col overflow-y-auto p-3"
-    >
-      <div className="mb-2 flex items-center justify-between gap-2 px-1">
-        <span
-          className="min-w-0 truncate text-sm font-medium"
-          title={trigger?.name}
-        >
-          {trigger?.name ?? "Schedule"}
-        </span>
-        {canRun && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            disabled={runNow.isPending}
-            onClick={runNow.start}
-          >
-            {runNow.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Play className="h-4 w-4" />
-            )}
-            <span>Start New Run</span>
-          </Button>
-        )}
-      </div>
-      <ScheduleRunsList triggerId={triggerId} currentRunId={currentRunId} />
-    </div>
-  );
-}

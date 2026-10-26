@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-21
+lastUpdated: 2026-10-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -14,12 +14,12 @@ Agent Runtime becomes available when your Kubernetes cluster serves the Agent Sa
 
 A run uses the agent's instructions, tools, skills, and permissions. Its model calls go through the [LLM Proxy](/docs/llm-proxy) and its tools through the [MCP Gateway](/docs/mcp/gateway), so logs, guardrails, and cost limits apply.
 
-![The Create Agent page with Claude Code, Codex, OpenCode, Hermes, and OpenClaw under Agent Runtimes](/docs/automated_screenshots/agents-runtime_create-agent.webp)
+![The Create Agent page with Claude Code, Codex, OpenCode, Hermes, OpenClaw, and Grok Build under Agent Runtimes](/docs/automated_screenshots/agents-runtime_create-agent.webp)
 
 ## Create an Agent With a Dedicated Runtime
 
 1. Go to **Agents** and click **Add Agent**.
-2. Under **Agent Runtimes**, pick **Claude Code**, **Codex**, **OpenCode**, **Hermes**, or **OpenClaw**. The agent opens prefilled.
+2. Under **Agent Runtimes**, pick **Claude Code**, **Codex**, **OpenCode**, **Hermes**, **OpenClaw**, or **Grok Build**. The agent opens prefilled.
 3. Review **Runtime** on the **Configuration** step. An attention icon marks a setting you must fix. Hover over it to see what to change.
 4. Click **Create and run**, or **Continue setup** to add tools, skills, and knowledge first.
 
@@ -51,6 +51,7 @@ Each run gets a temporary virtual key. Provider keys stay in Archestra.
 
 - **Claude Code:** your Claude Pro or Max subscription, or an API key for Anthropic, Amazon Bedrock, or Anthropic on Vertex AI.
 - **Codex:** your ChatGPT subscription, connected under **Model Providers**. An OpenAI API key does not replace it.
+- **Grok Build:** your SuperGrok subscription, connected under **Model Providers**, or an xAI API key. Pick an xAI model, such as `grok-4.7`.
 - **Other agents:** any [model provider](/docs/llm-proxy/providers) configured in Archestra.
 
 What to know:
@@ -135,6 +136,42 @@ What to know:
 - **Messaging channels:** a message to the agent in [Slack](/docs/agents/triggers-and-channels/slack), [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams), or [Telegram](/docs/agents/triggers-and-channels/telegram) starts a run. The bot replies with a link to the run, then posts the result in the thread. A follow-up from the same person continues their run.
 - **Email:** an [email](/docs/agents/triggers-and-channels/email) to the agent starts a run. The result returns in the thread when replies are on.
 - **A2A:** A2A clients start runs and continue them with the same `contextId`. See [A2A](/docs/agents/triggers-and-channels/webhook-a2a#sdks).
+- **Scripts and CI:** a script starts a run with [`start_agent_run`](/docs/reference/archestra-mcp-server#start_agent_run) through an MCP Gateway and polls [`get_agent_run`](/docs/reference/archestra-mcp-server#get_agent_run). The run ends when the agent finishes. A failed run says whether to start again: see [Read Why a Run Failed](#read-why-a-run-failed). Continue the saved workspace with [`steer_agent_run`](/docs/reference/archestra-mcp-server#steer_agent_run).
+
+### Read Why a Run Failed
+
+A failed run carries a stable `failure.code`, so a script can retry or stop without parsing the message.
+
+| Code | Retry | What happened |
+| --- | --- | --- |
+| `launch.kubernetes_unavailable` | Yes | The Kubernetes API was overloaded or unavailable. |
+| `launch.kubernetes_rejected` | No | Kubernetes refused the run's objects. |
+| `launch.controller_missing` | No | The cluster has no Agent Sandbox controller. |
+| `launch.misconfigured` | No | The agent's settings or the caller's credentials do not allow a start. |
+| `launch.capacity_timeout` | Yes | The pod did not start or resume in time. |
+| `launch.credentials_timeout` | Yes | The run's credentials did not reach the pod in time. |
+| `pod.evicted` | Yes | Kubernetes evicted or preempted the pod. |
+| `pod.oom_killed` | No | The agent ran out of memory. |
+| `pod.image_pull` | No | The image could not be pulled. |
+| `pod.failed` | No | The pod failed for another reason. |
+| `turn.interrupted` | Yes | The pod was replaced while the agent worked. The turn is not repeated. |
+| `turn.recording_failed` | Yes | The terminal recording stopped, so the turn stopped. |
+| `turn.process_exited` | No | The agent exited before it reported a result. |
+| `turn.exit_status` | No | The agent exited with an error and gave no reason. |
+| `budget.exceeded` | No | The run spent its **Metered LLM budget**. |
+| `run.settings_changed` | No | The agent's image or host access changed. Start a new run. |
+| `run.resume_refused` | No | The saved workspace cannot take this turn. |
+| `run.workspace_busy` | Yes | Another turn took the saved workspace first. |
+| `run.workspace_missing` | No | The workspace was deleted while the agent worked. |
+| `run.deadline_exceeded` | No | The workspace reached its retention deadline. |
+| `run.unknown` | No | No other code applies. |
+| `image.<code>` | Depends | The agent's image reported this code. Maintained images mark rate limits, provider outages, and proxy or tool startup failures as retriable. |
+
+What to know:
+
+- `failure.retriable` is `true` when a new run of the same agent is likely to succeed without a change.
+- `failure` is `null` on a run that did not fail, and on a failed run with no code.
+- Under [Guardrails](/docs/agents/guardrails), [`get_agent_run`](/docs/reference/archestra-mcp-server#get_agent_run) withholds the status reason but still returns the code. [`GET /api/agent-runs/:taskId`](/docs/reference/api#/Agents/getMyAgentRun) also returns `failure.message`, the same text as `statusReason`.
 
 ## Troubleshooting
 

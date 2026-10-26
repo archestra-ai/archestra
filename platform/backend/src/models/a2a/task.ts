@@ -18,6 +18,7 @@ import type {
   A2AMessage,
   A2ATask,
   A2ATaskApprovalRequest,
+  A2ATaskFailure,
   A2ATaskState,
   InsertA2AMessage,
   InsertA2ATask,
@@ -115,6 +116,8 @@ class A2ATaskModel {
     allowedFrom: A2ATaskState[];
     eventPayload: A2AProtocolStreamResponse;
     statusReason?: string;
+    /** Classification of a FAILED terminal state; stored with its reason. */
+    failure?: A2ATaskFailure;
     /** Also delete the task's approval-request rows (cancellation). */
     clearApprovals?: boolean;
   }): Promise<A2ATask | null> {
@@ -858,6 +861,7 @@ class A2ATaskModel {
       to: A2ATaskState;
       allowedFrom: A2ATaskState[];
       statusReason?: string;
+      failure?: A2ATaskFailure;
     },
   ): Promise<A2ATask | null> {
     const now = new Date();
@@ -870,6 +874,7 @@ class A2ATaskModel {
         ...(params.statusReason !== undefined
           ? { statusReason: params.statusReason }
           : {}),
+        ...(params.failure !== undefined ? { failure: params.failure } : {}),
       })
       .where(
         and(

@@ -61,6 +61,7 @@ describe("popular Agent images", () => {
       opencode: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-opencode:latest`,
       hermes: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-hermes:latest`,
       openclaw: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-openclaw:latest`,
+      grok: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-grok:latest`,
     });
   });
 

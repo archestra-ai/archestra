@@ -133,7 +133,7 @@ export async function withKbObservability<T>(
           cost,
           source: params.source,
         });
-        InteractionModel.create({
+        InteractionModel.record({
           profileId: null,
           connectorId: params.connectorId ?? null,
           source: params.source,

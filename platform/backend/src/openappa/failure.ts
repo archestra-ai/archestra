@@ -52,6 +52,18 @@ export function runtimeFailureCode(error: unknown): RuntimeFailureCode | null {
 }
 
 /**
+ * A tool absent from the policy cannot run and has no remedy. The runtime
+ * refuses it before recording a call, so retain this notice on the host just
+ * like an unanswered annotation. Never turn unrelated failures into denials.
+ */
+export function undeclaredToolNotice(error: unknown): string | null {
+  const cause = error instanceof ApiError ? error.cause : error;
+  return runtimeFailureCode(cause) === "undeclared_tool"
+    ? "[appa] Blocked: the policy does not declare this tool. The tool did not run. No remedy plan is available. Stop and explain the refusal to the user."
+    : null;
+}
+
+/**
  * The notice that replaces one tool call whose annotator gave no answer, or
  * null for any other failure.
  *

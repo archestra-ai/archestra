@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
+import { z } from "zod";
 import { completeFit, fitNow, prepareFit } from "@/auto-routing/fit";
 import { getAutoRoutingSettings } from "@/auto-routing/settings";
 import { activeSourceVersion } from "@/auto-routing/signals";
@@ -143,6 +144,31 @@ describe("auto routing plan fit", () => {
     expect(await isDirty(org.organizationId)).toBe(false);
   });
 
+  test("a history above the session cap fits a deterministic sample at the full window's volume", async ({
+    makeOrganization,
+  }) => {
+    const org = await configuredOrganization(makeOrganization);
+    await AutoRoutingSettingsModel.update(org.organizationId, {
+      budgetUsdPerDay: "1000.00",
+    });
+    await seedHistory(org, 200);
+    const cap = 60;
+
+    const full = await fittedPlan(org.organizationId);
+    const capped = await fittedPlan(org.organizationId, cap);
+    const again = await fittedPlan(org.organizationId, cap);
+
+    expect(full.inputs.history.sample).toHaveLength(200);
+    expect(capped.inputs.history.sample).toHaveLength(cap);
+    expect(capped.inputs.history.volume).toEqual(full.inputs.history.volume);
+    expect(capped.summary.sessions_per_day).toBe(full.summary.sessions_per_day);
+    expect(capped.summary.tokens_per_day).toBe(full.summary.tokens_per_day);
+    expect(
+      Math.abs(capped.summary.expected_spend / full.summary.expected_spend - 1),
+    ).toBeLessThan(0.05);
+    expect(again.plan).toEqual(capped.plan);
+  });
+
   test("a settings change during a fit rejects it and the next dispatch re-plans", async ({
     makeOrganization,
   }) => {
@@ -278,6 +304,16 @@ describe("auto routing plan fit", () => {
 
 // === Helpers ===
 
+const PlanSummarySchema = z
+  .object({
+    summary: z.object({
+      sessions_per_day: z.number(),
+      tokens_per_day: z.number(),
+      expected_spend: z.number(),
+    }),
+  })
+  .passthrough();
+
 type Org = { organizationId: string; smartModelId: string };
 
 async function configuredOrganization(
@@ -311,6 +347,17 @@ function pricedModel(input: string, output: string) {
     customPricePerMillionInput: input,
     customPricePerMillionOutput: output,
   });
+}
+
+/** Prepares and publishes a fit reading at most `maxSessions` sessions; its plan must be active. */
+async function fittedPlan(organizationId: string, maxSessions?: number) {
+  const inputs = await prepareFit(organizationId, undefined, maxSessions);
+  if (!inputs) throw new Error("organization is not configured");
+  const published = await completeFit(inputs);
+  if (published.kind !== "recorded" || published.plan.status !== "active")
+    throw new Error(`fit did not publish an active plan: ${published.kind}`);
+  const plan = PlanSummarySchema.parse(published.plan.plan);
+  return { inputs, plan, summary: plan.summary };
 }
 
 async function seedHistory(org: Org, sessions: number) {

@@ -358,15 +358,16 @@ async function recordAt(params: {
     .where(eq(schema.routingUsageTable.interactionId, id));
 }
 
-function fitHistory(params: {
+async function fitHistory(params: {
   organizationId: string;
   scorerVersionId: string;
   longContextThreshold?: number;
   inputWatermark?: Date;
 }) {
-  return RoutingUsageModel.findFitHistory({
+  const history = await RoutingUsageModel.findFitHistory({
     ...params,
     inputWatermark: params.inputWatermark ?? new Date(),
     longContextThreshold: params.longContextThreshold ?? null,
   });
+  return history.sample;
 }

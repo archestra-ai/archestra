@@ -36,7 +36,7 @@ type FitInputs = {
   tiers: FitTiers;
   budgetUsdPerDay: string;
   scorerVersionId: string;
-  history: FitHistoryRow[];
+  history: FitHistory;
 };
 
 /** The trio as router-core prices it, or why it cannot be priced (recorded as a failed fit). */
@@ -54,6 +54,7 @@ type FitTiers =
 export async function prepareFit(
   organizationId: string,
   requestedTrigger?: RoutingPlanTrigger,
+  maxSessions?: number,
 ): Promise<FitInputs | null> {
   const scorerVersion = await activeSourceVersion();
   await AutoRoutingSettingsModel.activateScorerVersion(
@@ -69,13 +70,16 @@ export async function prepareFit(
   const inputWatermark = new Date();
   const history =
     tiers.kind === "ok"
-      ? await RoutingUsageModel.findFitHistory({
-          organizationId,
-          scorerVersionId: scorerVersion.id,
-          inputWatermark,
-          longContextThreshold: tiers.tiers.long_context_threshold,
-        })
-      : [];
+      ? await RoutingUsageModel.findFitHistory(
+          {
+            organizationId,
+            scorerVersionId: scorerVersion.id,
+            inputWatermark,
+            longContextThreshold: tiers.tiers.long_context_threshold,
+          },
+          maxSessions,
+        )
+      : EMPTY_HISTORY;
   const trigger: RoutingPlanTrigger =
     requestedTrigger ??
     (latest && latest.plan.scorerVersionId !== scorerVersion.id
@@ -215,7 +219,7 @@ function fitSessions(inputs: FitInputs): FitSessions | null {
   return inputs.tiers.kind === "ok"
     ? {
         scorerVersionId: inputs.scorerVersionId,
-        sessions: inputs.history.length,
+        sessions: inputs.history.volume.sessions,
       }
     : null;
 }
@@ -256,9 +260,18 @@ function fitTiers(trio: Trio): FitTiers {
   }
 }
 
-type FitHistoryRow = Awaited<
-  ReturnType<typeof RoutingUsageModel.findFitHistory>
->[number];
+type FitHistory = Awaited<ReturnType<typeof RoutingUsageModel.findFitHistory>>;
+type FitHistoryRow = FitHistory["sample"][number];
+
+const EMPTY_HISTORY: FitHistory = {
+  sample: [],
+  volume: {
+    sessions: 0,
+    tokens: 0,
+    firstCreatedAt: null,
+    lastCreatedAt: null,
+  },
+};
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -310,7 +323,7 @@ async function fit(inputs: FitInputs): Promise<{
     };
   }
   const { tiers } = inputs.tiers;
-  const sessions = inputs.history.length;
+  const sessions = inputs.history.volume.sessions;
   const minSessions = config.autoRouting.minSessions;
   if (sessions < minSessions) {
     return {
@@ -355,37 +368,32 @@ async function fit(inputs: FitInputs): Promise<{
 }
 
 /**
- * router-core `PlanInput`. Volume is flat at the observed arrival rate:
- * sessions and tokens per day over the span the history covers (at least a
- * day, so a burst does not read as an extreme rate).
+ * router-core `PlanInput`: the per-session models fit on the sample, while
+ * volume is flat at the whole window's arrival rate: sessions and tokens per
+ * day over the span it covers (at least a day, so a burst does not read as an
+ * extreme rate).
  */
 function planInput(inputs: FitInputs, tiers: RouterTierSet) {
-  const { history } = inputs;
-  const created = history.map((row) => row.createdAt.getTime());
+  const { sample, volume } = inputs.history;
   const span =
-    created.reduce((a, b) => Math.max(a, b)) -
-    created.reduce((a, b) => Math.min(a, b));
+    (volume.lastCreatedAt?.getTime() ?? 0) -
+    (volume.firstCreatedAt?.getTime() ?? 0);
   const days = Math.max(1, span / DAY_MS);
-  const rows = history.map((row) => ({
-    features: routerFeatures(row.features),
-    short: tokenCounts(row.short),
-    long: tokenCounts(row.long),
-    timestamp_ms: row.createdAt.getTime(),
-  }));
-  const tokens = rows.reduce(
-    (sum, row) => sum + totalTokens(row.short) + totalTokens(row.long),
-    0,
-  );
   return {
-    history: rows,
+    history: sample.map((row) => ({
+      features: routerFeatures(row.features),
+      short: tokenCounts(row.short),
+      long: tokenCounts(row.long),
+      timestamp_ms: row.createdAt.getTime(),
+    })),
     tiers,
     budget: Number(inputs.budgetUsdPerDay),
     volume: {
       kind: "flat",
-      sessions_per_day: history.length / days,
-      tokens_per_day: tokens / days,
+      sessions_per_day: volume.sessions / days,
+      tokens_per_day: volume.tokens / days,
     },
-    baseline_source: mostFrequentSource(history),
+    baseline_source: mostFrequentSource(sample),
   };
 }
 
@@ -397,10 +405,6 @@ function tokenCounts(block: FitHistoryRow["short"]) {
     cache_write: block.cacheWrite,
     output: block.output,
   };
-}
-
-function totalTokens(counts: ReturnType<typeof tokenCounts>): number {
-  return counts.input + counts.cache_read + counts.cache_write + counts.output;
 }
 
 /**

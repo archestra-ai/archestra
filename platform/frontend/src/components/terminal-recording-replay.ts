@@ -189,7 +189,7 @@ const SCREEN_EVENTS =
   // biome-ignore lint/suspicious/noControlCharactersInRegex: size events and screen modes are terminal protocol bytes
   /\x1b\]777;(archestra-terminal-size=\d+x\d+)(?:\x07|\x1b\\)|\x1b\[\?([\d;]*)h/g;
 
-/** An empty parameter, NaN after `Number`, names no mode. */
+/** An empty parameter is 0 after `Number`, which names no mode. */
 function alternateScreenMode(modes: number[]): boolean {
   return modes.some((mode) => ALTERNATE_SCREEN_MODES.has(mode));
 }

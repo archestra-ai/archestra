@@ -8,7 +8,7 @@ test("upload and browser switches save and cancel, with the upload warning above
   page,
   mswControl,
 }, testInfo) => {
-  const organization = makeOrganization({ allowChatFileUploads: true });
+  const organization = makeOrganization();
   await mswControl.use({
     method: "get",
     url: "/api/organization",

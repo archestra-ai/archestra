@@ -27,7 +27,7 @@ export function makeOrganization(
     newAppsDisabledByDefault: false,
     newAppsLockedByDefault: false,
     playwrightMcpEnabled: true,
-    allowChatFileUploads: false,
+    allowChatFileUploads: true,
     allowUnauthenticatedLlmProxyRequests: false,
     allowToolAutoAssignment: true,
     // Configured, so the knowledge section renders its pages rather than the

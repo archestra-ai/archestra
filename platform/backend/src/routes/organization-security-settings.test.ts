@@ -52,7 +52,10 @@ describe("PATCH /api/organization/security-settings", () => {
       payload,
     });
 
-  test("the built-in browser defaults on and administrators can disable and re-enable it", async () => {
+  test("uploads and the built-in browser default on, and administrators can disable and re-enable the browser", async () => {
+    expect(
+      (await OrganizationModel.getById(organizationId))?.allowChatFileUploads,
+    ).toBe(true);
     expect(
       (await OrganizationModel.getById(organizationId))?.playwrightMcpEnabled,
     ).toBe(true);

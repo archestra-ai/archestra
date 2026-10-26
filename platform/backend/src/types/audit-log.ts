@@ -234,6 +234,7 @@ export const AuditEventNameSchema = z.enum([
   "openappaCredentialBinding.updated",
   "user.password_reset",
   "userToken.rotated",
+  "userLimitUsage.reset",
   "virtualApiKey.created",
   "virtualApiKey.deleted",
   "virtualApiKey.bulk_deleted",

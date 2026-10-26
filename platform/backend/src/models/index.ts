@@ -178,6 +178,7 @@ export { default as ToolObservationModel } from "./tool-observation";
 export { default as UsageStatisticsModel } from "./usage-statistics";
 export { default as UserModel } from "./user";
 export { default as UserCredentialModel } from "./user-credential";
+export { default as UserLimitUsageResetModel } from "./user-limit-usage-reset";
 export { default as UserOnboardingSeenItemModel } from "./user-onboarding-seen-item";
 export { default as UserTokenModel } from "./user-token";
 export { default as VerificationModel } from "./verification";

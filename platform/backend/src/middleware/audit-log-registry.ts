@@ -46,6 +46,7 @@ import SiteNotificationModel from "@/models/site-notification";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
+import UserLimitUsageResetModel from "@/models/user-limit-usage-reset";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { findConnectedClientForAudit } from "@/services/connected-client";
@@ -727,6 +728,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "defaultUserLimit",
     fetchById: (id, orgId) =>
       EnvironmentDefaultUserLimitModel.findByIdForAudit(id, orgId),
+  },
+  // An admin resetting one user's limit usage: the snapshot is the user's
+  // reset marker, so before/after shows when it moved.
+  "/api/default-user-limits/users/:userId/reset": {
+    resourceType: "userLimitUsage",
+    resourceIdParam: "userId",
+    action: "userLimitUsage.reset",
+    fetchById: (userId, orgId) =>
+      UserLimitUsageResetModel.findByUserIdForAudit(userId, orgId),
   },
 
   // Projects. Delete soft-deletes and restore is an oversight action on

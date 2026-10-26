@@ -251,6 +251,7 @@ const RESOURCE_ICONS: Record<string, LucideIcon> = {
   connector: Plug,
   credential: KeyRound,
   defaultUserLimit: Gauge,
+  userLimitUsage: Gauge,
   environment: Globe,
   githubPat: KeyRound,
   identityProvider: Fingerprint,

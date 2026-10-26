@@ -450,6 +450,42 @@ class MemberModel {
   }
 
   /**
+   * Every member's user in an organization, ordered by name, optionally
+   * matching `search` against name or email. Unpaginated: callers that rank
+   * members by a computed value (the user limits roster) need the whole set.
+   */
+  static async findUsersInOrganization(params: {
+    organizationId: string;
+    search?: string;
+  }): Promise<
+    { userId: string; name: string; email: string; image: string | null }[]
+  > {
+    const searchFilter = buildTokenizedSearchFilter({
+      query: params.search,
+      columns: [schema.usersTable.name, schema.usersTable.email],
+    });
+    return db
+      .select({
+        userId: schema.membersTable.userId,
+        name: schema.usersTable.name,
+        email: schema.usersTable.email,
+        image: schema.usersTable.image,
+      })
+      .from(schema.membersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.membersTable.userId, schema.usersTable.id),
+      )
+      .where(
+        and(
+          eq(schema.membersTable.organizationId, params.organizationId),
+          searchFilter,
+        ),
+      )
+      .orderBy(schema.usersTable.name);
+  }
+
+  /**
    * Get paginated members of an organization with optional filters
    */
   static async findAllPaginated(params: {

@@ -166,6 +166,8 @@ export const ConfigResponseSchema = z.strictObject({
     chatopsTelegramEnabled: z.boolean(),
     /** BETA: auto-sync-permissions connector visibility and its Permissions tab UI. */
     kbMfilesConnectorEnabled: z.boolean(),
+    /** BETA: the Model Pools page and pool routing. */
+    llmModelPoolsEnabled: z.boolean(),
     kbMfilesOauthEnabled: z.boolean(),
     /**
      * The BM25 tuning constants an organization inherits until it
@@ -271,6 +273,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
       agentHooksEnabled: config.hooks.enabled,
       chatopsTelegramEnabled: config.chatops.telegramEnabled,
       kbMfilesConnectorEnabled: config.kb.mfilesConnectorEnabled,
+      llmModelPoolsEnabled: config.llmProxy.modelPoolsEnabled,
       kbMfilesOauthEnabled: config.kb.mfilesOauthEnabled,
       kbBm25DefaultK1: config.kb.bm25K1,
       kbBm25DefaultB: config.kb.bm25B,

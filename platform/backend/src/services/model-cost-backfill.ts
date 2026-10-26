@@ -75,13 +75,11 @@ class ModelCostBackfillService {
         ? this.getCachedWindow(scope, model.id, params.since)
         : Promise.resolve(null),
     ]);
-    if (
-      missesCachePrice({
-        pricing,
-        instancePriced,
-        tokens: sumTokens(history.map((day) => day.tokens)),
-      })
-    ) {
+    // Gate on what the selected range would recompute, as start() does.
+    const tokens = window
+      ? window.tokens
+      : sumTokens(history.map((day) => day.tokens));
+    if (missesCachePrice({ pricing, instancePriced, tokens })) {
       return {
         availability: "needs_custom_price",
         instancePriced,

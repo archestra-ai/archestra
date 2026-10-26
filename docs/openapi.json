@@ -329626,22 +329626,22 @@
                       "input": {
                         "nullable": true,
                         "type": "string",
-                        "pattern": "^\\d{1,8}(\\.\\d+)?$"
+                        "pattern": "^\\d+(\\.\\d+)?$"
                       },
                       "output": {
                         "nullable": true,
                         "type": "string",
-                        "pattern": "^\\d{1,8}(\\.\\d+)?$"
+                        "pattern": "^\\d+(\\.\\d+)?$"
                       },
                       "cacheRead": {
                         "nullable": true,
                         "type": "string",
-                        "pattern": "^\\d{1,8}(\\.\\d+)?$"
+                        "pattern": "^\\d+(\\.\\d+)?$"
                       },
                       "cacheWrite": {
                         "nullable": true,
                         "type": "string",
-                        "pattern": "^\\d{1,8}(\\.\\d+)?$"
+                        "pattern": "^\\d+(\\.\\d+)?$"
                       }
                     },
                     "required": [

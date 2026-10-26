@@ -97,7 +97,7 @@ export type CostBackfillAvailability = z.infer<
 
 const PriceInputSchema = z
   .string()
-  .regex(/^\d{1,8}(\.\d+)?$/, "Must be a non-negative number")
+  .regex(/^\d+(\.\d+)?$/, "Must be a non-negative decimal number")
   .nullable();
 
 /** Custom prices per million tokens, as typed in the edit form (unsaved). */

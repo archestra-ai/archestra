@@ -448,6 +448,14 @@ describe("previewing a recompute", () => {
       cacheReadTokens: 5_000,
       createdAt: new Date(Date.now() - DAY_MS),
     });
+    // A range after the cached requests needs no cache price.
+    const recent = await modelCostBackfillService.getPreview({
+      model: litellm,
+      prices: { input: "2", output: "8", cacheRead: null, cacheWrite: null },
+      timeZone: "UTC",
+      since: new Date(Date.now() - 60 * 60 * 1000),
+    });
+    expect(recent.availability).toBe("available");
     const startLitellm = async (prices: Partial<Model>) =>
       modelCostBackfillService.start({
         model: (await ModelModel.update(litellm.id, prices)) as Model,

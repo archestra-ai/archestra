@@ -115,7 +115,7 @@ describe("GitHubActionsAccessSection", () => {
     await user.clear(workflows);
     await user.type(workflows, `${WORKFLOW}{Enter}`);
 
-    const saved = onChange.mock.lastCall?.[0];
+    const saved = onChange.mock.lastCall?.[0] ?? null;
     expect(saved).toEqual({
       githubAppCredentialKey: "review-app",
       repositories: ["acme/widgets"],

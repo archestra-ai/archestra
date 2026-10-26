@@ -101,6 +101,7 @@ function fixture(t, initialMarkdown = markdown) {
     base: sourceSha,
     writes: 0,
     author: "archestra-ci[bot]",
+    verified: true,
     run: {
       path: generationWorkflow,
       event: "pull_request",
@@ -176,9 +177,11 @@ function fixture(t, initialMarkdown = markdown) {
         return {
           data: {
             sha: ref,
-            committer: { login: state.author },
+            author: { login: state.author },
+            committer: { login: "web-flow" },
             parents,
             commit: {
+              verification: { verified: state.verified },
               message: git(["show", "-s", "--format=%B", ref]),
               tree: { sha: git(["rev-parse", `${ref}^{tree}`]) },
             },
@@ -538,4 +541,18 @@ test("unchanged generators still attest completion once and then stop", async (t
     false,
   );
   assert.equal(f.state.writes, 1);
+});
+
+test("unsigned bot attribution is not accepted as GitHub App provenance", async (t) => {
+  const f = fixture(t);
+  await publishGeneration(f.args);
+  f.state.verified = false;
+  assert.equal(
+    await generatedReceipt({ ...f.args, context: f.finalContext() }),
+    null,
+  );
+  assert.equal(
+    await selectGeneration({ ...f.args, context: f.finalContext() }),
+    true,
+  );
 });

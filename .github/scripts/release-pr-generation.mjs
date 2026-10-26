@@ -156,7 +156,11 @@ export async function generatedReceipt({
   });
   if (
     commit.commit.message.split("\n")[0] !== generationCommit ||
-    commit.committer?.login !== "archestra-ci[bot]" ||
+    // GitHub signs App-created Git database commits as web-flow, with the
+    // authenticated App as author. An unsigned bot email is not provenance.
+    commit.author?.login !== "archestra-ci[bot]" ||
+    commit.committer?.login !== "web-flow" ||
+    commit.commit.verification?.verified !== true ||
     commit.parents?.length !== 1 ||
     commit.parents[0].sha !== receipt.sourceSha
   )

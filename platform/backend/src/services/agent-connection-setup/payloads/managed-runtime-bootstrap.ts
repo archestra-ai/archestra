@@ -17,9 +17,15 @@ function owned(file, directory = false, privateFile = true) {
     throw new Error("Unsafe managed runtime ownership: " + file);
   }
   if (process.platform === "win32") {
-    require("node:child_process").execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
-      '$ErrorActionPreference="Stop"; $acl=Get-Acl -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){exit 1}; $genericWrite=0x40000000; $genericAll=0x10000000; $writes=([int64][Security.AccessControl.FileSystemRights]"Write,Delete,ChangePermissions,TakeOwnership") -bor $genericWrite -bor $genericAll; foreach($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($rule.AccessControlType -eq "Allow" -and $rule.IdentityReference.Value -notin @($sid.Value,"S-1-5-18","S-1-5-32-544") -and ($env:ARCHESTRA_RUNTIME_ACL_PRIVATE -eq "1" -or (([int64]$rule.FileSystemRights -band $writes) -ne 0))){exit 1}}'
-    ], { env: { ...process.env, ARCHESTRA_RUNTIME_ACL_PATH: file, ARCHESTRA_RUNTIME_ACL_PRIVATE: privateFile ? "1" : "0" }, timeout: 1500, stdio: "ignore" });
+    try {
+      require("node:child_process").execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
+        '$ErrorActionPreference="Stop"; [Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false); try { $acl=Get-Acl -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value; if($owner -ne $sid.Value){[Console]::Error.WriteLine("Owner mismatch: actual="+$owner+"; expected="+$sid.Value); exit 2}; $genericWrite=0x40000000; $genericAll=0x10000000; $writes=([int64][Security.AccessControl.FileSystemRights]"Write,Delete,ChangePermissions,TakeOwnership") -bor $genericWrite -bor $genericAll; foreach($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($rule.AccessControlType -eq "Allow" -and $rule.IdentityReference.Value -notin @($sid.Value,"S-1-5-18","S-1-5-32-544") -and ($env:ARCHESTRA_RUNTIME_ACL_PRIVATE -eq "1" -or (([int64]$rule.FileSystemRights -band $writes) -ne 0))){[Console]::Error.WriteLine("Foreign allow ACE: SID="+$rule.IdentityReference.Value+"; rights="+$rule.FileSystemRights+"; inherited="+$rule.IsInherited); exit 2}} } catch { [Console]::Error.WriteLine("PowerShell ACL inspection failed: "+$_.Exception.Message); exit 1 }'
+      ], { env: { ...process.env, ARCHESTRA_RUNTIME_ACL_PATH: file, ARCHESTRA_RUNTIME_ACL_PRIVATE: privateFile ? "1" : "0" }, timeout: 15000, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    } catch (error) {
+      const detail = error.code === "ETIMEDOUT" ? "PowerShell timed out after 15000 ms" :
+        (error.stderr && String(error.stderr).trim()) || error.code || "PowerShell exited with status " + error.status;
+      throw new Error("Managed runtime ACL check failed for " + file + " (" + (privateFile ? "private" : "no foreign writers") + "): " + detail);
+    }
   }
 }
 function atomic(file, bytes) {
@@ -87,7 +93,7 @@ async function locked(root, callback) {
   }
   try { return await callback(); } finally { fs.rmSync(lock, { recursive: true, force: true }); }
 }
-async function refresh(root) {
+function installedParams(root) {
   owned(path.dirname(root), true, false);
   owned(root, true);
   owned(path.join(root, "params.json"));
@@ -98,6 +104,16 @@ async function refresh(root) {
   if (owner.installation !== params.installation || owner.clientId !== params.clientId ||
       owner.bootstrapHash !== hash(fs.readFileSync(path.join(root, "bootstrap.cjs"))) ||
       !params.source.token.startsWith("cru1_" + params.installation + ".")) throw new Error("Managed runtime installation fingerprint mismatch");
+  return params;
+}
+function verify(root) {
+  const runtime = cached(root, installedParams(root));
+  const checkedPath = path.join(root, "last-check.json");
+  if (fs.existsSync(checkedPath)) owned(checkedPath);
+  return runtime;
+}
+async function refresh(root) {
+  const params = installedParams(root);
   return locked(root, async () => {
     const old = cached(root, params);
     const checkedPath = path.join(root, "last-check.json");
@@ -155,7 +171,7 @@ async function refresh(root) {
     return cached(root, params);
   });
 }
-module.exports = { refresh, locked, owned, atomic };
+module.exports = { refresh, verify, locked, owned, atomic };
 if (require.main === module) {
   refresh(path.dirname(__filename)).then(async runtime => {
     await require(path.join(runtime.directory, "launcher.cjs")).prepare(runtime);

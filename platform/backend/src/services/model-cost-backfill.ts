@@ -1,5 +1,6 @@
 import { hostname } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
+import { isDeepStrictEqual } from "node:util";
 import { type SupportedProvider, TimeInMs } from "@archestra/shared";
 import { LRUCacheManager } from "@/cache-manager";
 import { withDbTransaction } from "@/database";
@@ -163,10 +164,17 @@ class ModelCostBackfillService {
       throw new ApiError(400, UNAVAILABLE_MESSAGES.needs_custom_price);
     }
     // The snapshot is taken from the prices read above. Holding the model row
-    // while the backfill is created means no price edit lands in between.
+    // while the backfill is created means no edit or catalog sync lands in
+    // between; one that landed during the totals query refuses the start.
     const backfill = await withDbTransaction(async (tx) => {
       const current = await ModelModel.findByIdForUpdate(model.id, tx);
-      if (!current || !hasCustomPrices(current, customPricesOf(model))) {
+      if (
+        !current ||
+        !isDeepStrictEqual(
+          pricingFor({ model: current, instancePriced }),
+          pricing,
+        )
+      ) {
         throw new ApiError(409, PRICES_CHANGED_MESSAGE);
       }
       return ModelCostBackfillModel.create(
@@ -321,54 +329,17 @@ class ModelCostBackfillService {
     await ModelCostBackfillModel.release(lease);
   }
 
-  /**
-   * The prices a recompute uses. For a model that provider keys price
-   * individually (LiteLLM), only the admin's custom prices apply: past rows
-   * don't record their key, and the proxy never derives a cache price such a
-   * key did not publish, so neither does the recompute.
-   */
+  /** The prices a recompute uses; see {@link pricingFor}. */
   private async resolvePricing(
     model: Model,
     prices?: CostBackfillPrices,
   ): Promise<{ pricing: ResolvedPricing; instancePriced: boolean }> {
-    const priced: Model = prices
-      ? {
-          ...model,
-          customPricePerMillionInput: toStoredPrice(prices.input),
-          customPricePerMillionOutput: toStoredPrice(prices.output),
-          customPricePerMillionCacheRead: toStoredPrice(prices.cacheRead),
-          customPricePerMillionCacheWrite: toStoredPrice(prices.cacheWrite),
-        }
-      : model;
-    const pricing = ModelModel.getEffectivePricing(
-      priced,
-      model.modelId,
-      model.provider,
-    );
     const instancePriced =
       model.provider !== "openrouter" &&
       (await LlmProviderApiKeyModelLinkModel.hasProviderPricing(model.id));
-    if (!instancePriced) return { pricing, instancePriced };
-
-    const cacheRead =
-      priced.customPricePerMillionCacheRead != null
-        ? pricing.pricePerMillionCacheRead
-        : null;
-    const cacheWrite =
-      priced.customPricePerMillionCacheWrite != null
-        ? pricing.pricePerMillionCacheWrite
-        : null;
     return {
       instancePriced,
-      pricing: {
-        ...pricing,
-        pricePerMillionCacheRead: cacheRead,
-        pricePerMillionCacheWrite: cacheWrite,
-        cacheSource:
-          cacheRead === null && cacheWrite === null
-            ? null
-            : pricing.cacheSource,
-      },
+      pricing: pricingFor({ model, prices, instancePriced }),
     };
   }
 
@@ -434,7 +405,7 @@ const RUN_TIME_BUDGET_MS = 45_000;
 /** Renewed every batch; a dead worker's backfill is reclaimable after this. */
 const LEASE_TTL_SECONDS = 120;
 const MAX_CONSECUTIVE_FAILURES = 10;
-/** Rest this many times a batch's duration after it: writes ≤ 1/3 of the time. */
+/** Rest this many times a batch's duration after it: writes ≤ 1/10 of the time. */
 const THROTTLE_RATIO = 9;
 /**
  * Requests in flight when a backfill starts can commit after the main pass has
@@ -457,15 +428,56 @@ const UNAVAILABLE_MESSAGES: Record<
     "Provider keys price this model individually. Set custom input and output prices first, and cache prices if its requests used the cache.",
 };
 
+/**
+ * The model's effective prices, or as they'd be with `prices` saved. For a
+ * model that provider keys price individually (LiteLLM), only the admin's
+ * custom cache prices apply: past rows don't record their key, and the proxy
+ * never derives a cache price such a key did not publish, so neither does the
+ * recompute.
+ */
+function pricingFor(params: {
+  model: Model;
+  prices?: CostBackfillPrices;
+  instancePriced: boolean;
+}): ResolvedPricing {
+  const { model, prices } = params;
+  const priced: Model = prices
+    ? {
+        ...model,
+        customPricePerMillionInput: toStoredPrice(prices.input),
+        customPricePerMillionOutput: toStoredPrice(prices.output),
+        customPricePerMillionCacheRead: toStoredPrice(prices.cacheRead),
+        customPricePerMillionCacheWrite: toStoredPrice(prices.cacheWrite),
+      }
+    : model;
+  const pricing = ModelModel.getEffectivePricing(
+    priced,
+    model.modelId,
+    model.provider,
+  );
+  if (!params.instancePriced) return pricing;
+
+  const cacheRead =
+    priced.customPricePerMillionCacheRead != null
+      ? pricing.pricePerMillionCacheRead
+      : null;
+  const cacheWrite =
+    priced.customPricePerMillionCacheWrite != null
+      ? pricing.pricePerMillionCacheWrite
+      : null;
+  return {
+    ...pricing,
+    pricePerMillionCacheRead: cacheRead,
+    pricePerMillionCacheWrite: cacheWrite,
+    cacheSource:
+      cacheRead === null && cacheWrite === null ? null : pricing.cacheSource,
+  };
+}
+
 function toScope(model: Model): BackfillScope {
   return { modelId: model.modelId, provider: model.provider };
 }
 
-/**
- * The price as `numeric(10,2)` will store it, so the preview prices what Save
- * stores. Decimal half-up on the digits themselves: binary `toFixed` rounds
- * "1.005" down where Postgres rounds it up.
- */
 /** Whether the model's stored custom prices are `prices`, as stored. */
 function hasCustomPrices(model: Model, prices: CostBackfillPrices): boolean {
   const stored = customPricesOf(model);
@@ -489,6 +501,11 @@ function customPricesOf(model: Model): CostBackfillPrices {
   };
 }
 
+/**
+ * The price as `numeric(10,2)` will store it, so the preview prices what Save
+ * stores. Decimal half-up on the digits themselves: binary `toFixed` rounds
+ * "1.005" down where Postgres rounds it up.
+ */
 function toStoredPrice(price: string | null): string | null {
   if (price === null) return null;
   const [whole, fraction = ""] = price.split(".");

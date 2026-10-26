@@ -331,6 +331,22 @@ describe("recomputing past costs", () => {
     ).rejects.toMatchObject({ statusCode: 409 });
     expect(await modelCostBackfillService.getLatest(saved.id)).toBeNull();
 
+    // A catalog sync changed a synced price the custom ones don't override.
+    const beforeSync = (await ModelModel.findById(saved.id)) as Model;
+    await ModelModel.bulkUpsert([
+      {
+        externalId: beforeSync.externalId,
+        provider: beforeSync.provider,
+        modelId: beforeSync.modelId,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        cacheReadPricePerToken: "0.000002",
+      },
+    ]);
+    await expect(
+      modelCostBackfillService.start({ ...base, model: beforeSync }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
     // Same prices, written differently, start.
     const current = (await ModelModel.findById(saved.id)) as Model;
     await expect(

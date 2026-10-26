@@ -480,7 +480,7 @@ export function ChatPageContent({
   });
   const { data: organization, isPending: isOrgLoading } = useOrganization(
     true,
-    { fresh: true, refetchInterval: 5000 },
+    { refetchInterval: 5000, refetchOnWindowFocus: "always" },
   );
 
   // A new chat started from a project (`/chat?project=<id>`) takes the

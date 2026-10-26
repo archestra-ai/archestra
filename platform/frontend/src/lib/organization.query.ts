@@ -335,7 +335,11 @@ export function useCreateInvitation(organizationId: string | undefined) {
  */
 export function useOrganization(
   enabled = true,
-  options: { fresh?: boolean; refetchInterval?: number } = {},
+  options: {
+    fresh?: boolean;
+    refetchInterval?: number;
+    refetchOnWindowFocus?: boolean | "always";
+  } = {},
 ) {
   const session = useSession();
   // Read through the context, not useQueryClient(): that hook throws without
@@ -367,7 +371,7 @@ export function useOrganization(
       ? (query) =>
           client && isDocumentSeedFresh(client, query) ? false : "always"
       : undefined,
-    refetchOnWindowFocus: fresh || undefined,
+    refetchOnWindowFocus: options.refetchOnWindowFocus ?? (fresh || undefined),
     refetchInterval: options.refetchInterval,
     // Restored on refresh: the shell reads the app name and theme from here,
     // so without it a reload repaints the branding a beat after the layout.

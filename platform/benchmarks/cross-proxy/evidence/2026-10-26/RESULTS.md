@@ -53,9 +53,13 @@ Streaming first content (TTFT) means the first decoded nonempty content SSE even
 - Peak sampled container CPU was 135.69% for Archestra, 125.35% for LiteLLM content, 127.95% for LiteLLM default and 103.75% for PostgreSQL (100% = one logical CPU). Proxy quotas were 400% and the database quota 200%; this gives no evidence of sustained CPU-quota saturation. Exact cgroup throttling-event and swap counters were not captured, so zero throttling cannot be asserted. PostgreSQL's high sampled memory usage is retained as a limit on interpretation.
 - One worker can bottleneck on its event loop/interpreter/native dependencies despite four allocated CPUs. This experiment matches the existing headline's one-process configuration; it does not compare each product's best tuned four-worker capacity. No supported accounting defaults were disabled to improve performance, and the spend-queue warnings remain in the evidence.
 
-## Database lifecycle sensitivity (pending)
+## Database lifecycle sensitivity
 
-The original shared PostgreSQL instance persisted separate profile databases across all repeats, accumulating tmpfs data and reaching about 95% of its 2 GiB memory limit. This is a plausible pressure/cache confound; sampled Docker memory alone cannot distinguish the two. A separate bounded matrix with fresh per-profile/run databases, an equal 8 GiB database limit and direct cgroup pressure/throttle counters is running at [40407997195](https://github.com/archestra-ai/archestra/actions/runs/40407997195). Until it is reviewed, the primary table describes the original process-count-matched configuration and is not a fully isolated causal estimate of gateway implementation overhead.
+The primary instance retained separate profile databases across repeats, accumulating tmpfs data to about 95% of its 2 GiB limit. Docker stats alone cannot establish whether that was cache or pressure. A [completed bounded sensitivity check](sensitivity/SENSITIVITY.md) used fresh per-profile/run databases, an equal 8 GiB database limit, two repeats and direct cgroup memory/PSI/swap/quota counters.
+
+Its JSON added medians were **58.71 ms Archestra / 290.29 ms LiteLLM content / 266.18 ms LiteLLM default**, with all 36,000 measured requests successful. PostgreSQL cgroup peak stayed below 0.51 GiB; memory-event and memory-PSI deltas, swap, CPU throttled periods and throttled time were zero in every before/after window. CPU scheduling pressure remained (database CPU `some` PSI up to 10.30%), separate from quota throttling.
+
+The gap persisted under fresh low-pressure database conditions, so near-limit database memory does not appear to be the sole or dominant explanation for the observed LiteLLM figures. Archestra’s absolute median changed materially, and lifecycle, sample counts and VM instance also changed; do not pool these datasets or call the original result a fully isolated causal estimate of implementation cost. Both remain one-worker, process-count-matched configuration comparisons with different logging/durability semantics.
 
 ## Repeat spread
 

@@ -35,6 +35,8 @@ cleanup() {
   done
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 node_bin=$(command -v node)
 node_dir=$(dirname "$node_bin")
 git rev-parse HEAD > "$out/archestra-commit.txt"

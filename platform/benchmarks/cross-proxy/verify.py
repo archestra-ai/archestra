@@ -54,6 +54,27 @@ for line in (root/'resources.jsonl').read_text().splitlines():
     value,unit=re.fullmatch(r'([\d.]+)([A-Za-z]+)',row['MemUsage'].split(' / ')[0]).groups()
     agg['maxMemoryBytes']=max(agg['maxMemoryBytes'],float(value)*units[unit])
 for role in roles: assert resources[f'archestra-cross-proxy-{role}']['samples']>0
+if sensitivity:
+    def read_cgroup(path):
+        sections={}; key=None
+        for line in path.read_text().splitlines():
+            if line.startswith('FILE '): key=line[5:]; sections[key]=[]
+            elif key: sections[key].append(line)
+        return sections
+    def values(lines): return {x.split()[0]:int(x.split()[1]) for x in lines}
+    def pressure(lines): return {x.split()[0]:int(next(p[6:] for p in x.split() if p.startswith('total='))) for x in lines}
+    for role in roles:
+        for repeat in range(1,repeats+1):
+            for container in ['db',role]:
+                before=read_cgroup(root/f'{role}-{repeat}-before-{container}-cgroup.txt')
+                after=read_cgroup(root/f'{role}-{repeat}-after-{container}-cgroup.txt')
+                for field in ['memory.events','cpu.stat']:
+                    a,b=values(before[field]),values(after[field])
+                    keys=list(b) if field=='memory.events' else ['nr_throttled','throttled_usec']
+                    assert all(b[k]-a[k]==0 for k in keys)
+                a,b=pressure(before['memory.pressure']),pressure(after['memory.pressure'])
+                assert all(b[k]-a[k]==0 for k in b)
+                assert int(before['memory.swap.current'][0])==int(after['memory.swap.current'][0])==0
 upstream=json.loads((root/'upstream-all.json').read_text())
 assert len(upstream)==rows_per_run*repeats*len(roles)*2 and len({s['id'] for s in upstream})==len(upstream)
 assert all(s['user']=='benchmark-user' for s in upstream)

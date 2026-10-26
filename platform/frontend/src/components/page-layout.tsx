@@ -195,6 +195,20 @@ export function PageLayout({
     return () => observer.disconnect();
   }, [headerElement]);
 
+  // Moving to another page under this layout (a tab such as Costs → Limits)
+  // starts it at the top. Next scrolls only the new page segment into view,
+  // which inside the app's scroll container leaves this header scrolled away
+  // whenever the page is taller than the viewport. Query-only changes keep
+  // their position.
+  const previousPathname = useRef(pathname);
+  useEffect(() => {
+    if (previousPathname.current === pathname) return;
+    previousPathname.current = pathname;
+    headerElement
+      ?.closest<HTMLElement>("[data-page-scroll-container]")
+      ?.scrollTo({ top: 0 });
+  }, [pathname, headerElement]);
+
   // Split tabs for mobile: visible vs overflow
   const mobileVisibleTabs = tabs.slice(0, mobileVisibleCount);
   const mobileOverflowTabs = tabs.slice(mobileVisibleCount);

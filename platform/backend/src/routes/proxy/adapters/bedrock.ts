@@ -1286,6 +1286,11 @@ class BedrockStreamAdapter
         this.currentToolCallIndex === this.state.toolCalls.length - 1;
 
       if (isToolBlock) {
+        // A tool called with no input streams only an empty `input` delta;
+        // its input is `{}`, not the empty string policy evaluation would
+        // reject.
+        const call = this.state.toolCalls[this.currentToolCallIndex];
+        if (call.arguments === "") call.arguments = "{}";
         this.state.rawToolCallEvents.push(chunk);
         isToolCallChunk = true;
       } else {

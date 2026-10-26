@@ -13,9 +13,11 @@ import {
   type RouterDocument,
   RouterDocumentSchema,
   type RoutingFitOutcome,
+  type RoutingPlan,
   type RoutingPlanTrigger,
   type RoutingPublishResult,
 } from "@/types/auto-routing";
+import type { AutoRoutingFitResult } from "@/types/auto-routing-api";
 import { activeScorerVersion } from "./router";
 import {
   loadTrio,
@@ -50,6 +52,7 @@ type FitTiers =
  */
 export async function prepareFit(
   organizationId: string,
+  requestedTrigger?: RoutingPlanTrigger,
 ): Promise<FitInputs | null> {
   const scorerVersion = await activeScorerVersion();
   await AutoRoutingSettingsModel.activateScorerVersion(
@@ -73,11 +76,12 @@ export async function prepareFit(
         })
       : [];
   const trigger: RoutingPlanTrigger =
-    latest && latest.plan.scorerVersionId !== scorerVersion.id
+    requestedTrigger ??
+    (latest && latest.plan.scorerVersionId !== scorerVersion.id
       ? "scorer_change"
       : settings.generation > settings.plannedGeneration
         ? "settings"
-        : "nightly";
+        : "nightly");
   return {
     organizationId,
     trigger,
@@ -110,7 +114,59 @@ export async function completeFit(
   });
 }
 
+/**
+ * Fits and publishes in the caller's request, after its generation bump
+ * committed. A fit rejected for newer settings refits on them; one rejected
+ * for older usage than an accepted fit reports that fit, the newest outcome.
+ * An unexpected error is reported as a failure without a plan; the generation
+ * stays unplanned, so the dispatcher retries it. Null when auto routing is not
+ * fully configured.
+ */
+export async function fitNow(
+  organizationId: string,
+  trigger: RoutingPlanTrigger,
+): Promise<AutoRoutingFitResult | null> {
+  try {
+    for (let attempt = 0; attempt < INLINE_FIT_ATTEMPTS; attempt++) {
+      const inputs = await prepareFit(organizationId, trigger);
+      if (!inputs) return null;
+      const published = await completeFit(inputs);
+      if (published.kind === "recorded") return fitResult(published.plan);
+      if (published.reason === "stale_watermark") break;
+    }
+    const latest = await RoutingPlanModel.findLatestOutcome(organizationId);
+    return latest ? fitResult(latest) : { status: "cold_start", planId: null };
+  } catch (error) {
+    logger.error(
+      { err: error, organizationId },
+      "[AutoRouting] Plan fit threw",
+    );
+    return {
+      status: "failed",
+      planId: null,
+      error: "The plan fit failed unexpectedly; it will be retried shortly.",
+    };
+  }
+}
+
 // === Internal ===
+
+function fitResult(plan: RoutingPlan): AutoRoutingFitResult {
+  switch (plan.status) {
+    case "active":
+      return { status: "active", planId: plan.id };
+    case "cold_start":
+      return { status: "cold_start", planId: plan.id };
+    case "failed":
+      return {
+        status: "failed",
+        planId: plan.id,
+        error: plan.error ?? "The plan fit failed.",
+      };
+    case "superseded":
+      throw new Error(`Newest plan ${plan.id} is superseded`);
+  }
+}
 
 function fitTiers(trio: Trio): FitTiers {
   try {
@@ -135,6 +191,9 @@ type FitHistoryRow = Awaited<
 >[number];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Bounds refits when settings keep changing under an inline fit. */
+const INLINE_FIT_ATTEMPTS = 3;
 
 /** The part of router-core `Plan` the publisher records next to the plan itself. */
 const RouterPlanSchema = z

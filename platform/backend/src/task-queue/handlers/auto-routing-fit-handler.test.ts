@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
-import { completeFit, prepareFit } from "@/auto-routing/fit";
+import { and, eq, sql } from "drizzle-orm";
+import { completeFit, fitNow, prepareFit } from "@/auto-routing/fit";
 import { activeScorerVersion } from "@/auto-routing/router";
+import { getAutoRoutingSettings } from "@/auto-routing/settings";
 import { loadTrio, tiersFingerprint } from "@/auto-routing/tiers";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -179,6 +180,51 @@ describe("auto routing plan fit", () => {
       { generation: settings?.generation, budgetUsdPerDay: "30.00" },
     );
   });
+
+  test("a dispatcher fit over older usage loses to the inline fit that overlapped it", async ({
+    makeOrganization,
+  }) => {
+    const org = await configuredOrganization(makeOrganization);
+    await seedHistory(org, 40);
+    const dispatched = await prepareFit(org.organizationId);
+    if (!dispatched) throw new Error("organization is not configured");
+
+    const inline = await fitNow(org.organizationId, "settings");
+    const late = await completeFit(dispatched);
+
+    expect(late).toMatchObject({ kind: "rejected", reason: "stale_watermark" });
+    const active = await RoutingPlanModel.findActive(org.organizationId);
+    expect(inline).toEqual({ status: "active", planId: active?.id });
+    expect(
+      (await getAutoRoutingSettings(org.organizationId)).status.lastFitError,
+    ).toBeNull();
+    expect(await isDirty(org.organizationId)).toBe(false);
+  });
+
+  test("an inline fit racing a dispatched one leaves one active plan and nothing due", async ({
+    makeOrganization,
+  }) => {
+    const org = await configuredOrganization(makeOrganization);
+    await seedHistory(org, 40);
+    await AutoRoutingSettingsModel.update(org.organizationId, {
+      budgetUsdPerDay: "30.00",
+    });
+    await autoRoutingDispatcher.dispatch();
+    const [task] = await pendingFits(org.organizationId);
+
+    const [inline] = await Promise.all([
+      fitNow(org.organizationId, "settings"),
+      handleAutoRoutingFit(task.payload),
+    ]);
+
+    expect(inline?.status).toBe("active");
+    const active = (await plans(org.organizationId)).filter(
+      (plan) => plan.status === "active",
+    );
+    expect(active).toHaveLength(1);
+    expect(active[0].budgetUsdPerDay).toBe("30.00");
+    expect(await isDirty(org.organizationId)).toBe(false);
+  });
 });
 
 // === Helpers ===
@@ -239,6 +285,19 @@ async function isDirty(organizationId: string): Promise<boolean> {
   const settings = await AutoRoutingSettingsModel.find(organizationId);
   if (!settings) throw new Error("organization has no LLM Proxy");
   return settings.generation > settings.plannedGeneration;
+}
+
+function pendingFits(organizationId: string) {
+  return db
+    .select()
+    .from(schema.tasksTable)
+    .where(
+      and(
+        eq(schema.tasksTable.taskType, "auto_routing_fit"),
+        eq(schema.tasksTable.status, "pending"),
+        sql`${schema.tasksTable.payload}->>'organizationId' = ${organizationId}`,
+      ),
+    );
 }
 
 function plans(organizationId: string) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import {
@@ -145,7 +146,8 @@ export function AutoRoutingSettingsForm({
             size="sm"
             disabled={update.isPending || !form.formState.isDirty}
           >
-            Save
+            {update.isPending && <Loader2 className="animate-spin" />}
+            <span>Save</span>
           </Button>
         )}
       </form>
@@ -183,7 +185,7 @@ function toFormValues(settings: AutoRoutingSettings): FormValues {
   };
 }
 
-/** Only edited fields go out: every saved change schedules a new plan. */
+/** Only edited fields go out: every saved change fits a new plan. */
 function changedFields(
   values: FormValues,
   dirty: Partial<Record<keyof FormValues, boolean>>,

@@ -1,5 +1,10 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
@@ -14,6 +19,8 @@ const {
 
 export type AutoRoutingSettings =
   archestraApiTypes.GetAutoRoutingSettingsResponses["200"];
+type AutoRoutingSettingsChange =
+  archestraApiTypes.UpdateAutoRoutingSettingsResponses["200"];
 export type AutoRoutingSettingsUpdate =
   archestraApiTypes.UpdateAutoRoutingSettingsData["body"];
 export type AutoRoutingPlanSummary =
@@ -33,38 +40,14 @@ const autoRoutingKeys = {
   plan: (id: string | null) => [...autoRoutingKeys.planDetails(), id] as const,
 };
 
-const REPLAN_POLL_INTERVAL_MS = 3_000;
-
-export function isReplanPending(settings: AutoRoutingSettings): boolean {
-  return settings.generation > settings.plannedGeneration;
-}
-
 export function useAutoRoutingSettings() {
   return useQuery({
     queryKey: autoRoutingKeys.settings(),
-    queryFn: async ({ client }) => {
+    queryFn: async () => {
       const { data, error } = await getAutoRoutingSettings();
       throwOnApiError(error, { toastOnError: false });
-      const previous = client.getQueryData<AutoRoutingSettings | null>(
-        autoRoutingKeys.settings(),
-      );
-      if (
-        previous &&
-        data &&
-        previous.plannedGeneration !== data.plannedGeneration
-      ) {
-        // A fit finished: plans gained a row and the old one changed status.
-        void client.invalidateQueries({ queryKey: autoRoutingKeys.plans() });
-        void client.invalidateQueries({
-          queryKey: autoRoutingKeys.planDetails(),
-        });
-      }
       return data ?? null;
     },
-    refetchInterval: ({ state }) =>
-      state.data && isReplanPending(state.data)
-        ? REPLAN_POLL_INTERVAL_MS
-        : false,
   });
 }
 
@@ -105,10 +88,7 @@ export function useUpdateAutoRoutingSettings() {
       }
       return data;
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: autoRoutingKeys.all });
-      toast.success("Auto routing settings saved");
-    },
+    onSuccess: (data) => applyFit(queryClient, data),
   });
 }
 
@@ -123,11 +103,35 @@ export function useReplanAutoRouting() {
       }
       return data;
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: autoRoutingKeys.all });
-      toast.success("Re-plan requested");
-    },
+    onSuccess: (data) => applyFit(queryClient, data),
   });
+}
+
+/** The response already carries the fit's outcome; only the plan lists need refetching. */
+async function applyFit(
+  queryClient: QueryClient,
+  data: AutoRoutingSettingsChange | undefined,
+) {
+  if (!data) return;
+  queryClient.setQueryData(autoRoutingKeys.settings(), data);
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: autoRoutingKeys.plans() }),
+    queryClient.invalidateQueries({ queryKey: autoRoutingKeys.planDetails() }),
+  ]);
+  switch (data.fit?.status) {
+    case undefined:
+      toast.success("Auto routing settings saved");
+      break;
+    case "active":
+      toast.success("New plan is active");
+      break;
+    case "cold_start":
+      toast.success("Saved; collecting sessions before the first plan");
+      break;
+    case "failed":
+      toast.error("Plan fit failed");
+      break;
+  }
 }
 
 export function usePreviewAutoRouting() {

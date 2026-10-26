@@ -1,6 +1,6 @@
-import { archestraApiClient } from "@archestra/shared";
+import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -135,7 +135,7 @@ const server = setupServer(
   ),
   http.put(`${API_ORIGIN}/api/auto-routing/settings`, async ({ request }) => {
     updates.push((await request.json()) as AutoRoutingSettingsUpdate);
-    return HttpResponse.json(settings);
+    return HttpResponse.json({ ...settings, fit: null });
   }),
   http.get(`${API_ORIGIN}/api/auto-routing/plans/${PLAN_ID}`, () =>
     HttpResponse.json(activePlan),
@@ -338,37 +338,61 @@ describe("AutoRoutingOverviewPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("follows a requested re-plan until its plan is published", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      settings = makeSettings({ generation: 4, plannedGeneration: 3 });
-      let plans: AutoRoutingPlanDetail[] = [];
-      server.use(
-        http.get(`${API_ORIGIN}/api/auto-routing/plans`, () =>
-          HttpResponse.json(plans),
-        ),
-      );
-      renderPage(<AutoRoutingPlansPage />);
-      expect(await screen.findByText("Re-plan pending")).toBeInTheDocument();
-      expect(await screen.findByText("No plans yet")).toBeInTheDocument();
+  it("shows the plan a save fitted without refetching the settings", async () => {
+    let settingsReads = 0;
+    let plans: AutoRoutingPlanDetail[] = [];
+    server.use(
+      http.get(`${API_ORIGIN}/api/auto-routing/settings`, () => {
+        settingsReads++;
+        return HttpResponse.json(settings);
+      }),
+      http.put(`${API_ORIGIN}/api/auto-routing/settings`, () => {
+        plans = [activePlan];
+        return HttpResponse.json({
+          ...withActivePlan(makeSettings({ budgetUsdPerDay: 30 })),
+          fit: { status: "active", planId: PLAN_ID },
+        } satisfies AutoRoutingSettingsChange);
+      }),
+      http.get(`${API_ORIGIN}/api/auto-routing/plans`, () =>
+        HttpResponse.json(plans),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage(<AutoRoutingPlansPage />);
+    expect(await screen.findByText("No plans yet")).toBeInTheDocument();
+    const budget = screen.getByLabelText("Daily budget (USD)");
+    await user.clear(budget);
+    await user.type(budget, "30");
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
-      settings = makeSettings({
-        generation: 4,
-        plannedGeneration: 4,
-        status: {
-          ...makeSettings().status,
-          activePlan: { id: PLAN_ID, createdAt: activePlan.createdAt },
-        },
-      });
-      plans = [activePlan];
-      await act(() => vi.advanceTimersByTimeAsync(5_000));
+    expect(await screen.findByText("$12.50/day")).toBeInTheDocument();
+    expect(screen.getByTestId("auto-routing-status")).toHaveTextContent(
+      "Active plan from",
+    );
+    expect(await screen.findByText("420")).toBeInTheDocument();
+    expect(settingsReads).toBe(1);
+  });
 
-      expect(await screen.findByText("$12.50/day")).toBeInTheDocument();
-      expect(screen.queryByText("Re-plan pending")).not.toBeInTheDocument();
-      expect(await screen.findByText("420")).toBeInTheDocument();
-    } finally {
-      vi.useRealTimers();
-    }
+  it("shows the error of a re-plan whose fit failed", async () => {
+    const error = "ARCHESTRA_ROUTER_INFEASIBLE: budget below the cheapest tier";
+    server.use(
+      http.post(`${API_ORIGIN}/api/auto-routing/replan`, () =>
+        HttpResponse.json({
+          ...makeSettings({
+            status: { ...makeSettings().status, lastFitError: error },
+          }),
+          fit: { status: "failed", planId: PLAN_ID, error },
+        } satisfies AutoRoutingSettingsChange),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: "Re-plan now" }),
+    );
+
+    expect(await screen.findByText("Last fit failed")).toBeInTheDocument();
+    expect(screen.getByText(error)).toBeInTheDocument();
   });
 
   it("previews the tier a prompt would get", async () => {
@@ -409,6 +433,19 @@ describe("AutoRoutingOverviewPage", () => {
     expect(within(result).getByText("$0.000123")).toBeInTheDocument();
   });
 });
+
+type AutoRoutingSettingsChange =
+  archestraApiTypes.UpdateAutoRoutingSettingsResponses["200"];
+
+function withActivePlan(base: AutoRoutingSettings): AutoRoutingSettings {
+  return {
+    ...base,
+    status: {
+      ...base.status,
+      activePlan: { id: PLAN_ID, createdAt: activePlan.createdAt },
+    },
+  };
+}
 
 function setCanUpdate(canUpdate: boolean) {
   vi.mocked(useHasPermissions).mockReturnValue({

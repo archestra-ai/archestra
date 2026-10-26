@@ -30254,6 +30254,17 @@ export type UpdateAutoRoutingSettingsResponses = {
             };
             lastFitError: string | null;
         };
+        fit: {
+            status: 'active';
+            planId: string;
+        } | {
+            status: 'cold_start';
+            planId: string | null;
+        } | {
+            status: 'failed';
+            planId: string | null;
+            error: string;
+        } | null;
     };
 };
 
@@ -30565,7 +30576,50 @@ export type ReplanAutoRoutingResponses = {
      * Default Response
      */
     200: {
+        enabled: boolean;
+        budgetUsdPerDay: number | null;
+        tiers: {
+            fast: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            } | null;
+            normal: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            } | null;
+            smart: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            } | null;
+        };
         generation: number;
+        plannedGeneration: number;
+        status: {
+            activePlan: {
+                id: string;
+                createdAt: string;
+            } | null;
+            coldStart: {
+                scorerVersionId: string;
+                sessions: number;
+                required: number;
+            };
+            lastFitError: string | null;
+        };
+        fit: {
+            status: 'active';
+            planId: string;
+        } | {
+            status: 'cold_start';
+            planId: string | null;
+        } | {
+            status: 'failed';
+            planId: string | null;
+            error: string;
+        } | null;
     };
 };
 

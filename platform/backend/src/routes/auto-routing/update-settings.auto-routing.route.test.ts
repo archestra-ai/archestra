@@ -1,9 +1,14 @@
 import { randomUUID } from "node:crypto";
+import { and, eq } from "drizzle-orm";
+import { activeScorerVersion } from "@/auto-routing/router";
 import config from "@/config";
+import db, { schema } from "@/database";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import ModelModel from "@/models/model";
+import RoutingPlanModel from "@/models/routing-plan";
 import { beforeEach, describe, expect, test } from "@/test";
 import { configureAutoRouting, makeRoutingModel } from "@/test/auto-routing";
+import { seedFitHistory } from "@/test/auto-routing-fit";
 import { useRouteTestApp } from "@/test/route-test-app";
 import autoRoutingRoutes from "./auto-routing.routes";
 
@@ -11,6 +16,7 @@ describe("PUT /api/auto-routing/settings", () => {
   const ctx = useRouteTestApp(autoRoutingRoutes);
   beforeEach(() => {
     config.autoRouting.enabled = true;
+    config.autoRouting.minSessions = 30;
   });
 
   const putSettings = (payload: Record<string, unknown>) =>
@@ -20,7 +26,7 @@ describe("PUT /api/auto-routing/settings", () => {
       payload,
     });
 
-  test("stores the trio and budget and bumps the generation", async () => {
+  test("stores the trio and budget and records a cold start without history", async () => {
     const [fast, normal, smart] = await Promise.all([
       makeRoutingModel(),
       makeRoutingModel(),
@@ -44,9 +50,11 @@ describe("PUT /api/auto-routing/settings", () => {
         normal: { id: normal.id },
         smart: { id: smart.id },
       },
-      generation: 1,
-      plannedGeneration: 0,
+      fit: { status: "cold_start" },
+      status: { activePlan: null },
     });
+    const body = response.json();
+    expect(body.plannedGeneration).toBe(body.generation);
     expect(
       await AutoRoutingSettingsModel.find(ctx.organizationId),
     ).toMatchObject({
@@ -55,7 +63,77 @@ describe("PUT /api/auto-routing/settings", () => {
       fastModelId: fast.id,
       normalModelId: normal.id,
       smartModelId: smart.id,
-      generation: 1,
+      generation: body.generation,
+    });
+  });
+
+  test("a budget change fits an active plan on the new budget", async () => {
+    const trio = await configureAutoRouting(ctx.organizationId);
+    await seedHistory(ctx.organizationId, trio[2].id);
+
+    const response = await putSettings({ budgetUsdPerDay: 30 });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const body = response.json();
+    expect(body.fit).toEqual({ status: "active", planId: expect.any(String) });
+    expect(body.status.activePlan.id).toBe(body.fit.planId);
+    expect(body.plannedGeneration).toBe(body.generation);
+    expect(await RoutingPlanModel.findActive(ctx.organizationId)).toMatchObject(
+      {
+        id: body.fit.planId,
+        budgetUsdPerDay: "30.00",
+        generation: body.generation,
+        trigger: "settings",
+      },
+    );
+  });
+
+  test("a router failure saves the settings and reports the failed fit", async () => {
+    const trio = await configureAutoRouting(ctx.organizationId);
+    await seedHistory(ctx.organizationId, trio[2].id);
+
+    const response = await putSettings({ budgetUsdPerDay: 0.01 });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const body = response.json();
+    expect(body.fit).toMatchObject({ status: "failed" });
+    expect(body.fit.error).toMatch(/^ARCHESTRA_ROUTER_INFEASIBLE: /);
+    expect(body.status.lastFitError).toBe(body.fit.error);
+    expect(
+      (await AutoRoutingSettingsModel.find(ctx.organizationId))
+        ?.budgetUsdPerDay,
+    ).toBe("0.01");
+  });
+
+  test("concurrent changes leave one active plan on the latest settings", async () => {
+    const trio = await configureAutoRouting(ctx.organizationId);
+    await seedHistory(ctx.organizationId, trio[2].id);
+
+    const responses = await Promise.all(
+      [30, 40].map((budgetUsdPerDay) => putSettings({ budgetUsdPerDay })),
+    );
+
+    for (const response of responses) {
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({
+        fit: { status: "active" },
+        status: { lastFitError: null },
+      });
+    }
+    const settings = await AutoRoutingSettingsModel.find(ctx.organizationId);
+    const active = await db
+      .select()
+      .from(schema.routingPlansTable)
+      .where(
+        and(
+          eq(schema.routingPlansTable.organizationId, ctx.organizationId),
+          eq(schema.routingPlansTable.status, "active"),
+        ),
+      );
+    expect(active).toHaveLength(1);
+    expect(active[0]).toMatchObject({
+      generation: settings?.generation,
+      budgetUsdPerDay: settings?.budgetUsdPerDay,
     });
   });
 
@@ -70,6 +148,7 @@ describe("PUT /api/auto-routing/settings", () => {
       budgetUsdPerDay: 50,
       tiers: { fast: { id: trio[0].id } },
       generation: 2,
+      fit: null,
     });
   });
 
@@ -201,3 +280,12 @@ describe("PUT /api/auto-routing/settings", () => {
     expect(accepted.statusCode, accepted.body).toBe(200);
   });
 });
+
+async function seedHistory(organizationId: string, modelId: string) {
+  await seedFitHistory({
+    organizationId,
+    modelId,
+    scorerVersionId: (await activeScorerVersion()).id,
+    sessions: 40,
+  });
+}

@@ -2198,7 +2198,7 @@ export const postApiAuthBy__ = <ThrowOnError extends boolean = false>(options: O
 export const getAutoRoutingSettings = <ThrowOnError extends boolean = false>(options?: Options<GetAutoRoutingSettingsData, ThrowOnError>) => (options?.client ?? client).get<GetAutoRoutingSettingsResponses, GetAutoRoutingSettingsErrors, ThrowOnError>({ url: '/api/auto-routing/settings', ...options });
 
 /**
- * Update auto routing settings; any change schedules a new plan
+ * Update auto routing settings and fit a plan on them when auto routing is enabled and configured
  *
  * Authentication:
  *
@@ -2244,7 +2244,7 @@ export const getAutoRoutingPlans = <ThrowOnError extends boolean = false>(option
 export const getAutoRoutingPlan = <ThrowOnError extends boolean = false>(options: Options<GetAutoRoutingPlanData, ThrowOnError>) => (options.client ?? client).get<GetAutoRoutingPlanResponses, GetAutoRoutingPlanErrors, ThrowOnError>({ url: '/api/auto-routing/plans/{id}', ...options });
 
 /**
- * Request a new auto routing plan at the current settings
+ * Fit a new auto routing plan at the current settings
  *
  * Authentication:
  *

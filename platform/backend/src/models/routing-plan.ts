@@ -1,4 +1,4 @@
-import { and, desc, eq, max, ne, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, max, ne, notLike, or, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import {
   lockRoutingPlan,
@@ -55,6 +55,27 @@ class RoutingPlanModel {
     return row ? RoutingPlanRecordSchema.parse(row) : null;
   }
 
+  /** The newest fit outcome that was not rejected at publication. */
+  static async findLatestOutcome(
+    organizationId: string,
+  ): Promise<RoutingPlan | null> {
+    const [row] = await db
+      .select()
+      .from(plans)
+      .where(
+        and(
+          eq(plans.organizationId, organizationId),
+          or(
+            isNull(plans.error),
+            notLike(plans.error, `${REJECTED_AT_PUBLICATION}%`),
+          ),
+        ),
+      )
+      .orderBy(desc(plans.createdAt), desc(plans.id))
+      .limit(1);
+    return row ? SelectRoutingPlanSchema.parse(row) : null;
+  }
+
   /**
    * Records a fit's outcome under the routing-plan lock. The fit loses — and is
    * recorded as failed — when settings changed since it read them, it was
@@ -104,7 +125,7 @@ class RoutingPlanModel {
       const outcome = rejection
         ? {
             status: "failed" as const,
-            error: `Rejected at publication: ${rejection}`,
+            error: `${REJECTED_AT_PUBLICATION}${rejection}`,
             diagnostics: fit.outcome.diagnostics,
           }
         : fit.outcome;
@@ -150,6 +171,8 @@ class RoutingPlanModel {
 }
 
 export default RoutingPlanModel;
+
+const REJECTED_AT_PUBLICATION = "Rejected at publication: ";
 
 /** Plans with their scorer version and how many sessions each routed. */
 function planRecords() {

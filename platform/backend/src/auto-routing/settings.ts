@@ -7,13 +7,16 @@ import { ApiError, type Model } from "@/types";
 import type {
   AutoRoutingSettings,
   RoutingPlanRecord,
+  RoutingPlanTrigger,
 } from "@/types/auto-routing";
 import type {
   AutoRoutingPlanDetail,
   AutoRoutingPlanSummary,
+  AutoRoutingSettingsChangeResponse,
   AutoRoutingSettingsResponse,
   UpdateAutoRoutingSettingsBody,
 } from "@/types/auto-routing-api";
+import { fitNow } from "./fit";
 import { activeScorerVersion } from "./router";
 import { sharedLongContextThreshold, TIER_NAMES } from "./tiers";
 
@@ -32,11 +35,11 @@ export async function getAutoRoutingSettings(
   );
 }
 
-/** Validates the resulting state, then writes it and bumps the generation so the next fit uses it. */
+/** Validates the resulting state, writes it with a generation bump, then fits a plan on it. */
 export async function updateAutoRoutingSettings(
   organizationId: string,
   body: UpdateAutoRoutingSettingsBody,
-): Promise<AutoRoutingSettingsResponse> {
+): Promise<AutoRoutingSettingsChangeResponse> {
   const current = await loadAutoRoutingSettings(organizationId);
   const next = { ...current, ...body };
   await assertTierModels(
@@ -74,17 +77,17 @@ export async function updateAutoRoutingSettings(
     smartModelId: body.smartModelId,
   });
   if (!updated) throw new ApiError(404, "LLM Proxy not found");
-  return describe(organizationId, updated);
+  return fitAndDescribe(organizationId, "settings");
 }
 
-/** Asks for a fit at the current settings; the dispatcher picks it up. */
-export async function requestAutoRoutingReplan(
+/** Fits a new plan at the current settings. */
+export async function replanAutoRouting(
   organizationId: string,
-): Promise<AutoRoutingSettings> {
+): Promise<AutoRoutingSettingsChangeResponse> {
   await AgentModel.getOrgLlmProxy(organizationId);
   const updated = await AutoRoutingSettingsModel.update(organizationId, {});
   if (!updated) throw new ApiError(404, "LLM Proxy not found");
-  return updated;
+  return fitAndDescribe(organizationId, "manual");
 }
 
 export function toPlanSummary(
@@ -127,6 +130,23 @@ export async function loadAutoRoutingSettings(
   const settings = await AutoRoutingSettingsModel.find(organizationId);
   if (!settings) throw new ApiError(404, "LLM Proxy not found");
   return settings;
+}
+
+async function fitAndDescribe(
+  organizationId: string,
+  trigger: RoutingPlanTrigger,
+): Promise<AutoRoutingSettingsChangeResponse> {
+  // prepareFit activates the scorer version, which must not bump a disabled organization.
+  const { enabled } = await loadAutoRoutingSettings(organizationId);
+  const fit = enabled ? await fitNow(organizationId, trigger) : null;
+  const described = await describe(
+    organizationId,
+    await loadAutoRoutingSettings(organizationId),
+  );
+  // An unexpected fit error records no plan, so only `fit` carries it.
+  const lastFitError =
+    fit?.status === "failed" ? fit.error : described.status.lastFitError;
+  return { ...described, status: { ...described.status, lastFitError }, fit };
 }
 
 /** A tier runs agent sessions, so it must chat and call tools — the subagent-tier rule. */
@@ -173,10 +193,10 @@ async function describe(
   settings: AutoRoutingSettings,
 ): Promise<AutoRoutingSettingsResponse> {
   const tierIds = TIER_NAMES.map((tier) => settings[TIER_FIELDS[tier]]);
-  const [models, active, [latest], scorerVersion] = await Promise.all([
+  const [models, active, latest, scorerVersion] = await Promise.all([
     ModelModel.findByIds(tierIds.filter((id): id is string => id !== null)),
     RoutingPlanModel.findActive(organizationId),
-    RoutingPlanModel.findHistory(organizationId, 1),
+    RoutingPlanModel.findLatestOutcome(organizationId),
     activeScorerVersion(),
   ]);
   const byId = new Map(models.map((model) => [model.id, model]));
@@ -209,7 +229,7 @@ async function describe(
         }),
         required: config.autoRouting.minSessions,
       },
-      lastFitError: latest?.plan.status === "failed" ? latest.plan.error : null,
+      lastFitError: latest?.status === "failed" ? latest.error : null,
     },
   };
 }

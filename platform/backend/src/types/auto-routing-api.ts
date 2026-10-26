@@ -47,6 +47,30 @@ export type AutoRoutingSettingsResponse = z.infer<
   typeof AutoRoutingSettingsResponseSchema
 >;
 
+/** Outcome of the fit a settings change or re-plan ran; a fit that lost to a concurrent one reports the winner's. */
+export const AutoRoutingFitResultSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("active"), planId: z.string().uuid() }),
+  z.object({
+    status: z.literal("cold_start"),
+    planId: z.string().uuid().nullable(),
+  }),
+  z.object({
+    status: z.literal("failed"),
+    planId: z.string().uuid().nullable(),
+    error: z.string(),
+  }),
+]);
+export type AutoRoutingFitResult = z.infer<typeof AutoRoutingFitResultSchema>;
+
+/** `fit` is null when no fit ran: auto routing is disabled or not fully configured. */
+export const AutoRoutingSettingsChangeResponseSchema =
+  AutoRoutingSettingsResponseSchema.extend({
+    fit: AutoRoutingFitResultSchema.nullable(),
+  });
+export type AutoRoutingSettingsChangeResponse = z.infer<
+  typeof AutoRoutingSettingsChangeResponseSchema
+>;
+
 export const UpdateAutoRoutingSettingsBodySchema = z.strictObject({
   enabled: z.boolean().optional(),
   budgetUsdPerDay: BudgetUsdPerDaySchema.optional(),

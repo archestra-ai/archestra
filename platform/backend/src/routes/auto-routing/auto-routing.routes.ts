@@ -4,7 +4,7 @@ import { z } from "zod";
 import { previewAutoRouting } from "@/auto-routing/preview";
 import {
   getAutoRoutingSettings,
-  requestAutoRoutingReplan,
+  replanAutoRouting,
   toPlanDetail,
   toPlanSummary,
   updateAutoRoutingSettings,
@@ -18,6 +18,7 @@ import {
   AutoRoutingPlansQuerySchema,
   AutoRoutingPreviewBodySchema,
   AutoRoutingPreviewResponseSchema,
+  AutoRoutingSettingsChangeResponseSchema,
   AutoRoutingSettingsResponseSchema,
   UpdateAutoRoutingSettingsBodySchema,
 } from "@/types/auto-routing-api";
@@ -53,10 +54,12 @@ const autoRoutingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateAutoRoutingSettings,
         description:
-          "Update auto routing settings; any change schedules a new plan",
+          "Update auto routing settings and fit a plan on them when auto routing is enabled and configured",
         tags: TAGS,
         body: UpdateAutoRoutingSettingsBodySchema,
-        response: constructResponseSchema(AutoRoutingSettingsResponseSchema),
+        response: constructResponseSchema(
+          AutoRoutingSettingsChangeResponseSchema,
+        ),
       },
     },
     async ({ organizationId, body }, reply) =>
@@ -112,17 +115,15 @@ const autoRoutingRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.ReplanAutoRouting,
-        description: "Request a new auto routing plan at the current settings",
+        description: "Fit a new auto routing plan at the current settings",
         tags: TAGS,
         response: constructResponseSchema(
-          z.object({ generation: z.number().int() }),
+          AutoRoutingSettingsChangeResponseSchema,
         ),
       },
     },
-    async ({ organizationId }, reply) => {
-      const { generation } = await requestAutoRoutingReplan(organizationId);
-      return reply.send({ generation });
-    },
+    async ({ organizationId }, reply) =>
+      reply.send(await replanAutoRouting(organizationId)),
   );
 
   fastify.post(

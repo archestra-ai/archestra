@@ -1,13 +1,12 @@
 "use client";
 
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   type AutoRoutingPlanDetail,
   type AutoRoutingSettings,
-  isReplanPending,
   useAutoRoutingPlan,
   useAutoRoutingSettings,
   useReplanAutoRouting,
@@ -46,7 +45,6 @@ function PlanStatus({
 }) {
   const replan = useReplanAutoRouting();
   const { activePlan, coldStart, lastFitError } = settings.status;
-  const pending = isReplanPending(settings);
 
   return (
     <div className="space-y-2">
@@ -56,9 +54,6 @@ function PlanStatus({
             ? `Active plan from ${formatDate({ date: activePlan.createdAt })}`
             : `Cold start: ${coldStart.sessions} of ${coldStart.required} sessions`}
         </span>
-        {pending && (
-          <span className="text-muted-foreground">Re-plan pending</span>
-        )}
         {canUpdate && (
           <Button
             size="sm"
@@ -67,7 +62,11 @@ function PlanStatus({
             disabled={replan.isPending}
             onClick={() => replan.mutate()}
           >
-            <RefreshCw />
+            {replan.isPending ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <RefreshCw />
+            )}
             <span>Re-plan now</span>
           </Button>
         )}

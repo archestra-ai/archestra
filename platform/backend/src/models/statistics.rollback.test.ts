@@ -126,19 +126,20 @@ describe("StatisticsModel", () => {
       }),
     ]);
 
-    // 100 uncached input + 20 output + 200 cache read + 300 cache write.
-    // The 500 estimated input is absent; the measured 7 output remains.
-    // The 1h write is not stored separately and must not be added again.
+    // 100 uncached input + 20 output + 300 cache write. The 200 cache reads
+    // stay on cacheReadTokens and are not added. The 500 estimated input is
+    // absent; the measured 7 output remains. The 1h write is not stored
+    // separately and must not be added again.
     for (const row of [teams[0], agents[0], models[0], users.data[0], mine]) {
       expect(row.inputTokens).toBe(600);
       expect(row.cacheReadTokens).toBe(200);
       expect(row.cacheWriteTokens).toBe(300);
-      expect(row.totalTokens).toBe(627);
+      expect(row.totalTokens).toBe(427);
     }
-    expect(users.data[0].models?.[0].totalTokens).toBe(627);
-    expect(users.data[0].timeSeries?.[0].totalTokens).toBe(627);
-    expect(teams[0].timeSeries[0].totalTokens).toBe(627);
-    expect(overview.totalTokens).toBe(627);
+    expect(users.data[0].models?.[0].totalTokens).toBe(427);
+    expect(users.data[0].timeSeries?.[0].totalTokens).toBe(427);
+    expect(teams[0].timeSeries[0].totalTokens).toBe(427);
+    expect(overview.totalTokens).toBe(427);
     expect(users.data[0].billedCost).toBe(0);
     expect(users.data[0].subscriptionCost).toBeCloseTo(4, 5);
     const breakdown = await StatisticsModel.getMyUsageBreakdown({
@@ -151,9 +152,9 @@ describe("StatisticsModel", () => {
     expect(
       breakdown.tokenMix.freshInputTokens +
         breakdown.tokenMix.outputTokens +
-        breakdown.tokenMix.cacheReadTokens +
         breakdown.tokenMix.cacheWriteTokens,
     ).toBe(mine.totalTokens);
+    expect(breakdown.tokenMix.cacheReadTokens).toBe(200);
   });
   describe("getTeamStatistics", () => {
     test("counts team members per team instead of per organization", async ({

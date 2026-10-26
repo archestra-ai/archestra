@@ -2,7 +2,7 @@
 title: Performance & Latency
 description: Latency added by the LLM proxy and the MCP gateway, measured with external HTTP requests
 order: 5
-lastUpdated: 2026-10-24
+lastUpdated: 2026-10-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json.
@@ -61,7 +61,7 @@ Run from a clean checkout's `platform/` directory with Node.js, pnpm, Rust and D
 
 ```bash
 pnpm install --frozen-lockfile
-bash benchmarks/ci.sh --requests=300 --stream-requests=60 --repeats=2
+bash benchmarks/ci.sh --requests=300 --stream-requests=300 --repeats=2
 ```
 
 The launcher creates and removes a disposable database. The [benchmark README](https://github.com/archestra-ai/archestra/tree/main/platform/benchmarks) describes workload options and timing boundaries; the [benchmark workflow](https://github.com/archestra-ai/archestra/actions/workflows/llm-proxy-benchmark.yml) retains each run's measurements and tested revision.

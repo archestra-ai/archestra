@@ -134,9 +134,15 @@ Grok Build differs from the other clients in three ways:
   Grok's Agent Client Protocol server (`grok agent stdio`) instead.
 - Grok drops every MCP tool whose name contains `__`, and every gateway tool
   does. `archestra-grok-mcp` connects Grok to the gateway over stdio and shows
-  `__` as `--` in tool names. The model calls gateway tools through Grok's
-  `use_tool` dispatcher, so the LLM proxy sees `use_tool` calls. The gateway
-  still applies policy to each tool call.
+  `__` as `--` in tool names.
+- Grok offers the model MCP tools only through its `search_tool` and `use_tool`
+  pair, so a model request would declare no gateway tool and the LLM proxy
+  could deliver no remedy for a blocked call. `archestra-grok-llm` listens on
+  loopback between Grok and the proxy: it declares the gateway tools the bridge
+  listed (as the gateway sent them, attestation included) in place of the pair,
+  shows earlier `use_tool` calls as the gateway calls they made, and turns the
+  model's gateway calls back into `use_tool` calls for Grok to run. The proxy
+  sees the same wire as from Hermes; Grok runs the same tools as before.
 - Title, summary and suggestion calls use the Agent's model through the proxy.
   Telemetry, auto-update, remote configuration and xAI-hosted tools are off.
 - A turn the model itself ended early (output limit, request limit, refusal,

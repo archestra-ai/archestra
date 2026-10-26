@@ -62,7 +62,7 @@ Instead of creating a separate rule for each person, go to **Settings → LLM** 
 ## How Usage Is Counted
 
 - **Spend (`$`):** counts metered API-key calls at the model's token prices. Calls on flat-rate subscriptions record `$0` spend and do not consume spend limits (see [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost)).
-- **Tokens:** counts total tokens reported by the provider after each call finishes (input, output, cache reads, and cache writes), including subscription traffic. Because token counts arrive when a response completes, requests already in flight can push usage slightly past a token limit before subsequent requests are blocked.
+- **Tokens:** counts newly processed input and output tokens reported by the provider after each call finishes (including cache writes and subscription traffic; reused cached input does not consume token limits). Because token counts arrive when a response completes, requests already in flight can push usage slightly past a token limit before subsequent requests are blocked.
 - **Requests:** counts one request when the proxy admits a model call, including subscription traffic.
 
 ## When a Request Is Blocked

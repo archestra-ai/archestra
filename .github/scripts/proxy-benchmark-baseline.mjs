@@ -22,7 +22,7 @@ export function benchmarkPayload(summary, gitCommit) {
   return `${payloadPrefix}${Buffer.from(json).toString("base64")} -->`;
 }
 
-function readPayload(body) {
+export function readBenchmarkPayload(body) {
   if (typeof body !== "string" || body.length > 65536) return null;
   const encoded = body.match(
     /<!-- archestra-llm-proxy-benchmark-data:v1:([A-Za-z0-9+/=]+) -->/,
@@ -107,8 +107,11 @@ export async function findReleaseBenchmark({ github, context, remeasured }) {
       remeasured?.complete === true &&
       !remeasured.diagnostic &&
       remeasured.gitCommit === commit.sha &&
-      (await platformTree({ github, repo, treeSha: commit.commit.tree.sha })) ===
-        remeasured.platformTree
+      (await platformTree({
+        github,
+        repo,
+        treeSha: commit.commit.tree.sha,
+      })) === remeasured.platformTree
     ) {
       renderSummary(remeasured); // Only validated numeric metrics may reach the comment.
       return {
@@ -147,7 +150,7 @@ export async function findReleaseBenchmark({ github, context, remeasured }) {
         state: "first-run",
         reason: `First recorded release benchmark: ${previous.tag_name} has no saved benchmark comment.`,
       };
-    const payload = readPayload(saved.body);
+    const payload = readBenchmarkPayload(saved.body);
     if (!payload)
       return missing(
         `Last release (${previous.tag_name}) has no saved machine-readable metrics. Older comments and expired workflow artifacts cannot supply a baseline.`,

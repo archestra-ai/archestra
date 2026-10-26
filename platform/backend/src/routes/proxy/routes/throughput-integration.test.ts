@@ -67,6 +67,74 @@ describe("native proxy throughput", () => {
     );
   });
 
+  test("cached prompts do not exhaust token allowance through the native proxy", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    const key = await makePassthroughCredential({
+      organizationId: org.id,
+      ownerId: user.id,
+    });
+    const rule = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "tokens",
+      cleanupInterval: "calendar_day",
+      limitValue: 200,
+    });
+    let calls = 0;
+    respond = () => {
+      calls++;
+      return Response.json({
+        id: "cached-prompt",
+        object: "chat.completion",
+        created: 1,
+        model: "gpt-4o",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: "Hello" },
+            finish_reason: "stop",
+          },
+        ],
+        usage: {
+          prompt_tokens: 1000,
+          prompt_tokens_details: { cached_tokens: 900 },
+          completion_tokens: 10,
+          total_tokens: 1010,
+        },
+      });
+    };
+    const request = {
+      method: "POST" as const,
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        authorization: "Bearer sk-test-only",
+        "x-archestra-virtual-key": key,
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    };
+    expect((await app.inject(request)).statusCode).toBe(200);
+    expect(
+      (await LlmThroughputModel.usage([rule])).get(rule.id)?.currentUsage,
+    ).toBe(110);
+    expect((await app.inject(request)).statusCode).toBe(200);
+    expect(
+      (await LlmThroughputModel.usage([rule])).get(rule.id)?.currentUsage,
+    ).toBe(220);
+    expect((await app.inject(request)).statusCode).toBe(429);
+    expect(calls).toBe(2);
+  });
+
   for (const storageFailure of [false, true, "tokens"] as const) {
     test(`minute Spend charges actual cost and preserves interaction accounting (storage failure ${storageFailure})`, async ({
       makeOrganization,

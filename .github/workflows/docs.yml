@@ -58,8 +58,10 @@ jobs:
     name: Docs Link Check
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 75
     permissions:
       contents: read
+      pull-requests: read # Validate the release's saved benchmark before queue entry.
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -90,6 +92,30 @@ jobs:
 
       - name: Run docs check regression tests
         run: python3 -m unittest discover -s .github/scripts -p 'test_docs_*.py'
+
+      # This required check must stay pending until benchmark codegen finishes.
+      # Otherwise the merge queue locks the release branch before its tables land.
+      - name: Require current release benchmark tables
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.user.login == 'archestra-ci[bot]' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          startsWith(github.event.pull_request.head.ref, 'release-please--branches--') &&
+          endsWith(github.event.pull_request.head.ref, '--components--platform')
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { verifyBenchmarkDocs } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/update-proxy-benchmark-docs.mjs`);
+            for (let attempt = 0; attempt < 140; attempt++) {
+              const result = await verifyBenchmarkDocs({github, context});
+              if (result.ready) {
+                core.info(result.reason);
+                return;
+              }
+              core.info(result.reason);
+              if (attempt < 139) await new Promise(resolve => setTimeout(resolve, 30000));
+            }
+            core.setFailed('Release benchmark tables are not current. Inspect LLM Proxy Benchmark publication before enqueueing.');
 
   # Standalone manual validation retains the local build fallback. Queue/PR
   # validation is owned by platform-e2e-tests.yml, where capture can depend

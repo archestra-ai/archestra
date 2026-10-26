@@ -44,6 +44,7 @@ import type {
 } from "@/types";
 import { ApiError } from "@/types";
 import type { ReasoningEffort } from "@/types/model";
+import { streamChatCompletionChunks } from "./chat-completions-stream";
 import {
   makeOpenAiCompatibleEmbeddingsAdapterFactory,
   OpenAIRequestAdapter,
@@ -421,15 +422,9 @@ export const azureAdapterFactory: LLMProvider<
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
 
-    const stream = await azureClient.chat.completions.create(azureRequest);
-
-    return {
-      [Symbol.asyncIterator]: async function* () {
-        for await (const chunk of stream) {
-          yield chunk as AzureStreamChunk;
-        }
-      },
-    };
+    return streamChatCompletionChunks<AzureStreamChunk>(
+      azureClient.chat.completions.create(azureRequest),
+    );
   },
 
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {

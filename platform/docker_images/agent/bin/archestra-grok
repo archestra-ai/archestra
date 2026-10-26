@@ -33,6 +33,31 @@ export GROK_DISABLE_AUTOUPDATER=1
 mkdir -p "${runtime_dir}" "${GROK_HOME}/rules"
 chmod 0700 "${GROK_HOME}"
 
+# Grok offers the model only `search_tool` and `use_tool` for MCP tools, so the
+# LLM proxy would see no gateway tool and could deliver no remedy. The wire
+# adapter on loopback declares the gateway's tools to the model and turns the
+# model's gateway calls back into the `use_tool` calls Grok runs. The bridge
+# publishes the gateway's tool list for it; the adapter exits with this
+# process.
+export ARCHESTRA_GROK_GATEWAY_CATALOG="${runtime_dir}/grok-gateway-tools.json"
+rm -f "${ARCHESTRA_GROK_GATEWAY_CATALOG}"
+llm_port_file="${runtime_dir}/grok-llm.port"
+rm -f "${llm_port_file}"
+ARCHESTRA_GROK_UPSTREAM_URL="${OPENAI_BASE_URL}" ARCHESTRA_GROK_LLM_PORT_FILE="${llm_port_file}" \
+  "${script_dir}/archestra-grok-llm" &
+for _ in $(seq 1 100); do
+  [[ -s "${llm_port_file}" ]] && break
+  sleep 0.1
+done
+if [[ ! -s "${llm_port_file}" ]]; then
+  echo "archestra: the Grok Build wire adapter did not start" >&2
+  "${script_dir}/archestra-grok-turn-failure" unavailable
+  exit 78
+fi
+# Grok adds /chat/completions to this origin; the adapter puts the proxy's
+# route back in front of it.
+export OPENAI_BASE_URL="http://127.0.0.1:$(<"${llm_port_file}")"
+
 # Home-level rules load for every project without folder trust and without a
 # file in the workspace. Grok gives them to the model with its own prompt.
 rules_file="${GROK_HOME}/rules/archestra-runtime.md"
@@ -106,6 +131,11 @@ lines = [
     "",
     "[managed_mcps]",
     "enabled = false",
+    "",
+    # A ruling or a workspace file read through the gateway must reach the
+    # model whole; Grok's default cuts MCP results at 20 kB.
+    "[mcp]",
+    "max_output_bytes = 200000",
     "",
     # Only the Agent's gateway serves MCP tools. Other harnesses' settings in
     # the workspace or home directory do not add servers or hooks.

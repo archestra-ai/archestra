@@ -163,7 +163,7 @@ jobs:
             fi
             bash benchmarks/ci.sh --cpu-profile --scenarios=chat,tools --concurrency=1,10,50 --requests=1000 --repeats=3
           else
-            bash benchmarks/ci.sh --requests=300 --stream-requests=60 --repeats=2 "--web-workers=$WEB_WORKERS"
+            bash benchmarks/ci.sh --requests=300 --stream-requests=300 --repeats=2 "--web-workers=$WEB_WORKERS"
           fi
       - name: Measure the previous release on the same runner
         # Release comments compare with this, not with numbers from whatever

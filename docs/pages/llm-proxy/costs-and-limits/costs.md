@@ -20,7 +20,7 @@ Pick a time range in the top-right corner (**Today**, **Last 7 days**, **Last 30
 - **API spend:** metered charges from per-token API keys.
 - **Subscription usage estimate:** what calls through flat-rate subscriptions would have cost at list API rates (see [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost)).
 - **Requests:** total model calls in the selected period.
-- **Tokens:** combined input, output, and cached tokens.
+- **Tokens:** newly processed input and output tokens (including cache writes; reused cached input is shown separately and does not add to the total).
 - **Active people:** distinct users who ran a model call in the period.
 
 ## Slice Usage in the Cost Explorer

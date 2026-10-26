@@ -102,7 +102,7 @@ it("distinguishes API and billed spend from subscription estimates and explains 
     key: "Enter",
   });
   fireEvent.click(screen.getByRole("menuitem", { name: /^Tokens$/ }));
-  expect(screen.getByText(/Counts recorded token usage/)).toHaveTextContent(
-    "Requests in flight may not appear yet.",
+  expect(screen.getByText(/Counts newly processed input/)).toHaveTextContent(
+    "Reused cached input is shown separately and is not included.",
   );
 });

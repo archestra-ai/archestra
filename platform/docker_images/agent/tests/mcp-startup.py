@@ -41,7 +41,7 @@ class Gateway(ThreadingHTTPServer):
         self.discovery_failed = threading.Event()
         self.binding_headers = []
         self.prompts = []
-        # Grok side calls (no use_tool) that carry the task text.
+        # Grok side calls (no gateway tools) that carry the task text.
         self.aux_task_requests = []
 
     def inference(self):
@@ -122,8 +122,8 @@ class Handler(BaseHTTPRequestHandler):
                 names.extend(tool["name"] + "." + item["name"] for item in tool.get("tools", []))
             else:
                 names.append(tool.get("name") or tool.get("function", {}).get("name", ""))
-        if CLIENT == "grok" and "use_tool" not in names:
-            # Session summaries and other side calls declare no gateway route.
+        if CLIENT == "grok" and not any(name.endswith(TOOLS[0].removeprefix("archestra__")) for name in names):
+            # Session summaries and other side calls declare no gateway tool.
             # One that carries the task still counts as inference for the
             # barrier: it must not run before the catalog is loaded.
             if "recovery tool" in json.dumps(request.get("messages") or ""):
@@ -141,9 +141,6 @@ class Handler(BaseHTTPRequestHandler):
         if len(self.server.requests) == 1:
             print(f"{CLIENT}: first request gateway tools: {[n for n in names if 'remedy' in n or 'yell' in n]}", flush=True)
         tool = next((name for name in names if len(self.server.calls) < len(TOOLS) and name.endswith(TOOLS[len(self.server.calls)].removeprefix("archestra__"))), None)
-        if CLIENT == "grok":
-            # Grok reaches MCP tools only through its use_tool dispatcher.
-            tool = "use_tool" if len(self.server.calls) < len(TOOLS) else None
         if self.path.split("?", 1)[0].endswith("/messages"):
             self.anthropic(tool)
         elif self.path.endswith("/chat/completions"):
@@ -174,9 +171,7 @@ class Handler(BaseHTTPRequestHandler):
         message = {"role": "assistant", "content": "STARTUP_OK"}
         finish = "stop"
         if tool:
-            # The bridge spells gateway `__` as `--`; Grok prefixes its server name.
-            arguments = json.dumps({"tool_name": "archestra__" + TOOLS[len(self.server.calls)].replace("__", "--"), "tool_input": {}}) if CLIENT == "grok" else "{}"
-            message = {"role": "assistant", "content": None, "tool_calls": [{"index": 0, "id": "call_test_" + self.reply_id, "type": "function", "function": {"name": tool, "arguments": arguments}}]}
+            message = {"role": "assistant", "content": None, "tool_calls": [{"index": 0, "id": "call_test_" + self.reply_id, "type": "function", "function": {"name": tool, "arguments": "{}"}}]}
             finish = "tool_calls"
         response = {"id": "chatcmpl-test", "object": "chat.completion", "created": 1, "model": "gpt-4.1", "choices": [{"index": 0, "message": message, "finish_reason": finish}], "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}
         if request.get("stream"):
@@ -224,6 +219,34 @@ def stop_retained_client(tmux, env):
 
 
 class StartupTest(unittest.TestCase):
+    if CLIENT == "hermes":
+        def test_agent_build_starts_discovery(self):
+            # Exercise the real agent builder before any background thread exists.
+            server = Gateway()
+            server.release.set()
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            try:
+                with tempfile.TemporaryDirectory() as directory:
+                    origin = f"http://127.0.0.1:{server.server_port}"
+                    Path(directory, "config.yaml").write_text(json.dumps({
+                        "model": {"default": "gpt-4.1", "provider": "openai", "base_url": origin + "/v1"},
+                        "mcp_servers": {"archestra": {"url": origin + "/mcp"}},
+                        "mcp_discovery_timeout": 10,
+                    }))
+                    result = subprocess.run(
+                        ["/opt/hermes/.venv/bin/python", "-c",
+                         "from tui_gateway.server import _make_agent; "
+                         "_make_agent('startup-test', 'test-key', model_override='gpt-4.1', provider_override='openai')"],
+                        env={**os.environ, "HERMES_HOME": directory, "OPENAI_API_KEY": "test-key", "OPENAI_BASE_URL": origin + "/v1"},
+                        capture_output=True, text=True, timeout=30,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertTrue(server.catalog_sent)
+                    self.assertFalse(server.inference())
+            finally:
+                server.shutdown()
+                server.server_close()
+
     def test_missing_runtime_binding_is_fail_closed(self):
         self.run_client("one_shot", missing_binding=True)
 
@@ -370,7 +393,10 @@ class StartupTest(unittest.TestCase):
                     # ~10s after a gateway error) bounded time to write the failure.
                     observed = 40 if failure in ("timeout", "empty") else 12
                     elapsed = time.monotonic() - started
-                    if elapsed > observed and (Path(turn_prefix + ".failure").exists() or elapsed > observed + 30):
+                    # The envelope is published before the helper writes its
+                    # completion marker. Wait for both before asserting on them.
+                    completed_failure = Path(turn_prefix + ".failure").exists() and (runtime / "turn-complete.failed").exists()
+                    if elapsed > observed and (completed_failure or elapsed > observed + 30):
                         break
                 if server.list_started.is_set() and not server.release.is_set():
                     held_since = held_since or time.monotonic()
@@ -432,9 +458,9 @@ class StartupTest(unittest.TestCase):
             for request in server.requests:
                 self.assertTrue(request["catalog_sent"], "Inference preceded catalog discovery")
                 if CLIENT == "grok":
-                    # Grok declares its MCP dispatcher, not each gateway tool.
-                    self.assertTrue({"search_tool", "use_tool"} <= set(request["names"]), request)
-                    continue
+                    # The wire adapter shows the model the gateway tools, never
+                    # Grok's own dispatcher pair.
+                    self.assertFalse({"search_tool", "use_tool"} & set(request["names"]), request)
                 for tool in TOOLS:
                     self.assertTrue(any(name.endswith(tool.removeprefix("archestra__")) for name in request["names"]), (tool, request))
             if not plain:

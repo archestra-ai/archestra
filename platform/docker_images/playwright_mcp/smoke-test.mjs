@@ -64,6 +64,34 @@ try {
   assert.equal(runtime.mcp, expected.mcpVersion);
   assert.equal(runtime.playwright, expected.playwrightVersion);
   console.log(JSON.stringify(runtime));
+  const osVersions = JSON.parse(
+    docker(
+      "run",
+      "--rm",
+      "--entrypoint",
+      "node",
+      image,
+      "-e",
+      `
+    const fs = require("node:fs");
+    const { execFileSync } = require("node:child_process");
+    const expected = JSON.parse(process.argv[1]);
+    for (const path of ["/usr/local/lib/node_modules/npm", "/usr/local/lib/node_modules/corepack", "/usr/local/bin/npm", "/usr/local/bin/npx", "/usr/local/bin/yarn", "/usr/local/bin/yarnpkg"]) {
+      try { fs.lstatSync(path); throw new Error("Unexpected package-manager path: " + path); }
+      catch (error) { if (error.code !== "ENOENT") throw error; }
+    }
+    const versions = {};
+    for (const name of Object.keys(expected))
+      versions[name] = execFileSync("dpkg-query", ["-W", "-f=" + "$" + "{Version}", name], { encoding: "utf8" }).trim();
+    console.log(JSON.stringify(versions));
+  `,
+      JSON.stringify(expected.osPackages),
+    ),
+  );
+  assert.deepEqual(osVersions, expected.osPackages);
+  console.log(
+    JSON.stringify({ osPackages: osVersions, packageManagers: "absent" }),
+  );
   // Exactly the platform seed's explicit command, path and flags. Bind locally;
   // no production resources, credentials or external pages are used.
   container = docker(

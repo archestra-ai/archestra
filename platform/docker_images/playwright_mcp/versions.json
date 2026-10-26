@@ -8,5 +8,10 @@
   "architectures": [
     "amd64",
     "arm64"
-  ]
+  ],
+  "osPackages": {
+    "perl-base": "5.36.0-7+deb12u4",
+    "libexpat1": "2.5.0-1+deb12u5",
+    "libssl3": "3.0.22-1~deb12u2"
+  }
 }

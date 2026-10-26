@@ -9,7 +9,11 @@ browser flags. Existing sandbox behavior is preserved.
 `versions.json` records both immutable multi-architecture image inputs and the
 expected final package/runtime versions. Upstream's own Node version is recorded
 separately: upgrading MCP alone does not guarantee a patched Node runtime.
-The Dockerfile and metadata must move together.
+The Dockerfile and metadata must move together. Exact Debian security-package
+versions are also pinned for `perl-base`, `libexpat1` and `libssl3`. The runtime
+removes global npm/npx, Corepack and Yarn, including their vulnerable transitive
+packages; the built-in MCP uses its already-installed application and Chromium.
+It does not offer package-manager-based browser installation.
 
 From `platform/`:
 
@@ -27,7 +31,11 @@ the existing major and must meet the CVE-2026-111497 fixed-version floor on both
 amd64 and arm64; they cannot downgrade. A Node security patch can be adopted
 without waiting for another MCP release. HTTP failures, mismatched manifests or
 architectures, and vulnerable replacements leave the input files unchanged.
-The updater never installs packages or publishes images.
+The updater queries signed APT indexes for both amd64 and arm64 inside a disposable
+official Node container, without host mounts or credentials. Debian candidates
+must agree across architectures, meet their fixed-version floors, and never
+downgrade. It does not install packages on the host or publish images. Docker is
+required for live updates; `--check` is offline and does not start containers.
 
 PR validation builds and exercises MCP/Chromium on both architectures. Trusted
 PRs also use the existing Docker Scout policy; fork PRs lack its credentials.

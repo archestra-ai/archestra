@@ -9,6 +9,22 @@ FROM ${MCP_IMAGE}
 # OS/npm installation; inherited browser libraries and the unprivileged user stay.
 COPY --from=patched-node /usr/local/bin/node /usr/local/bin/node
 ENV NODE_VERSION=24.22.1
+ARG PERL_BASE_VERSION=5.36.0-7+deb12u4
+ARG EXPAT_VERSION=2.5.0-1+deb12u5
+ARG OPENSSL_VERSION=3.0.22-1~deb12u2
+USER root
+# Signed Debian repositories provide the exact patches tracked in versions.json.
+# The server uses preinstalled browsers, not npm/npx, Corepack or Yarn. Remove
+# those build-time tools and their vulnerable transitive packages from runtime.
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --only-upgrade --no-install-recommends \
+      "perl-base=${PERL_BASE_VERSION}" \
+      "libexpat1=${EXPAT_VERSION}" \
+      "libssl3=${OPENSSL_VERSION}" \
+ && rm -rf /var/lib/apt/lists/* \
+      /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+      /opt/yarn-* /usr/local/bin/npm /usr/local/bin/npx \
+      /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
 WORKDIR /app
 USER node
 ENTRYPOINT ["node", "/app/cli.js", "--headless", "--browser", "chromium", "--no-sandbox"]

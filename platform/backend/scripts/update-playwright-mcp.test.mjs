@@ -46,18 +46,33 @@ async function setup(t, options = {}) {
   }
   const mcp = registry("playwright/mcp", "24.21.0", options.missingArm);
   routes.set("/v2/playwright/mcp/manifests/v0.0.84", mcp);
+  routes.set("/v2/playwright/mcp/manifests/v0.0.83", mcp);
   const node = registry("library/node", options.node || "24.22.2");
   routes.set("/v2/library/node/manifests/24-bookworm-slim", node);
   routes.set("/token", { token: "public-registry-pull-token" });
   const dependencies = { playwright: "1.65.0", "playwright-core": "1.65.0" };
   routes.set("/@playwright%2fmcp", {
     "dist-tags": { latest: options.latest || "0.0.85" },
-    versions: { "0.0.84": { dependencies }, "0.0.85": { dependencies } },
+    versions: {
+      "0.0.83": { dependencies },
+      "0.0.84": { dependencies },
+      "0.0.85": { dependencies },
+    },
     time: {
+      "0.0.83": "2026-09-01T00:00:00Z",
       "0.0.84": "2026-10-01T00:00:00Z",
       "0.0.85": "2026-10-25T00:00:00Z",
     },
   });
+  const docker = path.join(dir, "fake-docker");
+  await writeFile(
+    docker,
+    `#!/usr/bin/env node
+if (process.env.TEST_OS_FAILURE) process.exit(1);
+console.log(process.env.TEST_OS_VERSIONS);
+`,
+    { mode: 0o755 },
+  );
   const server = createServer((req, res) => {
     const url = new URL(req.url, "http://localhost");
     if (options.failRegistry && url.pathname.startsWith("/v2/")) {
@@ -96,6 +111,15 @@ async function setup(t, options = {}) {
               PLAYWRIGHT_MCR_REGISTRY: url,
               PLAYWRIGHT_NODE_REGISTRY: url,
               PLAYWRIGHT_NODE_AUTH: url,
+              PLAYWRIGHT_DOCKER_BIN: docker,
+              TEST_OS_FAILURE: options.osFailure ? "true" : "",
+              TEST_OS_VERSIONS: JSON.stringify(
+                options.osVersions ?? {
+                  "perl-base": "5.36.0-7+deb12u4",
+                  libexpat1: "2.5.0-1+deb12u5",
+                  libssl3: "3.0.22-1~deb12u2",
+                },
+              ),
             },
           },
         )),
@@ -200,5 +224,78 @@ test("check mode rejects Dockerfile drift and missing version arguments", async 
   assert.match(
     (await fixture.run("--check")).stderr,
     /Expected exactly one ARG MCP_IMAGE/,
+  );
+});
+
+for (const [name, options, message] of [
+  [
+    "vulnerable Debian candidate",
+    {
+      osVersions: {
+        "perl-base": "5.36.0-7+deb12u3",
+        libexpat1: "2.5.0-1+deb12u5",
+        libssl3: "3.0.22-1~deb12u2",
+      },
+    },
+    /below the fixed Debian version/,
+  ],
+  [
+    "missing Debian candidate",
+    { osVersions: { "perl-base": "5.36.0-7+deb12u4" } },
+    /Missing or unexpected Debian package pins/,
+  ],
+  ["failed signed APT query", { osFailure: true }, /Command failed/],
+]) {
+  test(`rejects ${name} without changing image inputs`, async (t) => {
+    const fixture = await setup(t, options);
+    const result = await fixture.run();
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, message);
+    assert.equal(
+      await readFile(path.join(fixture.dir, "versions.json"), "utf8"),
+      fixture.initial,
+    );
+    assert.equal(
+      await readFile(path.join(fixture.dir, "Dockerfile"), "utf8"),
+      fixture.dockerfile,
+    );
+  });
+}
+
+test("updates and round-trips Debian patch pins without an MCP release", async (t) => {
+  const fixture = await setup(t, {
+    latest: "0.0.83",
+    osVersions: {
+      "perl-base": "5.36.0-7+deb12u5",
+      libexpat1: "2.5.0-1+deb12u6",
+      libssl3: "3.0.22-1~deb12u3",
+    },
+  });
+  assert.equal((await fixture.run()).status, 0);
+  assert.equal(
+    JSON.parse(await readFile(path.join(fixture.dir, "versions.json"), "utf8"))
+      .mcpVersion,
+    "0.0.83",
+  );
+  assert.match(
+    await readFile(path.join(fixture.dir, "Dockerfile"), "utf8"),
+    /ARG PERL_BASE_VERSION=5\.36\.0-7\+deb12u5/,
+  );
+  assert.equal((await fixture.run("--check")).status, 0);
+});
+
+test("refuses Debian patch downgrades above the security floor", async (t) => {
+  const fixture = await setup(t);
+  const metadata = JSON.parse(fixture.initial);
+  metadata.osPackages["perl-base"] = "5.36.0-7+deb12u5";
+  await writeFile(
+    path.join(fixture.dir, "versions.json"),
+    JSON.stringify(metadata),
+  );
+  const result = await fixture.run();
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /Refusing Debian package downgrade for perl-base/,
   );
 });

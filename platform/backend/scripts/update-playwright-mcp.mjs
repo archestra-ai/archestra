@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -45,8 +46,95 @@ function assertPatched(version) {
   }
 }
 
+// These source packages account for the inherited Debian findings in this image.
+// The updater queries signed APT indexes; no repository/key/trust override is used.
+const osPackages = [
+  {
+    name: "perl-base",
+    argument: "PERL_BASE_VERSION",
+    floor: "5.36.0-7+deb12u4",
+  },
+  { name: "libexpat1", argument: "EXPAT_VERSION", floor: "2.5.0-1+deb12u5" },
+  { name: "libssl3", argument: "OPENSSL_VERSION", floor: "3.0.22-1~deb12u2" },
+];
+
+function compareBookwormVersion(a, b) {
+  // Restrict this updater to reviewed Bookworm security version forms. A distro
+  // or version-scheme change needs review rather than a guessed ordering.
+  const pattern = /^(\d+)\.(\d+)\.(\d+)-(\d+)([+~])deb12u(\d+)$/;
+  const left = pattern.exec(a);
+  const right = pattern.exec(b);
+  if (!left || !right || left[5] !== right[5])
+    throw new Error(`Unsupported Bookworm package version: ${a} / ${b}`);
+  for (const index of [1, 2, 3, 4, 6]) {
+    const difference = Number(left[index]) - Number(right[index]);
+    if (difference) return difference;
+  }
+  return 0;
+}
+
+function validateOsPackages(versions, previousVersions) {
+  if (!versions || Object.keys(versions).length !== osPackages.length)
+    throw new Error("Missing or unexpected Debian package pins");
+  for (const { name, floor } of osPackages) {
+    if (compareBookwormVersion(versions[name], floor) < 0)
+      throw new Error(
+        `${name} ${versions[name]} is below the fixed Debian version ${floor}`,
+      );
+    if (
+      previousVersions &&
+      compareBookwormVersion(versions[name], previousVersions[name]) < 0
+    )
+      throw new Error(`Refusing Debian package downgrade for ${name}`);
+  }
+}
+
+function resolveOsPackages(nodeImage) {
+  // Run only the official, digest-verified Node image, without host mounts or
+  // credentials. APT verifies both architectures' indexes with its existing keys.
+  const query = String.raw`
+    const { execFileSync } = require("node:child_process");
+    const names = JSON.parse(process.argv[1]);
+    const native = execFileSync("dpkg", ["--print-architecture"], { encoding: "utf8" }).trim();
+    if (!["amd64", "arm64"].includes(native)) throw new Error("Unsupported package query architecture");
+    execFileSync("dpkg", ["--add-architecture", native === "amd64" ? "arm64" : "amd64"]);
+    execFileSync("apt-get", ["update", "-qq"], { stdio: ["ignore", "ignore", "inherit"] });
+    const versions = {};
+    for (const name of names) {
+      const candidates = ["amd64", "arm64"].map((arch) => {
+        const policy = execFileSync("apt-cache", ["policy", name + ":" + arch], { encoding: "utf8" });
+        const candidate = policy.match(/Candidate:\s*(\S+)/)?.[1];
+        if (!candidate || candidate === "(none)") throw new Error("Missing " + name + " for " + arch);
+        return candidate;
+      });
+      if (candidates[0] !== candidates[1]) throw new Error("Debian architectures disagree for " + name);
+      versions[name] = candidates[0];
+    }
+    console.log(JSON.stringify(versions));
+  `;
+  return JSON.parse(
+    execFileSync(
+      process.env.PLAYWRIGHT_DOCKER_BIN || "docker",
+      [
+        "run",
+        "--rm",
+        "--user",
+        "root",
+        "--entrypoint",
+        "node",
+        nodeImage,
+        "-e",
+        query,
+        JSON.stringify(osPackages.map(({ name }) => name)),
+      ],
+      { encoding: "utf8", timeout: 180_000, maxBuffer: 2_000_000 },
+    ),
+  );
+}
+
 function validate(metadata) {
   assertPatched(metadata.nodeVersion);
+  validateOsPackages(metadata.osPackages);
   if (
     !stable.test(metadata.mcpVersion) ||
     !/^node:\d+\.\d+\.\d+-bookworm-slim@sha256:[a-f0-9]{64}$/.test(
@@ -65,20 +153,31 @@ function validate(metadata) {
 }
 
 function render(metadata) {
-  for (const key of ["ARG NODE_IMAGE", "ARG MCP_IMAGE", "ENV NODE_VERSION"]) {
+  for (const key of [
+    "ARG NODE_IMAGE",
+    "ARG MCP_IMAGE",
+    "ENV NODE_VERSION",
+    ...osPackages.map(({ argument }) => `ARG ${argument}`),
+  ]) {
     if (
       dockerfile.split("\n").filter((line) => line.startsWith(`${key}=`))
         .length !== 1
     )
       throw new Error(`Expected exactly one ${key} in Dockerfile`);
   }
-  return dockerfile
+  let rendered = dockerfile
     .replace(/^ARG NODE_IMAGE=.*$/m, `ARG NODE_IMAGE=${metadata.nodeImage}`)
     .replace(/^ARG MCP_IMAGE=.*$/m, `ARG MCP_IMAGE=${metadata.mcpImage}`)
     .replace(
       /^ENV NODE_VERSION=.*$/m,
       `ENV NODE_VERSION=${metadata.nodeVersion}`,
     );
+  for (const { name, argument } of osPackages)
+    rendered = rendered.replace(
+      new RegExp(`^ARG ${argument}=.*$`, "m"),
+      `ARG ${argument}=${metadata.osPackages[name]}`,
+    );
+  return rendered;
 }
 
 async function request(url, token) {
@@ -146,7 +245,7 @@ try {
     if (render(previous) !== dockerfile)
       throw new Error("Dockerfile does not match versions.json");
     console.log(
-      "Playwright image inputs match their immutable metadata and patched Node floor",
+      "Playwright image inputs match their immutable metadata and patched Node/Debian floors",
     );
   } else {
     const cooldown = Number(values["cooldown-days"]);
@@ -209,6 +308,8 @@ try {
       nodeImage: `node:${node.nodeVersion}-bookworm-slim@${node.digest}`,
       playwrightVersion: deps.playwright,
     };
+    next.osPackages = resolveOsPackages(next.nodeImage);
+    validateOsPackages(next.osPackages, previous.osPackages);
     validate(next);
     if (JSON.stringify(next) === JSON.stringify(previous))
       console.log("Playwright MCP image inputs already current");
@@ -216,8 +317,14 @@ try {
       // Resolve and validate both architectures before writing any input.
       await writeFile(dockerfilePath, render(next));
       await writeFile(metadataPath, `${JSON.stringify(next, null, 2)}\n`);
+      const debian = osPackages
+        .map(
+          ({ name }) =>
+            `${name} ${previous.osPackages[name]} -> ${next.osPackages[name]}`,
+        )
+        .join(", ");
       console.log(
-        `Updated Playwright MCP ${previous.mcpVersion} -> ${next.mcpVersion}, Node ${previous.nodeVersion} -> ${next.nodeVersion} (immutable image inputs)`,
+        `Updated Playwright MCP ${previous.mcpVersion} -> ${next.mcpVersion}, Node ${previous.nodeVersion} -> ${next.nodeVersion}; ${debian} (pinned image inputs)`,
       );
     }
   }

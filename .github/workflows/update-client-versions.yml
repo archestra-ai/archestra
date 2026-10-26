@@ -551,7 +551,7 @@ jobs:
           fi
 
           pr_title="chore: update Playwright MCP image inputs"
-          pr_body="Update the built-in browser MCP and its patched Node replacement using immutable multi-architecture image digests. MCP stable releases wait at least seven days; Node security rebuilds are checked against the CVE-2026-111497 fixed-version floor and cannot downgrade. Both architectures must supply matching runtime metadata.
+          pr_body="Update the built-in browser MCP and its patched Node replacement using immutable multi-architecture image digests. MCP stable releases wait at least seven days; Node security rebuilds and exact Debian security-library pins must meet their fixed-version floors and cannot downgrade. Both architectures must supply matching runtime metadata and signed APT candidates. Unused global package managers are removed from the runtime.
 
           Review and merge only after both **Validate Playwright MCP** checks pass, including startup, MCP calls, browser navigation and screenshots. The upstream source image may still ship older Node; the wrapper replaces its executable with the separately pinned patched binary."
           owner="${GH_REPO%%/*}"

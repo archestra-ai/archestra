@@ -172,6 +172,8 @@ import {
 } from "./llm-proxy-helpers";
 import {
   MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
+  MODEL_POOL_MAX_RESPONSE_TIMEOUT_MS,
+  MODEL_POOL_MS_PER_OUTPUT_TOKEN,
   MODEL_POOL_RESPONSE_TIMEOUT_MS,
   type ModelPoolPlan,
   openThroughModelPool,
@@ -184,6 +186,7 @@ import {
   type MemberTransport,
   memberAdapter,
   memberTransport,
+  requestedMaxOutputTokens,
 } from "./model-pool-transport";
 import { StreamKeepAlive } from "./stream-keepalive";
 import {
@@ -3230,7 +3233,7 @@ async function handleNonStreaming<
           transport: ownTransport(provider, client),
           open: async (transport) =>
             (await transport.execute(request)) as TResponse,
-          memberTimeoutMs: MODEL_POOL_RESPONSE_TIMEOUT_MS,
+          memberTimeoutMs: poolResponseTimeoutMs(request),
           // See the streaming path: Gemini cannot safely classify this boundary.
           isRetryable: (error) =>
             providerName !== "gemini" &&
@@ -4150,6 +4153,21 @@ async function openUpstream<TRequest, T>(params: {
     ctx.providerApiKeyId = ctx.upstreamAttempt.providerApiKeyId;
     pool.setResponseHeaders(ctx.upstreamAttempt);
   }
+}
+
+/**
+ * How long a pool member that isn't the last may take to answer a
+ * non-streaming request: the floor, plus time for every output token the
+ * request allows. A request with no output limit gets the most.
+ */
+function poolResponseTimeoutMs(request: unknown): number {
+  const maxOutputTokens = requestedMaxOutputTokens(request);
+  if (maxOutputTokens === undefined) return MODEL_POOL_MAX_RESPONSE_TIMEOUT_MS;
+  return Math.min(
+    MODEL_POOL_MAX_RESPONSE_TIMEOUT_MS,
+    MODEL_POOL_RESPONSE_TIMEOUT_MS +
+      maxOutputTokens * MODEL_POOL_MS_PER_OUTPUT_TOKEN,
+  );
 }
 
 /** The request's own provider and client, as a transport. */

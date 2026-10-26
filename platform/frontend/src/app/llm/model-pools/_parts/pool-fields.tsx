@@ -443,7 +443,7 @@ const RELIABILITY_RULES = [
   {
     label: "Move on from a silent member",
     value:
-      "No first chunk in 30 s, or no answer in 3 min, unless it is the last member",
+      "No first chunk in 30 s, or no answer in 3 min plus 1 s per 20 tokens the request allows (at most 30 min), unless it is the last member",
   },
   {
     label: "Also move on when a key is refused",

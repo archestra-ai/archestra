@@ -27,6 +27,8 @@ vi.mock("../model-pool-failover", async (importOriginal) => ({
   // The lab's black-hole deployment timeout, shortened to keep the test fast.
   MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS: 300,
   MODEL_POOL_RESPONSE_TIMEOUT_MS: 300,
+  MODEL_POOL_MS_PER_OUTPUT_TOKEN: 10,
+  MODEL_POOL_MAX_RESPONSE_TIMEOUT_MS: 600,
 }));
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
@@ -38,6 +40,7 @@ type Mode =
   | { kind: "status"; status: number; retryAfter?: string }
   | { kind: "refused" }
   | { kind: "black-hole" }
+  | { kind: "slow"; ms: number }
   | { kind: "cut-before-first-chunk" }
   | { kind: "cut-after-first-chunk" };
 
@@ -53,7 +56,7 @@ const labTest = test.extend<{
     deploy: (
       members: Array<{ priority: number; weight?: number }>,
     ) => Promise<Deployment[]>;
-    ask: (options?: { stream?: boolean }) => Promise<{
+    ask: (options?: { stream?: boolean; maxTokens?: number }) => Promise<{
       status: number;
       body: string;
       attempts?: string;
@@ -126,7 +129,13 @@ const labTest = test.extend<{
       return deployments;
     };
 
-    const ask = async ({ stream = false } = {}) => {
+    const ask = async ({
+      stream = false,
+      maxTokens,
+    }: {
+      stream?: boolean;
+      maxTokens?: number;
+    } = {}) => {
       const started = Date.now();
       const response = await app.inject({
         method: "POST",
@@ -136,6 +145,7 @@ const labTest = test.extend<{
           model: "lab-model",
           stream,
           messages: [{ role: "user", content: "hello" }],
+          ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
         },
       });
       return {
@@ -244,6 +254,41 @@ labTest(
 );
 
 labTest(
+  "a slow non-streaming answer is waited on for the output the request allows",
+  async ({ lab }) => {
+    const [first, second] = await lab.deploy([
+      { priority: 1 },
+      { priority: 2 },
+    ]);
+    // Past the 300 ms floor, inside 300 ms + 20 tokens at 10 ms each.
+    first.mode = { kind: "slow", ms: 400 };
+    const answer = await lab.ask({ maxTokens: 20 });
+    expect(answer.status, answer.body).toBe(200);
+    expect(answer.providerKey).toBe(first.keyId);
+    expect(answer.attempts).toBe("1");
+    expect(second.hits).toBe(0);
+    const rows = await db.select().from(schema.interactionsTable);
+    expect(rows.map((row) => row.attemptOutcome)).toEqual(["answered"]);
+  },
+);
+
+labTest(
+  "a non-streaming answer slower than its output budget moves on",
+  async ({ lab }) => {
+    const [first, second] = await lab.deploy([
+      { priority: 1 },
+      { priority: 2 },
+    ]);
+    // 300 ms + 1 token at 10 ms is over before the answer comes.
+    first.mode = { kind: "slow", ms: 400 };
+    const answer = await lab.ask({ maxTokens: 1 });
+    expect(answer.status, answer.body).toBe(200);
+    expect(answer.providerKey).toBe(second.keyId);
+    expect(answer.attempts).toBe("2");
+  },
+);
+
+labTest(
   "AC-C3 every member failing returns the upstream's error, not a 429",
   async ({ lab }) => {
     const [first, second] = await lab.deploy([
@@ -345,31 +390,38 @@ async function respond(
         request.signal.addEventListener("abort", resolve),
       );
       return HttpResponse.error();
+    case "slow":
+      await new Promise((resolve) => setTimeout(resolve, mode.ms));
+      return okResponse(stream);
     case "cut-before-first-chunk":
       return sse([], { cut: true });
     case "cut-after-first-chunk":
       return sse([{ content: "Hal" }], { cut: true });
     case "ok":
-      if (!stream) {
-        return HttpResponse.json({
-          id: "chatcmpl-lab",
-          object: "chat.completion",
-          created: 1,
-          model: "lab-model",
-          choices: [
-            {
-              index: 0,
-              message: { role: "assistant", content: "hi" },
-              finish_reason: "stop",
-            },
-          ],
-          usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 },
-        });
-      }
-      return sse([{ role: "assistant", content: "" }, { content: "hi" }], {
-        cut: false,
-      });
+      return okResponse(stream);
   }
+}
+
+function okResponse(stream: boolean | undefined): Response {
+  if (!stream) {
+    return HttpResponse.json({
+      id: "chatcmpl-lab",
+      object: "chat.completion",
+      created: 1,
+      model: "lab-model",
+      choices: [
+        {
+          index: 0,
+          message: { role: "assistant", content: "hi" },
+          finish_reason: "stop",
+        },
+      ],
+      usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 },
+    });
+  }
+  return sse([{ role: "assistant", content: "" }, { content: "hi" }], {
+    cut: false,
+  });
 }
 
 /** An SSE chunk stream; `cut` errors the body instead of finishing it. */

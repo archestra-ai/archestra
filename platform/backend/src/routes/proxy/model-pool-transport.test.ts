@@ -4,6 +4,7 @@ import {
   inboundPoolWire,
   memberAdapter,
   memberTransport,
+  requestedMaxOutputTokens,
 } from "./model-pool-transport";
 
 async function collect(stream: AsyncIterable<unknown>) {
@@ -15,6 +16,25 @@ async function collect(stream: AsyncIterable<unknown>) {
 async function* from(items: unknown[]) {
   yield* items;
 }
+
+describe("the output a request allows", () => {
+  test("reads the limit from each pool wire", () => {
+    expect(requestedMaxOutputTokens({ max_tokens: 4096 })).toBe(4096);
+    expect(
+      requestedMaxOutputTokens({ max_completion_tokens: 900, max_tokens: 10 }),
+    ).toBe(900);
+    expect(
+      requestedMaxOutputTokens({ inferenceConfig: { maxTokens: 512 } }),
+    ).toBe(512);
+  });
+
+  test("is undefined when the request sets no usable limit", () => {
+    expect(requestedMaxOutputTokens({ messages: [] })).toBeUndefined();
+    expect(requestedMaxOutputTokens({ max_tokens: 0 })).toBeUndefined();
+    expect(requestedMaxOutputTokens({ max_tokens: "100" })).toBeUndefined();
+    expect(requestedMaxOutputTokens(null)).toBeUndefined();
+  });
+});
 
 describe("which members a client's wire reaches", () => {
   test("names the wire a request arrived in", () => {

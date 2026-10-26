@@ -221,6 +221,25 @@ export function memberTransport(params: {
   throw new Error(`A ${inbound} request cannot reach a ${target} member`);
 }
 
+/**
+ * The most output tokens a request in any pool wire lets the model write, or
+ * undefined when it sets no limit (allowed on OpenAI chat and Converse).
+ */
+export function requestedMaxOutputTokens(request: unknown): number | undefined {
+  const body = request as {
+    max_completion_tokens?: unknown;
+    max_tokens?: unknown;
+    inferenceConfig?: { maxTokens?: unknown };
+  } | null;
+  const limit =
+    body?.max_completion_tokens ??
+    body?.max_tokens ??
+    body?.inferenceConfig?.maxTokens;
+  return typeof limit === "number" && Number.isFinite(limit) && limit > 0
+    ? limit
+    : undefined;
+}
+
 /** The adapter whose client and execute calls a member's provider uses. */
 export function memberAdapter(
   provider: SupportedProvider,

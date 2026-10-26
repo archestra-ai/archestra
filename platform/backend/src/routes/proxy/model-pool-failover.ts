@@ -35,9 +35,20 @@ export const MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS = 30_000;
 
 /**
  * The same for a non-streaming call, which only answers once the whole
- * response is ready, so it gets longer.
+ * response is ready, so it gets longer. This is the floor: a request that lets
+ * the model write more gets `MODEL_POOL_MS_PER_OUTPUT_TOKEN` per token on top,
+ * so a long answer isn't cut off, paid for, and asked for again elsewhere.
  */
 export const MODEL_POOL_RESPONSE_TIMEOUT_MS = 180_000;
+
+/** A slow but healthy member still writes 20 tokens a second. */
+export const MODEL_POOL_MS_PER_OUTPUT_TOKEN = 50;
+
+/**
+ * The most a non-streaming member is waited on, also for a request that sets
+ * no output limit.
+ */
+export const MODEL_POOL_MAX_RESPONSE_TIMEOUT_MS = 30 * 60_000;
 
 /** What a request's interaction rows record about the attempt that wrote them. */
 export interface UpstreamAttempt {

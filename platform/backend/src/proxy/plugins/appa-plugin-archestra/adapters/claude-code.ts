@@ -113,6 +113,8 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   // Claude Code connects MCP servers in the background and declares this tool
   // in the requests it sends before they are ready.
   readonly pendingServersTool = "WaitForMcpServers";
+  // Observed on 2.1.310: "No such tool available" comes back as an error result.
+  readonly answersUndeclaredCalls = true;
   // A gateway that needs a sign-in is not pending, so the wait tool is not
   // declared and never carries the denial: /mcp is where the person sees that.
   gatewayToolsHint(serverName: string): string {

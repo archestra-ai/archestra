@@ -1657,14 +1657,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           released.push({ id: call.id, name: wait, arguments: "{}" });
           continue;
         }
-        // Refuses the call and cancels admitted calls when the client declares no notice tool.
-        await cancelCalls(
-          session,
-          rest.flatMap((each) =>
-            decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
-          ),
-          policy,
-        );
         // Clients connect MCP servers in the background, so a session's first
         // request often leaves before the gateway's tool list arrives. One
         // resend normally carries the tools; only a repeat within the same
@@ -1698,6 +1690,47 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             : noPlan
               ? `${withoutRemedySections(decision.feedback)}${clarification}${NO_REMEDY_PLAN_HINT}`
               : `${withoutRemedySections(decision.feedback)}${clarification}\n\n${remedylessRefusalNote({ binding, transient })}`;
+        // The ruling reaches the model as the result of an undeclared notice
+        // call. The client answers it with an error, and the next request
+        // restores the denied call and the ruling from the call's arguments.
+        const carrier = this.undeclaredNoticeTool(binding, context);
+        if (carrier) {
+          // The runtime would answer this id with its full ruling, whose plans
+          // this client cannot act on; the result shows what the client can.
+          await cacheManager.set(
+            notLoadedRulingKey({ session, callId: call.id }),
+            contentMessage,
+            TimeInMs.Day,
+          );
+          blocked.push({
+            id: call.id,
+            name: call.name,
+            reason: decision.feedback,
+          });
+          released.push({
+            id: call.id,
+            name: carrier,
+            arguments: JSON.stringify(
+              buildNoticeArguments({
+                id: call.id,
+                tool: identity.name,
+                arguments: identity.arguments,
+                result: contentMessage,
+                custom: identity.custom,
+                namespace: identity.namespace,
+              }),
+            ),
+          });
+          continue;
+        }
+        // Refuses the call and cancels admitted calls when the client declares no notice tool.
+        await cancelCalls(
+          session,
+          rest.flatMap((each) =>
+            decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
+          ),
+          policy,
+        );
         return {
           decision: "refuse",
           refusal: {
@@ -2119,6 +2152,30 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
    * Whether this session was already refused once for a request without the
    * gateway remedy tools. Records the current refusal so the next one counts.
    */
+  /**
+   * The notice tool name a denial is released under when the client declares
+   * no notice tool, for a client that answers an undeclared call with an error
+   * result. None when the client declares that name: it would run there.
+   */
+  private undeclaredNoticeTool(
+    binding: AppaPluginBinding,
+    context: LlmProxyToolCallsContext,
+  ): string | undefined {
+    if (
+      !binding.adapter?.answersUndeclaredCalls ||
+      context.interactionType !== "anthropic:messages"
+    )
+      return undefined;
+    const name = archestraMcpBranding.getToolName(
+      TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+    );
+    const declared = [
+      ...binding.request.declaredTools,
+      ...(binding.request.heldTools ?? []),
+    ];
+    return declared.some((tool) => tool.name === name) ? undefined : name;
+  }
+
   private async remedyToolsMissingBefore(
     session: OpenAppaSession,
   ): Promise<boolean> {

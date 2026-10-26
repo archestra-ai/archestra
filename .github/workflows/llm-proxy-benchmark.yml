@@ -1,6 +1,11 @@
 name: LLM Proxy Benchmark
 
 on:
+  workflow_call:
+    inputs:
+      release-generation:
+        type: boolean
+        default: false
   pull_request:
     paths:
       - platform/benchmarks/**
@@ -40,12 +45,14 @@ permissions: {}
 jobs:
   select:
     name: Select benchmark runs
+    # Release measurements run only inside the single generation coordinator.
+    if: inputs.release-generation || !startsWith(github.head_ref, 'release-please--branches--')
     concurrency:
       group: llm-proxy-select-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: true
     runs-on: ubuntu-24.04
     permissions:
-      contents: read # Inspect generated table commits to avoid benchmark loops.
+      contents: read # Inspect source and previous release metadata.
       pull-requests: read # Read changed paths; no PR code is executed.
     outputs:
       run: ${{ steps.select.outputs.run }}
@@ -59,11 +66,9 @@ jobs:
             const pr = context.payload.pull_request;
             const release = Boolean(pr && pr.head.repo.full_name === `${context.repo.owner}/${context.repo.repo}` && pr.head.ref.startsWith('release-please--branches--') && pr.head.ref.endsWith('--components--platform'));
             let run = context.eventName === 'workflow_dispatch' || release;
-            if (release && context.eventName === 'pull_request') {
-              const {data: commit} = await github.rest.repos.getCommit({...context.repo, ref: pr.head.sha});
-              const generated = commit.commit.message.split('\n')[0] === 'docs: update proxy benchmark results' && commit.parents?.length === 1 && commit.files?.length === 1 && commit.files[0].filename === 'docs/pages/admin/observability/performance-benchmarks.md' && commit.files[0].status === 'modified';
-              if (generated) run = false;
-            }
+            // The caller has already rejected a verified combined-generation
+            // head. Every selected source, including a legacy docs-only head,
+            // must produce a benchmark artifact for this same run attempt.
             if (pr && !run && !release) {
               const files = await github.paginate(github.rest.pulls.listFiles, {...context.repo, pull_number: pr.number, per_page: 100});
               run = files.some(({filename}) => filename.startsWith('platform/benchmarks/') || filename.startsWith('platform/backend/src/server/llm-proxy-timing') || filename === '.github/workflows/llm-proxy-benchmark.yml' || filename.startsWith('.github/scripts/publish-proxy-benchmark-comment') || filename.startsWith('.github/scripts/proxy-benchmark-baseline') || filename.startsWith('.github/scripts/update-proxy-benchmark-docs'));
@@ -198,12 +203,12 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: llm-proxy-benchmark
+          name: ${{ inputs.release-generation && format('release-generation-benchmark-{0}', github.run_attempt) || 'llm-proxy-benchmark' }}
           path: platform/benchmarks/results/
           retention-days: 14
 
   comment:
-    name: Update release benchmark summary and docs
+    name: Update release benchmark summary
     needs: [select, benchmark]
     if: ${{ always() && !cancelled() && needs.select.outputs.release == 'true' && needs.benchmark.result != 'skipped' }}
     runs-on: ubuntu-24.04
@@ -222,7 +227,7 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         continue-on-error: true # Setup failures can precede artifact creation.
         with:
-          name: llm-proxy-benchmark
+          name: ${{ inputs.release-generation && format('release-generation-benchmark-{0}', github.run_attempt) || 'llm-proxy-benchmark' }}
           path: benchmark-artifact
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         id: publish
@@ -251,26 +256,3 @@ jobs:
             const { publishBenchmarkComment } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/publish-proxy-benchmark-comment.mjs`);
             const result = await publishBenchmarkComment({github, context, summary, remeasured, benchmarkResult: process.env.BENCHMARK_RESULT});
             core.info(result);
-            core.setOutput('update-docs', String(['created', 'updated'].includes(result) && process.env.BENCHMARK_RESULT === 'success' && summary?.complete && summary.gitCommit === context.payload.pull_request.head.sha && context.payload.pull_request.user.login === 'archestra-ci[bot]'));
-      # App-token pushes trigger ordinary PR validation. The select job skips
-      # the generated table commit, and screenshot capture also suppresses its
-      # follow-up commit, so volatile timings cannot create a commit loop.
-      - name: Generate docs commit token
-        if: steps.publish.outputs.update-docs == 'true'
-        id: docs-token
-        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
-        with:
-          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
-          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: read
-      - name: Commit generated benchmark table
-        if: steps.publish.outputs.update-docs == 'true'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          github-token: ${{ steps.docs-token.outputs.token }}
-          script: |
-            const fs = require('node:fs');
-            const summary = JSON.parse(fs.readFileSync('benchmark-artifact/ci/report.json', 'utf8'));
-            const { commitBenchmarkDocs } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/update-proxy-benchmark-docs.mjs`);
-            core.info(await commitBenchmarkDocs({github, context, summary, benchmarkResult: 'success'}));

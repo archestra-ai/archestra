@@ -191,6 +191,7 @@ test("the required workflow waits for publication and fails closed after its bou
     .join("\n");
   const execute = new (Object.getPrototypeOf(async () => {}).constructor)(
     "verifyBenchmarkDocs",
+    "verifyGeneration",
     "github",
     "context",
     "core",
@@ -203,6 +204,7 @@ test("the required workflow waits for publication and fails closed after its bou
     let waits = 0;
     await execute(
       async () => ({ ready: ++attempts === 2 && becomesReady, reason: "test" }),
+      async () => ({ ready: true }),
       {},
       {},
       {

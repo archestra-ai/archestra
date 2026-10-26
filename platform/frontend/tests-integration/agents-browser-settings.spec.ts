@@ -26,7 +26,7 @@ test("upload and browser switches save and cancel, with the upload warning above
   await expect(uploads).toBeChecked();
   await expect(browser).toBeChecked();
   await expect(browser).toBeEnabled();
-  for (const width of [1440, 390]) {
+  for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
     await uploads.scrollIntoViewIfNeeded();
     const title = await page
@@ -51,6 +51,24 @@ test("upload and browser switches save and cancel, with the upload warning above
     ).toBeLessThan(2);
     expect(toggle.x + toggle.width).toBeLessThanOrEqual(width);
     await browser.scrollIntoViewIfNeeded();
+    const browserDescription = await page
+      .getByText(/Allow agents to use the built-in browser\./)
+      .boundingBox();
+    const browserToggle = await browser.boundingBox();
+    if (!browserDescription || !browserToggle)
+      throw new Error("Browser controls missing");
+    expect(browserToggle.x).toBeGreaterThanOrEqual(
+      browserDescription.x + browserDescription.width,
+    );
+    expect(
+      Math.abs(
+        browserDescription.y +
+          browserDescription.height / 2 -
+          browserToggle.y -
+          browserToggle.height / 2,
+      ),
+    ).toBeLessThan(2);
+    expect(browserToggle.x + browserToggle.width).toBeLessThanOrEqual(width);
     await page.screenshot({
       path: testInfo.outputPath(`settings-${width}.png`),
     });

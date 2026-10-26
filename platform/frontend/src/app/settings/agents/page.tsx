@@ -415,18 +415,31 @@ export default function AgentSettingsPage() {
           </WithPermissions>
         </div>
       </section>
-      <SettingsBlock
-        title="Built-in Browser (Playwright MCP)"
-        description="Allow agents to use the built-in browser. Disabling stops browser MCP runtimes in every environment and hides the Browser panel in chat."
-        control={
+      <section className="space-y-3" aria-labelledby="built-in-browser-title">
+        <h2
+          id="built-in-browser-title"
+          className="text-sm font-medium leading-5"
+        >
+          Built-in Browser (Playwright MCP)
+        </h2>
+        <div className="flex items-center justify-between gap-4">
+          <p
+            id="built-in-browser-description"
+            className="text-sm leading-5 text-muted-foreground"
+          >
+            Allow agents to use the built-in browser. Disabling stops browser
+            MCP runtimes in every environment and hides the Browser panel in
+            chat.
+          </p>
           <Switch
             aria-label="Built-in Browser (Playwright MCP)"
+            aria-describedby="built-in-browser-description"
             checked={playwrightEnabled}
             onCheckedChange={setPlaywrightEnabled}
             disabled={isSaving || !isGlobalAdmin}
           />
-        }
-      />
+        </div>
+      </section>
 
       <SettingsSaveBar
         hasChanges={changes.hasChanges || securityHasChanges}

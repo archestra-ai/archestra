@@ -324,6 +324,8 @@ async function linkAllProviderModelsToApiKey(
 const ROUTABLE_PROVIDER_CASES: Array<{
   provider: SupportedProvider;
   modelId: string;
+  /** `false` when the router serves the provider over Chat Completions only. */
+  responses?: false;
 }> = [
   { provider: "anthropic", modelId: "claude-opus-4-6-20250918" },
   { provider: "azure", modelId: "gpt-4.1" },
@@ -337,8 +339,10 @@ const ROUTABLE_PROVIDER_CASES: Array<{
   // separately below.
   { provider: "github-copilot", modelId: "gpt-4o" },
   { provider: "groq", modelId: "llama-3.1-8b-instant" },
-  // A Kimi for Coding plan id, served over the same chat completions wire.
-  { provider: "kimi", modelId: "k3.1-pro" },
+  // A Kimi for Coding plan id, served over the same chat completions wire. The
+  // Responses translation cannot replay Kimi's reasoning, so that surface is
+  // refused; see the dedicated test below.
+  { provider: "kimi", modelId: "k3.1-pro", responses: false },
   { provider: "minimax", modelId: "MiniMax-M1" },
   { provider: "mistral", modelId: "mistral-large-latest" },
   { provider: "ollama", modelId: "llama3.1" },
@@ -673,7 +677,7 @@ describe("model router proxy routes", () => {
     vi.restoreAllMocks();
   });
 
-  for (const { provider, modelId } of ROUTABLE_PROVIDER_CASES) {
+  for (const { provider, modelId, responses } of ROUTABLE_PROVIDER_CASES) {
     test(`routes ${provider} models through chat completions`, async ({
       makeAgent,
       makeOrganization,
@@ -717,6 +721,8 @@ describe("model router proxy routes", () => {
         object: "chat.completion",
       });
     });
+
+    if (responses === false) continue;
 
     test(`routes ${provider} models through responses`, async ({
       makeAgent,
@@ -837,6 +843,63 @@ describe("model router proxy routes", () => {
       );
     });
   }
+
+  test("refuses Kimi on the Responses endpoint, which cannot replay its reasoning", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const provider = "kimi";
+    const modelId = "k3.1-pro";
+    await upsertModel({ provider, modelId });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider,
+      makeUser,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Kimi Responses Agent",
+      agentType: "llm_proxy",
+    });
+    const headers = {
+      "content-type": "application/json",
+      authorization: `Bearer ${value}`,
+      "user-agent": "test-client",
+    };
+
+    const refused = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/responses`,
+      headers,
+      payload: { model: `${provider}:${modelId}`, input: "Hello" },
+    });
+
+    expect(refused.statusCode).toBe(501);
+    expect(refused.json().error.message).toContain(
+      "Chat Completions endpoint only",
+    );
+
+    // The same model still answers on the surface Kimi supports.
+    const served = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers,
+      payload: {
+        model: `${provider}:${modelId}`,
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+
+    expect(served.statusCode).toBe(200);
+  });
 
   test("collects a delegation marker from the Responses wire before flattening a two-part prompt", async ({
     makeAgent,

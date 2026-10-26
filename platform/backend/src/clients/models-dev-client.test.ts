@@ -509,7 +509,7 @@ describe("ModelsDevClient", () => {
           "k3.1-pro": createMockModel({
             id: "k3.1-pro",
             name: "K3.1 Pro (kimi.ai)",
-            cost: { input: 0, output: 0 },
+            cost: { input: 0, output: 0, cache_read: 0 },
           }),
         }),
         moonshotai: createMockProvider("moonshotai", {
@@ -535,11 +535,22 @@ describe("ModelsDevClient", () => {
       );
       expect(planModel?.externalId).toBe("kimi-code-plan-global/k3.1-pro");
       expect(planModel?.description).toBe("K3.1 Pro (kimi.ai)");
+      // The plan's zero rates must persist as zeros (the column is a
+      // numeric(20, 12), read back as a decimal string): a null rate falls
+      // back to the estimated price and can exhaust a cost-capped run.
+      expect(planModel?.promptPricePerToken).not.toBeNull();
+      expect(Number(planModel?.promptPricePerToken)).toBe(0);
+      expect(planModel?.completionPricePerToken).not.toBeNull();
+      expect(Number(planModel?.completionPricePerToken)).toBe(0);
+      expect(planModel?.cacheReadPricePerToken).not.toBeNull();
+      expect(Number(planModel?.cacheReadPricePerToken)).toBe(0);
       const platformModel = await ModelModel.findByProviderAndModelId(
         "kimi",
         "kimi-k3.1-pro",
       );
       expect(platformModel?.externalId).toBe("moonshotai/kimi-k3.1-pro");
+      expect(Number(platformModel?.promptPricePerToken)).toBe(0.000002);
+      expect(Number(platformModel?.completionPricePerToken)).toBe(0.00001);
     });
 
     test("maps Google provider to Gemini", async () => {

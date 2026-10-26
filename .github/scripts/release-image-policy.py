@@ -48,7 +48,7 @@ def candidate_matrix(root):
         {"image": "platform-slim", "context": "./platform", "dockerfile": "./platform/Dockerfile", "target": "unified-slim"},
     ]
     for image, directory in (("mcp-server-base", "mcp_server"), ("p4-shim", "p4_shim"),
-                             ("sandbox-base", "sandbox_base")):
+                             ("sandbox-base", "sandbox_base"), ("playwright-mcp", "playwright_mcp")):
         context = f"./platform/docker_images/{directory}"
         images.append({"image": image, "context": context, "dockerfile": f"{context}/Dockerfile", "target": ""})
     catalog = json.loads((platform / "shared/agent-catalog-images.json").read_text())

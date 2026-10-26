@@ -1,5 +1,8 @@
 import type { Terminal } from "@xterm/xterm";
-import { parseTerminalSize } from "./terminal-recording-geometry";
+import {
+  parseTerminalSize,
+  type TerminalDimensions,
+} from "./terminal-recording-geometry";
 
 /**
  * Writes a recording to xterm as the recorded pane received it.
@@ -15,26 +18,28 @@ import { parseTerminalSize } from "./terminal-recording-geometry";
  *
  * The alternate screen is replayed in the normal buffer, so the document
  * keeps the output before it and the client's last screen after it. On
- * entry, the screen in view scrolls into the document rather than being
+ * entry, the rows written so far scroll into the document rather than being
  * erased by the client's first clear. While the alternate screen is on, a
  * pane that shrinks drops its top rows and a pane that grows takes nothing
  * back, as tmux's alternate screen has no history.
+ *
+ * The cursor moves the replayer makes assume the scroll region covers the
+ * screen and origin mode is off, as clients leave them between turns. With
+ * a region set, a line feed on the last row and a line deletion at the top
+ * do nothing, and the screen is cleared or scrolled as it was before.
  */
 export function createTerminalReplayer(terminal: Terminal): TerminalReplayer {
   let alternate = false;
+  let stopped = false;
   /** Bytes a live stream ended with that do not finish a sequence yet. */
   let unfinished = "";
-  const alternateScreenMode = (params: (number | number[])[]) =>
-    params.some(
-      (param) => typeof param === "number" && ALTERNATE_SCREEN_MODES.has(param),
-    );
   terminal.parser.registerCsiHandler({ prefix: "?", final: "h" }, (params) => {
-    if (!alternateScreenMode(params)) return false;
+    if (!alternateScreenMode(params.filter(isNumber))) return false;
     alternate = true;
     return true;
   });
   terminal.parser.registerCsiHandler({ prefix: "?", final: "l" }, (params) => {
-    if (!alternateScreenMode(params)) return false;
+    if (!alternateScreenMode(params.filter(isNumber))) return false;
     alternate = false;
     return true;
   });
@@ -42,28 +47,37 @@ export function createTerminalReplayer(terminal: Terminal): TerminalReplayer {
     async write(content) {
       const { frames, rest } = splitTerminalRecording(unfinished + content);
       unfinished = rest;
+      // Frames are written together until one changes the terminal: a size
+      // event for the size the terminal has is free, as legacy recordings
+      // carry one before every clear.
+      let pending = "";
       for (const frame of frames) {
-        if (frame.size) await resizeLikeTmux(terminal, frame.size, alternate);
-        if (frame.enterAlternate && !alternate) {
-          // The rows written so far join the document above the client's own
-          // screen, which starts on blank rows.
-          const buffer = terminal.buffer.active;
-          const { cursorX, cursorY } = buffer;
-          const written =
-            cursorX > 0 ||
-            (buffer.getLine(buffer.baseY + cursorY)?.translateToString(true)
-              .length ?? 0) > 0;
-          await write(
-            terminal,
-            `\x1b[${terminal.rows};1H${"\n".repeat(cursorY + (written ? 1 : 0))}\x1b[${cursorY + 1};${cursorX + 1}H`,
-          );
+        const resizes =
+          frame.size !== undefined &&
+          (frame.size.cols !== terminal.cols ||
+            frame.size.rows !== terminal.rows);
+        if ((resizes || frame.enterAlternate) && pending) {
+          if (stopped) return;
+          await write(terminal, pending);
+          pending = "";
         }
-        if (frame.bytes) await write(terminal, frame.bytes);
+        if (stopped) return;
+        if (resizes && frame.size) {
+          await resizeLikeTmux(terminal, frame.size, alternate);
+        }
+        if (frame.enterAlternate && !alternate) {
+          await scrollScreenIntoDocument(terminal);
+        }
+        pending += frame.bytes;
       }
+      if (pending && !stopped) await write(terminal, pending);
     },
     reset() {
       alternate = false;
       unfinished = "";
+    },
+    stop() {
+      stopped = true;
     },
   };
 }
@@ -73,6 +87,8 @@ export interface TerminalReplayer {
   write(content: string): Promise<void>;
   /** Forget stream state after `terminal.reset()`. */
   reset(): void;
+  /** Write nothing more, before the terminal is disposed. */
+  stop(): void;
 }
 
 /**
@@ -88,18 +104,14 @@ export function splitTerminalRecording(content: string): {
   let frame: Omit<RecordingFrame, "bytes"> = {};
   let offset = 0;
   for (const match of content.matchAll(SCREEN_EVENTS)) {
-    if (match[1]) {
+    if (match[1] !== undefined) {
       const size = parseTerminalSize(match[1]);
       // An event with no usable size stays in the stream; xterm ignores it.
       if (!size) continue;
       frames.push({ ...frame, bytes: content.slice(offset, match.index) });
       frame = { size };
       offset = match.index + match[0].length;
-    } else if (
-      match[2]
-        .split(";")
-        .some((mode) => ALTERNATE_SCREEN_MODES.has(Number(mode)))
-    ) {
+    } else if (alternateScreenMode(match[2].split(";").map(Number))) {
       frames.push({ ...frame, bytes: content.slice(offset, match.index) });
       frame = { enterAlternate: true };
       offset = match.index;
@@ -119,27 +131,40 @@ interface RecordingFrame {
   bytes: string;
 }
 
-interface TerminalDimensions {
-  cols: number;
-  rows: number;
-}
-
 const ALTERNATE_SCREEN_MODES = new Set([47, 1047, 1049]);
 const SIZE_EVENT_START = "\x1b]777;archestra-terminal-size=";
 const SCREEN_EVENTS =
   // biome-ignore lint/suspicious/noControlCharactersInRegex: size events and screen modes are terminal protocol bytes
   /\x1b\]777;(archestra-terminal-size=\d+x\d+)(?:\x07|\x1b\\)|\x1b\[\?([\d;]*)h/g;
 
+function alternateScreenMode(modes: number[]): boolean {
+  return modes.some((mode) => ALTERNATE_SCREEN_MODES.has(mode));
+}
+
+function isNumber(value: number | number[]): value is number {
+  return typeof value === "number";
+}
+
 /** Where a size event or screen mode the bytes do not finish starts. */
 function unfinishedSequence(bytes: string): number {
   const start = bytes.lastIndexOf("\x1b");
   if (start === -1) return bytes.length;
   const candidate = bytes.slice(start);
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: an unfinished CSI private mode is terminal protocol bytes
-  if (/^\x1b(?:\[(?:\?[\d;]*)?)?$/.test(candidate)) return start;
-  if (candidate.length <= SIZE_EVENT_START.length) {
-    return SIZE_EVENT_START.startsWith(candidate) ? start : bytes.length;
+  if (candidate === "\x1b") {
+    // The escape can also open the string terminator of a size event.
+    const event = bytes.lastIndexOf("\x1b", start - 1);
+    if (
+      event !== -1 &&
+      bytes.slice(event, start).startsWith(SIZE_EVENT_START) &&
+      /^\d+x\d+$/.test(bytes.slice(event + SIZE_EVENT_START.length, start))
+    ) {
+      return event;
+    }
+    return start;
   }
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: an unfinished CSI private mode is terminal protocol bytes
+  if (/^\x1b\[(?:\?[\d;]*)?$/.test(candidate)) return start;
+  if (SIZE_EVENT_START.startsWith(candidate)) return start;
   return candidate.startsWith(SIZE_EVENT_START) &&
     /^\d+(?:x\d*)?$/.test(candidate.slice(SIZE_EVENT_START.length))
     ? start
@@ -151,14 +176,13 @@ async function resizeLikeTmux(
   { cols, rows }: TerminalDimensions,
   alternate: boolean,
 ): Promise<void> {
-  const buffer = terminal.buffer.active;
-  const { cursorX, cursorY } = buffer;
   if (alternate) {
     // tmux neither reflows the alternate screen nor keeps its history: a
     // smaller pane cuts rows (below the cursor first, then at the top) and a
     // larger one gains blank rows. xterm resizes a Windows pty's buffer
     // without reflow and without taking lines from scrollback, so the
     // alternate screen resizes as one.
+    const { cursorX, cursorY } = terminal.buffer.active;
     const cut = Math.max(
       0,
       terminal.rows - rows - (terminal.rows - 1 - cursorY),
@@ -177,18 +201,38 @@ async function resizeLikeTmux(
     }
     return;
   }
+  // The width first: xterm reflows the buffer and keeps the cursor on its
+  // line through that. Then the height.
+  if (cols !== terminal.cols) terminal.resize(cols, terminal.rows);
+  const buffer = terminal.buffer.active;
   const pulled = Math.min(Math.max(0, rows - terminal.rows), buffer.baseY);
   if (pulled === 0) {
-    terminal.resize(cols, rows);
+    if (rows !== terminal.rows) terminal.resize(cols, rows);
     return;
   }
   // Lines come back from scrollback with the cursor on the last row. The
   // cursor then moves down by as many rows, as tmux moves it.
+  const { cursorX, cursorY } = buffer;
   await write(terminal, `\x1b[${terminal.rows};1H`);
   terminal.resize(cols, rows);
   await write(
     terminal,
-    `\x1b[${Math.min(cursorY + pulled, rows - 1) + 1};${Math.min(cursorX, cols - 1) + 1}H`,
+    `\x1b[${Math.min(cursorY + pulled, rows - 1) + 1};${cursorX + 1}H`,
+  );
+}
+
+/** On entering the alternate screen, the rows written so far join the
+ * document above the client's own screen, which starts on blank rows. */
+async function scrollScreenIntoDocument(terminal: Terminal): Promise<void> {
+  const buffer = terminal.buffer.active;
+  const { cursorX, cursorY } = buffer;
+  const written =
+    cursorX > 0 ||
+    (buffer.getLine(buffer.baseY + cursorY)?.translateToString(true).length ??
+      0) > 0;
+  await write(
+    terminal,
+    `\x1b[${terminal.rows};1H${"\n".repeat(cursorY + (written ? 1 : 0))}\x1b[${cursorY + 1};${cursorX + 1}H`,
   );
 }
 

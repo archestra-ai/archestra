@@ -5,7 +5,10 @@ import { cn } from "@/lib/utils/tailwind";
 import { TerminalRecordingBlock } from "./terminal-recording-block";
 import { prepareTerminalRecording } from "./terminal-recording-geometry";
 import { inferTerminalRecordingLinks } from "./terminal-recording-links";
-import { createTerminalReplayer } from "./terminal-recording-replay";
+import {
+  createTerminalReplayer,
+  type TerminalReplayer,
+} from "./terminal-recording-replay";
 import { snapshotTerminalRecording } from "./terminal-recording-snapshot";
 
 /**
@@ -29,6 +32,7 @@ export function TerminalPlayback({
   );
   const recordingRef = useRef(recording);
   recordingRef.current = recording;
+  const replayerRef = useRef<TerminalReplayer | null>(null);
   const lines = useMemo(() => {
     if (!snapshot) return [];
     const physical = snapshot.lines.map((line) => ({
@@ -97,6 +101,7 @@ export function TerminalPlayback({
       // replayer keeps replay in the normal buffer, so snapshots retain
       // earlier output, and resizes xterm as tmux resized the recorded pane.
       const replayer = createTerminalReplayer(terminal);
+      replayerRef.current = replayer;
 
       let rendered: TerminalRecording | null = null;
       let writing = false;
@@ -126,44 +131,58 @@ export function TerminalPlayback({
         // reset() does not discard xterm's pending write buffer. Every write
         // completes before the next render starts, so a seek never meets old
         // bytes that could resurrect a later screen.
-        void replayer.write(bytes).then(async () => {
-          if (disposed) return;
-          let view: ReturnType<typeof snapshotTerminalRecording> | null = null;
-          if (!queued) {
-            const length = terminal.buffer.active.length;
-            if (length <= 5000) {
-              view = snapshotTerminalRecording(terminal);
-            } else {
-              view = { cols: terminal.cols, rows: terminal.rows, lines: [] };
-              // Yield between chunks while retaining the write lock to keep
-              // the buffer stable. A queued seek discards this stale snapshot.
-              for (let start = 0; start < length; start += 2000) {
-                if (disposed || queued) {
-                  view = null;
-                  break;
+        void replayer.write(bytes).then(
+          async () => {
+            if (disposed) return;
+            let view: ReturnType<typeof snapshotTerminalRecording> | null =
+              null;
+            if (!queued) {
+              const length = terminal.buffer.active.length;
+              if (length <= 5000) {
+                view = snapshotTerminalRecording(terminal);
+              } else {
+                view = { cols: terminal.cols, rows: terminal.rows, lines: [] };
+                // Yield between chunks while retaining the write lock to keep
+                // the buffer stable. A queued seek discards this stale snapshot.
+                for (let start = 0; start < length; start += 2000) {
+                  if (disposed || queued) {
+                    view = null;
+                    break;
+                  }
+                  const chunk = snapshotTerminalRecording(terminal, {
+                    start,
+                    end: start + 2000,
+                  });
+                  view.lines.push(...chunk.lines);
+                  await new Promise<void>((resolve) => setTimeout(resolve, 0));
                 }
-                const chunk = snapshotTerminalRecording(terminal, {
-                  start,
-                  end: start + 2000,
-                });
-                view.lines.push(...chunk.lines);
-                await new Promise<void>((resolve) => setTimeout(resolve, 0));
+                while (view?.lines.length && !view.lines.at(-1)?.runs.length)
+                  view.lines.pop();
               }
-              while (view?.lines.length && !view.lines.at(-1)?.runs.length)
-                view.lines.pop();
             }
-          }
-          if (disposed) return;
-          writing = false;
-          if (queued) {
-            const latest = queued;
+            if (disposed) return;
+            writing = false;
+            if (queued) {
+              const latest = queued;
+              queued = null;
+              renderRecording(latest);
+            } else if (view) {
+              inferTerminalRecordingLinks(view.lines);
+              setSnapshot(view);
+            }
+          },
+          (error: unknown) => {
+            // A failed write leaves the buffer unknown: the next render
+            // replays from the start instead of appending.
+            console.error("Terminal recording replay failed", error);
+            if (disposed) return;
+            writing = false;
+            rendered = null;
+            const latest = queued ?? next;
             queued = null;
             renderRecording(latest);
-          } else if (view) {
-            inferTerminalRecordingLinks(view.lines);
-            setSnapshot(view);
-          }
-        });
+          },
+        );
       };
       renderRecordingRef.current = renderRecording;
       renderRecording(recordingRef.current);
@@ -172,6 +191,7 @@ export function TerminalPlayback({
     void initialize();
     return () => {
       disposed = true;
+      replayerRef.current?.stop();
       initializedTerminal?.dispose();
       renderRecordingRef.current = null;
     };

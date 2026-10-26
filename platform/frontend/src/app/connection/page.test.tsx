@@ -1606,6 +1606,9 @@ describe("ConnectPage after copying the command", () => {
     expect(screen.getByRole("region", { name: "Connect" })).not.toHaveClass(
       "opacity-50",
     );
+    expect(
+      screen.getByRole("button", { name: "Show the starter prompt" }),
+    ).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: /Cursor/ }));
     expect(status()).toHaveTextContent(

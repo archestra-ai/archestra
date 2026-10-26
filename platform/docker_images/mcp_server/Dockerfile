@@ -148,7 +148,7 @@ RUN apk add --no-cache \
    # CVE-2026-22184: zlib vulnerability fixed in 1.3.2-r0
    # CVE-2026-32767: expat XML parser vulnerability
    # CVE-2026-40200 (musl 1.2.5-r23) is covered by the pinned base image digest
-   # Fixed-version-available curl/libcurl vulnerabilities are resolved in 8.22.0-r0.
+   # CVE-2026-92392: curl/libcurl vulnerabilities are resolved in 8.23.0-r0.
    # The explicit `apk add curl` above installs them, so explicit floors below ensure
    # a cached layer cannot retain the older packages.
    # Fixed-version-available util-linux vulnerabilities are resolved in 2.41.6-r1.
@@ -164,7 +164,7 @@ RUN apk add --no-cache \
    # fixes. Require 9.20.30-r0 for CVE-2026-94300, CVE-2026-97313,
    # CVE-2026-96888 and CVE-2026-19630 in addition to the earlier fixes.
    apk add --no-cache --upgrade "bind>=9.20.30-r0" && \
-   apk add --no-cache --upgrade "curl>=8.22.0-r0" "libcurl>=8.22.0-r0" \
+   apk add --no-cache --upgrade "curl>=8.23.0-r0" "libcurl>=8.23.0-r0" \
        "util-linux>=2.41.6-r1" && \
    # CVE-2026-63076, CVE-2026-63075, CVE-2026-63072, CVE-2026-54874, CVE-2026-18798,
    # CVE-2026-14457, CVE-2026-14456: OpenSSL vulnerabilities (HIGH) fixed in 3.5.8-r0.

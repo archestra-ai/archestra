@@ -440,12 +440,6 @@ export async function calculateInteractionCosts(params: {
       cacheReadSavings: undefined,
     };
   }
-  const pricing = await quoteUsagePricing({
-    model: params.actualModel,
-    usage: params.usage,
-    provider: params.providerName,
-    providerApiKeyId: params.providerApiKeyId,
-  });
   const billingUsage =
     params.usageAccountingMode && params.usageAccountingMode !== "off"
       ? await priceBillingUsage({
@@ -465,12 +459,21 @@ export async function calculateInteractionCosts(params: {
           provider: params.providerName,
           providerApiKeyId: params.providerApiKeyId,
         });
+  const tokens = usageCostTokens(params.usage);
   const cacheBreakdown =
-    billingUsage?.mode === "enforce"
+    billingUsage?.mode === "enforce" ||
+    (!tokens.readTokens && !tokens.writeTokens)
       ? undefined
       : utils.costOptimization.cacheCostFromQuote(
-          pricing.request,
-          usageCostTokens(params.usage),
+          (
+            await quoteUsagePricing({
+              model: params.actualModel,
+              usage: params.usage,
+              provider: params.providerName,
+              providerApiKeyId: params.providerApiKeyId,
+            })
+          ).request,
+          tokens,
         );
   const componentsCache =
     billingUsage?.mode === "enforce"

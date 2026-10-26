@@ -11,6 +11,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { delay, HttpResponse, http } from "msw";
+import { vi } from "vitest";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { activeSourceVersion } from "@/auto-routing/signals";
 import { type Trio, tiersFingerprint } from "@/auto-routing/tiers";
@@ -28,6 +29,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RoutingDecisionModel from "@/models/routing-decision";
 import RoutingPlanModel from "@/models/routing-plan";
 import RoutingScorerVersionModel from "@/models/routing-scorer-version";
+import { secretManager } from "@/secrets-manager";
 import { handleAutoRoutingFit } from "@/task-queue/handlers/auto-routing-fit-handler";
 import { accessGrants, beforeEach, describe, expect, test } from "@/test";
 import { seedFitHistory } from "@/test/auto-routing-fit";
@@ -666,6 +668,75 @@ describe("Model Router auto model", () => {
       expect(await listsAuto({ ...org, credential })).toBe(false);
       expect(jevCalls).toBe(0);
     });
+
+    test("a tier on a provider the Model Router cannot serve is refused", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const nativeModel = await createModel("ollama-native", "llama3.2");
+      const secret = await makeSecret({ secret: { apiKey: "ollama" } });
+      const nativeKey = await makeLlmProviderApiKey(
+        org.organizationId,
+        secret.id,
+        { provider: "ollama-native" },
+      );
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(nativeKey.id, [
+        nativeModel.id,
+      ]);
+      await AutoRoutingSettingsModel.update(org.organizationId, {
+        normalModelId: nativeModel.id,
+      });
+      const credential = await virtualKey(org, {
+        authorId: null,
+        extraKeys: [
+          { provider: "ollama-native", providerApiKeyId: nativeKey.id },
+        ],
+      });
+
+      await expectRefused({ ...org, credential }, "normal");
+      await expectRefused({ ...org, credential }, "normal", "responses");
+      expect(await listsAuto({ ...org, credential })).toBe(false);
+      expect(jevCalls).toBe(0);
+      expect(await decisions(org.organizationId)).toEqual([]);
+    });
+
+    test("tiers sharing a credential read its secret once per request", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await setupOrganization({
+        makeOrganization,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const reads = vi.spyOn(secretManager(), "getSecret");
+      const providerReads = () =>
+        reads.mock.calls.filter(([id]) => id === org.providerSecretId).length;
+
+      const response = await send(org, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: "s-1",
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(upstreamModels).toEqual([org.trio[1].modelId]);
+      expect(providerReads()).toBe(1);
+
+      await send(org, {
+        ingress: "chat",
+        path: "chat/completions",
+        session: "s-1",
+      });
+      expect(providerReads()).toBe(2);
+      reads.mockRestore();
+    });
   });
 
   describe("listing", () => {
@@ -849,6 +920,7 @@ async function setupOrganization(params: {
   };
   return {
     ...base,
+    providerSecretId: secret.id,
     credential: await virtualKey(base, { authorId: null }),
   };
 }

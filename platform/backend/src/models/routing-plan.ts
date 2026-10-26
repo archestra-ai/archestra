@@ -153,6 +153,9 @@ class RoutingPlanModel {
           summary: columns.summary,
           diagnostics: outcome.diagnostics,
           error: columns.error,
+          // Taken under the lock, so newest-first follows publication order;
+          // `now()` is the transaction's start, which may precede the lock wait.
+          createdAt: sql`clock_timestamp()`,
         })
         .returning();
       const plan = SelectRoutingPlanSchema.parse(row);

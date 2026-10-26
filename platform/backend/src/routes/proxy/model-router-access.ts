@@ -1,6 +1,7 @@
 import {
   credentialRequiresPerUserScope,
   isChatCompletionsOnlyRouterProvider,
+  isModelRouterSupportedProvider,
   perUserCredentialLabel,
   type ResourceVisibilityScope,
   requiresOpenAiResponsesApi,
@@ -159,7 +160,7 @@ export async function selectModelRouterCredential(params: {
   }
 
   const apiKey = mappedApiKey.secretId
-    ? await getSecretValueForLlmProviderApiKey(mappedApiKey.secretId)
+    ? await readRequestSecret(params.auth, mappedApiKey.secretId)
     : undefined;
   try {
     assertSubscriptionCredentialForProvider({ apiKey, provider });
@@ -181,6 +182,28 @@ export async function selectModelRouterCredential(params: {
     };
   }
   return { kind: "selected", mappedApiKey, apiKey };
+}
+
+/**
+ * Provider secrets read for one request, keyed by its auth: auto routing
+ * checks every tier and forwarding selects the credential again, usually all
+ * with the same secret.
+ */
+const requestSecrets = new WeakMap<
+  ModelRouterAuth,
+  Map<string, Promise<string | undefined>>
+>();
+
+function readRequestSecret(
+  auth: ModelRouterAuth,
+  secretId: string,
+): Promise<string | undefined> {
+  const secrets = requestSecrets.get(auth) ?? new Map();
+  requestSecrets.set(auth, secrets);
+  const secret =
+    secrets.get(secretId) ?? getSecretValueForLlmProviderApiKey(secretId);
+  secrets.set(secretId, secret);
+  return secret;
 }
 
 function isOwnedPersonalCredential(
@@ -240,6 +263,7 @@ export function modelRouterServesEndpoint(
   resolution: ModelRouterResolution,
   endpoint: ModelRouterEndpoint,
 ): boolean {
+  if (!isModelRouterSupportedProvider(resolution.provider)) return false;
   switch (endpoint) {
     case "chat_completions":
       return !modelRequiresResponses(resolution);

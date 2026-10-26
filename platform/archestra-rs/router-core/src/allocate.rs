@@ -91,7 +91,7 @@ pub(crate) struct Route {
     pub(crate) tie: Option<usize>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 pub struct Decision {
     pub tier_index: usize,
     /// Probability the policy picks this tier for this session: 1, q, or 1 − q.

@@ -13,6 +13,11 @@ const RIDGE_ALPHA: f64 = 1e-6;
 const STEP_TOLERANCE: f64 = 1e-10;
 // Each one-hot source adds a dense column; Newton's Hessian is O(rows · width²) per step.
 pub(crate) const MAX_FIT_SOURCES: usize = 20;
+/// Predicted sizes are clamped to [1, 1e12] tokens. Finite fitted coefficients can still push
+/// `exp` of the linear predictor to 0 or ∞ on features unlike the training data, and every
+/// downstream estimate (log size, cost) needs a positive finite size.
+const MIN_SESSION_TOKENS: f64 = 1.0;
+const MAX_SESSION_TOKENS: f64 = 1e12;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SourceEffect {
@@ -34,7 +39,8 @@ pub enum SizeModel {
 }
 
 impl SizeModel {
-    /// Expected tokens; a source unseen in training gets the baseline's (zero) effect.
+    /// Expected tokens in [`MIN_SESSION_TOKENS`, `MAX_SESSION_TOKENS`]; a source unseen in
+    /// training gets the baseline's (zero) effect.
     pub(crate) fn predict(&self, features: &SessionFeatures) -> f64 {
         match self {
             Self::PoissonGlm {
@@ -47,7 +53,8 @@ impl SizeModel {
                     .iter()
                     .find(|e| e.source == features.source)
                     .map_or(0.0, |e| e.coef);
-                (intercept + effect + p_long * features.p_long.get()).exp() * TOKEN_SCALE
+                ((intercept + effect + p_long * features.p_long.get()).exp() * TOKEN_SCALE)
+                    .clamp(MIN_SESSION_TOKENS, MAX_SESSION_TOKENS)
             }
         }
     }
@@ -449,6 +456,21 @@ mod tests {
             features.source = Source(dropped.into());
             assert_eq!(model.predict(&features), baseline_prediction);
         }
+    }
+
+    #[test]
+    fn extreme_linear_predictors_stay_positive_and_finite() {
+        let model = |p_long: f64| SizeModel::PoissonGlm {
+            baseline: Source("base".into()),
+            intercept: -7.0,
+            source_effects: vec![],
+            p_long,
+        };
+        let mut features = row("base", SessionKind::Main, 1.0, 0, 0).features;
+        assert_eq!(model(1178.0).predict(&features), MAX_SESSION_TOKENS);
+        assert_eq!(model(-1178.0).predict(&features), MIN_SESSION_TOKENS);
+        features.p_long = Probability::new(0.0).unwrap();
+        assert!((model(1178.0).predict(&features) - (-7.0_f64).exp() * TOKEN_SCALE).abs() < 1e-9);
     }
 
     #[test]

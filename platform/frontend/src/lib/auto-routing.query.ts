@@ -6,7 +6,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
+import { throwOnApiError } from "@/lib/utils/api";
 
 const {
   getAutoRoutingSettings,
@@ -82,10 +82,7 @@ export function useUpdateAutoRoutingSettings() {
   return useMutation({
     mutationFn: async (body: AutoRoutingSettingsUpdate) => {
       const { data, error } = await updateAutoRoutingSettings({ body });
-      if (error) {
-        handleApiError(error);
-        throw toApiError(error);
-      }
+      throwOnApiError(error);
       return data;
     },
     onSuccess: (data) => applyFit(queryClient, data),
@@ -97,10 +94,7 @@ export function useReplanAutoRouting() {
   return useMutation({
     mutationFn: async () => {
       const { data, error } = await replanAutoRouting();
-      if (error) {
-        handleApiError(error);
-        throw toApiError(error);
-      }
+      throwOnApiError(error);
       return data;
     },
     onSuccess: (data) => applyFit(queryClient, data),
@@ -138,10 +132,7 @@ export function usePreviewAutoRouting() {
   return useMutation({
     mutationFn: async (body: AutoRoutingPreviewBody) => {
       const { data, error } = await previewAutoRouting({ body });
-      if (error) {
-        handleApiError(error);
-        throw toApiError(error);
-      }
+      throwOnApiError(error);
       return data;
     },
   });

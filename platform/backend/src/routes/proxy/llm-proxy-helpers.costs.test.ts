@@ -226,16 +226,25 @@ describe("calculateInteractionCosts pricing quote", () => {
 
   test("records the cost the provider reports instead of the price-table estimate", async () => {
     await makeModel("reported", BASE_PRICES, "openrouter");
+    const usage: UsageView = {
+      inputTokens: 1200,
+      outputTokens: 300,
+      providerReportedCost: 0.0123,
+    };
     const result = await calculateInteractionCosts({
       actualModel: "reported",
-      usage: {
-        inputTokens: 1200,
-        outputTokens: 300,
-        providerReportedCost: 0.0123,
-      },
+      usage,
       providerName: "openrouter",
     });
-    expect(result.actualCost).toBe(0.0123);
+    expect(result).toEqual({
+      billingUsage: undefined,
+      actualCost: 0.0123,
+      cacheCost: undefined,
+      cacheSavings: undefined,
+      cacheReadSavings: undefined,
+    });
+    // Nothing needed a local price, so no pricing quote was resolved.
+    expect(usage.billingQuote).toBeUndefined();
   });
 
   test("records no costs when the provider reported no usage", async () => {

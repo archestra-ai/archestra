@@ -68,6 +68,8 @@ pub enum RouterError {
     InvalidUniform(f64),
     #[error("policy needs a finite λ ≥ 0 and q in [0, 1], got λ = {lam_star}, q = {q}")]
     InvalidPolicy { lam_star: f64, q: f64 },
+    #[error("expected session cost is not finite: {0}")]
+    NonFiniteEstimate(f64),
 }
 
 pub fn plan(input: PlanInput) -> Result<Plan, RouterError> {
@@ -175,11 +177,15 @@ pub fn decide(
     } = Hull::new(estimate.price, estimate.adequacy)
         .route(policy)
         .draw(policy.q, u);
+    let expected_cost_usd = estimate.size * estimate.price[tier_index];
+    if !expected_cost_usd.is_finite() {
+        return Err(RouterError::NonFiniteEstimate(expected_cost_usd));
+    }
     Ok(Decision {
         tier_index,
         propensity,
         lambda: policy.lam_star,
-        expected_cost_usd: estimate.size * estimate.price[tier_index],
+        expected_cost_usd,
     })
 }
 
@@ -462,6 +468,43 @@ mod tests {
             decide(&plan, &plan.policy, &features("main"), 0.5),
             Err(RouterError::NonFinitePlan("long_share"))
         );
+    }
+
+    #[test]
+    fn steep_p_long_fit_still_routes_long_sessions() {
+        // one source and kind; the sessions with a slightly higher p_long are vastly larger
+        let mut input = input(4.0);
+        for (i, row) in input.history.iter_mut().enumerate() {
+            if i % 2 == 1 {
+                row.features.p_long = Probability::new(0.01).unwrap();
+                row.short.cache_read *= 100_000;
+            }
+        }
+        let plan = plan(input).unwrap();
+        let SizeModel::PoissonGlm { p_long, .. } = plan.size_model;
+        assert!(p_long > 710.0, "{p_long}");
+        let mut long = features("main");
+        long.p_long = Probability::new(1.0).unwrap();
+        let decision = decide(&plan, &plan.policy, &long, 0.5).unwrap();
+        assert!(decision.expected_cost_usd.is_finite() && decision.expected_cost_usd > 0.0);
+    }
+
+    #[test]
+    fn non_finite_expected_cost_is_an_error() {
+        let mut plan = plan(input(4.0)).unwrap();
+        let tier = |id: &str| TierSpec {
+            model_id: ModelId::new(id.into()).unwrap(),
+            short: prices(f64::MAX / 5.0),
+            long: None,
+        };
+        plan.tiers_fingerprint =
+            TierSet::new([tier("fast"), tier("normal"), tier("smart")], None).unwrap();
+        let SizeModel::PoissonGlm { intercept, .. } = &mut plan.size_model;
+        *intercept = 100.0;
+        assert!(matches!(
+            decide(&plan, &plan.policy, &features("main"), 0.5),
+            Err(RouterError::NonFiniteEstimate(_))
+        ));
     }
 
     #[test]

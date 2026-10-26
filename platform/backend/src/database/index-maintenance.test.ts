@@ -6,6 +6,7 @@ import {
   createInteractionsIndexes,
   createMcpServerIndexes,
   dropLegacyPayloadTrgmIndexes,
+  isModelHistoryIndexReady,
 } from "./index-maintenance";
 
 async function indexExists(name: string): Promise<boolean> {
@@ -205,6 +206,7 @@ describe("createMcpServerIndexes", () => {
 describe("createInteractionsIndexes", () => {
   const name = "interactions_session_preview_missing_idx";
   const passthroughName = "interactions_passthrough_virtual_key_id_idx";
+  const modelHistoryName = "interactions_model_created_at_idx";
   const options = {
     concurrently: false,
     client: {
@@ -216,12 +218,14 @@ describe("createInteractionsIndexes", () => {
   beforeEach(async () => {
     await db.execute(sql.raw(`DROP INDEX IF EXISTS "${name}"`));
     await db.execute(sql.raw(`DROP INDEX IF EXISTS "${passthroughName}"`));
+    await db.execute(sql.raw(`DROP INDEX IF EXISTS "${modelHistoryName}"`));
   });
 
   test("creates the missing-preview index, then recognizes it on the next boot", async () => {
     expect(await createInteractionsIndexes(options)).toEqual({
       [name]: "created",
       [passthroughName]: "created",
+      [modelHistoryName]: "created",
     });
     expect(await indexDefinition(name)).toBe(
       `CREATE INDEX ${name} ON public.interactions USING btree (created_at, id) WHERE ((session_preview IS NULL) AND (encrypted_chat_conversation_id IS NULL))`,
@@ -233,6 +237,7 @@ describe("createInteractionsIndexes", () => {
     expect(await createInteractionsIndexes(options)).toEqual({
       [name]: "already_valid",
       [passthroughName]: "already_valid",
+      [modelHistoryName]: "already_valid",
     });
     expect(await indexOid(name)).toBe(oid);
     expect(await advisoryLockCount()).toBe(0);
@@ -254,6 +259,48 @@ describe("createInteractionsIndexes", () => {
     );
     expect(await indexOid(passthroughName)).toBe(oid);
     expect(await advisoryLockCount()).toBe(0);
+  });
+});
+
+describe("model history index", () => {
+  const name = "interactions_model_created_at_idx";
+  const options = {
+    concurrently: false,
+    client: {
+      query: (text: string, values?: unknown[]) =>
+        db.$client.query(text, values),
+    },
+  };
+
+  beforeEach(async () => {
+    await db.execute(sql.raw(`DROP INDEX IF EXISTS "${name}"`));
+  });
+
+  // Cost backfills refuse to run until this reports ready, so the INCLUDE list
+  // must read back exactly as built or the feature would stay off forever.
+  test("is built with its INCLUDE columns and then reported ready", async () => {
+    expect(await isModelHistoryIndexReady()).toBe(false);
+
+    expect((await createInteractionsIndexes(options))[name]).toBe("created");
+    expect(await indexDefinition(name)).toBe(
+      `CREATE INDEX ${name} ON public.interactions USING btree (model, created_at, id) INCLUDE (type, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cache_write_1h_tokens, cost, billing_mode, user_id)`,
+    );
+    expect(await isModelHistoryIndexReady()).toBe(true);
+
+    expect((await createInteractionsIndexes(options))[name]).toBe(
+      "already_valid",
+    );
+  });
+
+  test("an index under its name with other columns is not ready and is left alone", async () => {
+    await db.execute(
+      sql.raw(`CREATE INDEX "${name}" ON interactions (model, created_at)`),
+    );
+
+    expect(await isModelHistoryIndexReady()).toBe(false);
+    expect((await createInteractionsIndexes(options))[name]).toBe(
+      "unexpected_definition",
+    );
   });
 });
 

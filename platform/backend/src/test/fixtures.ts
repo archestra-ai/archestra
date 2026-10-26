@@ -991,6 +991,8 @@ async function makeInteraction(
       | "runId"
       | "cacheReadTokens"
       | "cacheWriteTokens"
+      | "cacheWrite1hTokens"
+      | "baselineModel"
       | "externalAgentId"
       | "userId"
       | "serviceAccountId"

@@ -1,6 +1,7 @@
 import {
   credentialRequiresPerUserScope,
   hasArchestraTokenPrefix,
+  isChatCompletionsOnlyRouterProvider,
   LLM_PROXY_OAUTH_SCOPE,
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
   perUserCredentialLabel,
@@ -268,17 +269,6 @@ const translatedModelRouterProviders = [
  */
 const unreadTranslatedProviders: ReadonlySet<SupportedProvider> =
   new Set<TranslatedModelRouterProvider>(["bedrock", "cohere", "gemini"]);
-
-/**
- * Chat providers the router serves over Chat Completions only. Their thinking
- * models return `reasoning_content` that must be sent back on every tool-call
- * turn, and the Responses translation keeps neither the reasoning in the
- * output nor the field on the replayed assistant message, so a tool loop
- * breaks on its second turn. Until the translation carries it, reject the
- * Responses endpoint for them instead of serving a request that fails later.
- */
-const chatCompletionsOnlyProviders: ReadonlySet<SupportedProvider> =
-  new Set<SupportedProvider>(["kimi"]);
 
 /**
  * Built from the shared list so the connection UI cannot advertise the router
@@ -577,7 +567,9 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     );
   }
 
-  if (chatCompletionsOnlyProviders.has(resolution.provider)) {
+  // The shared list keeps this refusal, the model picker and the runtime
+  // launch preflight in agreement: see CHAT_COMPLETIONS_ONLY_ROUTER_PROVIDERS.
+  if (isChatCompletionsOnlyRouterProvider(resolution.provider)) {
     throw new ApiError(
       501,
       `${providerDisplayNames[resolution.provider]} models are available through the model router's Chat Completions endpoint only: the Responses translation cannot carry the reasoning their thinking models need on tool-call turns.`,

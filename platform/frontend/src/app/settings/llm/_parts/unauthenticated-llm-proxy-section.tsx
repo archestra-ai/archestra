@@ -3,10 +3,7 @@
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { WithPermissions } from "@/components/roles/with-permissions";
-import {
-  SettingsBlock,
-  SettingsSaveBar,
-} from "@/components/settings/settings-block";
+import { SettingsSaveBar } from "@/components/settings/settings-block";
 import {
   InlineNotice,
   InlineNoticeBody,
@@ -49,30 +46,16 @@ export function UnauthenticatedLlmProxySection() {
 
   return (
     <>
-      <SettingsBlock
-        title="Allow requests without a virtual key"
-        description="Accept LLM proxy requests that carry only a provider key, or none."
-        control={
-          <WithPermissions
-            permissions={{ organizationSettings: ["update"] }}
-            noPermissionHandle="tooltip"
-          >
-            {({ hasPermission }) => (
-              <div className="flex items-center gap-2.5">
-                <span className="text-sm text-muted-foreground">
-                  {allowed ? "On" : "Off"}
-                </span>
-                <Switch
-                  checked={allowed}
-                  onCheckedChange={setAllowed}
-                  disabled={updateMutation.isPending || !hasPermission}
-                  aria-label="Allow requests without a virtual key"
-                />
-              </div>
-            )}
-          </WithPermissions>
-        }
+      <section
+        className="space-y-3"
+        aria-labelledby="unauthenticated-llm-proxy-title"
       >
+        <h2
+          id="unauthenticated-llm-proxy-title"
+          className="text-sm font-medium leading-5"
+        >
+          Allow requests without a virtual key
+        </h2>
         <InlineNotice variant="warning">
           <AlertTriangle />
           <InlineNoticeBody>
@@ -84,7 +67,34 @@ export function UnauthenticatedLlmProxySection() {
             </InlineNoticeText>
           </InlineNoticeBody>
         </InlineNotice>
-      </SettingsBlock>
+        <div className="flex items-center justify-between gap-4">
+          <p
+            id="unauthenticated-llm-proxy-description"
+            className="text-sm leading-5 text-muted-foreground"
+          >
+            Accept LLM proxy requests that carry only a provider key, or none.
+          </p>
+          <WithPermissions
+            permissions={{ organizationSettings: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <div className="flex shrink-0 items-center gap-2.5">
+                <span className="text-sm text-muted-foreground">
+                  {allowed ? "On" : "Off"}
+                </span>
+                <Switch
+                  checked={allowed}
+                  onCheckedChange={setAllowed}
+                  disabled={updateMutation.isPending || !hasPermission}
+                  aria-label="Allow requests without a virtual key"
+                  aria-describedby="unauthenticated-llm-proxy-description"
+                />
+              </div>
+            )}
+          </WithPermissions>
+        </div>
+      </section>
       <SettingsSaveBar
         hasChanges={allowed !== saved}
         isSaving={updateMutation.isPending}

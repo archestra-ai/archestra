@@ -28,8 +28,8 @@ import {
 } from "./pool-fields";
 import {
   accessSummary,
+  orderSummary,
   type PoolFormValues,
-  roleSummary,
   toFormValues,
   toPoolInput,
   usePoolOptions,
@@ -76,7 +76,7 @@ export function EditPoolDialog({
     if (saved) onOpenChange(false);
   });
 
-  const memberStatus = `${roleSummary(members)}${
+  const memberStatus = `${orderSummary(members)}${
     benched.length > 0 ? `, ${benched.length} benched` : ""
   }`;
 

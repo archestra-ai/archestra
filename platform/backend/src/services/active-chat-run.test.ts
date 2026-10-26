@@ -879,7 +879,9 @@ test("Stop's wait is bounded and never fails a recently touched run", async ({
     conversationId: conversation.id,
     organizationId: organization.id,
   });
-  await service.waitForTerminal(runId, { timeoutMs: 100 });
+  await expect(
+    service.waitForTerminal(runId, { timeoutMs: 100 }),
+  ).rejects.toThrow("The response is still stopping");
 
   expect((await ActiveChatRunModel.findById(runId))?.status).toBe("running");
 });

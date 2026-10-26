@@ -74,6 +74,48 @@ test("prepends the skill activation block to the last user message", async ({
   expect((await SkillModel.findById(skill.id))?.usageCount).toBe(1);
 });
 
+test("activates every queued skill in one turn without reactivating history or bypassing access", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  const org = await makeOrganization();
+  const otherOrg = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, org.id);
+  const first = await seedSkill(org.id, "Research");
+  const second = await seedSkill(org.id, "Summary");
+  const forbidden = await seedSkill(otherOrg.id, "Private");
+  const userMessage = (skill: typeof first, text: string): ChatMessage => ({
+    role: "user",
+    parts: [{ type: "text", text }],
+    metadata: { skill: { id: skill.id, name: skill.name } },
+  });
+  const messages: ChatMessage[] = [
+    userMessage(first, "old request"),
+    { role: "assistant", parts: [{ type: "text", text: "old response" }] },
+    userMessage(first, "first correction"),
+    userMessage(forbidden, "inaccessible skill"),
+    userMessage(second, "second correction"),
+  ];
+  const result = await injectSkillActivation({
+    messages,
+    organizationId: org.id,
+    userId: user.id,
+    conversationId: undefined,
+    provider: "anthropic",
+    model: "claude-sonnet-4-5",
+  });
+  expect(result[0]).toBe(messages[0]);
+  expect(result[2].parts?.[0]?.text).toContain("Follow the Research steps.");
+  expect(result[3]).toBe(messages[3]);
+  expect(result[4].parts?.[0]?.text).toContain("Follow the Summary steps.");
+  expect(messages[2].parts?.[0]?.text).toBe("first correction");
+  await drainBackgroundWork();
+  expect((await SkillModel.findById(first.id))?.usageCount).toBe(1);
+  expect((await SkillModel.findById(second.id))?.usageCount).toBe(1);
+});
+
 test("ignores a skill that belongs to another organization", async ({
   makeOrganization,
   makeUser,

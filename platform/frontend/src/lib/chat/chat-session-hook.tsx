@@ -54,6 +54,7 @@ import {
   resolveCanonicalMessageId,
 } from "@/lib/chat/chat-utils";
 import { encryptedChatRequestHeaders } from "@/lib/chat/encrypted-chat";
+import { getQueueInterruptBlockedReason } from "@/lib/chat/queue-interrupt";
 import { ResumableChatTransport } from "@/lib/chat/resumable-chat-transport";
 import { useStreamStall } from "@/lib/chat/stream-stall.hook";
 import { readThinkingEffort } from "@/lib/chat/thinking-effort-cache";
@@ -1113,8 +1114,8 @@ export default function ChatSessionHook({
   // ---- Queued-message auto-drain -------------------------------------------
   // Messages submitted while a turn was in-flight wait in a per-conversation
   // persisted queue (see chat-message-queue.ts). Whenever this session settles
-  // back to "ready", send the oldest one; multi-message queues chain naturally
-  // as each drained turn finishes. Living here (not in the page) means queues
+  // back to "ready", send the oldest one, or the whole queue when the user
+  // explicitly interrupted to send it together. Living here (not in the page) means queues
   // keep draining while the user is viewing another conversation, since
   // ChatSessionHook instances survive conversation switches.
   const queuedMessages = useConversationMessageQueue(conversationId);
@@ -1152,35 +1153,40 @@ export default function ChatSessionHook({
     ) {
       return;
     }
-    const next = chatMessageQueue.takeNext(conversationId);
-    if (!next) {
-      return;
-    }
+    const batch = chatMessageQueue.takeForTurn(conversationId);
+    if (batch.length === 0) return;
     queueDrainInFlightRef.current = true;
-    const fileParts = (next.files ?? []).map((file) => ({
-      type: "file" as const,
-      ...file,
-    }));
-    sendMessageRef.current?.({
-      role: "user",
-      // Text first, then attachments — the same order as a direct send. A
-      // bare skill command carries no text; keep an empty text part so the
-      // message is well-formed and the backend can inject the skill.
-      parts:
-        next.text.trim() || fileParts.length === 0
-          ? [{ type: "text", text: next.text }, ...fileParts]
-          : fileParts,
-      metadata: {
-        createdAt: new Date().toISOString(),
-        ...(next.skill ? { skill: next.skill } : {}),
-        ...(next.externalMcpSkill
-          ? { externalMcpSkill: next.externalMcpSkill }
-          : {}),
-        ...(next.sandboxCommand ? { sandboxCommand: true as const } : {}),
-      },
+    const pending: UIMessage[] = batch.map((next) => {
+      const fileParts = (next.files ?? []).map((file) => ({
+        type: "file" as const,
+        ...file,
+      }));
+      return {
+        id: next.id,
+        role: "user",
+        parts:
+          next.text.trim() || fileParts.length === 0
+            ? [{ type: "text", text: next.text }, ...fileParts]
+            : fileParts,
+        metadata: {
+          createdAt: next.queuedAt,
+          ...(next.skill ? { skill: next.skill } : {}),
+          ...(next.externalMcpSkill
+            ? { externalMcpSkill: next.externalMcpSkill }
+            : {}),
+          ...(next.sandboxCommand ? { sandboxCommand: true as const } : {}),
+        },
+      };
     });
+    // Keep each queued message and its metadata in the transcript. Appending
+    // the prefix locally is synchronous in the SDK; only sending the last one
+    // starts a request, carrying every queued message in the same model turn.
+    if (pending.length > 1)
+      setMessages((current) => [...current, ...pending.slice(0, -1)]);
+    sendMessageRef.current?.(pending[pending.length - 1]);
   }, [
     status,
+    setMessages,
     error,
     queuedMessages,
     isStopping,
@@ -1277,9 +1283,27 @@ export default function ChatSessionHook({
   const stopSession = useCallback(
     (options?: {
       preserveQueuedMessages?: boolean;
+      interruptQueued?: boolean;
       stopServer?: () => Promise<unknown>;
     }) => {
       if (stopInFlightRef.current) return;
+      // Recheck against the live session when a click races stream updates.
+      if (
+        options?.interruptQueued &&
+        (!["submitted", "streaming"].includes(latestStatusRef.current) ||
+          chatMessageQueue.get(conversationId).length === 0 ||
+          chatMessageQueue
+            .get(conversationId)
+            .some((message) => message.sandboxCommand) ||
+          getQueueInterruptBlockedReason({
+            messages: latestMessagesRef.current,
+            hasPendingQuestion: pendingMcpElicitationsRef.current.length > 0,
+            isCompacting: contextCompaction.isCompacting,
+          }))
+      )
+        return;
+      if (options?.interruptQueued)
+        chatMessageQueue.requestBatch(conversationId);
       const activeUserMessageId = latestMessagesRef.current.findLast(
         (message) => message.role === "user",
       )?.id;
@@ -1318,7 +1342,7 @@ export default function ChatSessionHook({
         setIsStopping(false);
       });
     },
-    [stop, transport],
+    [stop, transport, conversationId, contextCompaction.isCompacting],
   );
   const sendOrQueueText = useCallback(
     (text: string) => {

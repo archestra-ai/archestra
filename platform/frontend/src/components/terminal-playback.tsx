@@ -106,6 +106,7 @@ export function TerminalPlayback({
       let rendered: TerminalRecording | null = null;
       let writing = false;
       let queued: TerminalRecording | null = null;
+      let failures = 0;
       const renderRecording = (next: TerminalRecording) => {
         if (disposed) return;
         if (writing) {
@@ -162,6 +163,7 @@ export function TerminalPlayback({
             }
             if (disposed) return;
             writing = false;
+            failures = 0;
             if (queued) {
               const latest = queued;
               queued = null;
@@ -174,6 +176,7 @@ export function TerminalPlayback({
           (error: unknown) => {
             // A failed write leaves the buffer unknown: it is reset, and
             // the next render replays from the start instead of appending.
+            // A recording that fails every replay is given up after a few.
             console.error("Terminal recording replay failed", error);
             if (disposed) return;
             terminal.reset();
@@ -182,6 +185,7 @@ export function TerminalPlayback({
             rendered = null;
             const latest = queued ?? next;
             queued = null;
+            if (failures++ >= MAX_REPLAY_RETRIES) return;
             renderRecording(latest);
           },
         );
@@ -267,6 +271,8 @@ export function TerminalPlayback({
 // ===================== internals =====================
 
 const RETAINED_SCROLLBACK_LINES = 1_000_000;
+/** Replays retried after a failed write before the player gives up. */
+const MAX_REPLAY_RETRIES = 2;
 /** How close to the end still counts as "at the end" for following output. */
 const FOLLOW_END_SLACK_PX = 10;
 

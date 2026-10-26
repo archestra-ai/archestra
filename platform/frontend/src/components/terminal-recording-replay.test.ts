@@ -253,3 +253,32 @@ test("keeps the client's scroll region when it enters the alternate screen", asy
     terminal.dispose();
   }
 });
+
+test("a reset the client sends opens its scroll region", async () => {
+  // RIS resets the margins, so entering the alternate screen afterwards
+  // restores none: `ALT` lands on the first row, as in tmux.
+  const terminal = new Terminal({ cols: 20, rows: 5, scrollback: 10_000 });
+  try {
+    await createTerminalReplayer(terminal).write(
+      `${size(20, 5)}before\r\n\x1b[2;4r\x1bc\x1b[?6h\x1b[?1049h\x1b[2J\x1b[1;1HALT`,
+    );
+    expect(rows(terminal)).toEqual(["ALT", "", "", "", ""]);
+    expect(terminal.buffer.active.baseY).toBe(0);
+    expect(terminal.modes.originMode).toBe(true);
+  } finally {
+    terminal.dispose();
+  }
+});
+
+test("a soft reset the client sends opens its scroll region", async () => {
+  // DECSTR resets the margins and keeps the screen.
+  const terminal = new Terminal({ cols: 20, rows: 5, scrollback: 10_000 });
+  try {
+    await createTerminalReplayer(terminal).write(
+      `${size(20, 5)}before\r\n\x1b[2;4r\x1b[!p\x1b[?6h\x1b[?1049h\x1b[2J\x1b[1;1HALT`,
+    );
+    expect(rows(terminal).slice(0, 2)).toEqual(["before", "ALT"]);
+  } finally {
+    terminal.dispose();
+  }
+});

@@ -24,9 +24,10 @@ import {
  * back, as tmux's alternate screen has no history.
  *
  * The replayer's own cursor moves are absolute: they turn origin mode off
- * and open the scroll region, and restore both afterwards. A resize leaves
- * the region open, as it does in tmux and xterm; entering the alternate
- * screen keeps the region the client set.
+ * and open the scroll region, and restore both afterwards. A resize or a
+ * reset the client sends (RIS, DECSTR) leaves the region open, as it does
+ * in tmux and xterm; entering the alternate screen keeps the region the
+ * client set.
  */
 export function createTerminalReplayer(terminal: Terminal): TerminalReplayer {
   let alternate = false;
@@ -54,6 +55,16 @@ export function createTerminalReplayer(terminal: Terminal): TerminalReplayer {
     // xterm keeps its region when the rows do not make one.
     if (top < bottom)
       region = top === 1 && bottom === terminal.rows ? null : { top, bottom };
+    return false;
+  });
+  // A full reset (RIS) and a soft reset (DECSTR) open the region, in tmux
+  // as in xterm.
+  terminal.parser.registerEscHandler({ final: "c" }, () => {
+    region = null;
+    return false;
+  });
+  terminal.parser.registerCsiHandler({ intermediates: "!", final: "p" }, () => {
+    region = null;
     return false;
   });
   return {
@@ -100,7 +111,10 @@ export function createTerminalReplayer(terminal: Terminal): TerminalReplayer {
 export interface TerminalReplayer {
   /** Write the next bytes of the recording; resolves once xterm parsed them. */
   write(content: string): Promise<void>;
-  /** Forget stream state after `terminal.reset()`. */
+  /**
+   * Forget stream state after `terminal.reset()`. A stopped replayer stays
+   * stopped: `stop` is for the terminal's disposal.
+   */
   reset(): void;
   /** Write nothing more, before the terminal is disposed. */
   stop(): void;

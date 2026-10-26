@@ -309,3 +309,28 @@ test("replays from the start after a failed write", async () => {
   );
   expect(resize.mock.calls.length).toBeGreaterThan(1);
 });
+
+test("gives up after repeated failed writes", async () => {
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  const original = Terminal.prototype.resize;
+  vi.spyOn(Terminal.prototype, "resize").mockImplementation(function (
+    this: Terminal,
+    cols: number,
+    rows: number,
+  ) {
+    if (cols === 60) throw new Error("resize failed");
+    return original.call(this, cols, rows);
+  });
+  render(
+    <TerminalPlayback
+      content={
+        "\x1b]777;archestra-terminal-size=40x6\x07first\r\n\x1b]777;archestra-terminal-size=60x8\x07second\r\n"
+      }
+    />,
+  );
+  // The first attempt and two retries fail; a fourth is not made.
+  await waitFor(() => expect(error).toHaveBeenCalledTimes(3));
+  await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+  expect(error).toHaveBeenCalledTimes(3);
+  expect(screen.queryByText("second")).toBeNull();
+});

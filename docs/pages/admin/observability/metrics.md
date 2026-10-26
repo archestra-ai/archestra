@@ -75,8 +75,8 @@ Go to an agent's **Advanced** tab and add a key and value under **Labels**. Each
 
 Users, skills, apps, and client-supplied IDs are not metric labels. Use these sources instead:
 
-- **Users:** [per-user statistics](/docs/llm-proxy/costs-and-limits#per-user-usage), or the `archestra.user.*` [span attributes](/docs/admin/observability/tracing#identity-attributes).
-- **Skills and apps:** [per-skill](/docs/llm-proxy/costs-and-limits#per-skill-cost) and [per-app](/docs/llm-proxy/costs-and-limits#per-app-cost) statistics. App LLM spend shows in the LLM metrics as `source="app:llm_complete"`.
+- **Users:** [per-user statistics](/docs/llm-proxy/costs-and-limits/costs#per-user-usage), or the `archestra.user.*` [span attributes](/docs/admin/observability/tracing#identity-attributes).
+- **Skills and apps:** [per-skill](/docs/llm-proxy/costs-and-limits/costs#per-skill-cost) and [per-app](/docs/llm-proxy/costs-and-limits/costs#per-app-cost) statistics. App LLM spend shows in the LLM metrics as `source="app:llm_complete"`.
 - **Client-supplied agent IDs** from the [`X-Archestra-Agent-Id`](/docs/llm-proxy#custom-headers) header: the `archestra.external_agent_id` span attribute. Only `agent_runs_total` carries it as a label.
 - **Credentials:** the `archestra.virtual_key.id` span attribute.
 

@@ -42,7 +42,7 @@ export function CreatePoolDialog({
       open
       onOpenChange={onOpenChange}
       title="New model pool"
-      description="Serve one model from several provider keys. Requests move to the next member on rate limits and outages."
+      description="Serve one model from several provider keys, with fallbacks."
       size="small"
       className="sm:max-w-[720px]"
       isDirty={form.formState.isDirty}

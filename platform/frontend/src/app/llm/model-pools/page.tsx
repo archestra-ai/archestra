@@ -44,7 +44,7 @@ import { PoolProviders } from "./_parts/pool-fields";
 import { accessSummary, memberSummary } from "./_parts/pool-form";
 
 const DESCRIPTION =
-  "Serve one model from several provider keys, on one provider or several. Clients ask for the pool's name; requests go to members by priority and weight, and move to the next member on rate limits and outages.";
+  "Serve one model from several provider keys, on one provider or several. Clients ask for the pool's name; requests go to primary members by weight, and to fallbacks on rate limits and outages.";
 
 const EMPTY_MESSAGE =
   "No model pools yet. Create one to serve a model from several provider keys.";

@@ -1,6 +1,6 @@
 {
   "name": "@frontend",
-  "version": "1.5.0-rc.9",
+  "version": "1.5.0-rc.10",
   "private": true,
   "type": "module",
   "scripts": {

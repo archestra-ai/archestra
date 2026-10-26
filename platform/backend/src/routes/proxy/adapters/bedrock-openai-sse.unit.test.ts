@@ -158,6 +158,65 @@ describe("sse encoder — events", () => {
     expect(bytes).toBeNull();
   });
 
+  test("toolUse with no input → arguments {} at contentBlockStop", () => {
+    const enc = createConverseToOpenaiSseEncoder(ctx);
+    enc.encodeBedrockEvent(
+      chunk({
+        contentBlockStart: {
+          contentBlockIndex: 0,
+          start: { toolUse: { toolUseId: "t_xyz", name: "get_tests" } },
+        },
+      }),
+    );
+    // Bedrock streams a no-argument call as one empty `input` delta.
+    const deltaBytes = enc.encodeBedrockEvent(
+      chunk({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { toolUse: { input: "" } },
+        },
+      }),
+    );
+    const stopBytes = enc.encodeBedrockEvent(
+      chunk({ contentBlockStop: { contentBlockIndex: 0 } }),
+    );
+
+    expect(deltaBytes).toBeNull();
+    const [c] = parseSseChunks(stopBytes) as Array<Record<string, unknown>>;
+    expect(c).toMatchObject({
+      choices: [
+        {
+          delta: { tool_calls: [{ index: 0, function: { arguments: "{}" } }] },
+          finish_reason: null,
+        },
+      ],
+    });
+  });
+
+  test("toolUse with input → no extra emission at contentBlockStop", () => {
+    const enc = createConverseToOpenaiSseEncoder(ctx);
+    enc.encodeBedrockEvent(
+      chunk({
+        contentBlockStart: {
+          contentBlockIndex: 0,
+          start: { toolUse: { toolUseId: "t_xyz", name: "get_weather" } },
+        },
+      }),
+    );
+    enc.encodeBedrockEvent(
+      chunk({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { toolUse: { input: '{"city":"Berlin"}' } },
+        },
+      }),
+    );
+    const bytes = enc.encodeBedrockEvent(
+      chunk({ contentBlockStop: { contentBlockIndex: 0 } }),
+    );
+    expect(bytes).toBeNull();
+  });
+
   test("messageStop → null + stashes finish reason for formatEnd", () => {
     const enc = createConverseToOpenaiSseEncoder(ctx);
     const bytes = enc.encodeBedrockEvent(

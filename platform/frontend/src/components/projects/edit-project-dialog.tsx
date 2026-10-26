@@ -320,6 +320,7 @@ function EditProjectDialogForm({
         onDirtyChange={setPermissionsDirty}
       />
       <AdvancedLabelsSection
+        collapsible
         ref={labelsRef}
         labels={labels}
         onLabelsChange={setLabels}

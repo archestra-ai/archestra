@@ -61,6 +61,7 @@ import {
   DialogForm,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
+import { FieldDescription } from "@/components/ui/field-description";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -316,6 +317,7 @@ export default function LimitsPage() {
   const [formState, setFormState] =
     useState<LimitFormState>(DEFAULT_FORM_STATE);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  const limitValueRef = useRef<HTMLInputElement>(null);
 
   const editId = searchParams.get("edit");
   // The list is unfiltered and unpaginated, so every limit the `edit` param can
@@ -832,10 +834,7 @@ export default function LimitsPage() {
         permissions={{ llmLimit: ["read"] }}
         noPermissionHandle="hide"
       >
-        <details className="mb-3 text-xs text-muted-foreground">
-          <summary className="mb-2 cursor-pointer">
-            Default user spend limits
-          </summary>
+        <div className="mb-3">
           <InlineNotice variant="info">
             <Info />
             <InlineNoticeText>
@@ -851,7 +850,7 @@ export default function LimitsPage() {
               .
             </InlineNoticeText>
           </InlineNotice>
-        </details>
+        </div>
       </WithPermissions>
 
       <BulkActionsScope>
@@ -1064,7 +1063,12 @@ export default function LimitsPage() {
         open={isCreateDialogOpen || !!editingLimit}
         onOpenChange={(open) => !open && closeDialog()}
         title={editingLimit ? "Edit limit" : "Create limit"}
-        description="Choose an amount, limit kind and interval for each limit."
+        initialFocusRef={editingLimit ? limitValueRef : undefined}
+        description={
+          editingLimit
+            ? "Adjust the amount, models or interval."
+            : "Choose who this limit applies to and how much they can use."
+        }
         size="medium"
       >
         <DialogForm
@@ -1074,12 +1078,13 @@ export default function LimitsPage() {
             void handleSubmit();
           }}
         >
-          <DialogBody className="space-y-5">
-            <InlineNotice variant="neutral">
+          <DialogBody className="space-y-4">
+            <InlineNotice variant="warning">
               <Info aria-hidden="true" />
               <InlineNoticeText>
-                Every matching limit must allow the request. A key's allowance
-                does not override its team or organization cap.
+                Requests are blocked when any applicable limit is reached. For
+                example, a virtual key with remaining allowance is still blocked
+                if its team or organization has reached a limit.
               </InlineNoticeText>
             </InlineNotice>
 
@@ -1093,22 +1098,16 @@ export default function LimitsPage() {
               </InlineNotice>
             )}
 
-            <section
-              className="space-y-4"
-              aria-labelledby="limit-scope-heading"
-            >
-              <div className="space-y-1">
-                <h3 id="limit-scope-heading" className="text-sm font-medium">
-                  What this rule applies to
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  {editingLimit
-                    ? "Limit kind and scope stay fixed. Create another rule to change them."
-                    : "Choose who the limit applies to, then set its value and interval."}
-                </p>
-              </div>
-              <fieldset disabled={Boolean(editingLimit)} className="space-y-2">
-                <Label>Apply to</Label>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex h-5 items-center gap-1.5">
+                  <Label>Apply to</Label>
+                  {editingLimit && (
+                    <LimitFieldHelp label="Apply to help">
+                      Create a new limit to change who it applies to.
+                    </LimitFieldHelp>
+                  )}
+                </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <SearchableSelect
                     value={formState.entityType}
@@ -1188,6 +1187,7 @@ export default function LimitsPage() {
                         }))
                       }
                       placeholder="Select user"
+                      disabled={Boolean(editingLimit)}
                       className="w-full sm:flex-1"
                     />
                   )}
@@ -1202,6 +1202,7 @@ export default function LimitsPage() {
                         }))
                       }
                       virtualKeys={virtualKeys}
+                      disabled={Boolean(editingLimit)}
                       placeholder="Select virtual key"
                       className="w-full sm:flex-1"
                     />
@@ -1211,6 +1212,7 @@ export default function LimitsPage() {
                     <AgentSelector
                       mode="single"
                       flat
+                      disabled={Boolean(editingLimit)}
                       remote={{
                         filters: {
                           agentType: "agent",
@@ -1239,6 +1241,7 @@ export default function LimitsPage() {
                         }))
                       }
                       placeholder="Select OAuth client"
+                      disabled={Boolean(editingLimit)}
                       items={oauthClients.map((client) => ({
                         value: client.id,
                         label: client.name,
@@ -1252,6 +1255,7 @@ export default function LimitsPage() {
                     <EnvironmentSelector
                       mode="scope"
                       value={formState.entityId}
+                      disabled={Boolean(editingLimit)}
                       onChange={(value) =>
                         setFormState((current) => ({
                           ...current,
@@ -1262,77 +1266,52 @@ export default function LimitsPage() {
                     />
                   )}
                 </div>
-              </fieldset>
+              </div>
 
               <div className="space-y-2">
                 <Label>Select models</Label>
-                <LlmModelPicker
-                  multiple
-                  sortDirection="desc"
-                  value={formState.isAllModels ? ["all"] : formState.models}
-                  onValueChange={(values) => {
-                    const isAllModels = values.includes("all");
-                    setFormState((current) => ({
-                      ...current,
-                      models: isAllModels ? [] : values,
-                      isAllModels,
-                    }));
-                  }}
-                  models={modelOptions}
-                  editable
-                  includeAllOption
-                />
-              </div>
-            </section>
-
-            <section
-              className="space-y-4 border-t pt-4"
-              aria-labelledby="limit-allowance-heading"
-            >
-              <h3 id="limit-allowance-heading" className="text-sm font-medium">
-                Limit settings
-              </h3>
-              <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_8rem_minmax(0,1.4fr)]">
-                <div className="space-y-2">
-                  <div className="flex h-5 items-center">
-                    <Label htmlFor="limit-value">Limit value</Label>
-                  </div>
-                  <Input
-                    id="limit-value"
-                    aria-label="Limit value"
-                    aria-describedby="limit-value-help"
-                    aria-invalid={Boolean(formState.limitValue) && !validAmount}
-                    required
-                    value={formState.limitValue}
-                    onChange={(event) =>
+                {modelOptions.length === 0 ? (
+                  <FieldDescription>
+                    No model pricing configured.{" "}
+                    <Link
+                      href="/llm/models"
+                      className="underline underline-offset-4"
+                    >
+                      Add pricing
+                    </Link>
+                  </FieldDescription>
+                ) : (
+                  <LlmModelPicker
+                    multiple
+                    sortDirection="desc"
+                    value={formState.isAllModels ? ["all"] : formState.models}
+                    onValueChange={(values) => {
+                      const isAllModels = values.includes("all");
                       setFormState((current) => ({
                         ...current,
-                        limitValue: /^\d{1,3}(,\d{3})+$/.test(
-                          event.target.value,
-                        )
-                          ? event.target.value.replace(/,/g, "")
-                          : event.target.value,
-                      }))
-                    }
-                    placeholder={getLimitValuePlaceholder(
-                      formState.limitType,
-                      formState.cleanupInterval,
-                    )}
-                    inputMode="numeric"
+                        models: isAllModels ? [] : values,
+                        isAllModels,
+                      }));
+                    }}
+                    models={modelOptions}
+                    editable
+                    includeAllOption
                   />
-                  <p
-                    id="limit-value-help"
-                    className="text-xs text-muted-foreground"
-                  >
-                    {formState.limitValue && !validAmount
-                      ? "Enter a whole number from 1 to 2,147,483,647. Decimal and negative amounts are not supported."
-                      : "Choose a whole-number allowance for your workload and interval."}
-                  </p>
-                </div>
+                )}
+              </div>
+            </div>
 
-                <div className="space-y-2">
-                  <div className="flex h-5 items-center">
+            <div className="space-y-4 border-t pt-4">
+              <div className="grid items-start gap-4 sm:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1.4fr)]">
+                <div className="flex flex-col gap-2">
+                  <div className="flex h-5 items-center gap-1.5">
                     <Label htmlFor="limit-kind">Limit kind</Label>
+                    {editingLimit && (
+                      <LimitFieldHelp label="Limit kind help">
+                        Create a new limit to change between spend, tokens and
+                        requests.
+                      </LimitFieldHelp>
+                    )}
                   </div>
                   <Select
                     value={formState.limitType}
@@ -1371,6 +1350,49 @@ export default function LimitsPage() {
                   </Select>
                 </div>
 
+                <div className="flex flex-col gap-2">
+                  <div className="flex h-5 items-center">
+                    <Label htmlFor="limit-value">Limit value</Label>
+                  </div>
+                  <Input
+                    id="limit-value"
+                    ref={limitValueRef}
+                    aria-label="Limit value"
+                    aria-describedby={
+                      formState.limitValue && !validAmount
+                        ? "limit-value-error"
+                        : undefined
+                    }
+                    aria-invalid={Boolean(formState.limitValue) && !validAmount}
+                    required
+                    value={formState.limitValue}
+                    onChange={(event) =>
+                      setFormState((current) => ({
+                        ...current,
+                        limitValue: /^\d{1,3}(,\d{3})+$/.test(
+                          event.target.value,
+                        )
+                          ? event.target.value.replace(/,/g, "")
+                          : event.target.value,
+                      }))
+                    }
+                    placeholder={getLimitValuePlaceholder(
+                      formState.limitType,
+                      formState.cleanupInterval,
+                    )}
+                    inputMode="numeric"
+                  />
+                  {formState.limitValue && !validAmount ? (
+                    <p
+                      id="limit-value-error"
+                      className="text-xs text-destructive"
+                    >
+                      Enter a whole number from 1 to 2,147,483,647. Decimal and
+                      negative amounts are not supported.
+                    </p>
+                  ) : null}
+                </div>
+
                 <div className="grid grid-cols-[auto_1fr] grid-rows-[1.25rem_auto] content-start items-center gap-x-1.5 gap-y-2">
                   <Label htmlFor="limit-interval">Interval</Label>
                   <div className="col-span-2 row-start-2">
@@ -1400,28 +1422,14 @@ export default function LimitsPage() {
                       }
                     />
                   </div>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        className="col-start-2 row-start-1 justify-self-start text-muted-foreground hover:text-foreground"
-                        aria-label="Interval help"
-                      >
-                        <Info className="h-3.5 w-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="top"
-                      align="start"
-                      className="max-w-72"
-                    >
-                      Per-minute allowance recovers continuously. Rolling
-                      intervals reset after elapsed time; calendar intervals
-                      reset at the next day, week or month boundary.
-                    </TooltipContent>
-                  </Tooltip>
+                  <LimitFieldHelp
+                    label="Interval help"
+                    className="col-start-2 row-start-1 justify-self-start"
+                  >
+                    Per-minute allowance recovers continuously. Rolling
+                    intervals reset after elapsed time; calendar intervals reset
+                    at the next day, week or month boundary.
+                  </LimitFieldHelp>
                 </div>
               </div>
               {!(
@@ -1445,9 +1453,10 @@ export default function LimitsPage() {
                   flight can exceed this limit.
                 </p>
               )}
-            </section>
+            </div>
 
             <AdvancedLabelsSection
+              collapsible
               ref={labelsRef}
               labels={formState.labels}
               onLabelsChange={(labels) =>
@@ -1920,4 +1929,36 @@ function getLimitInterval(limit: LimitData): LimitCleanupInterval {
     return "minute";
   }
   return limit.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL;
+}
+
+function LimitFieldHelp({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className={cn(
+            "text-muted-foreground hover:text-foreground",
+            className,
+          )}
+          aria-label={label}
+        >
+          <Info aria-hidden="true" className="h-3.5 w-3.5" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent align="start" className="max-w-60 text-wrap">
+        {children}
+      </TooltipContent>
+    </Tooltip>
+  );
 }

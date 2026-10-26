@@ -637,6 +637,27 @@ describe("LimitsPage", () => {
     );
   });
 
+  it("saves a pending label after Advanced is collapsed", () => {
+    render(<LimitsPage />);
+
+    const key = screen.getByLabelText("Label key");
+    expect(key).not.toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /^Advanced$/ }));
+    fireEvent.change(key, { target: { value: "stage" } });
+    fireEvent.change(screen.getByLabelText("Label value"), {
+      target: { value: "preview" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Advanced$/ }));
+    expect(key).not.toBeVisible();
+    fireEvent.change(screen.getByLabelText("Limit value"), {
+      target: { value: "100" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create limit" }));
+    expect(mockCreateLimit).toHaveBeenCalledWith(
+      expect.objectContaining({ labels: [{ key: "stage", value: "preview" }] }),
+    );
+  });
+
   it("omits the proxy scope from the applied-to filter", () => {
     render(<LimitsPage />);
     fireEvent.click(screen.getByRole("combobox", { name: "All applied to" }));
@@ -652,13 +673,16 @@ describe("LimitsPage", () => {
   it("does not reinterpret decimal, negative or excessive amounts when pasted", () => {
     render(<LimitsPage />);
     const amount = screen.getByLabelText("Limit value");
+    expect(amount).not.toHaveAttribute("aria-describedby");
     for (const value of ["1.50", "1,50", "1,2", "-1", "2147483648"]) {
       fireEvent.change(amount, { target: { value } });
       expect(amount).toHaveValue(value);
       expect(
         screen.getByRole("button", { name: "Create limit" }),
       ).toBeDisabled();
-      expect(screen.getByText(/Enter a whole number from 1 to/)).toBeVisible();
+      expect(amount).toHaveAccessibleDescription(
+        /Enter a whole number from 1 to/,
+      );
     }
     fireEvent.keyDown(screen.getByRole("combobox", { name: "Limit kind" }), {
       key: "Enter",
@@ -670,6 +694,10 @@ describe("LimitsPage", () => {
     fireEvent.submit(amount.closest("form") as HTMLFormElement);
     expect(mockCreateLimit).not.toHaveBeenCalled();
     fireEvent.change(amount, { target: { value: "1,000" } });
+    expect(amount).not.toHaveAttribute("aria-describedby");
+    expect(
+      screen.queryByText(/Enter a whole number from 1 to/),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create limit" })).toBeEnabled();
   });
 
@@ -891,12 +919,10 @@ describe("LimitsPage", () => {
     );
   });
 
-  it("shows a settings notice when a default user limit is configured", () => {
+  it("shows the configured default user limit notice without expanding it", () => {
     render(<LimitsPage />);
 
-    expect(
-      screen.getByText(/default user spend limit applies/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/default user spend limit applies/i)).toBeVisible();
     expect(
       screen.getByText(/custom per-user spend limits override it/i),
     ).toBeInTheDocument();

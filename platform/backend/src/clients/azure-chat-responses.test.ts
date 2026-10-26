@@ -1,12 +1,8 @@
 import { type ModelMessage, stepCountIs, streamText, tool } from "ai";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
+import { createFastifyInstance } from "@/fastify-instance";
 import azureProxyRoutes from "@/routes/proxy/routes/azure";
 import { afterEach, describe, expect, test } from "@/test";
 import { createLLMModel } from "./llm-client";
@@ -15,7 +11,7 @@ import { createLLMModel } from "./llm-client";
 // Use local HTTP servers: the proxy closes its upstream iterator at the final
 // event, and canceling an MSW-teed response body can otherwise deadlock.
 let upstreamApp: ReturnType<typeof Fastify> | undefined;
-let proxyApp: ReturnType<typeof createProxyApp> | undefined;
+let proxyApp: ReturnType<typeof createFastifyInstance> | undefined;
 
 afterEach(async () => {
   proxyApp?.server.closeAllConnections();
@@ -26,11 +22,11 @@ afterEach(async () => {
   proxyApp = undefined;
 });
 
-describe.each([
-  "gpt-5.4",
-  "gpt-6.1-sol",
-  "gpt-6-luna",
-])("Azure %s", (modelName) => {
+describe.each(
+  ["gpt-5.4", "gpt-6.1-sol", "gpt-6.1-luna"].flatMap((modelName) =>
+    ["/openai/v1", "/openai"].map((basePath) => ({ modelName, basePath })),
+  ),
+)("Azure $modelName on $basePath", ({ modelName, basePath }) => {
   test("streams a tool turn and replays it on the next turn through Responses", async ({
     makeOrganization,
     makeAgent,
@@ -44,11 +40,28 @@ describe.each([
     const proxyUrls: string[] = [];
     upstreamApp = Fastify();
     upstreamApp.post(
-      "/openai/v1/responses",
+      `${basePath}/responses`,
       async (request: FastifyRequest, reply: FastifyReply) => {
         const body = request.body as Record<string, unknown>;
         bodies.push(body);
         urls.push(request.url);
+        const apiVersion = new URL(
+          request.url,
+          "http://upstream",
+        ).searchParams.get("api-version");
+        if (
+          apiVersion !==
+          (basePath === "/openai/v1"
+            ? null
+            : config.llm.azure.responsesApiVersion)
+        ) {
+          return reply.code(400).send({
+            error: {
+              code: "BadRequest",
+              message: "API version not supported",
+            },
+          });
+        }
         expect(request.headers["api-key"]).toBe("test-key");
         const input = body.input as Array<Record<string, unknown>>;
         expect(input.some((item) => item.type === "item_reference")).toBe(
@@ -76,7 +89,7 @@ describe.each([
       port: 0,
       host: "127.0.0.1",
     });
-    proxyApp = createProxyApp();
+    proxyApp = createFastifyInstance();
     proxyApp.addHook("onRequest", async (request) => {
       proxyUrls.push(request.url);
     });
@@ -88,7 +101,7 @@ describe.each([
       apiKey: "test-key",
       agentId: agent.id,
       modelName,
-      baseUrl: `${upstreamUrl}/openai/v1`,
+      baseUrl: `${upstreamUrl}${basePath}`,
       source: "chat",
     });
     const executedPaths: string[] = [];
@@ -190,21 +203,18 @@ describe.each([
         }),
       ]),
     );
-    expect(
-      new URL(proxyUrls[0], proxyUrl).searchParams.get("api-version"),
-    ).toBe(config.llm.azure.responsesApiVersion);
-    expect(new URL(urls[0], upstreamUrl).searchParams.has("api-version")).toBe(
-      false,
-    );
+    for (const url of proxyUrls) {
+      expect(new URL(url, proxyUrl).searchParams.has("api-version")).toBe(
+        false,
+      );
+    }
+    for (const url of urls) {
+      expect(new URL(url, upstreamUrl).searchParams.get("api-version")).toBe(
+        basePath === "/openai/v1" ? null : config.llm.azure.responsesApiVersion,
+      );
+    }
   });
 });
-
-function createProxyApp() {
-  const app = Fastify().withTypeProvider<ZodTypeProvider>();
-  app.setValidatorCompiler(validatorCompiler);
-  app.setSerializerCompiler(serializerCompiler);
-  return app;
-}
 
 function responseStream(params: { modelName: string; toolCall: boolean }) {
   const reasoning = {

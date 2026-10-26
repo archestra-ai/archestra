@@ -50,6 +50,7 @@ import {
 } from "../utils/mcp-image";
 import { stripBrowserToolsResults } from "../utils/summarize-tool-results";
 import { withOpenAiChatToolCallIds } from "../utils/tool-call-ids";
+import { streamChatCompletionChunks } from "./chat-completions-stream";
 import { createOpenAiCodexClient } from "./openai-codex-client";
 import { toOpenAiStreamUsageWithCache } from "./openai-sse-chunk";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
@@ -1651,15 +1652,9 @@ export const openaiAdapterFactory: LLMProvider<
       stream: true,
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
-    const stream = await openaiClient.chat.completions.create(openaiRequest);
-
-    return {
-      [Symbol.asyncIterator]: async function* () {
-        for await (const chunk of stream) {
-          yield chunk as OpenAiStreamChunk;
-        }
-      },
-    };
+    return streamChatCompletionChunks<OpenAiStreamChunk>(
+      openaiClient.chat.completions.create(openaiRequest),
+    );
   },
 
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {

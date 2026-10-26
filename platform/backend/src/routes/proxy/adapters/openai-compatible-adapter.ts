@@ -26,6 +26,7 @@ import type {
   LLMStreamAdapter,
   OpenAi,
 } from "@/types";
+import { streamChatCompletionChunks } from "./chat-completions-stream";
 import {
   OpenAIRequestAdapter,
   OpenAIResponseAdapter,
@@ -121,15 +122,9 @@ export function createOpenAiCompatibleAdapterFactory(
         stream: true,
         stream_options: { include_usage: true },
       } as unknown as ChatCompletionCreateParamsStreaming;
-      const stream = await openaiClient.chat.completions.create(params);
-
-      return {
-        [Symbol.asyncIterator]: async function* () {
-          for await (const chunk of stream) {
-            yield chunk as StreamChunk;
-          }
-        },
-      };
+      return streamChatCompletionChunks<StreamChunk>(
+        openaiClient.chat.completions.create(params),
+      );
     },
 
     extractInternalCode:

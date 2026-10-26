@@ -92,22 +92,7 @@ spec:
             timeoutSeconds: {{ .Values.archestra.probes.readiness.timeoutSeconds }}
             failureThreshold: {{ .Values.archestra.probes.readiness.failureThreshold }}
           {{- include "archestra-platform.volumeMounts" . | nindent 10 }}
-      {{- /*
-        Scheduling comes from the shared archestra.* values. Spread constraints
-        without a labelSelector select worker pods here (see the helper).
-      */}}
-      {{- with .Values.archestra.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.archestra.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.archestra.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+      {{- include "archestra-platform.scheduling" (dict "global" .Values.archestra "tier" .Values.archestra.worker) | nindent 6 }}
       {{- with .Values.archestra.topologySpreadConstraints }}
       topologySpreadConstraints:
         {{- include "archestra-platform.topologySpreadConstraints" (dict "constraints" . "selectorLabels" (include "archestra-platform.workerSelectorLabels" $)) | nindent 8 }}

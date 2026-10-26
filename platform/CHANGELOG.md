@@ -1,5 +1,96 @@
 # Changelog
 
+## [1.4.7](https://github.com/archestra-ai/archestra/compare/platform-v1.4.6...platform-v1.4.7) (2026-10-26)
+
+
+### Bug Fixes
+
+* **agent:** patch Debian OpenSSL on stable ([#9657](https://github.com/archestra-ai/archestra/issues/9657)) ([1bbf8f5](https://github.com/archestra-ai/archestra/commit/1bbf8f59e2002b84ed68a502040a8996aec44d9e))
+
+## [1.4.6](https://github.com/archestra-ai/archestra/compare/platform-v1.4.5...platform-v1.4.6) (2026-10-26)
+
+
+### Bug Fixes
+
+* **mcp:** require patched curl in runtime image (backport release/1.4) ([#9655](https://github.com/archestra-ai/archestra/issues/9655)) ([f44db9c](https://github.com/archestra-ai/archestra/commit/f44db9c272c05bab5fad87ad859f0e55ba14f2b2))
+* **sidebar:** preserve collapsed state on initial page load (1.4) ([#9635](https://github.com/archestra-ai/archestra/issues/9635)) ([fe89637](https://github.com/archestra-ai/archestra/commit/fe89637a4df46de65805f26a84ed0a84cf41dc3e))
+
+## [1.4.5](https://github.com/archestra-ai/archestra/compare/platform-v1.4.3...platform-v1.4.5) (2026-10-24)
+
+
+### Features
+
+* **schedules:** compact execution history and show agent schedules (backport release/1.4) ([#9564](https://github.com/archestra-ai/archestra/issues/9564)) ([f9d6fa6](https://github.com/archestra-ai/archestra/commit/f9d6fa6adc530f9504d4985ac3f062ee7a14b2f8))
+
+
+### Bug Fixes
+
+* **agent-runtime:** reduce space above the run notice (backport release/1.4) ([#9559](https://github.com/archestra-ai/archestra/issues/9559)) ([bec95ed](https://github.com/archestra-ai/archestra/commit/bec95ed13f8daeabc341f5ade3fc116fa1ef5364))
+* **agent-runtime:** serialize recording replacements on release/1.4 ([#9592](https://github.com/archestra-ai/archestra/issues/9592)) ([962861a](https://github.com/archestra-ai/archestra/commit/962861a66caa2016b47dabb40705eda6cc8044fc))
+* backport authorization checks to release/1.4 ([#9598](https://github.com/archestra-ai/archestra/issues/9598)) ([e0c0a19](https://github.com/archestra-ai/archestra/commit/e0c0a19b217f625a0956471798aecaf5963082f3))
+* **connect:** keep OpenCode and Kilo's own providers and filter their models (backport release/1.4) ([#9522](https://github.com/archestra-ai/archestra/issues/9522)) ([e4d00aa](https://github.com/archestra-ai/archestra/commit/e4d00aafa6f792f5318216cba54ca40e94c58f9b))
+* **connect:** send the passthrough key on passthrough routes added after setup (backport release/1.4) ([#9547](https://github.com/archestra-ai/archestra/issues/9547)) ([c6ae6e8](https://github.com/archestra-ai/archestra/commit/c6ae6e8529040c83c84c3e6fcf0e3268f35bc36f))
+* **deps:** move tokio to 1.53.3 for RUSTSEC-2026-0386 (backport release/1.4) ([#9542](https://github.com/archestra-ai/archestra/issues/9542)) ([53c31f8](https://github.com/archestra-ai/archestra/commit/53c31f8a59a6f71ed4060894ac1c1b3c7a58617e))
+* **deps:** move undici to 7.30.1 and msal-node to 7.1.0 (backport release/1.4) ([#9593](https://github.com/archestra-ai/archestra/issues/9593)) ([25ba5b4](https://github.com/archestra-ai/archestra/commit/25ba5b4fb8903c3da29e7d4617cb3e9dc109e632))
+* **deps:** patch compressed body parsing in release images (backport release/1.4) ([#9594](https://github.com/archestra-ai/archestra/issues/9594)) ([809e098](https://github.com/archestra-ai/archestra/commit/809e09832eca5a4c5d88c387a4832947aa90302a))
+* **deps:** require patched Zod in Platform (backport [#9563](https://github.com/archestra-ai/archestra/issues/9563)) ([#9575](https://github.com/archestra-ai/archestra/issues/9575)) ([f5b0dc4](https://github.com/archestra-ai/archestra/commit/f5b0dc455f2ec3ad98d21655c992f890aa549273))
+* **docker:** move the platform image to Node 24.22.1 (backport release/1.4) ([#9526](https://github.com/archestra-ai/archestra/issues/9526)) ([c3d1ad3](https://github.com/archestra-ai/archestra/commit/c3d1ad373244fcce02237c820584149a7b52c6bb))
+* **docker:** repair MCP Python wheels and npm HTTP dependency (backport release/1.4) ([#9602](https://github.com/archestra-ai/archestra/issues/9602)) ([2897d42](https://github.com/archestra-ai/archestra/commit/2897d42d5b2b095876faf6961bbbe0a6175a7cb1))
+* **docker:** require Node.js and Brotli fixes for CVE-2026-111497 (backport release/1.4) ([#9582](https://github.com/archestra-ai/archestra/issues/9582)) ([48cd20a](https://github.com/archestra-ai/archestra/commit/48cd20a2ad7385d6a784c8c4fdb9cd8dc34d4673))
+* **docker:** require patched Brotli in the sandbox base for CVE-2026-111497 (backport release/1.4) ([#9601](https://github.com/archestra-ai/archestra/issues/9601)) ([ca37177](https://github.com/archestra-ai/archestra/commit/ca3717778737315aba1f1003c6b68d44054d48cd))
+* **docker:** require patched Zod in the MCP image (backport release/1.4) ([#9571](https://github.com/archestra-ai/archestra/issues/9571)) ([245481e](https://github.com/archestra-ai/archestra/commit/245481eda6cbb246db719b19436bcc8b3721235c))
+* **docker:** take Node.js 24.22.1 for the MCP image from the official build (backport release/1.4) ([#9586](https://github.com/archestra-ai/archestra/issues/9586)) ([ae6904f](https://github.com/archestra-ai/archestra/commit/ae6904fad10a78532263e837351eb1cc47918c3e))
+* **gemini:** discover Nano Banana image models (backport [#9558](https://github.com/archestra-ai/archestra/issues/9558)) ([#9560](https://github.com/archestra-ai/archestra/issues/9560)) ([f1be6d8](https://github.com/archestra-ai/archestra/commit/f1be6d86978d2597d7fcb69184d5b1df8dfc5024))
+* **helm:** backport independent tier scheduling to 1.4 ([#9531](https://github.com/archestra-ai/archestra/issues/9531)) ([5052fc1](https://github.com/archestra-ai/archestra/commit/5052fc17132544b8329a3f6006d7b6f449e441b3))
+* **knowledge-base:** parse small PDFs on Node 24.22.1 (backport release/1.4) ([#9587](https://github.com/archestra-ai/archestra/issues/9587)) ([f3d71fa](https://github.com/archestra-ai/archestra/commit/f3d71fabbff8b7d9c8eb8e0ab0546717eeb69705))
+* **ms-teams:** generate the Teams app manifest on schema 1.30 (backport release/1.4) ([#9533](https://github.com/archestra-ai/archestra/issues/9533)) ([478fe65](https://github.com/archestra-ai/archestra/commit/478fe65a4a7d02ff4a57b74699c52547da0f6eb5))
+* **oauth:** validate discovered metadata identities (release/1.4) ([#9556](https://github.com/archestra-ai/archestra/issues/9556)) ([bb3d28d](https://github.com/archestra-ai/archestra/commit/bb3d28dac6a7e9a68576a37549a980f01ad1d69d))
+* **openappa:** decouple diagnostic forwarding (backport release/1.4) ([#9529](https://github.com/archestra-ai/archestra/issues/9529)) ([c74f375](https://github.com/archestra-ai/archestra/commit/c74f375898f6ae58334869e5f97e5191bdea13ed))
+* **proxy:** serve Responses on the xAI route (backport release/1.4) ([#9528](https://github.com/archestra-ai/archestra/issues/9528)) ([0b6c7f5](https://github.com/archestra-ai/archestra/commit/0b6c7f5847b0b5d9f041a2e4c59db4849a4a4b54))
+* remove vulnerable legacy Zod from SDK dependencies (backport release/1.4) ([#9584](https://github.com/archestra-ai/archestra/issues/9584)) ([c7c2ba6](https://github.com/archestra-ai/archestra/commit/c7c2ba65e40d148d7d984d33dd3e40e9715f4bfd))
+* **runtime:** await backend discovery before starting tasks (backport release/1.4) ([#9553](https://github.com/archestra-ai/archestra/issues/9553)) ([b5653a9](https://github.com/archestra-ai/archestra/commit/b5653a97f2fe606ef30ee74b45f47028ee4bc21d))
+* **docker:** patch the Agent npm HTTP dependency ([#9611](https://github.com/archestra-ai/archestra/issues/9611)) ([e8458a6](https://github.com/archestra-ai/archestra/commit/e8458a60499b63cfe9083c896f6c1f65cc5223a7))
+* **sandbox:** patch sandbox base image dependencies ([#9616](https://github.com/archestra-ai/archestra/issues/9616)) ([d554155](https://github.com/archestra-ai/archestra/commit/d554155851f8d7006092dbeaf624bae217aff998))
+* **agent:** patch runtime dependency toolchains and packages ([#9618](https://github.com/archestra-ai/archestra/issues/9618)) ([1f12361](https://github.com/archestra-ai/archestra/commit/1f1236109cc8566bed5ff188359ea5ce1f89085e))
+* **agent:** patch bundled Hermes Python dependencies ([#9623](https://github.com/archestra-ai/archestra/issues/9623)) ([7c96f84](https://github.com/archestra-ai/archestra/commit/7c96f8462ea6e6bfd6baa113869cf4e1879c5d6e))
+
+
+### Miscellaneous Chores
+
+* **deps:** ignore the ctutils mask advisory until its fix clears the releas (backport release/1.4) ([#9523](https://github.com/archestra-ai/archestra/issues/9523)) ([bafedff](https://github.com/archestra-ai/archestra/commit/bafedfffdd05da332d951bdd490131eb7d53e200))
+* **ci:** scan every release/1.4 image target ([#9609](https://github.com/archestra-ai/archestra/issues/9609)) ([59e740d](https://github.com/archestra-ai/archestra/commit/59e740de0c5362cd6ebe43a4a2a6c79086f7ae91))
+
+
+## [1.4.3](https://github.com/archestra-ai/archestra/compare/platform-v1.4.2...platform-v1.4.3) (2026-10-23)
+
+
+### Bug Fixes
+
+* **agent-runtime:** share workspace transfer tickets across replicas (backport release/1.4) ([#9504](https://github.com/archestra-ai/archestra/issues/9504)) ([42a0157](https://github.com/archestra-ai/archestra/commit/42a0157f1752341afd7add65fd5b2e3011319580))
+* **connect:** tell OpenCode and Kilo which models read images (backport release/1.4) ([#9500](https://github.com/archestra-ai/archestra/issues/9500)) ([001e4b3](https://github.com/archestra-ai/archestra/commit/001e4b35f5e0b6ed55fda9944d1fcfe19055d3c4))
+* **guardrails:** keep a session alive after a tool result with NUL characters (backport release/1.4) ([#9508](https://github.com/archestra-ai/archestra/issues/9508)) ([1ff22d9](https://github.com/archestra-ai/archestra/commit/1ff22d90fbfba86ce2405fd5cea12bc80fc3226b))
+* **k8s:** emit the IPv6 egress floor rule only on clusters that serve IPv6 (backport release/1.4) ([#9502](https://github.com/archestra-ai/archestra/issues/9502)) ([d161721](https://github.com/archestra-ai/archestra/commit/d1617212ae27a110ea11e6b244dd105a9d0d138a))
+* **openappa:** preserve Anthropic cache prefixes during remedy continuation (backport release/1.4) ([#9509](https://github.com/archestra-ai/archestra/issues/9509)) ([dae8b8d](https://github.com/archestra-ai/archestra/commit/dae8b8ddb88562ee1dc69b6819f5b3e395b69cea))
+
+## [1.4.2](https://github.com/archestra-ai/archestra/compare/platform-v1.4.1...platform-v1.4.2) (2026-10-22)
+
+
+### Bug Fixes
+
+* **agent-runtime:** keep Claude assignments open for background work (backport release/1.4) ([#9447](https://github.com/archestra-ai/archestra/issues/9447)) ([61b36bf](https://github.com/archestra-ai/archestra/commit/61b36bf1af1be0e98ade55af60c3c1303d60adf7))
+* **agent-runtime:** say why a workspace file read, write or transfer failed (backport release/1.4) ([#9450](https://github.com/archestra-ai/archestra/issues/9450)) ([6def6ef](https://github.com/archestra-ai/archestra/commit/6def6ef7f9edb4cdc4b369f4545682c7c04aa754))
+* **agent-runtime:** submit long Claude Code tasks through a tmux buffer (backport release/1.4) ([#9440](https://github.com/archestra-ai/archestra/issues/9440)) ([67cb68d](https://github.com/archestra-ai/archestra/commit/67cb68dffd70a7a07e6ac8930e1b3f90356bde89))
+* **deps:** clear release/1.4 image CVEs and queue test failures ([#9493](https://github.com/archestra-ai/archestra/issues/9493)) ([576aacf](https://github.com/archestra-ai/archestra/commit/576aacfd3146d710002d528f035ed6abee4df00b))
+* **guardrails:** allow complete approval reviews through ask_user validation (backport release/1.4) ([#9470](https://github.com/archestra-ai/archestra/issues/9470)) ([f3f3125](https://github.com/archestra-ai/archestra/commit/f3f31258569ae16570b20c4c7650646cbc9b1e63))
+* **guardrails:** send the managed key for Kilo subagents and close failed spa (backport release/1.4) ([#9479](https://github.com/archestra-ai/archestra/issues/9479)) ([fe1da32](https://github.com/archestra-ai/archestra/commit/fe1da3227888e2c106c8d27e38c0cde446c094a2))
+* **llm-proxy:** prepare Claude Desktop subscription requests (backport release/1.4) ([#9491](https://github.com/archestra-ai/archestra/issues/9491)) ([f06416f](https://github.com/archestra-ai/archestra/commit/f06416fdfcae0ce546f06862df8e6463398d02bd))
+* **openappa:** use single-line Appa crown in session and subagent markers (backport release/1.4) ([#9451](https://github.com/archestra-ai/archestra/issues/9451)) ([8f6b9be](https://github.com/archestra-ai/archestra/commit/8f6b9bebd4046f3792b32de3047f3b00614e4f5a))
+* **provider-keys:** delete the stored secret when a key write fails (backport release/1.4) ([#9457](https://github.com/archestra-ai/archestra/issues/9457)) ([772ced8](https://github.com/archestra-ai/archestra/commit/772ced88f7289f6ee145e83ec022b60d4b66d167))
+* **provider-keys:** return 400 when a service account creates a key of its ow (backport release/1.4) ([#9453](https://github.com/archestra-ai/archestra/issues/9453)) ([9a9babd](https://github.com/archestra-ai/archestra/commit/9a9babdb4a0753c4d6246dffed39b12185d3a2bf))
+* **proxy:** end failed Responses streams with response.failed (backport release/1.4) ([#9442](https://github.com/archestra-ai/archestra/issues/9442)) ([3e5a81c](https://github.com/archestra-ai/archestra/commit/3e5a81c6c734e379d8c8a1705da482494a7183e5))
+* **server:** keep failed-query SQL and parameters out of error responses (backport release/1.4) ([#9456](https://github.com/archestra-ai/archestra/issues/9456)) ([2cfff96](https://github.com/archestra-ai/archestra/commit/2cfff960958d8ae9a1d4e3014d748e7384b4f398))
+* **settings:** keep Appearance subpages on refresh (backport release/1.4) ([#9441](https://github.com/archestra-ai/archestra/issues/9441)) ([37df2af](https://github.com/archestra-ai/archestra/commit/37df2af3f9a067c3e682eb2de890ed1edb3bdd2a))
+
 ## [1.4.1](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0...platform-v1.4.1) (2026-10-21)
 
 

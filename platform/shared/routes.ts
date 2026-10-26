@@ -306,6 +306,9 @@ export const RouteId = {
   // Proxy Routes - xAI
   XaiChatCompletionsWithDefaultAgent: "xaiChatCompletionsWithDefaultAgent",
   XaiChatCompletionsWithAgent: "xaiChatCompletionsWithAgent",
+  // Proxy Routes - xAI Responses (served over xAI's chat completions)
+  XaiResponsesWithDefaultAgent: "xaiResponsesWithDefaultAgent",
+  XaiResponsesWithAgent: "xaiResponsesWithAgent",
 
   // Proxy Routes - OpenRouter
   OpenrouterChatCompletionsWithDefaultAgent:

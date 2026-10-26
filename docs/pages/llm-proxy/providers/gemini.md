@@ -2,7 +2,7 @@
 title: Google Gemini
 description: Connect Gemini using Google AI Studio or Vertex AI.
 order: 4
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -34,6 +34,15 @@ To use Vertex AI instead of Google AI Studio, configure these environment variab
 | [`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`](/docs/reference/configuration#ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE) | No       | Path to service account JSON key file  |
 
 Vertex AI mode also gives Knowledge access to Vertex's multimodal embedding model (`multimodalembedding@001`) — see [Image Embedding](/docs/knowledge/settings#image-embedding).
+
+### Missing Models and Nano Banana
+
+Some Vertex AI models, including Nano Banana 2.1, require the global endpoint.
+
+1. Set [`ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT=true`](/docs/reference/configuration#ARCHESTRA_GEMINI_VERTEX_AI_ALLOW_GLOBAL_ENDPOINT) and restart Archestra.
+2. Click **Refresh Models**, then search for `Nano Banana`.
+
+Leave global access disabled if requests must stay in your configured region.
 
 ### GKE with Workload Identity (Recommended)
 

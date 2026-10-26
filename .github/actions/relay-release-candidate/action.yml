@@ -1,0 +1,61 @@
+name: Relay scanned release candidate
+description: Copy verified candidate bytes with the release job's existing App token into same-run artifacts.
+inputs:
+  image_name:
+    description: Published image from the validated selection
+    required: true
+  selection:
+    description: Validated candidate selection JSON
+    required: true
+  token:
+    description: Existing release job App token; never passed to publisher jobs
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Download and verify amd64 candidate
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        IMAGE_NAME: ${{ inputs.image_name }}
+        IMAGE_ARCH: amd64
+        SELECTION_FILE: ${{ inputs.selection }}
+        CANDIDATE_DIR: ${{ runner.temp }}/relay-${{ inputs.image_name }}-amd64
+      run: python3 .github/scripts/release-handoff.py relay
+    - name: Relay amd64 bytes into this release run
+      uses: ./.github/actions/github-upload-artifact
+      with:
+        name: promoted-candidate-${{ inputs.image_name }}-amd64-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/relay-${{ inputs.image_name }}-amd64/*
+        if-no-files-found: error
+        retention-days: 1
+        compression-level: 1
+    - name: Remove downloaded amd64 archive
+      if: ${{ always() }}
+      shell: bash
+      env:
+        CANDIDATE_DIR: ${{ runner.temp }}/relay-${{ inputs.image_name }}-amd64
+      run: rm -rf -- "$CANDIDATE_DIR"
+    - name: Download and verify arm64 candidate
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        IMAGE_NAME: ${{ inputs.image_name }}
+        IMAGE_ARCH: arm64
+        SELECTION_FILE: ${{ inputs.selection }}
+        CANDIDATE_DIR: ${{ runner.temp }}/relay-${{ inputs.image_name }}-arm64
+      run: python3 .github/scripts/release-handoff.py relay
+    - name: Relay arm64 bytes into this release run
+      uses: ./.github/actions/github-upload-artifact
+      with:
+        name: promoted-candidate-${{ inputs.image_name }}-arm64-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/relay-${{ inputs.image_name }}-arm64/*
+        if-no-files-found: error
+        retention-days: 1
+        compression-level: 1
+    - name: Remove downloaded arm64 archive
+      if: ${{ always() }}
+      shell: bash
+      env:
+        CANDIDATE_DIR: ${{ runner.temp }}/relay-${{ inputs.image_name }}-arm64
+      run: rm -rf -- "$CANDIDATE_DIR"

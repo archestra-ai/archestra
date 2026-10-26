@@ -18,8 +18,8 @@ export function buildTeamsManifest(params: {
   const conversationScopes = ["team", "groupChat", "personal"];
   return {
     $schema:
-      "https://developer.microsoft.com/json-schemas/teams/v1.21/MicrosoftTeams.schema.json",
-    manifestVersion: "1.21",
+      "https://developer.microsoft.com/json-schemas/teams/v1.30/MicrosoftTeams.schema.json",
+    manifestVersion: "1.30",
     version: version || "1.0.0",
     id: botAppId || "{{BOT_MS_APP_ID}}",
     developer: {

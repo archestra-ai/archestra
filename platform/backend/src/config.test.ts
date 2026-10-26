@@ -3482,6 +3482,40 @@ describe("parseOtelCaptureContent", () => {
 });
 
 describe("OpenAPPA feature configuration", () => {
+  test.each([
+    undefined,
+    "",
+    "false",
+    "true",
+    " true ",
+  ])("requires explicit opt-in for external reports independently of analytics (%s)", (forwarding) => {
+    for (const analytics of ["disabled", "enabled", undefined]) {
+      vi.stubEnv("ARCHESTRA_ANALYTICS", analytics);
+      for (const environment of ["production", "development"]) {
+        vi.stubEnv("NODE_ENV", environment);
+        expect(
+          parseOpenAppaConfig({ yellForwardingEnabled: forwarding })
+            .yellForwardingEnabled,
+        ).toBe(forwarding?.trim() === "true");
+        expect(getAnalyticsConfig().enabled).toBe(
+          analytics ? analytics !== "disabled" : environment === "production",
+        );
+      }
+    }
+  });
+
+  test.each([
+    "TRUE",
+    "enabled",
+    "1",
+    "yes",
+    "disabled",
+  ])("rejects invalid external reporting configuration (%s)", (yellForwardingEnabled) => {
+    expect(() => parseOpenAppaConfig({ yellForwardingEnabled })).toThrow(
+      "ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED must be true or false",
+    );
+  });
+
   test("reporting defaults on and supports an explicit opt-out", () => {
     expect(parseOpenAppaConfig().yellEnabled).toBe(true);
     expect(parseOpenAppaConfig({ yellEnabled: "true" }).yellEnabled).toBe(true);
@@ -3517,6 +3551,7 @@ describe("OpenAPPA feature configuration", () => {
     expect(parseOpenAppaConfig()).toEqual({
       enabled: true,
       yellEnabled: true,
+      yellForwardingEnabled: false,
       offerSigningSecret: "",
       postgresMaxConnections: 4,
     });

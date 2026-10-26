@@ -3,6 +3,7 @@ import config from "@/config";
 import {
   type AppaDelegationMarker,
   collectDelegationMarkers,
+  collectReleasedSpawnCalls,
   isDelegatedPrompt,
   isDelegationMarkerItem,
   isDelegationMarkerLine,
@@ -380,6 +381,123 @@ describe("collecting delegation markers", () => {
     const completed = structuredClone(changed);
     stripDelegationMarkers({ family: "openai:responses", body: changed });
     expect(changed).toEqual(completed);
+  });
+});
+
+describe("collecting released spawn calls", () => {
+  const marked = (spawnCallId: string) =>
+    `${PROMPT}\n\n${mintDelegationMarker({ ...SPAWN, prompt: PROMPT, spawnCallId })}`;
+
+  test("reads the call each spawn prompt's marker names, on every wire", () => {
+    expect(
+      collectReleasedSpawnCalls({
+        family: "openai:responses",
+        body: {
+          input: [
+            {
+              type: "function_call",
+              call_id: "client-id",
+              name: "task",
+              // The marker names the provider id APPA released.
+              arguments: JSON.stringify({ prompt: marked("call_released") }),
+            },
+            {
+              type: "function_call",
+              call_id: "call_plain",
+              name: "task",
+              arguments: JSON.stringify({ prompt: PROMPT }),
+            },
+          ],
+        },
+      }),
+    ).toEqual(["call_released"]);
+    expect(
+      collectReleasedSpawnCalls({
+        family: "anthropic:messages",
+        body: {
+          messages: [
+            {
+              role: "assistant",
+              content: [
+                {
+                  type: "tool_use",
+                  id: "toolu_released",
+                  name: "Agent",
+                  input: { prompt: marked("toolu_released") },
+                },
+                {
+                  type: "tool_use",
+                  id: "toolu_plain",
+                  name: "Agent",
+                  input: { prompt: PROMPT },
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    ).toEqual(["toolu_released"]);
+    expect(
+      collectReleasedSpawnCalls({
+        family: "openai:chatCompletions",
+        body: {
+          messages: [
+            {
+              role: "assistant",
+              tool_calls: [
+                {
+                  id: "call_released",
+                  type: "function",
+                  function: {
+                    name: "task",
+                    arguments: JSON.stringify({
+                      prompt: marked("call_released"),
+                    }),
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    ).toEqual(["call_released"]);
+  });
+
+  test("ignores markers outside spawn prompts and markers that name no call", () => {
+    expect(
+      collectReleasedSpawnCalls({
+        family: "openai:chatCompletions",
+        body: {
+          messages: [
+            // A user may quote a marker; only a spawn prompt can carry one.
+            { role: "user", content: marked("call_quoted") },
+            {
+              role: "assistant",
+              tool_calls: [
+                {
+                  id: "call_read",
+                  type: "function",
+                  function: {
+                    name: "read",
+                    arguments: JSON.stringify({ prompt: marked("call_read") }),
+                  },
+                },
+                {
+                  id: "call_v1",
+                  type: "function",
+                  function: {
+                    name: "task",
+                    arguments: JSON.stringify({
+                      prompt: `${PROMPT}\n\n${mint()}`,
+                    }),
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    ).toEqual([]);
   });
 });
 

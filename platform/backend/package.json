@@ -1,6 +1,6 @@
 {
   "name": "@backend",
-  "version": "1.4.1",
+  "version": "1.4.7",
   "description": "",
   "author": "",
   "private": true,
@@ -22,6 +22,7 @@
     "benchmark:queries": "vitest run --config vitest.queries.config.ts",
     "test:migration-upgrades": "node --test scripts/migration-upgrades.test.mjs scripts/migration-tag-upgrades.test.mjs scripts/create-statistics-index.test.mjs",
     "test:permission-upgrade": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx --test scripts/resource-permissions-upgrade.test.mjs",
+    "test:agent-transcripts:postgres": "tsx --tsconfig standalone-scripts.tsconfig.json --test src/test/agent-transcripts.postgres.ts",
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "lint:fix:unsafe": "biome check --write --unsafe",
@@ -142,7 +143,7 @@
     "cheerio": "^1.2.0",
     "confluence.js": "^2.1.0",
     "croner": "^10.0.1",
-    "dompurify": "^3.4.16",
+    "dompurify": "^3.4.17",
     "dotenv": "^17.3.1",
     "drizzle-kit": "^0.31.9",
     "drizzle-orm": "^0.45.2",
@@ -182,7 +183,7 @@
     "sharp": "0.35.5",
     "smol-toml": "1.9.0",
     "tiktoken": "^1.0.22",
-    "undici": "7.29.1",
+    "undici": "7.30.1",
     "ws": "^8.20.1",
     "zod": "catalog:"
   },

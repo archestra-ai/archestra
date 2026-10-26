@@ -20,10 +20,13 @@ crate-type = ["cdylib"]
 # and the generic coding battery (#697); then v0.37.0 and libpq TLS
 # parameters (`sslmode=verify-full`, `sslrootcert`) in the PostgreSQL URL (#710),
 # and the attestation offered only where the parent covers its rank (#713).
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "6d296379be0791eb1c49197d81cfc5060f1da784", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "6d296379be0791eb1c49197d81cfc5060f1da784" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "6d296379be0791eb1c49197d81cfc5060f1da784", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "6d296379be0791eb1c49197d81cfc5060f1da784" }
+# On the 1.4 line only: the `main` pin above plus plaintext receipts that hold
+# U+0000 stored under the plaintext escape (#724), cherry-picked as 9e89e007 on
+# the branch backport/archestra-release-1.4-plaintext-nul.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9e89e00784904dfc91c1a3e3a62a0b2a25a5ef51", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9e89e00784904dfc91c1a3e3a62a0b2a25a5ef51" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9e89e00784904dfc91c1a3e3a62a0b2a25a5ef51", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "9e89e00784904dfc91c1a3e3a62a0b2a25a5ef51" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

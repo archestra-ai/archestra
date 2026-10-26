@@ -1576,36 +1576,44 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     });
   });
 
-  test("keeps Gemini image-model providerOptions free of thinkingConfig", async ({
-    makeConversation,
-  }) => {
-    const model = await makeGeminiModelRow("gemini-2.5-flash-image");
-    const geminiConversation = await makeConversation(agentId, {
-      userId: user.id,
-      organizationId,
-      modelId: model.id,
-    });
-    mockStreamText.mockClear();
+  for (const modelId of ["gemini-2.5-flash-image", "gemini-nano-banana-2.1"]) {
+    test(`enables image output without text thinking settings for ${modelId}`, async ({
+      makeConversation,
+    }) => {
+      const model = await makeGeminiModelRow(modelId);
+      const geminiConversation = await makeConversation(agentId, {
+        userId: user.id,
+        organizationId,
+        modelId: model.id,
+      });
+      mockStreamText.mockClear();
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/chat",
-      payload: {
-        id: geminiConversation.id,
-        messages: [
-          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
-        ],
-      },
-    });
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/chat",
+        payload: {
+          id: geminiConversation.id,
+          messages: [
+            {
+              id: "msg-1",
+              role: "user",
+              parts: [{ type: "text", text: "hi" }],
+            },
+          ],
+        },
+      });
 
-    expect(response.statusCode).toBe(200);
-    await executionPromise;
+      expect(response.statusCode).toBe(200);
+      await executionPromise;
 
-    expect(mockStreamText).toHaveBeenCalledTimes(1);
-    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
-      responseModalities: ["TEXT", "IMAGE"],
+      expect(mockStreamText).toHaveBeenCalledTimes(1);
+      expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual(
+        {
+          responseModalities: ["TEXT", "IMAGE"],
+        },
+      );
     });
-  });
+  }
 
   // Seeds a synced OpenAI model row so resolveConversationModel dereferences
   // the conversation to that model id + the openai provider.

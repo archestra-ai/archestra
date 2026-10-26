@@ -169,6 +169,11 @@ export const CacheKey = {
    * next call reads them.
    */
   AgentRuntimePendingExports: "agent-runtime-pending-exports-v1",
+  /**
+   * Workspace transfer tickets: minted by whichever replica serves the tool
+   * or API call, redeemed by whichever one the public content URL reaches.
+   */
+  AgentWorkspaceTransferTicket: "agent-workspace-transfer-ticket-v1",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

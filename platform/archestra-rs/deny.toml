@@ -9,6 +9,13 @@ ignore = [
   { id = "RUSTSEC-2026-0367", reason = "appa never extracts ZIP archives; remove once appa uses zip 9" },
   { id = "RUSTSEC-2026-0368", reason = "appa never extracts ZIP archives; remove once appa uses zip 9" },
   { id = "RUSTSEC-2026-0369", reason = "appa never extracts ZIP archives; remove once appa uses zip 9" },
+  # ctutils 0.4.2 reaches us only through digest (hmac, sha2, md-5 under
+  # appa and tokio-postgres). The advisory is a timing side channel in
+  # ctutils::Choice mask generation; this workspace never compares secrets
+  # through it. The fixed releases (0.4.4, 0.4.5) were published on
+  # 2026-10-23, inside the 7-day Cargo release-age rule. Remove this entry
+  # and run `cargo update -p ctutils` on or after 2026-10-30.
+  { id = "RUSTSEC-2026-0385", reason = "ctutils only backs digest hashing here; fixed releases are younger than the release-age rule until 2026-10-30" },
 ]
 
 [bans]

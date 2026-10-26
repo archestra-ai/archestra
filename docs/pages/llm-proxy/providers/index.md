@@ -95,7 +95,7 @@ Each provider has its own proxy URL, `https://<archestra-host>/v1/<path>`, with 
 | [OpenAI-compatible servers](/docs/llm-proxy/providers/openai-compatible) | `vllm` | Chat Completions, Embeddings | Yes | vLLM, llama.cpp, LM Studio, SGLang, and others |
 | OpenRouter | `openrouter` | Chat Completions, Embeddings | Yes | See [OpenRouter Free Models](#openrouter-free-models) |
 | Perplexity | `perplexity` | Chat Completions, Responses | Yes | `sonar` models take no tools; vendor-prefixed models such as `anthropic/claude-opus-5` do |
-| xAI (Grok) | `xai` | Chat Completions | Yes | SuperGrok subscription through **Connect** |
+| xAI (Grok) | `xai` | Chat Completions, Responses | Yes | SuperGrok subscription through **Connect** |
 | Zhipu AI | `zhipuai` | Chat Completions, Embeddings | Yes | |
 
 Each provider's default endpoint can be changed with its `ARCHESTRA_<PROVIDER>_BASE_URL` variable, listed under [LLM Provider Configuration](/docs/reference/configuration#llm-providers).

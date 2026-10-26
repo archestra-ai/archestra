@@ -46,6 +46,7 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   buildCurlExample,
+  getImageExampleOperations,
   getProviderAuthHeader,
   getProxyBaseUrl,
   providerKeyEnvVar,
@@ -436,12 +437,15 @@ export function RequestExample({
   const isPending = usesCatalog
     ? passthroughModelsPending
     : readsLinkedModels && linkedModelsPending;
+  const imageOperations = getImageExampleOperations(target);
   const candidates = usesCatalog
     ? (passthroughModels ?? []).map((model) => ({
         id: model.id,
         provider: model.provider,
         isBest: model.isBest,
         supportedEndpoints: model.capabilities?.supportedEndpoints,
+        isImage:
+          model.capabilities?.outputModalities?.includes("image") ?? false,
       }))
     : (linkedModels ?? [])
         .filter((model) =>
@@ -456,12 +460,14 @@ export function RequestExample({
             // Decision models answer with probabilities, not text.
             (model.provider === "jev" ||
               !model.outputModalities ||
-              model.outputModalities.includes("text")),
+              model.outputModalities.includes("text") ||
+              model.outputModalities.includes("image")),
         )
         .map((model) => ({
           id: model.modelId,
           provider: model.provider,
           isBest: model.isBest,
+          isImage: model.outputModalities?.includes("image") ?? false,
           supportedEndpoints: Array.isArray(model.supportedEndpoints)
             ? model.supportedEndpoints.filter(
                 (endpoint): endpoint is string => typeof endpoint === "string",
@@ -469,6 +475,7 @@ export function RequestExample({
             : null,
         }));
   const modelOptions = candidates
+    .filter((model) => !model.isImage || imageOperations.length > 0)
     .filter((model) =>
       target.kind === "model-router"
         ? routerProviders.includes(model.provider) &&
@@ -486,6 +493,7 @@ export function RequestExample({
           ? `${model.provider}:${model.id}`
           : model.id,
       supportedEndpoints: model.supportedEndpoints,
+      isImage: model.isImage,
     }));
   // A provider route still has a request to show before its models sync: the
   // provider's default model stands in rather than leaving the step empty.
@@ -493,6 +501,7 @@ export function RequestExample({
     modelOptions.push({
       value: DEFAULT_MODELS[target.provider],
       supportedEndpoints: null,
+      isImage: false,
     });
   }
 
@@ -512,6 +521,7 @@ export function RequestExample({
       keyValue: secret ? MASKED_KEY : (keyValue ?? `$${credentialEnvVar}`),
       model,
       supportedEndpoints: selectedModel?.supportedEndpoints,
+      imageOperation: selectedModel?.isImage ? imageOperations[0] : undefined,
     });
   const providerLabel =
     target.kind === "provider" ? providerCatalog.label(target.provider) : null;
@@ -519,7 +529,13 @@ export function RequestExample({
   if (!isPending && modelOptions.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No runnable model example is available for this key and endpoint yet.
+        {target.kind === "model-router" &&
+        candidates.some(
+          (candidate) =>
+            candidate.isImage && routerProviders.includes(candidate.provider),
+        )
+          ? "Choose the native provider API for image generation examples."
+          : "No runnable model example is available for this key and endpoint yet."}
       </p>
     );
   }
@@ -596,6 +612,12 @@ export function RequestExample({
           </p>
         )}
       </div>
+      {selectedModel?.isImage && imageOperations.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          The response includes base64 image data in{" "}
+          <InlineCode>inlineData</InlineCode>.
+        </p>
+      )}
       {secret ? (
         <MaskedCodeExample
           language="cURL"

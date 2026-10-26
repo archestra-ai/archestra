@@ -65,6 +65,7 @@ import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { useChatApps } from "@/components/chat/use-chat-apps";
 import { LoadingState } from "@/components/loading";
 import { getScheduledRunChatState } from "@/components/scheduled-tasks/schedule-run-state";
+import { MobileScheduleRuns } from "@/components/scheduled-tasks/schedule-runs-panel";
 import { ScheduledRunInProgress } from "@/components/scheduled-tasks/scheduled-run-in-progress";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -3331,6 +3332,13 @@ export function ChatPageContent({
               {/* Mobile: Inline artifact/browser panel below header */}
               {isRightPanelOpen && (
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden md:hidden">
+                  {activeRightTab === "runs" && scheduledRun && (
+                    <MobileScheduleRuns
+                      triggerId={scheduledRun.triggerId}
+                      currentRunId={scheduledRun.runId}
+                      onClose={closeRightPanel}
+                    />
+                  )}
                   {activeRightTab === "files" && (
                     <div className="flex-1 min-h-0 overflow-auto">
                       <ConversationFilesPanel
@@ -3467,7 +3475,10 @@ export function ChatPageContent({
                     </div>
                   </ViewTransition>
 
-                  {isReadOnlyConversation ? (
+                  {/* The mobile Runs panel owns the content area while open. */}
+                  {isMobile &&
+                  isRightPanelOpen &&
+                  activeRightTab === "runs" ? null : isReadOnlyConversation ? (
                     <div className={COMPOSER_DOCK_CLASS}>
                       <div className="max-w-4xl mx-auto space-y-3">
                         <div className="relative">

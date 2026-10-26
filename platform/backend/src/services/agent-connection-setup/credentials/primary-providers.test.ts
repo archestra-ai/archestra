@@ -384,11 +384,11 @@ describe("Connection setup primary providers", () => {
       const secret = await fixtures.makeSecret();
       const keys = new Map<string, { id: string }>();
       const models = new Map<string, { id: string }>();
-      for (const [provider, modelId, supportsToolCalling] of [
-        ["anthropic", "claude-tools", true],
-        ["anthropic", "claude-no-tools", false],
-        ["openai", "gpt-unknown", null],
-        ["groq", "groq-no-tools", false],
+      for (const [provider, modelId, supportsToolCalling, inputModalities] of [
+        ["anthropic", "claude-tools", true, ["text", "image", "pdf"]],
+        ["anthropic", "claude-no-tools", false, ["text"]],
+        ["openai", "gpt-unknown", null, null],
+        ["groq", "groq-no-tools", false, ["text"]],
       ] as const) {
         if (!keys.has(provider)) {
           keys.set(
@@ -403,7 +403,7 @@ describe("Connection setup primary providers", () => {
           provider,
           modelId,
           externalId: modelId,
-          inputModalities: ["text"],
+          inputModalities: inputModalities ? [...inputModalities] : null,
           outputModalities: ["text"],
           supportsToolCalling,
         });
@@ -454,6 +454,29 @@ describe("Connection setup primary providers", () => {
       expect(
         entries.find((entry) => entry.provider === "openai")?.models,
       ).toEqual([expect.objectContaining({ id: "gpt-unknown" })]);
+    });
+
+    test("tells the client what each model reads and leaves unknown modalities unset", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const { catalog } = await seed({
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const models = (await catalog()).flatMap((entry) => entry.models);
+      expect(
+        models.find((model) => model.id === "claude-tools")?.inputModalities,
+      ).toEqual(["text", "image", "pdf"]);
+      expect(
+        models.find((model) => model.id === "gpt-unknown")?.inputModalities,
+      ).toBeNull();
     });
 
     test("fails clearly when no selected provider has a tool-capable model", async ({

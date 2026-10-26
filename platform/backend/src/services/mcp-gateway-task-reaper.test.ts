@@ -122,6 +122,17 @@ describe("MCP gateway task reaper", () => {
         ${key}, ${JSON.stringify({ value: { outcome: "review_cancelled" }, expires })}
       )`);
     }
+    // A download ticket is kept for resumes and read by nobody after it expires.
+    const abandonedTicket = `keyv:${CacheKey.AgentWorkspaceTransferTicket}-orphan`;
+    const liveTicket = `keyv:${CacheKey.AgentWorkspaceTransferTicket}-live`;
+    for (const [key, expires] of [
+      [abandonedTicket, Date.now() - 1_000],
+      [liveTicket, Date.now() + TTL_MS],
+    ] as const) {
+      await db.execute(sql`INSERT INTO keyv_cache (key, value) VALUES (
+        ${key}, ${JSON.stringify({ value: { direction: "download" }, expires })}
+      )`);
+    }
 
     const outcome = await mcpGatewayTaskReaper.sweep();
 
@@ -138,6 +149,10 @@ describe("MCP gateway task reaper", () => {
       sql`SELECT key FROM keyv_cache WHERE key IN (${abandonedHistory}, ${liveHistory})`,
     );
     expect(history.rows).toEqual([{ key: liveHistory }]);
+    const tickets = await db.execute(
+      sql`SELECT key FROM keyv_cache WHERE key IN (${abandonedTicket}, ${liveTicket})`,
+    );
+    expect(tickets.rows).toEqual([{ key: liveTicket }]);
   });
 
   test("a concurrent settle beats the reaper, matching the cancellation race rule", async ({

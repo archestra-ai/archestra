@@ -2,6 +2,7 @@ import {
   ApiError,
   ArchestraInternalErrorCode,
   credentialRequiresPerUserScope,
+  isGeminiImageGenerationModel,
   isSelfHostedProvider,
   isSmallModel,
   MODELS_DEV_ENRICHMENT_PROVIDER_MAP,
@@ -826,7 +827,8 @@ export function resolveModelCapabilities(params: {
     modelId,
     underlyingModelName,
     capabilities: {
-      description: capabilities?.description ?? null,
+      description:
+        capabilities?.description ?? inferredCapabilities.description,
       contextLength:
         fetched?.contextLength ??
         capabilities?.contextLength ??
@@ -1174,6 +1176,19 @@ function inferGeminiCapabilities(modelId: string): ProviderModelCapabilities {
     return emptyCapabilities();
   }
 
+  if (normalizedModelId === "gemini-nano-banana-2.1") {
+    return {
+      ...emptyCapabilities(),
+      description: "Nano Banana 2.1",
+      contextLength: 131_072,
+      outputLength: 32_768,
+      inputModalities: ["text", "image", "video", "pdf"],
+      outputModalities: ["text", "image"],
+      supportsToolCalling: false,
+      supportsReasoningEffort: false,
+    };
+  }
+
   if (normalizedModelId.includes("embedding")) {
     return {
       ...emptyCapabilities(),
@@ -1195,9 +1210,11 @@ function inferGeminiCapabilities(modelId: string): ProviderModelCapabilities {
     };
   }
 
-  if (normalizedModelId.includes("image")) {
+  if (isGeminiImageGenerationModel(modelId)) {
     return {
       ...emptyCapabilities(),
+      description:
+        normalizedModelId === "gemini-2.5-flash-image" ? "Nano Banana" : null,
       inputModalities: ["text", "image"],
       outputModalities: ["image"],
       supportsToolCalling: false,

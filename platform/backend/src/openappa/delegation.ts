@@ -17,6 +17,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import config from "@/config";
+import { withoutTrajectoryStamp } from "./trajectory-stamp";
 import { type AppaWireFamily, chatMessages, responsesItems } from "./wire";
 
 /** A marker read from a child's opening message, not yet verified. */
@@ -234,6 +235,59 @@ export function stripDelegationMarkers(params: {
       if (fn) stripSpawnArgumentText(fn, spawnFields(fn.name));
     }
   }
+}
+
+/**
+ * Returns the spawn calls APPA released, as the markers on the spawn prompts
+ * in a request's history name them. Read before `stripDelegationMarkers`. A
+ * marker names the call by the provider id APPA saw when it released it, so
+ * the ids match the request's tool results on a translated wire too. Markers
+ * are not verified here: the ids only tell a released spawn from one APPA
+ * never saw, and the runtime still rules on every result of them.
+ */
+export function collectReleasedSpawnCalls(params: {
+  family: AppaWireFamily;
+  body: unknown;
+}): string[] {
+  const released: string[] = [];
+  const read = (name: unknown, args: unknown) => {
+    let parsed = args;
+    if (typeof args === "string") {
+      try {
+        parsed = JSON.parse(args);
+      } catch {
+        return;
+      }
+    }
+    const record = asRecord(parsed);
+    for (const field of spawnFields(name)) {
+      const prompt = record?.[field];
+      const marked =
+        typeof prompt === "string"
+          ? trailingMarker(prompt)?.spawnCallId
+          : undefined;
+      if (marked) released.push(withoutTrajectoryStamp(marked));
+    }
+  };
+  if (params.family === "openai:responses") {
+    for (const item of responsesItems(params.body)) {
+      if (item.type === "function_call") read(item.name, item.arguments);
+    }
+    return released;
+  }
+  for (const message of chatMessages(params.body)) {
+    if (message.role !== "assistant") continue;
+    for (const block of asArray(message.content) ?? []) {
+      const record = asRecord(block);
+      if (record?.type === "tool_use") read(record.name, record.input);
+    }
+    for (const call of asArray(message.tool_calls) ?? []) {
+      const record = asRecord(call);
+      const fn = asRecord(record?.function);
+      if (fn) read(fn.name, fn.arguments);
+    }
+  }
+  return released;
 }
 
 // === Internal helpers ===

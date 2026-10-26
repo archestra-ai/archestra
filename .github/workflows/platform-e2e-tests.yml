@@ -116,7 +116,7 @@ jobs:
             local-tag-prefix: archestra-platform
             use-build-action: true
           - name: MCP Server Base
-            runner: ubuntu-latest
+            runner: blacksmith-16vcpu-ubuntu-2404
             context: ./platform/docker_images/mcp_server
             dockerfile: ./platform/docker_images/mcp_server/Dockerfile
             artifact-name: mcp-server-base-docker-image
@@ -162,8 +162,8 @@ jobs:
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
         uses: ./.github/actions/auth-to-gar
         with:
-          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       # Reuse a platform image already built for this exact image-input hash —
       # by a labeled run-e2e build, a prior merge-queue entry, or the scheduled
@@ -302,12 +302,27 @@ jobs:
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache-amd64
 
+      # Preserve the exact image pair even when later browser tests fail. The
+      # nightly scanner consumes these immutable refs, not overall E2E success.
+      - name: Record Platform byte scan inputs
+        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        run: python3 .github/scripts/platform-byte-scan-inputs.py record
+
+      - name: Retain Platform byte scan inputs
+        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: platform-byte-scan-inputs
+          path: ${{ runner.temp }}/platform-byte-scan-inputs.json
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Authenticate to Google Artifact Registry
         if: ${{ !matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
         uses: ./.github/actions/auth-to-gar
         with:
-          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       # Same input-hash reuse as the Platform image above. This image rarely
       # changes, and the lite/quickstart/K8s jobs wait for its push — so on a match, a
@@ -428,84 +443,6 @@ jobs:
           VALIDATION_ONLY: "true"
           CAPTURE_RESULT: ${{ needs.docs-screenshot-capture.result }}
         run: python3 .github/scripts/check-docs-screenshot-result.py
-
-  # Scan the exact images exercised by E2E instead of rebuilding the same
-  # Docker contexts on slower standard runners. The required check names stay
-  # unchanged, while the scans leave the queue critical path: they begin once
-  # the images are pushed and run alongside the E2E environments.
-  merge-queue-image-scanning:
-    name: Docker Image Scanning (${{ matrix.name }})
-    needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'merge_group' && needs.platform-e2e-build.result == 'success' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read # Required for checkout and local scan actions.
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Platform
-            image-repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform
-            tag-suffix: -e2e
-            slim-image-repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform
-            slim-tag-suffix: -e2e-slim
-            remote-sbom: true
-          - name: MCP Server Base
-            image-repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base
-            tag-suffix: ""
-            slim-image-repository: ""
-            slim-tag-suffix: ""
-            remote-sbom: false
-    steps:
-      - name: Reclaim disk space (background)
-        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
-
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Resolve attested Platform image digests
-        id: scan-refs
-        if: ${{ matrix.remote-sbom }}
-        env:
-          FULL_TAG: ${{ format('{0}:{1}{2}', matrix.image-repository, github.sha, matrix.tag-suffix) }}
-          SLIM_TAG: ${{ format('{0}:{1}{2}', matrix.slim-image-repository, github.sha, matrix.slim-tag-suffix) }}
-          GIT_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          if full_ref=$(bash .github/scripts/resolve-attested-image.sh "$FULL_TAG") \
-            && slim_ref=$(bash .github/scripts/resolve-attested-image.sh "$SLIM_TAG"); then
-            primary=$full_ref
-            additional=$slim_ref
-          else
-            echo "::warning::Attestation validation failed; falling back to the stronger byte-derived scan."
-            docker pull "$FULL_TAG"
-            docker pull "$SLIM_TAG"
-            docker tag "$FULL_TAG" "archestra-platform:${GIT_SHA}"
-            docker tag "$SLIM_TAG" "archestra-platform-slim:${GIT_SHA}"
-            primary="local://archestra-platform:${GIT_SHA}"
-            additional="local://archestra-platform-slim:${GIT_SHA}"
-          fi
-          echo "primary=${primary}" >> "$GITHUB_OUTPUT"
-          echo "additional=${additional}" >> "$GITHUB_OUTPUT"
-
-      - name: Pull E2E image
-        if: ${{ !matrix.remote-sbom }}
-        env:
-          SCAN_IMAGE: ${{ format('{0}:{1}{2}', matrix.image-repository, github.sha, matrix.tag-suffix) }}
-        run: docker pull "${SCAN_IMAGE}"
-
-      - name: Scan exact E2E image digest(s) for CVEs
-        uses: ./.github/actions/scan-docker-image
-        with:
-          image: ${{ steps.scan-refs.outputs.primary || format('{0}:{1}{2}', matrix.image-repository, github.sha, matrix.tag-suffix) }}
-          additional-images: ${{ steps.scan-refs.outputs.additional }}
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
-          exit-code: "true"
 
   # K8s-bound E2E tests: only the specs that need a real host cluster —
   # host-cluster kubectl, NetworkPolicy enforcement, helm-deployed fixture
@@ -1591,7 +1528,7 @@ jobs:
   platform-rust-napi-musl-smoke:
     name: Platform Rust NAPI musl Smoke
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
-    runs-on: ubicloud-standard-16-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     timeout-minutes: 30
     permissions:
       contents: read

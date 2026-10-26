@@ -69,6 +69,11 @@ class McpGatewayTaskReaper {
       await cacheManager.deleteExpiredByPrefix(
         CacheKey.AgentRuntimePendingExports,
       );
+      // Download tickets outlive their reads so a resume can follow, and an
+      // upload nobody ran is never read again.
+      await cacheManager.deleteExpiredByPrefix(
+        CacheKey.AgentWorkspaceTransferTicket,
+      );
       if (failed > 0 || purged > 0) {
         logger.info(
           { failed, purged },

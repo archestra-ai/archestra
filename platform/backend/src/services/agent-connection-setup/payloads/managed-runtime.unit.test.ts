@@ -15,6 +15,7 @@ import { promisify } from "node:util";
 import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { KILO_CLIENT, OPENCODE_CLIENT } from "../opencode-family";
+import type { SetupScriptProxySection } from "../types";
 import { managedRuntimeManifest } from "./managed-runtime";
 import { MANAGED_RUNTIME_BOOTSTRAP } from "./managed-runtime-bootstrap";
 import { managedRuntimeInstall } from "./managed-runtime-install";
@@ -28,7 +29,11 @@ const digest = (source: string) =>
   createHash("sha256").update(source).digest("hex");
 const require = createRequire(import.meta.url);
 
-async function fixture(client = KILO_CLIENT, apiMajor = 1) {
+async function fixture(
+  client = KILO_CLIENT,
+  apiMajor = 1,
+  proxy: SetupScriptProxySection | null = null,
+) {
   const home = await mkdtemp(path.join(tmpdir(), "managed-runtime-"));
   roots.push(home);
   const context = {
@@ -36,7 +41,7 @@ async function fixture(client = KILO_CLIENT, apiMajor = 1) {
     platform: "linux" as const,
     appName: "Test Platform",
     mcp: { serverName: name, url, toolPrefix: name },
-    proxy: null,
+    proxy,
     skills: null,
     managedRuntimeSource: {
       url: "https://deployment.example.com/api/connection-setups/runtime",
@@ -113,6 +118,39 @@ afterEach(async () => {
 });
 
 describe("managed runtime trust boundary", () => {
+  test("stores the passthrough key apart from any route", async () => {
+    // A setup that knew no passthrough route still keeps the key, so a route
+    // the deployment's catalog lists later can carry it.
+    const proxy: SetupScriptProxySection = {
+      authMode: "primary-providers",
+      provider: "anthropic",
+      providerLabel: "Anthropic",
+      baseUrl: "https://deployment.example.com/v1/proxy",
+      url: "https://deployment.example.com/v1/proxy/anthropic",
+      proxyName: "proxy",
+      routingAgentId: "agent",
+      primaryProviders: [],
+      passthroughProviders: [],
+      virtualKey: null,
+      virtualKeyName: null,
+      passthroughVirtualKey: "passthrough-secret",
+      model: null,
+    };
+    const files = await fixture(KILO_CLIENT, 1, proxy);
+    const parameters = JSON.parse(
+      await readFile(path.join(files.root, "params.json"), "utf8"),
+    );
+    expect(parameters.passthroughHeaders).toEqual({
+      "X-Archestra-Virtual-Key": "passthrough-secret",
+    });
+    const withoutKey = await fixture();
+    expect(
+      JSON.parse(
+        await readFile(path.join(withoutKey.root, "params.json"), "utf8"),
+      ),
+    ).not.toHaveProperty("passthroughHeaders");
+  });
+
   test("the installed launcher CLI executes the refreshed launcher, not only its next-process replacement", async () => {
     const files = await fixture();
     const manifest = managedRuntimeManifest({ installation, clientId: "kilo" });

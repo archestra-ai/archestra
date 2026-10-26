@@ -268,19 +268,27 @@ test.describe("MCP Registry layout", () => {
     page,
   }) => {
     await seed(mswControl);
+    await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
     await mcpRegistryPage.goto();
-
+    await expect(
+      mcpRegistryPage.cardForCatalogItem("org-crowded"),
+    ).toBeVisible();
+    // Freeze the debounce clock after hydration. Local filtering must still
+    // finish, even on a busy runner; a timer-backed debounce cannot fire.
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
     await page
       .getByRole("textbox", { name: "Search MCP servers by name" })
       .fill("not-installed");
+    // Let routing/paint callbacks settle while the debounce timer stays pending.
+    await page.clock.runFor(100);
 
     await expect(mcpRegistryPage.cardForCatalogItem("org-crowded")).toHaveCount(
       0,
-      { timeout: 200 },
     );
     await expect(
       mcpRegistryPage.cardForCatalogItem("not-installed"),
     ).toBeVisible();
+    await page.clock.resume();
   });
 
   test("lists a personal server of another user and narrows to it by author", async ({

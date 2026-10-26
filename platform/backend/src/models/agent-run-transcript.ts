@@ -34,16 +34,22 @@ export default class AgentRunTranscriptModel {
     );
 
     await db.transaction(async (tx) => {
-      await tx
-        .delete(schema.agentRunTranscriptsTable)
-        .where(eq(schema.agentRunTranscriptsTable.runId, params.runId));
-      await tx.insert(schema.agentRunTranscriptsTable).values({
-        runId: params.runId,
+      const recording = {
         uncompressedBytes: params.uncompressedBytes,
         compressedBytes,
         chunkCount: params.chunks.length,
         isComplete: params.isComplete,
-      });
+      };
+      await tx
+        .insert(schema.agentRunTranscriptsTable)
+        .values({ runId: params.runId, ...recording })
+        .onConflictDoUpdate({
+          target: schema.agentRunTranscriptsTable.runId,
+          set: recording,
+        });
+      await tx
+        .delete(schema.agentRunTranscriptChunksTable)
+        .where(eq(schema.agentRunTranscriptChunksTable.runId, params.runId));
       if (params.chunks.length > 0) {
         await tx
           .insert(schema.agentRunTranscriptChunksTable)
@@ -222,17 +228,25 @@ export default class AgentRunTranscriptModel {
     );
 
     await db.transaction(async (tx) => {
-      await tx
-        .delete(schema.agentRunReadableTranscriptsTable)
-        .where(eq(schema.agentRunReadableTranscriptsTable.runId, params.runId));
-      await tx.insert(schema.agentRunReadableTranscriptsTable).values({
-        runId: params.runId,
+      const recording = {
         provider: params.provider,
         version: params.version,
         uncompressedBytes: params.uncompressedBytes,
         compressedBytes,
         chunkCount: params.chunks.length,
-      });
+      };
+      await tx
+        .insert(schema.agentRunReadableTranscriptsTable)
+        .values({ runId: params.runId, ...recording })
+        .onConflictDoUpdate({
+          target: schema.agentRunReadableTranscriptsTable.runId,
+          set: recording,
+        });
+      await tx
+        .delete(schema.agentRunReadableTranscriptChunksTable)
+        .where(
+          eq(schema.agentRunReadableTranscriptChunksTable.runId, params.runId),
+        );
       if (params.chunks.length > 0) {
         await tx
           .insert(schema.agentRunReadableTranscriptChunksTable)

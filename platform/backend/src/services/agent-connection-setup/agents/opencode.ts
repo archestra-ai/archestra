@@ -384,10 +384,17 @@ $archRuntimeInstall = @'
 ${runtime.script}
 '@
 $archPreviousRuntimeMajor = $env:ARCHESTRA_OC_RUNTIME_API_MAJOR
+$archPreviousOutputEncoding = $OutputEncoding
 try {
   $env:ARCHESTRA_OC_RUNTIME_API_MAJOR = [string]$archOcMajor
+  # Native stdin defaults to ASCII in Windows PowerShell 5.1. Keep the exact
+  # UTF-8 artifact sources intact for the managed runtime hash checks.
+  $OutputEncoding = New-Object System.Text.UTF8Encoding $false
   $archRuntimeInstall | & node -
-} finally { $env:ARCHESTRA_OC_RUNTIME_API_MAJOR = $archPreviousRuntimeMajor }
+} finally {
+  $env:ARCHESTRA_OC_RUNTIME_API_MAJOR = $archPreviousRuntimeMajor
+  $OutputEncoding = $archPreviousOutputEncoding
+}
 if ($LASTEXITCODE -ne 0) { throw 'Could not install managed launcher updates' }`
     : ""
 }

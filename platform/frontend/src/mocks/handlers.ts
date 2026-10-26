@@ -400,6 +400,7 @@ export const handlers: HttpHandler[] = [
     sandbox: "disabled",
   }),
   ...getJson("/api/organization", organizationSeed),
+  ...getJson("/api/default-user-limits", []),
   ...getJson("/api/organization/appearance-settings", appearanceSettingsSeed),
   // Onboarding nudges: everything already seen / nothing eligible, so neither
   // the red dots nor the survey/feedback dialogs interfere with other tests.

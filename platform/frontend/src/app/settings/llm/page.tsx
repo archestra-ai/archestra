@@ -15,8 +15,8 @@ export default function LlmSettingsPage() {
       >
         <DefaultUserLimitsSection />
       </WithPermissions>
-      <ModelProvidersSection />
       <UnauthenticatedLlmProxySection />
+      <ModelProvidersSection />
     </SettingsSectionStack>
   );
 }

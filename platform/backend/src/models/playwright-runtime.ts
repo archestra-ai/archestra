@@ -48,6 +48,15 @@ class PlaywrightRuntimeModel {
     return rows.map(({ server }) => server);
   }
 
+  /** Loaded model rows retain internal parent metadata that the public API omits. */
+  static isManagedCatalogConfig(catalog: { id: string }): boolean {
+    return (
+      catalog.id === PLAYWRIGHT_MCP_CATALOG_ID ||
+      ("parentCatalogItemId" in catalog &&
+        catalog.parentCatalogItemId === PLAYWRIGHT_MCP_CATALOG_ID)
+    );
+  }
+
   static async isManagedCatalog(catalogId: string): Promise<boolean> {
     if (catalogId === PLAYWRIGHT_MCP_CATALOG_ID) return true;
     const [catalog] = await db

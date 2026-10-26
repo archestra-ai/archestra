@@ -21,7 +21,6 @@ import {
   MCP_SKILLS_EXTENSION_ID,
   type McpExecutedAs,
   type McpToolError,
-  PLAYWRIGHT_MCP_CATALOG_ID,
   parseFullToolName,
   platformExecutedAs,
   stripReservedPlatformMeta,
@@ -2485,8 +2484,7 @@ class McpClient {
   }): Promise<TargetInstall | { refusal: TargetInstallRefusal }> {
     const fallbackName = tool.catalogName || "unknown";
     if (
-      (isPlaywrightCatalogItem(catalogItem.id) ||
-        catalogItem.parentCatalogItemId === PLAYWRIGHT_MCP_CATALOG_ID) &&
+      PlaywrightRuntimeModel.isManagedCatalogConfig(catalogItem) &&
       !(await PlaywrightRuntimeModel.isEnabled())
     ) {
       return { refusal: "browser_runtime_unavailable" };
@@ -2801,8 +2799,7 @@ class McpClient {
   ): Promise<Transport> {
     // Also covers queued calls and retry paths that bypass getTransport().
     if (
-      (isPlaywrightCatalogItem(catalogItem.id) ||
-        catalogItem.parentCatalogItemId === PLAYWRIGHT_MCP_CATALOG_ID) &&
+      PlaywrightRuntimeModel.isManagedCatalogConfig(catalogItem) &&
       !(await PlaywrightRuntimeModel.isEnabled())
     ) {
       throw new Error("The built-in browser MCP is disabled");
@@ -3157,8 +3154,7 @@ class McpClient {
     },
   ): Promise<Transport> {
     if (
-      (isPlaywrightCatalogItem(catalogItem.id) ||
-        catalogItem.parentCatalogItemId === PLAYWRIGHT_MCP_CATALOG_ID) &&
+      PlaywrightRuntimeModel.isManagedCatalogConfig(catalogItem) &&
       !(await PlaywrightRuntimeModel.isEnabled())
     ) {
       throw new Error("The built-in browser MCP is disabled");
@@ -4230,8 +4226,7 @@ class McpClient {
     } = params;
 
     if (
-      (isPlaywrightCatalogItem(catalogItem.id) ||
-        catalogItem.parentCatalogItemId === PLAYWRIGHT_MCP_CATALOG_ID) &&
+      PlaywrightRuntimeModel.isManagedCatalogConfig(catalogItem) &&
       !(await PlaywrightRuntimeModel.isEnabled())
     ) {
       throw new Error("The built-in browser MCP is disabled");

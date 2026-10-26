@@ -3963,7 +3963,8 @@ export default class K8sDeployment {
   private async assertBrowserEnabled(): Promise<void> {
     if (
       (this.mcpServer.catalogId === PLAYWRIGHT_MCP_CATALOG_ID ||
-        this.catalogItem?.parentCatalogItemId === PLAYWRIGHT_MCP_CATALOG_ID) &&
+        (this.catalogItem &&
+          PlaywrightRuntimeModel.isManagedCatalogConfig(this.catalogItem))) &&
       !(await PlaywrightRuntimeModel.isEnabled())
     ) {
       throw new Error("The built-in browser MCP is disabled");

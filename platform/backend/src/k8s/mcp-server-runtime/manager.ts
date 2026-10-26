@@ -1072,8 +1072,8 @@ export class McpServerRuntimeManager {
         // Recheck inside the physical deployment lease. Disable cleanup takes
         // the same lease, so an in-flight start always precedes its teardown.
         if (
-          (catalogItem?.id === PLAYWRIGHT_MCP_CATALOG_ID ||
-            catalogItem?.parentCatalogItemId === PLAYWRIGHT_MCP_CATALOG_ID) &&
+          catalogItem &&
+          PlaywrightRuntimeModel.isManagedCatalogConfig(catalogItem) &&
           !(await PlaywrightRuntimeModel.isEnabled())
         ) {
           throw new Error("The built-in browser MCP is disabled");

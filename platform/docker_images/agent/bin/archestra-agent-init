@@ -74,4 +74,7 @@ if [ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ] && command -v gh >/dev/null 2>&1; the
   git config --global --add url."https://github.com/".insteadOf \
     "ssh://git@github.com/"
   unset github_token
+  # Verify the credential before the Agent starts, and attribute every
+  # repository's commits to the connected account.
+  "$(dirname "$0")/archestra-github-identity"
 fi

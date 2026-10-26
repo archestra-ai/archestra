@@ -2,9 +2,13 @@
 # CLI shares one hardened execution base.
 FROM ghcr.io/astral-sh/uv:0.9.17@sha256:5cb6b54d2bc3fe2eb9a8483db958a0b9eebf9edff68adedb369df8e7b98711a2 AS uv
 
+# One Rust toolchain both builds the review engine and ships in the runtime, so
+# projects with native code (Archestra's addons included) compile in place.
+FROM rust:1.93.0-bookworm AS rust
+
 # Build the review engine once for each native architecture. Skills supply the
 # review procedure and configuration; the runtime needs only this executable.
-FROM rust:1.93.0-bookworm AS nitpicker-build
+FROM rust AS nitpicker-build
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends pkg-config libssl-dev \
  && rm -rf /var/lib/apt/lists/* \
@@ -18,12 +22,31 @@ ARG TARGETARCH
 # CVE-2026-84782: require the fixed OpenSSL packages and refresh cached apt layers.
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
-      build-essential ca-certificates curl ffmpeg fonts-dejavu-core git jq less libssl3 openssh-client \
-      openssl procps python3 python3-venv ripgrep tmux \
+      build-essential ca-certificates curl ffmpeg fonts-dejavu-core git jq less libssl-dev libssl3 \
+      openssh-client openssl pkg-config procps python3 python3-venv ripgrep tmux \
  && for package in openssl libssl3; do \
       dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '3.0.22-1~deb12u2' || exit 1; \
     done \
  && rm -rf /var/lib/apt/lists/*
+
+# A local PostgreSQL with pgvector for projects that need a database. Debian's
+# own postgresql-common enables the PGDG repository: bookworm's pgvector
+# predates HNSW indexes. No cluster ships; the agent runs initdb under HOME,
+# and the shared socket directory lets local clients connect without flags.
+RUN apt-get update -qq \
+ && apt-get install -y --no-install-recommends postgresql-common \
+ && /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y \
+ && sed -i 's/^#*\s*create_main_cluster.*/create_main_cluster = false/' /etc/postgresql-common/createcluster.conf \
+ && apt-get install -y --no-install-recommends postgresql-18 postgresql-18-pgvector \
+ && chmod 1777 /var/run/postgresql \
+ && rm -rf /var/lib/apt/lists/*
+
+# The toolchain stays read-only; downloaded crates and `cargo install` go to
+# the persistent HOME, as do `uv tool` and `pip --user` commands.
+COPY --from=rust /usr/local/rustup /usr/local/rustup
+COPY --from=rust /usr/local/cargo /usr/local/cargo
+ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/home/node/.cargo
+ENV PATH=/home/node/.local/bin:/home/node/.cargo/bin:/usr/local/cargo/bin:/usr/lib/postgresql/18/bin:$PATH
 
 # Keep the real CLI at /usr/bin/gh: /usr/local/bin/gh is the managed credential
 # reader, including when Git invokes its credential helper. Debian's old CLI
@@ -95,6 +118,9 @@ RUN corepack disable \
  && node --version && npm --version && pnpm --version
 
 COPY docker_images/agent/bin /usr/local/bin
+# The maintained launchers append this description of the machine to the
+# Agent's instructions, so a run knows where to work and what is installed.
+COPY docker_images/agent/environment.md /etc/archestra/agent-environment.md
 # The backend sends this program to the workspace inline, so the image needs no
 # copy to serve file transfers. One is installed anyway: it keeps the image's
 # own test honest and gives anyone debugging inside a pod the same tool.
@@ -111,6 +137,7 @@ RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/workspace-files.py \
  && python3 /tmp/agent-image-tests/interactive-resume.py \
+ && python3 /tmp/agent-image-tests/development-tools.py \
  && node /tmp/agent-image-tests/npm-http.cjs
 
 FROM agent-base AS agent-claude-code

@@ -234,6 +234,7 @@ describe("buildAgentRunLaunchSpec", () => {
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
       runtime: {
         ...runtime(setup.agent, "openai_responses"),
+        ports: [3000, 9000, 3000],
         environment: [
           { key: "CUSTOM_SETTING", value: "preserved" },
           {
@@ -288,6 +289,12 @@ describe("buildAgentRunLaunchSpec", () => {
     );
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).not.toContain(
       "stale instructions",
+    );
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
+      "Files under /home/node persist across this conversation's turns",
+    );
+    expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(
+      "The user can forward ports 3000, 9000 from this workspace",
     );
 
     expect(spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT).toContain(

@@ -409,6 +409,7 @@ export async function buildAgentRunLaunchSpec(params: {
         "decode resources marked base64 with a shell decoder, not a text-file tool. " +
         "Paths advertised as code-sandbox mounts belong to that separate sandbox, " +
         "not this runtime's filesystem.",
+      describeRuntimeWorkspace(params.runtime),
     ]
       .filter(Boolean)
       .join("\n\n"),
@@ -690,6 +691,27 @@ function virtualKeyVisibility(actor: A2AActor): {
     };
   }
   return { scope: "org", authorId: null, publishToOrganization: true };
+}
+
+/**
+ * Workspace facts the platform owns, whatever the image installs: what
+ * survives between turns, and which ports a user can open from it. The image
+ * describes its own tools; see `docker_images/agent/environment.md`.
+ */
+function describeRuntimeWorkspace(
+  runtime: Pick<ResolvedAgentRuntime, "ports">,
+): string {
+  const ports = [...new Set(runtime.ports ?? [])];
+  return [
+    "Files under /home/node persist across this conversation's turns; " +
+      "other paths reset when the container is replaced.",
+    ports.length > 0 &&
+      `The user can forward ${ports.length === 1 ? "port" : "ports"} ` +
+        `${ports.join(", ")} from this workspace to a browser; serve anything ` +
+        "they should open there.",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function withNativeClientCredentialAliases(

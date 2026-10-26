@@ -234,7 +234,7 @@ if [[ -n "${ARCHESTRA_AGENT_RUNTIME_BINDING:-}" ]]; then
   binding_toml=$'"X-Archestra-Runtime-Binding" = '"$(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_BINDING}" '$value')"
 fi
 developer_instructions="$({
-  printf '%s\n\n' "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}"
+  printf '%s\n\n' "$("$(dirname "${BASH_SOURCE[0]}")/archestra-agent-instructions")"
   printf '%s' "Complete the delegated task fully in this isolated runner. Use the local shell and file tools directly. Do not stop after announcing a plan. Verify the work and report the concrete result."
 } | jq -Rs .)"
 cat > "${CODEX_HOME}/config.toml" <<EOF

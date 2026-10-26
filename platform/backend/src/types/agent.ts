@@ -262,7 +262,7 @@ function validateIncomingEmailDomain(
   }
 }
 
-/** Written only by AutoRoutingSettingsModel, under the routing-plan lock. */
+/** Internal state written only by AutoRoutingSettingsModel, under the routing-plan lock; never read or written through agent payloads. */
 const AUTO_ROUTING_COLUMNS = {
   autoRoutingEnabled: true,
   autoRoutingBudgetUsdPerDay: true,
@@ -277,7 +277,7 @@ const AUTO_ROUTING_COLUMNS = {
 const AgentRowSchema = createSelectSchema(
   schema.agentsTable,
   selectExtendedFields,
-);
+).omit(AUTO_ROUTING_COLUMNS);
 
 /**
  * Hot-path agent shape for the MCP gateway: the raw agents row plus labels,

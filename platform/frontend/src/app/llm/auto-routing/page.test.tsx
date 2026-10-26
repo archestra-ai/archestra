@@ -1,0 +1,259 @@
+import { archestraApiClient } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import type {
+  AutoRoutingPlanDetail,
+  AutoRoutingPreview,
+  AutoRoutingSettings,
+  AutoRoutingSettingsUpdate,
+} from "@/lib/auto-routing.query";
+import { useOrganization } from "@/lib/organization.query";
+import AutoRoutingOverviewPage from "./page";
+
+vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/organization.query");
+vi.mock("sonner");
+
+const API_ORIGIN = "http://localhost:9000";
+const PLAN_ID = "00000000-0000-4000-8000-000000000001";
+
+const tier = (modelId: string, index: number) => ({
+  id: `00000000-0000-4000-8000-00000000010${index}`,
+  provider: "anthropic" as const,
+  modelId,
+});
+
+function makeSettings(
+  overrides: Partial<AutoRoutingSettings> = {},
+): AutoRoutingSettings {
+  return {
+    enabled: true,
+    budgetUsdPerDay: 20,
+    tiers: {
+      fast: tier("claude-haiku", 1),
+      normal: tier("claude-sonnet", 2),
+      smart: tier("claude-opus", 3),
+    },
+    generation: 3,
+    plannedGeneration: 3,
+    status: {
+      activePlan: null,
+      coldStart: {
+        scorerVersionId: "00000000-0000-4000-8000-000000000009",
+        sessions: 12,
+        required: 100,
+      },
+      lastFitError: null,
+    },
+    ...overrides,
+  };
+}
+
+const activePlan: AutoRoutingPlanDetail = {
+  id: PLAN_ID,
+  createdAt: "2026-10-20T08:00:00.000Z",
+  trigger: "nightly",
+  status: "active",
+  generation: 3,
+  inputWatermark: "2026-10-20T08:00:00.000Z",
+  budgetUsdPerDay: 20,
+  scorerVersion: {
+    id: "00000000-0000-4000-8000-000000000009",
+    name: "jev",
+    model: "jev-1.13.0",
+    specHash: "abcdef0123456789",
+  },
+  coreVersion: "0.1.0",
+  planFormatVersion: 1,
+  summary: {
+    sessions_per_day: 140,
+    tokens_per_day: 9_000_000,
+    expected_spend: 12.5,
+    value_size_weighted: 0.84,
+    tier_session_share: [0.5, 0.3, 0.2],
+    tier_token_share: [0.2, 0.3, 0.5],
+    value_per_usd: 0.002,
+  },
+  diagnostics: { holdout: { status: "insufficient_history" } },
+  error: null,
+  decisionCount: 420,
+  tiersFingerprint: {},
+  plan: null,
+};
+
+let settings: AutoRoutingSettings;
+const updates: AutoRoutingSettingsUpdate[] = [];
+
+const server = setupServer(
+  http.get(`${API_ORIGIN}/api/auto-routing/settings`, () =>
+    HttpResponse.json(settings),
+  ),
+  http.put(`${API_ORIGIN}/api/auto-routing/settings`, async ({ request }) => {
+    updates.push((await request.json()) as AutoRoutingSettingsUpdate);
+    return HttpResponse.json(settings);
+  }),
+  http.get(`${API_ORIGIN}/api/auto-routing/plans/${PLAN_ID}`, () =>
+    HttpResponse.json(activePlan),
+  ),
+  http.get(`${API_ORIGIN}/api/llm-models/available`, () =>
+    HttpResponse.json([]),
+  ),
+);
+
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: "error" });
+  archestraApiClient.setConfig({ baseUrl: API_ORIGIN });
+});
+
+beforeEach(() => {
+  settings = makeSettings();
+  updates.length = 0;
+  setCanUpdate(true);
+  vi.mocked(useOrganization).mockReturnValue({
+    data: null,
+  } as unknown as ReturnType<typeof useOrganization>);
+});
+
+afterEach(() => server.resetHandlers());
+
+afterAll(() => {
+  server.close();
+  archestraApiClient.setConfig({ baseUrl: "" });
+});
+
+describe("AutoRoutingOverviewPage", () => {
+  it("saves only the edited budget", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const budget = await screen.findByLabelText("Daily budget (USD)");
+    await user.clear(budget);
+    await user.type(budget, "55.5");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updates).toEqual([{ budgetUsdPerDay: 55.5 }]));
+  });
+
+  it("rejects a budget below a cent without saving", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const budget = await screen.findByLabelText("Daily budget (USD)");
+    await user.clear(budget);
+    await user.type(budget, "0");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(
+      await screen.findByText(/Enter an amount between 0.01/),
+    ).toBeInTheDocument();
+    expect(updates).toEqual([]);
+  });
+
+  it("shows read-only viewers the settings without letting them change anything", async () => {
+    setCanUpdate(false);
+    renderPage();
+
+    expect(await screen.findByLabelText("Daily budget (USD)")).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "Enabled" })).toBeDisabled();
+    expect(screen.getByLabelText("Try a prompt")).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "Save" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Re-plan now" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("reports cold-start progress while no plan is active", async () => {
+    renderPage();
+
+    expect(await screen.findByTestId("auto-routing-status")).toHaveTextContent(
+      "Cold start: 12 of 100 sessions",
+    );
+  });
+
+  it("summarizes the active plan", async () => {
+    settings = makeSettings({
+      status: {
+        ...makeSettings().status,
+        activePlan: { id: PLAN_ID, createdAt: activePlan.createdAt },
+      },
+    });
+    renderPage();
+
+    expect(await screen.findByText("$12.50/day")).toBeInTheDocument();
+    expect(screen.getByText("84.0%")).toBeInTheDocument();
+    expect(screen.getByText("+2.0 pp")).toBeInTheDocument();
+    expect(screen.getByTestId("auto-routing-status")).toHaveTextContent(
+      "Active plan from",
+    );
+  });
+
+  it("previews the tier a prompt would get", async () => {
+    const previewed: unknown[] = [];
+    server.use(
+      http.post(
+        `${API_ORIGIN}/api/auto-routing/preview`,
+        async ({ request }) => {
+          previewed.push(await request.json());
+          return HttpResponse.json({
+            tierNeeded: [0.1, 0.2, 0.7],
+            pLong: 0.25,
+            reason: "planned",
+            planId: PLAN_ID,
+            chosen: { tier: "smart", model: tier("claude-opus", 3) },
+            propensity: 0.6,
+            scorerCostUsd: 0.000123,
+          } satisfies AutoRoutingPreview);
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.type(
+      await screen.findByLabelText("Try a prompt"),
+      "Refactor the billing module",
+    );
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+
+    const result = await screen.findByTestId("auto-routing-preview");
+    expect(previewed).toEqual([
+      { text: "Refactor the billing module", kind: "main" },
+    ]);
+    expect(result).toHaveTextContent("smart");
+    expect(result).toHaveTextContent("anthropic/claude-opus");
+    expect(within(result).getByText("70.0%")).toBeInTheDocument();
+    expect(within(result).getByText("25.0%")).toBeInTheDocument();
+    expect(within(result).getByText("$0.000123")).toBeInTheDocument();
+  });
+});
+
+function setCanUpdate(canUpdate: boolean) {
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: canUpdate,
+    isPending: false,
+  } as unknown as ReturnType<typeof useHasPermissions>);
+}
+
+function renderPage() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <AutoRoutingOverviewPage />
+    </QueryClientProvider>,
+  );
+}

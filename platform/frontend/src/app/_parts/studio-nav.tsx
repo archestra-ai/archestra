@@ -19,6 +19,7 @@ import {
   Puzzle,
   Route,
   Settings,
+  Shuffle,
   Sparkles,
   Waypoints,
 } from "lucide-react";
@@ -37,6 +38,9 @@ import { GUARDRAILS_BETA_TOOLTIP } from "@/lib/openappa-maturity";
  * Messaging Channels, six pages missing outright, and no permission gating at
  * all, so it offered pages the reader could not open.
  */
+
+/** Shown only while the deployment enables the auto routing alpha. */
+export const AUTO_ROUTING_URL = "/llm/auto-routing";
 
 export interface NavSubItem {
   title: string;
@@ -254,6 +258,15 @@ export const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) =>
           pathname.startsWith("/llm/costs") || pathname === "/llm/limits",
         permissionUrls: ["/llm/costs", "/llm/limits"],
+      },
+      {
+        title: "Auto Routing",
+        url: AUTO_ROUTING_URL,
+        icon: Shuffle,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith(AUTO_ROUTING_URL),
+        beta: true,
+        badgeLabel: "Alpha",
       },
     ],
   },

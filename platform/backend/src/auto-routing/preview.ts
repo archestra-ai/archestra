@@ -1,11 +1,8 @@
-import { randomInt } from "node:crypto";
-import { decide } from "@archestra/router-rs";
-import { z } from "zod";
-import logger from "@/logging";
 import RoutingPlanModel from "@/models/routing-plan";
 import { ApiError } from "@/types";
 import type { RoutingPlan, RoutingSessionFeatures } from "@/types/auto-routing";
 import type { AutoRoutingPreviewResponse } from "@/types/auto-routing-api";
+import { decidePlanned, uniform } from "./router";
 import { JevScorer } from "./scorer/jev-scorer";
 import { ScorerError, type ScorerInput } from "./scorer/types";
 import { loadAutoRoutingSettings } from "./settings";
@@ -17,11 +14,6 @@ import {
   type TierIndex,
   type Trio,
 } from "./tiers";
-
-const DecisionSchema = z.object({
-  tier_index: z.union([z.literal(0), z.literal(1), z.literal(2)]),
-  propensity: z.number(),
-});
 
 const scorer = new JevScorer();
 
@@ -99,25 +91,14 @@ function decideAgainstActivePlan(
 ): Outcome {
   if (plan === null) return { ...STALE, reason: "cold_start" };
   if (!fingerprintMatches(plan.tiersFingerprint, trio)) return STALE;
-  try {
-    const decision = DecisionSchema.parse(
-      JSON.parse(
-        decide(JSON.stringify(plan.plan), JSON.stringify(features), uniform()),
-      ),
-    );
-    return {
-      reason: "planned",
-      planId: plan.id,
-      tier: decision.tier_index,
-      propensity: decision.propensity,
-    };
-  } catch (error) {
-    logger.warn(
-      { err: error, organizationId: plan.organizationId, planId: plan.id },
-      "[AutoRouting] Preview: serving plan cannot route",
-    );
-    return STALE;
-  }
+  const decision = decidePlanned(plan, features, uniform());
+  if (decision === null) return STALE;
+  return {
+    reason: "planned",
+    planId: plan.id,
+    tier: decision.tier_index,
+    propensity: decision.propensity,
+  };
 }
 
 function scorerFailure(error: unknown): unknown {
@@ -130,10 +111,4 @@ function scorerFailure(error: unknown): unknown {
     case "invalid_response":
       return new ApiError(500, `Session scorer failed: ${error.message}`);
   }
-}
-
-/** Uniform on [0, 1) from the CSPRNG, as the router draws it. */
-function uniform(): number {
-  const range = 2 ** 48 - 1;
-  return randomInt(range) / range;
 }

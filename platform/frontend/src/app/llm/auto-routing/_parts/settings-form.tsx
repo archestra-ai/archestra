@@ -1,0 +1,228 @@
+"use client";
+
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import {
+  LlmModelSearchableSelect,
+  type LlmModelSelectOption,
+} from "@/components/llm-model-select";
+import { Button } from "@/components/ui/button";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import {
+  type AutoRoutingSettings,
+  type AutoRoutingSettingsUpdate,
+  useUpdateAutoRoutingSettings,
+} from "@/lib/auto-routing.query";
+import { useLlmModels } from "@/lib/llm-models.query";
+import { TIER_NAMES, type TierName } from "./tiers";
+
+type FormValues = {
+  enabled: boolean;
+  budgetUsdPerDay: string;
+} & Record<TierField, string>;
+
+type TierField = `${TierName}ModelId`;
+
+export function AutoRoutingSettingsForm({
+  settings,
+  canUpdate,
+}: {
+  settings: AutoRoutingSettings;
+  canUpdate: boolean;
+}) {
+  const update = useUpdateAutoRoutingSettings();
+  const form = useForm<FormValues>({ defaultValues: toFormValues(settings) });
+  useEffect(() => {
+    form.reset(toFormValues(settings));
+  }, [settings, form]);
+
+  const modelOptions = useTierModelOptions(settings);
+  const budget = Number(form.watch("budgetUsdPerDay")) || 0;
+  const sliderMax = Math.max(100, Math.ceil(budget * 2));
+  const disabled = !canUpdate || update.isPending;
+
+  const onSubmit = (values: FormValues) =>
+    update.mutate(changedFields(values, form.formState.dirtyFields));
+
+  return (
+    <Form {...form}>
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="space-y-4 rounded-md border p-4"
+      >
+        <FormField
+          control={form.control}
+          name="enabled"
+          render={({ field }) => (
+            <FormItem className="flex items-center gap-2">
+              <FormControl>
+                <Switch
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                  disabled={disabled}
+                />
+              </FormControl>
+              <FormLabel className="!mt-0">Enabled</FormLabel>
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="budgetUsdPerDay"
+          rules={{ validate: validateBudget }}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Daily budget (USD)</FormLabel>
+              <div className="flex items-center gap-3">
+                <Slider
+                  aria-label="Daily budget slider"
+                  min={0}
+                  max={sliderMax}
+                  step={1}
+                  value={[budget]}
+                  onValueChange={([value]) =>
+                    form.setValue("budgetUsdPerDay", String(value), {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                  disabled={disabled}
+                  className="max-w-md"
+                />
+                <FormControl>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
+                    className="w-32"
+                    disabled={disabled}
+                    {...field}
+                  />
+                </FormControl>
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <div className="grid gap-3 md:grid-cols-3">
+          {TIER_NAMES.map((tier) => (
+            <FormField
+              key={tier}
+              control={form.control}
+              name={`${tier}ModelId`}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{TIER_LABELS[tier]}</FormLabel>
+                  <LlmModelSearchableSelect
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    options={modelOptions}
+                    placeholder="Select model..."
+                    showPricing
+                    className="w-full"
+                    disabled={disabled}
+                  />
+                </FormItem>
+              )}
+            />
+          ))}
+        </div>
+        {canUpdate && (
+          <Button
+            type="submit"
+            size="sm"
+            disabled={update.isPending || !form.formState.isDirty}
+          >
+            Save
+          </Button>
+        )}
+      </form>
+    </Form>
+  );
+}
+
+const TIER_LABELS: Record<TierName, string> = {
+  fast: "Fast model",
+  normal: "Normal model",
+  smart: "Smart model",
+};
+
+// The `routing_plans.budget_usd_per_day` column bounds.
+const MIN_BUDGET = 0.01;
+const MAX_BUDGET = 9_999_999_999.99;
+
+function validateBudget(value: string): true | string {
+  if (!value.trim()) return "Set a daily budget";
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < MIN_BUDGET || parsed > MAX_BUDGET) {
+    return `Enter an amount between ${MIN_BUDGET} and ${MAX_BUDGET.toLocaleString("en-US")}`;
+  }
+  return true;
+}
+
+function toFormValues(settings: AutoRoutingSettings): FormValues {
+  return {
+    enabled: settings.enabled,
+    budgetUsdPerDay: settings.budgetUsdPerDay?.toString() ?? "",
+    fastModelId: settings.tiers.fast?.id ?? "",
+    normalModelId: settings.tiers.normal?.id ?? "",
+    smartModelId: settings.tiers.smart?.id ?? "",
+  };
+}
+
+/** Only edited fields go out: every saved change schedules a new plan. */
+function changedFields(
+  values: FormValues,
+  dirty: Partial<Record<keyof FormValues, boolean>>,
+): AutoRoutingSettingsUpdate {
+  return {
+    ...(dirty.enabled ? { enabled: values.enabled } : {}),
+    ...(dirty.budgetUsdPerDay
+      ? { budgetUsdPerDay: Number(values.budgetUsdPerDay) }
+      : {}),
+    ...Object.fromEntries(
+      TIER_NAMES.map((tier) => `${tier}ModelId` as const)
+        .filter((name) => dirty[name] && values[name])
+        .map((name) => [name, values[name]]),
+    ),
+  };
+}
+
+/** Every model the viewer can route to, plus saved tiers they cannot list. */
+function useTierModelOptions(
+  settings: AutoRoutingSettings,
+): LlmModelSelectOption[] {
+  const { data: models = [] } = useLlmModels();
+  const options: LlmModelSelectOption[] = models.map((model) => ({
+    value: model.dbId,
+    model: model.displayName ?? model.id,
+    modelId: model.id,
+    provider: model.provider,
+    pricePerMillionInput: model.capabilities?.pricePerMillionInput,
+    pricePerMillionOutput: model.capabilities?.pricePerMillionOutput,
+    isBest: model.isBest,
+    capabilities: model.capabilities,
+  }));
+  for (const tier of TIER_NAMES) {
+    const saved = settings.tiers[tier];
+    if (saved && !options.some((option) => option.value === saved.id)) {
+      options.push({
+        value: saved.id,
+        model: saved.modelId,
+        modelId: saved.modelId,
+        provider: saved.provider,
+      });
+    }
+  }
+  return options;
+}

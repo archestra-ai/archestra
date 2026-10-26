@@ -14575,14 +14575,6 @@ export type GetAgentCatalogResponses = {
                 modelId: string | null;
                 fastModelId: string | null;
                 smartModelId: string | null;
-                autoRoutingEnabled: boolean;
-                autoRoutingBudgetUsdPerDay: string | null;
-                autoRoutingFastModelId: string | null;
-                autoRoutingNormalModelId: string | null;
-                autoRoutingSmartModelId: string | null;
-                autoRoutingScorerVersionId: string | null;
-                autoRoutingGeneration: number;
-                autoRoutingPlannedGeneration: number;
                 identityProviderId: string | null;
                 environmentId: string | null;
                 runtime: {
@@ -14964,14 +14956,6 @@ export type GetAgentsResponses = {
             modelId: string | null;
             fastModelId: string | null;
             smartModelId: string | null;
-            autoRoutingEnabled: boolean;
-            autoRoutingBudgetUsdPerDay: string | null;
-            autoRoutingFastModelId: string | null;
-            autoRoutingNormalModelId: string | null;
-            autoRoutingSmartModelId: string | null;
-            autoRoutingScorerVersionId: string | null;
-            autoRoutingGeneration: number;
-            autoRoutingPlannedGeneration: number;
             identityProviderId: string | null;
             environmentId: string | null;
             runtime: {
@@ -15387,14 +15371,6 @@ export type CreateAgentResponses = {
         modelId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
-        autoRoutingEnabled: boolean;
-        autoRoutingBudgetUsdPerDay: string | null;
-        autoRoutingFastModelId: string | null;
-        autoRoutingNormalModelId: string | null;
-        autoRoutingSmartModelId: string | null;
-        autoRoutingScorerVersionId: string | null;
-        autoRoutingGeneration: number;
-        autoRoutingPlannedGeneration: number;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -16659,14 +16635,6 @@ export type GetDefaultMcpGatewayResponses = {
         modelId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
-        autoRoutingEnabled: boolean;
-        autoRoutingBudgetUsdPerDay: string | null;
-        autoRoutingFastModelId: string | null;
-        autoRoutingNormalModelId: string | null;
-        autoRoutingSmartModelId: string | null;
-        autoRoutingScorerVersionId: string | null;
-        autoRoutingGeneration: number;
-        autoRoutingPlannedGeneration: number;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -16967,14 +16935,6 @@ export type ImportAgentResponses = {
             modelId: string | null;
             fastModelId: string | null;
             smartModelId: string | null;
-            autoRoutingEnabled: boolean;
-            autoRoutingBudgetUsdPerDay: string | null;
-            autoRoutingFastModelId: string | null;
-            autoRoutingNormalModelId: string | null;
-            autoRoutingSmartModelId: string | null;
-            autoRoutingScorerVersionId: string | null;
-            autoRoutingGeneration: number;
-            autoRoutingPlannedGeneration: number;
             identityProviderId: string | null;
             environmentId: string | null;
             runtime: {
@@ -17284,14 +17244,6 @@ export type GetAgentResponses = {
         modelId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
-        autoRoutingEnabled: boolean;
-        autoRoutingBudgetUsdPerDay: string | null;
-        autoRoutingFastModelId: string | null;
-        autoRoutingNormalModelId: string | null;
-        autoRoutingSmartModelId: string | null;
-        autoRoutingScorerVersionId: string | null;
-        autoRoutingGeneration: number;
-        autoRoutingPlannedGeneration: number;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -17591,14 +17543,6 @@ export type UpdateAgentResponses = {
         modelId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
-        autoRoutingEnabled: boolean;
-        autoRoutingBudgetUsdPerDay: string | null;
-        autoRoutingFastModelId: string | null;
-        autoRoutingNormalModelId: string | null;
-        autoRoutingSmartModelId: string | null;
-        autoRoutingScorerVersionId: string | null;
-        autoRoutingGeneration: number;
-        autoRoutingPlannedGeneration: number;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -18182,14 +18126,6 @@ export type RestoreAgentVersionResponses = {
         modelId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
-        autoRoutingEnabled: boolean;
-        autoRoutingBudgetUsdPerDay: string | null;
-        autoRoutingFastModelId: string | null;
-        autoRoutingNormalModelId: string | null;
-        autoRoutingSmartModelId: string | null;
-        autoRoutingScorerVersionId: string | null;
-        autoRoutingGeneration: number;
-        autoRoutingPlannedGeneration: number;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -18428,14 +18364,6 @@ export type CloneAgentResponses = {
         modelId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
-        autoRoutingEnabled: boolean;
-        autoRoutingBudgetUsdPerDay: string | null;
-        autoRoutingFastModelId: string | null;
-        autoRoutingNormalModelId: string | null;
-        autoRoutingSmartModelId: string | null;
-        autoRoutingScorerVersionId: string | null;
-        autoRoutingGeneration: number;
-        autoRoutingPlannedGeneration: number;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -20913,14 +20841,6 @@ export type RestoreAgentResponses = {
         modelId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
-        autoRoutingEnabled: boolean;
-        autoRoutingBudgetUsdPerDay: string | null;
-        autoRoutingFastModelId: string | null;
-        autoRoutingNormalModelId: string | null;
-        autoRoutingSmartModelId: string | null;
-        autoRoutingScorerVersionId: string | null;
-        autoRoutingGeneration: number;
-        autoRoutingPlannedGeneration: number;
         identityProviderId: string | null;
         environmentId: string | null;
         runtime: {
@@ -38122,14 +38042,6 @@ export type GetNewChatBootstrapResponses = {
                 modelId: string | null;
                 fastModelId: string | null;
                 smartModelId: string | null;
-                autoRoutingEnabled: boolean;
-                autoRoutingBudgetUsdPerDay: string | null;
-                autoRoutingFastModelId: string | null;
-                autoRoutingNormalModelId: string | null;
-                autoRoutingSmartModelId: string | null;
-                autoRoutingScorerVersionId: string | null;
-                autoRoutingGeneration: number;
-                autoRoutingPlannedGeneration: number;
                 identityProviderId: string | null;
                 environmentId: string | null;
                 runtime: {
@@ -38681,14 +38593,6 @@ export type GetConversationBootstrapResponses = {
                     modelId: string | null;
                     fastModelId: string | null;
                     smartModelId: string | null;
-                    autoRoutingEnabled: boolean;
-                    autoRoutingBudgetUsdPerDay: string | null;
-                    autoRoutingFastModelId: string | null;
-                    autoRoutingNormalModelId: string | null;
-                    autoRoutingSmartModelId: string | null;
-                    autoRoutingScorerVersionId: string | null;
-                    autoRoutingGeneration: number;
-                    autoRoutingPlannedGeneration: number;
                     identityProviderId: string | null;
                     environmentId: string | null;
                     runtime: {

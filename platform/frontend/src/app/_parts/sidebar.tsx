@@ -27,6 +27,7 @@ import { getCostsNavigationUrl } from "@/app/_parts/costs-navigation";
 import { ShortcutHint } from "@/app/_parts/shortcut-hint";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
 import {
+  AUTO_ROUTING_URL,
   chatsNavItems,
   contentNavGroups,
   isNavItemPermitted,
@@ -68,6 +69,7 @@ import { prefetchApps } from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
+import { useFeature } from "@/lib/config/config.query";
 import { useDocsScreenshotMode } from "@/lib/docs-screenshot-mode";
 import { useGithubStars } from "@/lib/github/github.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
@@ -533,6 +535,7 @@ export function AppSidebar() {
   });
   const showConnect = Boolean(canReadMcpGateway || canReadLlmProxy);
   const { data: guardrailsDeployment } = useGuardrailsDeployment();
+  const autoRoutingEnabled = useFeature("autoRoutingEnabled");
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
@@ -564,6 +567,10 @@ export function AppSidebar() {
       contentNavGroups.map((group) => ({
         ...group,
         items: group.items
+          .filter(
+            (item) =>
+              item.url !== AUTO_ROUTING_URL || autoRoutingEnabled === true,
+          )
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.
@@ -601,7 +608,7 @@ export function AppSidebar() {
             return item;
           }),
       })),
-    [guardrailsDeployment?.enabled, permissionMap],
+    [guardrailsDeployment?.enabled, permissionMap, autoRoutingEnabled],
   );
 
   return (

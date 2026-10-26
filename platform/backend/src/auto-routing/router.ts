@@ -172,6 +172,33 @@ export function assertNotAutoOnNativeRoute(model: string): void {
   }
 }
 
+/** `decide` against `plan`; null when the plan cannot route these features. */
+export function decidePlanned(
+  plan: RoutingPlan,
+  features: RoutingSessionFeatures,
+  u: number,
+): z.infer<typeof DecisionSchema> | null {
+  try {
+    return DecisionSchema.parse(
+      JSON.parse(
+        decide(JSON.stringify(plan.plan), JSON.stringify(features), u),
+      ),
+    );
+  } catch (error) {
+    logger.error(
+      { err: error, organizationId: plan.organizationId, planId: plan.id },
+      "[AutoRouting] Serving plan cannot route; falling back to the normal tier",
+    );
+    return null;
+  }
+}
+
+/** Uniform on [0, 1) from the CSPRNG, at `randomInt`'s full 48-bit range. */
+export function uniform(): number {
+  const range = 2 ** 48 - 1;
+  return randomInt(range) / range;
+}
+
 // === Internal ===
 
 async function loadEnabledTrio(
@@ -335,26 +362,6 @@ async function decideSession(params: {
   return routed("plan_stale", NORMAL_TIER, 1, null);
 }
 
-function decidePlanned(
-  plan: RoutingPlan,
-  features: RoutingSessionFeatures,
-  u: number,
-): z.infer<typeof DecisionSchema> | null {
-  try {
-    return DecisionSchema.parse(
-      JSON.parse(
-        decide(JSON.stringify(plan.plan), JSON.stringify(features), u),
-      ),
-    );
-  } catch (error) {
-    logger.error(
-      { err: error, organizationId: plan.organizationId, planId: plan.id },
-      "[AutoRouting] Serving plan cannot route; falling back to the normal tier",
-    );
-    return null;
-  }
-}
-
 async function scoreSession(
   organizationId: string,
   input: Parameters<SessionScorer["score"]>[0],
@@ -408,10 +415,4 @@ async function requestReplan(
 ) {
   if (settings.generation > settings.plannedGeneration) return;
   await AutoRoutingSettingsModel.update(organizationId, {});
-}
-
-/** Uniform on [0, 1) from the CSPRNG, at `randomInt`'s full 48-bit range. */
-function uniform(): number {
-  const range = 2 ** 48 - 1;
-  return randomInt(range) / range;
 }

@@ -83,6 +83,11 @@ const SECTION_BY_FIELD: Record<string, ModelDialogSection> = {
   customPricePerMillionOutput: "pricing",
   customPricePerMillionCacheRead: "pricing",
   customPricePerMillionCacheWrite: "pricing",
+  longContextThreshold: "pricing",
+  longContextPricePerMillionInput: "pricing",
+  longContextPricePerMillionOutput: "pricing",
+  longContextPricePerMillionCacheRead: "pricing",
+  longContextPricePerMillionCacheWrite: "pricing",
   customContextLength: "limits",
   customOutputLength: "limits",
   inputModalities: "modalities",
@@ -139,6 +144,11 @@ interface EditModelFormValues {
   customPricePerMillionOutput: string;
   customPricePerMillionCacheRead: string;
   customPricePerMillionCacheWrite: string;
+  longContextThreshold: string;
+  longContextPricePerMillionInput: string;
+  longContextPricePerMillionOutput: string;
+  longContextPricePerMillionCacheRead: string;
+  longContextPricePerMillionCacheWrite: string;
   customContextLength: string;
   customOutputLength: string;
   ignored: boolean;
@@ -201,6 +211,18 @@ export function EditModelDialog({
       return true;
     },
   };
+  // The threshold and its four prices are one setting: all set or all empty.
+  const longContextRule = (validateValue: (v: string) => true | string) => ({
+    deps: [...LONG_CONTEXT_FIELDS],
+    validate: (v: string, values: EditModelFormValues) => {
+      if (!v.trim()) {
+        return LONG_CONTEXT_FIELDS.some((name) => values[name].trim())
+          ? "Set the threshold and all four long-context prices, or leave all empty"
+          : true;
+      }
+      return validateValue(v);
+    },
+  });
   const form = useForm<EditModelFormValues>({
     defaultValues: getDefaults(model),
   });
@@ -276,6 +298,15 @@ export function EditModelDialog({
 
     const result = await updateModel.mutateAsync({
       id: model.id,
+      longContextThreshold: parseCustomTokenLimit(values.longContextThreshold),
+      longContextPricePerMillionInput:
+        values.longContextPricePerMillionInput.trim() || null,
+      longContextPricePerMillionOutput:
+        values.longContextPricePerMillionOutput.trim() || null,
+      longContextPricePerMillionCacheRead:
+        values.longContextPricePerMillionCacheRead.trim() || null,
+      longContextPricePerMillionCacheWrite:
+        values.longContextPricePerMillionCacheWrite.trim() || null,
       customPricePerMillionInput: inputPrice,
       customPricePerMillionOutput: outputPrice,
       customPricePerMillionCacheRead: cacheReadPrice,
@@ -567,6 +598,46 @@ export function EditModelDialog({
                 cache price to override.
               </p>
             )}
+          </div>
+          <div className="space-y-2 pt-2">
+            <div className="flex min-h-7 items-center">
+              <span className="text-sm font-medium">
+                Long-context Pricing ($/M tokens)
+              </span>
+            </div>
+            <FormField
+              control={form.control}
+              name="longContextThreshold"
+              rules={longContextRule(validateCustomTokenLimit)}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Above prompt tokens</FormLabel>
+                  <FormControl>
+                    <GroupedNumberInput placeholder="Not set" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="grid grid-cols-2 gap-3">
+              {LONG_CONTEXT_PRICE_FIELDS.map(({ name, label }) => (
+                <FormField
+                  key={name}
+                  control={form.control}
+                  name={name}
+                  rules={longContextRule(nonNegativePriceRule.validate)}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{label}</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </DialogSection>
@@ -997,6 +1068,18 @@ function providerLimitPlaceholder(value: number | null): string {
     : formatThousands(value);
 }
 
+const LONG_CONTEXT_PRICE_FIELDS = [
+  { name: "longContextPricePerMillionInput", label: "Long input" },
+  { name: "longContextPricePerMillionOutput", label: "Long output" },
+  { name: "longContextPricePerMillionCacheRead", label: "Long cache read" },
+  { name: "longContextPricePerMillionCacheWrite", label: "Long cache write" },
+] as const;
+
+const LONG_CONTEXT_FIELDS = [
+  "longContextThreshold",
+  ...LONG_CONTEXT_PRICE_FIELDS.map(({ name }) => name),
+] as const;
+
 function sameModalities(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((modality) => b.includes(modality));
 }
@@ -1008,6 +1091,15 @@ function getDefaults(model: ModelWithApiKeys): EditModelFormValues {
     customPricePerMillionCacheRead: model.customPricePerMillionCacheRead ?? "",
     customPricePerMillionCacheWrite:
       model.customPricePerMillionCacheWrite ?? "",
+    longContextThreshold: model.longContextThreshold?.toString() ?? "",
+    longContextPricePerMillionInput:
+      model.longContextPricePerMillionInput ?? "",
+    longContextPricePerMillionOutput:
+      model.longContextPricePerMillionOutput ?? "",
+    longContextPricePerMillionCacheRead:
+      model.longContextPricePerMillionCacheRead ?? "",
+    longContextPricePerMillionCacheWrite:
+      model.longContextPricePerMillionCacheWrite ?? "",
     customContextLength: model.customContextLength?.toString() ?? "",
     customOutputLength: model.customOutputLength?.toString() ?? "",
     ignored: model.ignored,

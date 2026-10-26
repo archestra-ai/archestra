@@ -1,10 +1,12 @@
+//! Allocator: per-session upper hulls of the estimated (cost, value) points, the exact LP solve
+//! for the budget's dual price λ* and tie probability q, and routing one session with them.
+
 use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
 
 use crate::RouterError;
-use crate::domain::{TIER_COUNT, TierSet, TokenMix, TokenPrices};
-use crate::fit::{TOKEN_SCALE, TokenMixes};
+use crate::domain::TIER_COUNT;
 
 /// Dual-price policy: take every upgrade whose breakpoint is above `lam_star`; the tied
 /// upgrade exactly at `lam_star` is taken with probability `q`.
@@ -12,36 +14,6 @@ use crate::fit::{TOKEN_SCALE, TokenMixes};
 pub struct Policy {
     pub lam_star: f64,
     pub q: f64,
-}
-
-/// USD per token of each tier within the short- and long-prompt blocks of the token mix.
-pub(crate) struct BlockPrices {
-    short: [f64; TIER_COUNT],
-    long: [f64; TIER_COUNT],
-}
-
-impl BlockPrices {
-    pub(crate) fn new(tiers: &TierSet, mixes: &TokenMixes) -> Self {
-        let per_token = |mix: &TokenMix, prices: &TokenPrices| {
-            mix.values()
-                .iter()
-                .zip(prices.values())
-                .map(|(m, p)| m * p.get())
-                .sum::<f64>()
-                / TOKEN_SCALE
-        };
-        let tiers = tiers.tiers();
-        Self {
-            short: tiers.each_ref().map(|t| per_token(&mixes.short, &t.short)),
-            long: tiers
-                .each_ref()
-                .map(|t| per_token(&mixes.long, t.long.as_ref().unwrap_or(&t.short))),
-        }
-    }
-
-    pub(crate) fn session(&self, long_share: f64) -> [f64; TIER_COUNT] {
-        std::array::from_fn(|t| (1.0 - long_share) * self.short[t] + long_share * self.long[t])
-    }
 }
 
 /// Upper-left convex hull of a session's (price, adequacy) points, ascending in price.
@@ -104,6 +76,33 @@ impl Hull {
 pub(crate) struct Route {
     pub(crate) base: usize,
     pub(crate) tie: Option<usize>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Decision {
+    pub tier_index: usize,
+    /// Probability the policy picks this tier for this session: 1, q, or 1 − q.
+    pub propensity: f64,
+}
+
+impl Route {
+    /// `u` must be uniform on [0, 1).
+    pub(crate) fn draw(&self, q: f64, u: f64) -> Decision {
+        match self.tie {
+            Some(tie) if u < q => Decision {
+                tier_index: tie,
+                propensity: q,
+            },
+            Some(_) => Decision {
+                tier_index: self.base,
+                propensity: 1.0 - q,
+            },
+            None => Decision {
+                tier_index: self.base,
+                propensity: 1.0,
+            },
+        }
+    }
 }
 
 /// A session as the solver sees it: hull plus its share of daily tokens.
@@ -192,23 +191,6 @@ mod tests {
         assert_eq!(
             Hull::new([1.0, 2.0, 2.0], [0.2, 1.0, 1.0]).vertices,
             vec![0, 1]
-        );
-    }
-
-    #[test]
-    fn crossing_session_prices_change_the_hull() {
-        let prices = BlockPrices {
-            short: [1.0, 2.0, 4.0],
-            long: [5.0, 2.0, 4.0],
-        };
-        let adequacy = [0.3, 0.7, 1.0];
-        assert_eq!(
-            Hull::new(prices.session(0.0), adequacy).vertices,
-            vec![0, 1, 2]
-        );
-        assert_eq!(
-            Hull::new(prices.session(1.0), adequacy).vertices,
-            vec![1, 2]
         );
     }
 

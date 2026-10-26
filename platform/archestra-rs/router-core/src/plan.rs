@@ -1,9 +1,11 @@
 use serde::{Deserialize, Serialize};
 
 use crate::RouterError;
-use crate::domain::{HistoryRow, SessionFeatures, Source, TIER_COUNT, TierSet};
-use crate::fit::{LongShareModel, MAX_NEWTON_ITERATIONS, SizeModel, TokenMixes, fit_size};
-use crate::solver::{BlockPrices, Hull, Policy};
+use crate::allocate::{Hull, Policy};
+use crate::domain::{HistoryRow, Source, TIER_COUNT, TierSet};
+use crate::estimate::{
+    LongShareModel, MAX_NEWTON_ITERATIONS, SessionEstimate, SizeModel, TokenMixes, fit_size,
+};
 
 pub const PLAN_FORMAT_VERSION: u32 = 1;
 const HOLDOUT_WINDOW_MS: i64 = 10 * 24 * 60 * 60 * 1000;
@@ -88,39 +90,9 @@ impl Plan {
     }
 }
 
-/// Fitted models a session is scored with; shared by planning and `decide` so that
-/// breakpoints are bit-identical between the two.
-pub(crate) struct Scorer<'a> {
-    pub(crate) size_model: &'a SizeModel,
-    pub(crate) long_share: &'a LongShareModel,
-    pub(crate) prices: BlockPrices,
-}
-
-pub(crate) struct ScoredSession {
-    pub(crate) size: f64,
-    pub(crate) price: [f64; TIER_COUNT],
-    pub(crate) adequacy: [f64; TIER_COUNT],
-    pub(crate) hull: Hull,
-}
-
-impl Scorer<'_> {
-    pub(crate) fn score(&self, features: &SessionFeatures) -> ScoredSession {
-        let size = self.size_model.predict(features);
-        let price = self
-            .prices
-            .session(self.long_share.predict(size, features.kind));
-        let adequacy = features.tier_needed.adequacy();
-        ScoredSession {
-            size,
-            price,
-            adequacy,
-            hull: Hull::new(price, adequacy),
-        }
-    }
-}
-
 pub(crate) fn summarize(
-    sessions: &[ScoredSession],
+    sessions: &[SessionEstimate],
+    hulls: &[Hull],
     weights: &[f64],
     policy: &Policy,
     sessions_per_day: f64,
@@ -137,8 +109,8 @@ pub(crate) fn summarize(
         tier_token_share: [0.0; TIER_COUNT],
         value_per_usd: policy.lam_star / tokens_per_day,
     };
-    for (s, w) in sessions.iter().zip(weights) {
-        let route = s.hull.route(policy);
+    for ((s, hull), w) in sessions.iter().zip(hulls).zip(weights) {
+        let route = hull.route(policy);
         let outcomes = match route.tie {
             Some(tie) => [(route.base, 1.0 - policy.q), (tie, policy.q)],
             None => [(route.base, 1.0), (route.base, 0.0)],

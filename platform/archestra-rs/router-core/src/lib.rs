@@ -2,24 +2,30 @@
 //! session-size and long-prompt-share models on history and solves the budget LP exactly for a
 //! dual-price policy; `decide` routes one session with that policy and a caller-supplied uniform.
 
+//!
+//! Pipeline: pre-run session features → `estimate` (per-tier value and cost) → `allocate`
+//! (hull breakpoints, λ*/q under the budget, route with propensity).
+
+mod allocate;
 mod domain;
-mod fit;
+mod estimate;
 mod linalg;
 mod plan;
-mod solver;
 
+pub use allocate::{Decision, Policy};
 pub use domain::{
     HistoryRow, ModelId, PerDay, PlanInput, Probability, SessionFeatures, SessionKind, Source,
     TIER_COUNT, TierNeeded, TierSet, TierSpec, TokenCounts, TokenMix, TokenPrices, TokenTypes,
     UsdPerDay, UsdPerMTok, Volume,
 };
-pub use fit::{LongShareModel, SizeModel, SourceEffect, TokenMixes};
+pub use estimate::{LongShareModel, SizeModel, SourceEffect, TokenMixes};
 pub use plan::{Diagnostics, Holdout, PLAN_FORMAT_VERSION, Plan, Summary, Versions};
-pub use solver::Policy;
 
-use crate::fit::{MAX_NEWTON_ITERATIONS, fit_long_share, fit_mixes, fit_size};
-use crate::plan::{Scorer, holdout, summarize};
-use crate::solver::{BlockPrices, WeightedSession, solve};
+use crate::allocate::{Hull, WeightedSession, solve};
+use crate::estimate::{
+    BlockPrices, Estimator, MAX_NEWTON_ITERATIONS, fit_long_share, fit_mixes, fit_size,
+};
+use crate::plan::{holdout, summarize};
 
 /// This crate's version, recorded on every plan and decision.
 pub const CORE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -62,13 +68,6 @@ pub enum RouterError {
     InvalidUniform(f64),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Decision {
-    pub tier_index: usize,
-    /// Probability the policy picks this tier for this session: 1, q, or 1 − q.
-    pub propensity: f64,
-}
-
 pub fn plan(input: PlanInput) -> Result<Plan, RouterError> {
     let PlanInput {
         history,
@@ -94,28 +93,43 @@ pub fn plan(input: PlanInput) -> Result<Plan, RouterError> {
         .collect();
     let long_share = fit_long_share(&history, &sizes)?;
 
-    let scorer = Scorer {
+    let estimator = Estimator {
         size_model: &size_model,
         long_share: &long_share,
         prices: BlockPrices::new(&tiers, &token_mix),
     };
-    let scored: Vec<_> = history.iter().map(|r| scorer.score(&r.features)).collect();
-    let total_size: f64 = scored.iter().map(|s| s.size).sum();
-    let weights: Vec<f64> = scored
+    let estimates: Vec<_> = history
         .iter()
-        .map(|s| tokens_per_day * s.size / total_size)
+        .map(|r| estimator.estimate(&r.features))
         .collect();
-    let weighted: Vec<WeightedSession> = scored
+    let hulls: Vec<Hull> = estimates
         .iter()
+        .map(|e| Hull::new(e.price, e.adequacy))
+        .collect();
+    let total_size: f64 = estimates.iter().map(|e| e.size).sum();
+    let weights: Vec<f64> = estimates
+        .iter()
+        .map(|e| tokens_per_day * e.size / total_size)
+        .collect();
+    let weighted: Vec<WeightedSession> = estimates
+        .iter()
+        .zip(&hulls)
         .zip(&weights)
-        .map(|(s, &w)| WeightedSession {
-            hull: &s.hull,
-            price: s.price,
+        .map(|((e, hull), &w)| WeightedSession {
+            hull,
+            price: e.price,
             tokens_per_day: w,
         })
         .collect();
     let policy = solve(&weighted, budget.get())?;
-    let summary = summarize(&scored, &weights, &policy, sessions_per_day, tokens_per_day);
+    let summary = summarize(
+        &estimates,
+        &hulls,
+        &weights,
+        &policy,
+        sessions_per_day,
+        tokens_per_day,
+    );
     let diagnostics = plan::Diagnostics {
         holdout: holdout(&history, &baseline_source),
     };
@@ -140,27 +154,15 @@ pub fn decide(plan: &Plan, features: &SessionFeatures, u: f64) -> Result<Decisio
     if !(0.0..1.0).contains(&u) {
         return Err(RouterError::InvalidUniform(u));
     }
-    let scorer = Scorer {
+    let estimator = Estimator {
         size_model: &plan.size_model,
         long_share: &plan.long_share,
         prices: BlockPrices::new(&plan.tiers_fingerprint, &plan.token_mix),
     };
-    let route = scorer.score(features).hull.route(&plan.policy);
-    let q = plan.policy.q;
-    Ok(match route.tie {
-        Some(tie) if u < q => Decision {
-            tier_index: tie,
-            propensity: q,
-        },
-        Some(_) => Decision {
-            tier_index: route.base,
-            propensity: 1.0 - q,
-        },
-        None => Decision {
-            tier_index: route.base,
-            propensity: 1.0,
-        },
-    })
+    let estimate = estimator.estimate(features);
+    Ok(Hull::new(estimate.price, estimate.adequacy)
+        .route(&plan.policy)
+        .draw(plan.policy.q, u))
 }
 
 #[cfg(test)]
@@ -295,14 +297,14 @@ mod tests {
     #[test]
     fn sources_beyond_the_fit_cap_route_as_baseline() {
         let mut input = input(4.0);
-        let extra = fit::MAX_FIT_SOURCES + 5;
+        let extra = estimate::MAX_FIT_SOURCES + 5;
         let main_rows = input.history.len() - extra;
         for (i, row) in input.history.iter_mut().skip(main_rows).enumerate() {
             row.features.source = Source(format!("s{i:02}"));
         }
         let plan = plan(input).unwrap();
         let SizeModel::PoissonGlm { source_effects, .. } = &plan.size_model;
-        assert_eq!(source_effects.len(), fit::MAX_FIT_SOURCES);
+        assert_eq!(source_effects.len(), estimate::MAX_FIT_SOURCES);
         let dropped = format!("s{:02}", extra - 1);
         assert!(source_effects.iter().all(|e| e.source.0 != dropped));
         let q = plan.policy.q;

@@ -1,16 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { plan as fitPlan } from "@archestra/router-rs";
-import { activeScorerVersion } from "@/auto-routing/router";
+import { activeSourceVersion } from "@/auto-routing/signals";
 import { type Trio, tiersFingerprint } from "@/auto-routing/tiers";
 import AgentModel from "@/models/agent";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import ModelModel from "@/models/model";
 import RoutingPlanModel from "@/models/routing-plan";
 import RoutingScorerVersionModel from "@/models/routing-scorer-version";
-import type {
-  InsertRoutingDecision,
-  RoutingFit,
-  RoutingSessionKey,
+import {
+  FEATURES_SCHEMA_VERSION,
+  type InsertRoutingDecision,
+  type RoutingFit,
+  type RoutingSessionKey,
 } from "@/types/auto-routing";
 
 export async function makeRoutingModel(modelId = `model-${randomUUID()}`) {
@@ -51,12 +52,17 @@ export function plannedDecision(params: {
     reason: "planned",
     scorerVersionId: params.scorerVersionId,
     features: {
-      tier_needed: [0.2, 0.5, 0.3],
-      p_long: 0.1,
+      signals: {
+        "jev-session": {
+          version: params.scorerVersionId,
+          tier_needed: [0.2, 0.5, 0.3],
+          p_long: 0.1,
+        },
+      },
       kind: "main",
-      source: "claude-code",
+      client: "claude-code",
     },
-    featuresSchemaVersion: 1,
+    featuresSchemaVersion: FEATURES_SCHEMA_VERSION,
     coreVersion: "0.1.0",
     planFormatVersion: 1,
   };
@@ -97,7 +103,7 @@ export async function publishFittedPlan(params: {
   scorerVersionId?: string;
 }) {
   const scorerVersionId =
-    params.scorerVersionId ?? (await activeScorerVersion()).id;
+    params.scorerVersionId ?? (await activeSourceVersion()).id;
   await AutoRoutingSettingsModel.activateScorerVersion(
     params.organizationId,
     scorerVersionId,

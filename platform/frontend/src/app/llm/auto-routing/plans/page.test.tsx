@@ -9,6 +9,7 @@ import type {
   AutoRoutingPlanDetail,
   AutoRoutingPlanSummary,
 } from "@/lib/auto-routing.query";
+import { rejectionReason } from "../_parts/plan-document";
 import AutoRoutingPlansPage from "./page";
 
 const API_ORIGIN = "http://localhost:9000";
@@ -53,6 +54,15 @@ const failed: AutoRoutingPlanSummary = {
   decisionCount: 0,
 };
 
+const rejected: AutoRoutingPlanSummary = {
+  ...base,
+  id: "00000000-0000-4000-8000-000000000003",
+  status: "rejected",
+  generation: 2,
+  error: "stale_watermark",
+  decisionCount: 0,
+};
+
 const detail: AutoRoutingPlanDetail = {
   ...base,
   tiersFingerprint: {},
@@ -70,7 +80,7 @@ const detail: AutoRoutingPlanDetail = {
 
 const server = setupServer(
   http.get(`${API_ORIGIN}/api/auto-routing/plans`, () =>
-    HttpResponse.json([base, failed]),
+    HttpResponse.json([base, failed, rejected]),
   ),
   http.get(`${API_ORIGIN}/api/auto-routing/plans/${base.id}`, () =>
     HttpResponse.json(detail),
@@ -98,8 +108,22 @@ describe("AutoRoutingPlansPage", () => {
     expect(
       await screen.findByText(/budget below the cheapest tier/),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("jev · jev-1.13.0 · abcdef01")).toHaveLength(2);
+    expect(screen.getAllByText("jev · jev-1.13.0 · abcdef01")).toHaveLength(3);
     expect(screen.getByText("420")).toBeInTheDocument();
+  });
+
+  it("shows a fit rejected at publication with its reason, not as an error", async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <AutoRoutingPlansPage />
+      </QueryClientProvider>,
+    );
+
+    const row = (await screen.findByText("rejected")).closest("tr");
+    if (!row) throw new Error("rejected plan row missing");
+    expect(
+      within(row).getByText(rejectionReason("stale_watermark")),
+    ).not.toHaveClass("text-destructive");
   });
 
   it("opens a plan's fitted models and holdout check from its row", async () => {

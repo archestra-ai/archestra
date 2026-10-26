@@ -18,6 +18,7 @@ import {
 import { formatDate } from "@/lib/utils/date-time";
 import { formatCurrency } from "@/lib/utils/format-currency";
 import { PlanDiagnostics } from "../_parts/plan-diagnostics";
+import { rejectionReason } from "../_parts/plan-document";
 
 export default function AutoRoutingPlansPage() {
   const { data: plans = [], isPending } = useAutoRoutingPlans();
@@ -92,10 +93,15 @@ const COLUMNS: ColumnDef<AutoRoutingPlanSummary>[] = [
   {
     id: "error",
     header: "Error",
-    cell: ({ row }) => (
-      <span className="line-clamp-2 text-destructive">
-        {row.original.error}
-      </span>
-    ),
+    cell: ({ row }) =>
+      row.original.status === "rejected" ? (
+        <span className="line-clamp-2 text-muted-foreground">
+          {rejectionReason(row.original.error)}
+        </span>
+      ) : (
+        <span className="line-clamp-2 text-destructive">
+          {row.original.error}
+        </span>
+      ),
   },
 ];

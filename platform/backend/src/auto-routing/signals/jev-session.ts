@@ -4,12 +4,22 @@ import { DecisionsResponseSchema } from "@/types/llm-providers/jev/api";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { JEV_SESSION_SPEC, type JevSessionSpec, type ScorerSpec } from "./spec";
 import {
-  type ScorerContext,
-  ScorerError,
-  type ScorerInput,
-  type ScorerResult,
-  type SessionScorer,
+  type PreRunInput,
+  type PreRunSignalSource,
+  type SignalSourceContext,
+  SignalSourceError,
 } from "./types";
+
+export const JEV_SESSION_SOURCE_ID = "jev-session";
+
+export interface JevSessionReading {
+  /** Distribution of the weakest adequate tier: (fast, normal, smart), sums to 1. */
+  tierNeeded: [number, number, number];
+  /** Probability that the session's context grows past the long-context threshold. */
+  pLong: number;
+  /** Upstream-reported cost of the scoring call, when the endpoint reports one. */
+  costUsd: number | null;
+}
 
 // State template v1 (spec.stateTemplateVersion): ported from the router PoC rubric.
 const PROMPT_HEAD = 3000;
@@ -38,20 +48,26 @@ const SessionAnswersSchema = DecisionsResponseSchema.extend({
   }),
 });
 
-export class JevScorer implements SessionScorer {
+export class JevSessionSource
+  implements PreRunSignalSource<typeof JEV_SESSION_SOURCE_ID, JevSessionReading>
+{
+  readonly id = JEV_SESSION_SOURCE_ID;
   readonly spec: JevSessionSpec;
 
   constructor(spec: JevSessionSpec = JEV_SESSION_SPEC) {
     this.spec = spec;
   }
 
-  async score(input: ScorerInput, ctx: ScorerContext): Promise<ScorerResult> {
+  async read(
+    input: PreRunInput,
+    ctx: SignalSourceContext,
+  ): Promise<JevSessionReading> {
     const { apiKey, baseUrl } = await resolveProviderApiKey({
       organizationId: ctx.organizationId,
       provider: "jev",
     });
     if (!apiKey) {
-      throw new ScorerError(
+      throw new SignalSourceError(
         "no_credentials",
         "No Jev API key is configured for the organization",
       );
@@ -72,9 +88,13 @@ export class JevScorer implements SessionScorer {
     });
     const parsed = SessionAnswersSchema.safeParse(body);
     if (!parsed.success) {
-      throw new ScorerError("invalid_response", "Jev answers do not match", {
-        cause: parsed.error,
-      });
+      throw new SignalSourceError(
+        "invalid_response",
+        "Jev answers do not match",
+        {
+          cause: parsed.error,
+        },
+      );
     }
     const { tier_needed, long_context } = parsed.data.answers;
     return {
@@ -101,27 +121,37 @@ async function postDecisions(params: {
     signal: params.signal,
   });
   if (!response.ok) {
-    throw new ScorerError("http", `Jev answered HTTP ${response.status}`, {
-      status: response.status,
-    });
+    throw new SignalSourceError(
+      "http",
+      `Jev answered HTTP ${response.status}`,
+      {
+        status: response.status,
+      },
+    );
   }
   return response.json();
 }
 
 function transportFailure(error: unknown, timeout: AbortSignal): unknown {
   switch (true) {
-    case error instanceof ScorerError:
+    case error instanceof SignalSourceError:
       return error;
     case timeout.aborted:
-      return new ScorerError("timeout", "Jev did not answer in time", {
+      return new SignalSourceError("timeout", "Jev did not answer in time", {
         cause: error,
       });
     case error instanceof SyntaxError:
-      return new ScorerError("invalid_response", "Jev answered non-JSON", {
+      return new SignalSourceError(
+        "invalid_response",
+        "Jev answered non-JSON",
+        {
+          cause: error,
+        },
+      );
+    default:
+      return new SignalSourceError("http", "Jev request failed", {
         cause: error,
       });
-    default:
-      return new ScorerError("http", "Jev request failed", { cause: error });
   }
 }
 
@@ -133,7 +163,7 @@ function tierDistribution(
   const sum = fast + normal + smart;
   // NaN (a missing level) fails this comparison too.
   if (!(Math.abs(sum - 1) <= PROBABILITY_SUM_TOLERANCE)) {
-    throw new ScorerError(
+    throw new SignalSourceError(
       "invalid_response",
       "Jev tier_needed probabilities are not a distribution over three levels",
     );
@@ -141,7 +171,7 @@ function tierDistribution(
   return [fast / sum, normal / sum, smart / sum];
 }
 
-function sessionState(input: ScorerInput): Record<string, string> {
+function sessionState(input: PreRunInput): Record<string, string> {
   const kind = sessionKindPhrase(input);
   return {
     prompt: clip(input.firstUserText.replace(SECRET, "<redacted>")),
@@ -149,7 +179,7 @@ function sessionState(input: ScorerInput): Record<string, string> {
   };
 }
 
-function sessionKindPhrase(input: ScorerInput): string | undefined {
+function sessionKindPhrase(input: PreRunInput): string | undefined {
   switch (input.kind) {
     case "subagent":
       return "a self-contained brief written by an orchestrator agent for a sub-agent";

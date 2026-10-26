@@ -4201,6 +4201,13 @@
       "when": 1793045870405,
       "tag": "0599_fair_tag",
       "breakpoints": true
+    },
+    {
+      "idx": 600,
+      "version": "7",
+      "when": 1793047613833,
+      "tag": "0600_quick_sebastian_shaw",
+      "breakpoints": true
     }
   ]
 }

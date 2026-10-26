@@ -1,4 +1,4 @@
-import { activeScorerVersion } from "@/auto-routing/router";
+import { activeSourceVersion } from "@/auto-routing/signals";
 import config from "@/config";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import RoutingPlanModel from "@/models/routing-plan";
@@ -27,7 +27,7 @@ describe("POST /api/auto-routing/replan", () => {
     await seedFitHistory({
       organizationId: ctx.organizationId,
       modelId: trio[2].id,
-      scorerVersionId: (await activeScorerVersion()).id,
+      scorerVersionId: (await activeSourceVersion()).id,
       sessions: 40,
     });
 

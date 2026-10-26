@@ -1,11 +1,14 @@
 import RoutingPlanModel from "@/models/routing-plan";
 import { ApiError } from "@/types";
-import type { RoutingPlan, RoutingSessionFeatures } from "@/types/auto-routing";
+import type {
+  RoutingDecisionFeatures,
+  RoutingPlan,
+} from "@/types/auto-routing";
 import type { AutoRoutingPreviewResponse } from "@/types/auto-routing-api";
-import { activeScorerVersion, decidePlanned, uniform } from "./router";
-import { JevScorer } from "./scorer/jev-scorer";
-import { ScorerError, type ScorerInput } from "./scorer/types";
+import { decidePlanned, uniform } from "./router";
 import { loadAutoRoutingSettings } from "./settings";
+import { activeSourceVersion, decisionFeatures, preRunSource } from "./signals";
+import { type PreRunInput, SignalSourceError } from "./signals/types";
 import {
   fingerprintMatches,
   loadTrio,
@@ -15,8 +18,6 @@ import {
   type Trio,
 } from "./tiers";
 
-const scorer = new JevScorer();
-
 /**
  * What the router would decide for a new session opening with `text`, against
  * the active plan and a fresh `u`. Nothing is stored and no re-plan is
@@ -25,7 +26,7 @@ const scorer = new JevScorer();
 export async function previewAutoRouting(params: {
   organizationId: string;
   text: string;
-  kind: ScorerInput["kind"];
+  kind: PreRunInput["kind"];
 }): Promise<AutoRoutingPreviewResponse> {
   const { organizationId } = params;
   const loaded = await loadTrio(await loadAutoRoutingSettings(organizationId));
@@ -36,26 +37,18 @@ export async function previewAutoRouting(params: {
     );
   }
   const { trio } = loaded;
-  const scored = await scorer
-    .score(
-      { firstUserText: params.text, kind: params.kind, client: null },
-      { organizationId },
-    )
+  const input = { firstUserText: params.text, kind: params.kind, client: null };
+  const scored = await preRunSource
+    .read(input, { organizationId })
     .catch((error: unknown) => {
       throw scorerFailure(error);
     });
-  const features: RoutingSessionFeatures = {
-    tier_needed: scored.tierNeeded,
-    p_long: scored.pLong,
-    kind: params.kind,
-    source: "unknown",
-  };
-
+  const version = (await activeSourceVersion()).id;
   const outcome = decideAgainstActivePlan(
     await RoutingPlanModel.findActive(organizationId),
-    (await activeScorerVersion()).id,
+    version,
     trio,
-    features,
+    decisionFeatures({ version, reading: scored, input }),
   );
   const model = trio[outcome.tier];
   return {
@@ -89,7 +82,7 @@ function decideAgainstActivePlan(
   plan: RoutingPlan | null,
   scorerVersionId: string,
   trio: Trio,
-  features: RoutingSessionFeatures,
+  features: RoutingDecisionFeatures,
 ): Outcome {
   if (plan?.scorerVersionId !== scorerVersionId)
     return { ...STALE, reason: "cold_start" };
@@ -105,7 +98,7 @@ function decideAgainstActivePlan(
 }
 
 function scorerFailure(error: unknown): unknown {
-  if (!(error instanceof ScorerError)) return error;
+  if (!(error instanceof SignalSourceError)) return error;
   switch (error.reason) {
     case "no_credentials":
       return new ApiError(400, `Session scorer unavailable: ${error.message}`);

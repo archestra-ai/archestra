@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { activeScorerVersion } from "@/auto-routing/router";
+import { activeSourceVersion } from "@/auto-routing/signals";
 import config from "@/config";
 import db, { schema } from "@/database";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
@@ -285,7 +285,7 @@ async function seedHistory(organizationId: string, modelId: string) {
   await seedFitHistory({
     organizationId,
     modelId,
-    scorerVersionId: (await activeScorerVersion()).id,
+    scorerVersionId: (await activeSourceVersion()).id,
     sessions: 40,
   });
 }

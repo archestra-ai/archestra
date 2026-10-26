@@ -246,7 +246,7 @@ describe("routing usage", () => {
       expect(row.short.input).toBe(100);
       expect(row.long.input).toBe(101);
       expect(row.long.output).toBe(20);
-      expect(row.features.source).toBe("claude-code");
+      expect(row.features.client).toBe("claude-code");
       const stored = await db
         .select({ estimated: schema.routingUsageTable.estimated })
         .from(schema.routingUsageTable)

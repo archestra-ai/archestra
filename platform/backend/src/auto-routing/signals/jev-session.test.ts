@@ -2,9 +2,9 @@ import { delay, HttpResponse, http } from "msw";
 import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
-import { JevScorer } from "./jev-scorer";
+import { JevSessionSource } from "./jev-session";
 import { JEV_SESSION_SPEC } from "./spec";
-import { ScorerError } from "./types";
+import { SignalSourceError } from "./types";
 
 const TYPESAFE_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 
@@ -28,18 +28,18 @@ const INPUT = {
   client: "opencode",
 };
 
-async function expectScorerError(
+async function expectSourceError(
   promise: Promise<unknown>,
-  reason: ScorerError["reason"],
+  reason: SignalSourceError["reason"],
 ) {
   const error = await promise.catch((e: unknown) => e);
-  expect(error).toBeInstanceOf(ScorerError);
-  expect((error as ScorerError).reason).toBe(reason);
+  expect(error).toBeInstanceOf(SignalSourceError);
+  expect((error as SignalSourceError).reason).toBe(reason);
 }
 
-describe("JevScorer", () => {
+describe("JevSessionSource", () => {
   const server = useMswServer();
-  const scorer = new JevScorer();
+  const source = new JevSessionSource();
   let organizationId: string;
   const ctx = () => ({ organizationId });
 
@@ -65,7 +65,7 @@ describe("JevScorer", () => {
       }),
     );
 
-    const result = await scorer.score(INPUT, ctx());
+    const result = await source.read(INPUT, ctx());
 
     expect(result.tierNeeded[0]).toBeCloseTo(0.2, 12);
     expect(result.tierNeeded[1]).toBeCloseTo(0.5, 12);
@@ -103,7 +103,7 @@ describe("JevScorer", () => {
       ),
     );
 
-    const result = await scorer.score(INPUT, ctx());
+    const result = await source.read(INPUT, ctx());
 
     expect(result.tierNeeded.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 12);
     expect(result.costUsd).toBe(0.0004);
@@ -123,7 +123,7 @@ describe("JevScorer", () => {
     });
     server.use(http.post(openRouter, () => HttpResponse.json(ANSWERS)));
 
-    const result = await scorer.score(INPUT, { organizationId: org.id });
+    const result = await source.read(INPUT, { organizationId: org.id });
 
     expect(result.pLong).toBe(0.35);
   });
@@ -137,7 +137,7 @@ describe("JevScorer", () => {
       }),
     );
 
-    await expectScorerError(scorer.score(INPUT, ctx()), "timeout");
+    await expectSourceError(source.read(INPUT, ctx()), "timeout");
   });
 
   test("reports an HTTP error with its status", async () => {
@@ -147,9 +147,9 @@ describe("JevScorer", () => {
       ),
     );
 
-    const error = await scorer.score(INPUT, ctx()).catch((e: unknown) => e);
+    const error = await source.read(INPUT, ctx()).catch((e: unknown) => e);
 
-    expect(error).toBeInstanceOf(ScorerError);
+    expect(error).toBeInstanceOf(SignalSourceError);
     expect(error).toMatchObject({ reason: "http", status: 429 });
   });
 
@@ -180,7 +180,7 @@ describe("JevScorer", () => {
   ])("rejects %s as an invalid response", async (_, respond) => {
     server.use(http.post(TYPESAFE_ENDPOINT, respond));
 
-    await expectScorerError(scorer.score(INPUT, ctx()), "invalid_response");
+    await expectSourceError(source.read(INPUT, ctx()), "invalid_response");
   });
 
   test("fails without a Jev key before calling upstream", async ({
@@ -188,8 +188,8 @@ describe("JevScorer", () => {
   }) => {
     const org = await makeOrganization();
 
-    await expectScorerError(
-      scorer.score(INPUT, { organizationId: org.id }),
+    await expectSourceError(
+      source.read(INPUT, { organizationId: org.id }),
       "no_credentials",
     );
   });
@@ -206,7 +206,7 @@ describe("JevScorer", () => {
     const text = `use sk-${"a".repeat(30)} then ${tail}`;
     const redacted = `use <redacted> then ${tail}`;
 
-    await scorer.score(
+    await source.read(
       { firstUserText: text, kind: "subagent", client: null },
       ctx(),
     );

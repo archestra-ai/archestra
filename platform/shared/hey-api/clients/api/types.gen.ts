@@ -30355,7 +30355,7 @@ export type GetAutoRoutingPlansResponses = {
         id: string;
         createdAt: string;
         trigger: 'nightly' | 'settings' | 'manual' | 'scorer_change';
-        status: 'active' | 'superseded' | 'failed' | 'cold_start';
+        status: 'active' | 'superseded' | 'failed' | 'cold_start' | 'rejected';
         generation: number;
         inputWatermark: string;
         budgetUsdPerDay: number;
@@ -30465,7 +30465,7 @@ export type GetAutoRoutingPlanResponses = {
         id: string;
         createdAt: string;
         trigger: 'nightly' | 'settings' | 'manual' | 'scorer_change';
-        status: 'active' | 'superseded' | 'failed' | 'cold_start';
+        status: 'active' | 'superseded' | 'failed' | 'cold_start' | 'rejected';
         generation: number;
         inputWatermark: string;
         budgetUsdPerDay: number;

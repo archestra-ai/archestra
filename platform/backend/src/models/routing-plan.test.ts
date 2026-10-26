@@ -102,7 +102,7 @@ describe("RoutingPlanModel.publish", () => {
     expect(stale).toMatchObject({
       kind: "rejected",
       reason: "stale_watermark",
-      plan: { status: "failed", plan: null },
+      plan: { status: "rejected", error: "stale_watermark", plan: null },
     });
     expect((await RoutingPlanModel.findActive(organizationId))?.plan).toEqual({
       label: "newer",

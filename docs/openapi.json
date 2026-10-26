@@ -107196,7 +107196,8 @@
                           "active",
                           "superseded",
                           "failed",
-                          "cold_start"
+                          "cold_start",
+                          "rejected"
                         ]
                       },
                       "generation": {
@@ -107579,7 +107580,8 @@
                         "active",
                         "superseded",
                         "failed",
-                        "cold_start"
+                        "cold_start",
+                        "rejected"
                       ]
                     },
                     "generation": {

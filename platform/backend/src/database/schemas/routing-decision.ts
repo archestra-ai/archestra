@@ -14,8 +14,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type {
+  RoutingDecisionFeatures,
   RoutingDecisionReason,
-  RoutingSessionFeatures,
 } from "@/types/auto-routing";
 import modelsTable from "./model";
 import organizationsTable from "./organization";
@@ -43,7 +43,7 @@ const routingDecisionsTable = pgTable(
     scorerVersionId: uuid("scorer_version_id").references(
       () => routingScorerVersionsTable.id,
     ),
-    features: jsonb("features").$type<RoutingSessionFeatures>(),
+    features: jsonb("features").$type<RoutingDecisionFeatures>(),
     scorerCost: numeric("scorer_cost", { precision: 13, scale: 10 }),
     featuresSchemaVersion: integer("features_schema_version").notNull(),
     coreVersion: text("core_version").notNull(),

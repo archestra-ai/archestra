@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { completeFit, fitNow, prepareFit } from "@/auto-routing/fit";
-import { activeScorerVersion } from "@/auto-routing/router";
 import { getAutoRoutingSettings } from "@/auto-routing/settings";
+import { activeSourceVersion } from "@/auto-routing/signals";
 import { loadTrio, tiersFingerprint } from "@/auto-routing/tiers";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -130,7 +130,7 @@ describe("auto routing plan fit", () => {
 
     await handleAutoRoutingFit({ organizationId: org.organizationId });
 
-    const running = (await activeScorerVersion()).id;
+    const running = (await activeSourceVersion()).id;
     expect(await RoutingPlanModel.findActive(org.organizationId)).toMatchObject(
       { trigger: "scorer_change", scorerVersionId: running },
     );
@@ -192,7 +192,11 @@ describe("auto routing plan fit", () => {
     const inline = await fitNow(org.organizationId, "settings");
     const late = await completeFit(dispatched);
 
-    expect(late).toMatchObject({ kind: "rejected", reason: "stale_watermark" });
+    expect(late).toMatchObject({
+      kind: "rejected",
+      reason: "stale_watermark",
+      plan: { status: "rejected", error: "stale_watermark" },
+    });
     const active = await RoutingPlanModel.findActive(org.organizationId);
     expect(inline).toEqual({ status: "active", planId: active?.id });
     expect(
@@ -268,7 +272,7 @@ async function seedHistory(org: Org, sessions: number) {
   await seedFitHistory({
     organizationId: org.organizationId,
     modelId: org.smartModelId,
-    scorerVersionId: (await activeScorerVersion()).id,
+    scorerVersionId: (await activeSourceVersion()).id,
     sessions,
   });
 }

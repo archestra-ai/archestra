@@ -18,7 +18,7 @@ import {
   type RoutingPublishResult,
 } from "@/types/auto-routing";
 import type { AutoRoutingFitResult } from "@/types/auto-routing-api";
-import { activeScorerVersion } from "./router";
+import { activeSourceVersion, routerFeatures } from "./signals";
 import {
   loadTrio,
   type RouterTierSet,
@@ -54,7 +54,7 @@ export async function prepareFit(
   organizationId: string,
   requestedTrigger?: RoutingPlanTrigger,
 ): Promise<FitInputs | null> {
-  const scorerVersion = await activeScorerVersion();
+  const scorerVersion = await activeSourceVersion();
   await AutoRoutingSettingsModel.activateScorerVersion(
     organizationId,
     scorerVersion.id,
@@ -164,7 +164,8 @@ function fitResult(plan: RoutingPlan): AutoRoutingFitResult {
         error: plan.error ?? "The plan fit failed.",
       };
     case "superseded":
-      throw new Error(`Newest plan ${plan.id} is superseded`);
+    case "rejected":
+      throw new Error(`Newest plan ${plan.id} is ${plan.status}`);
   }
 }
 
@@ -297,7 +298,7 @@ function planInput(inputs: FitInputs, tiers: RouterTierSet) {
     created.reduce((a, b) => Math.min(a, b));
   const days = Math.max(1, span / DAY_MS);
   const rows = history.map((row) => ({
-    features: row.features,
+    features: routerFeatures(row.features),
     short: tokenCounts(row.short),
     long: tokenCounts(row.long),
     timestamp_ms: row.createdAt.getTime(),
@@ -341,7 +342,7 @@ function totalTokens(counts: ReturnType<typeof tokenCounts>): number {
 function mostFrequentSource(history: FitHistoryRow[]): string {
   const counts = new Map<string, number>();
   for (const row of history) {
-    counts.set(row.features.source, (counts.get(row.features.source) ?? 0) + 1);
+    counts.set(row.features.client, (counts.get(row.features.client) ?? 0) + 1);
   }
   const [[source]] = [...counts].sort(
     ([a, ca], [b, cb]) => cb - ca || a.localeCompare(b),

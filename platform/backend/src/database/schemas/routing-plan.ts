@@ -66,7 +66,7 @@ const routingPlansTable = pgTable(
     ),
     check(
       "routing_plans_status_check",
-      sql`${table.status} IN ('active', 'superseded', 'failed', 'cold_start')`,
+      sql`${table.status} IN ('active', 'superseded', 'failed', 'cold_start', 'rejected')`,
     ),
     check(
       "routing_plans_trigger_check",
@@ -78,7 +78,7 @@ const routingPlansTable = pgTable(
     ),
     check(
       "routing_plans_error_check",
-      sql`${table.status} <> 'failed' OR ${table.error} IS NOT NULL`,
+      sql`${table.status} NOT IN ('failed', 'rejected') OR ${table.error} IS NOT NULL`,
     ),
   ],
 );

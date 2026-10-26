@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
+import { routerFeatures } from "@/auto-routing/signals";
 import db, { schema } from "@/database";
 import RoutingDecisionModel from "@/models/routing-decision";
 import { describe, expect, test } from "@/test";
@@ -8,7 +9,10 @@ import {
   makeScorerVersion,
   plannedDecision,
 } from "@/test/auto-routing";
-import type { RoutingSessionKey } from "@/types/auto-routing";
+import {
+  RoutingDecisionFeaturesSchema,
+  type RoutingSessionKey,
+} from "@/types/auto-routing";
 
 describe("RoutingDecisionModel", () => {
   test("concurrent first requests of a session agree on one decision", async ({
@@ -86,6 +90,70 @@ describe("RoutingDecisionModel", () => {
         })
       )?.tierIndex,
     ).toBe(2);
+  });
+
+  test("v2 features round-trip by source id and translate to router-core's input", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const model = await makeRoutingModel();
+    const scorer = await makeScorerVersion();
+    const values = plannedDecision({
+      organizationId: organization.id,
+      sessionKey: sessionKeyFor("round-trip"),
+      modelId: model.id,
+      scorerVersionId: scorer.id,
+    });
+
+    await RoutingDecisionModel.insertOrGet(values);
+    const stored = await RoutingDecisionModel.find({
+      organizationId: organization.id,
+      sessionKey: values.sessionKey,
+    });
+
+    expect(stored?.featuresSchemaVersion).toBe(2);
+    expect(stored?.features).toEqual(values.features);
+    expect(stored?.features && routerFeatures(stored.features)).toEqual({
+      tier_needed: [0.2, 0.5, 0.3],
+      p_long: 0.1,
+      kind: "main",
+      source: "claude-code",
+    });
+  });
+
+  test("v2 features reject the v1 shape and malformed signals", () => {
+    const signal = {
+      version: randomUUID(),
+      tier_needed: [0.2, 0.5, 0.3],
+      p_long: 0.1,
+    };
+    const valid = {
+      signals: { "jev-session": signal },
+      kind: "main",
+      client: "claude-code",
+    };
+    const parse = (value: unknown) =>
+      RoutingDecisionFeaturesSchema.safeParse(value).success;
+
+    expect(parse(valid)).toBe(true);
+    expect(
+      parse({
+        tier_needed: [0.2, 0.5, 0.3],
+        p_long: 0.1,
+        kind: "main",
+        source: "claude-code",
+      }),
+    ).toBe(false);
+    expect(parse({ ...valid, signals: {} })).toBe(false);
+    expect(
+      parse({
+        ...valid,
+        signals: { "jev-session": { ...signal, version: "v1" } },
+      }),
+    ).toBe(false);
+    expect(
+      parse({ ...valid, signals: { "jev-session": { ...signal, p_long: 2 } } }),
+    ).toBe(false);
   });
 
   describe("sessionKey", () => {

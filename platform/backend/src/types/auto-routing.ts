@@ -24,10 +24,12 @@ export const RoutingPlanStatusSchema = z.enum([
   "superseded",
   "failed",
   "cold_start",
+  /** Fenced out at publication by newer settings, scorer version or usage. */
+  "rejected",
 ]);
 export type RoutingPlanStatus = z.infer<typeof RoutingPlanStatusSchema>;
 
-/** router-core `SessionFeatures`, as sent to `decide` and fitted on. */
+/** router-core `SessionFeatures`: the core's input, derived from `RoutingDecisionFeatures`. */
 export const RoutingSessionFeaturesSchema = z.object({
   tier_needed: z.tuple([z.number(), z.number(), z.number()]),
   p_long: z.number().min(0).max(1),
@@ -36,6 +38,26 @@ export const RoutingSessionFeaturesSchema = z.object({
 });
 export type RoutingSessionFeatures = z.infer<
   typeof RoutingSessionFeaturesSchema
+>;
+
+/** Shape version of `RoutingDecisionFeatures`, recorded on every decision. */
+export const FEATURES_SCHEMA_VERSION = 2;
+
+/** The Jev session signal; `version` is the scorer version that produced it. */
+export const JevSessionSignalSchema = z.object({
+  version: z.string().uuid(),
+  tier_needed: z.tuple([z.number(), z.number(), z.number()]),
+  p_long: z.number().min(0).max(1),
+});
+
+/** A decision's pre-run inputs: signals by source id, plus the request's metadata. */
+export const RoutingDecisionFeaturesSchema = z.object({
+  signals: z.object({ "jev-session": JevSessionSignalSchema }),
+  kind: z.enum(["main", "subagent"]),
+  client: z.string(),
+});
+export type RoutingDecisionFeatures = z.infer<
+  typeof RoutingDecisionFeaturesSchema
 >;
 
 /** A router-core JSON document (plan, tiers fingerprint) stored verbatim. */
@@ -66,7 +88,7 @@ export const SelectRoutingDecisionSchema = createSelectSchema(
   {
     sessionKey: RoutingSessionKeySchema,
     reason: RoutingDecisionReasonSchema,
-    features: RoutingSessionFeaturesSchema.nullable(),
+    features: RoutingDecisionFeaturesSchema.nullable(),
   },
 );
 export const InsertRoutingDecisionSchema = createInsertSchema(
@@ -74,7 +96,7 @@ export const InsertRoutingDecisionSchema = createInsertSchema(
   {
     sessionKey: RoutingSessionKeySchema,
     reason: RoutingDecisionReasonSchema,
-    features: RoutingSessionFeaturesSchema.nullable(),
+    features: RoutingDecisionFeaturesSchema.nullable(),
   },
 ).omit({ id: true, createdAt: true });
 export type RoutingDecision = z.infer<typeof SelectRoutingDecisionSchema>;

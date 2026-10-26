@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { activeScorerVersion } from "@/auto-routing/router";
+import { activeSourceVersion } from "@/auto-routing/signals";
 import config from "@/config";
 import db, { schema } from "@/database";
 import RoutingDecisionModel from "@/models/routing-decision";
@@ -38,7 +38,7 @@ describe("GET /api/auto-routing/settings", () => {
       status: {
         activePlan: null,
         coldStart: {
-          scorerVersionId: (await activeScorerVersion()).id,
+          scorerVersionId: (await activeSourceVersion()).id,
           sessions: 0,
           required: 100,
         },
@@ -66,7 +66,7 @@ describe("GET /api/auto-routing/settings", () => {
         diagnostics: null,
       },
     });
-    const running = await activeScorerVersion();
+    const running = await activeSourceVersion();
     const other = await makeScorerVersion();
     // Counted: idle sessions of the running version. Not counted: still active, no usage, another version.
     await decide(running.id, trio[1].id, { lastUsageHoursAgo: 30 });

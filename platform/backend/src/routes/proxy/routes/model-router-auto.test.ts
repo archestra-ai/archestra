@@ -12,7 +12,7 @@ import {
 } from "fastify-type-provider-zod";
 import { delay, HttpResponse, http } from "msw";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
-import { activeScorerVersion } from "@/auto-routing/router";
+import { activeSourceVersion } from "@/auto-routing/signals";
 import { type Trio, tiersFingerprint } from "@/auto-routing/tiers";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -118,7 +118,17 @@ describe("Model Router auto model", () => {
           modelId: org.trio[2].id,
           propensity: 1,
         });
-        expect(decision.features).toMatchObject({ kind: "main" });
+        const version = (await activeSourceVersion()).id;
+        expect(decision).toMatchObject({
+          scorerVersionId: version,
+          featuresSchemaVersion: 2,
+          features: {
+            signals: {
+              "jev-session": { version, tier_needed: [0, 0, 1], p_long: 0.1 },
+            },
+            kind: "main",
+          },
+        });
         expect(await usage(decision.id)).toEqual([
           expect.objectContaining({ input: 12, output: 10 }),
         ]);
@@ -327,7 +337,7 @@ describe("Model Router auto model", () => {
     expect(
       await AutoRoutingSettingsModel.find(org.organizationId),
     ).toMatchObject({
-      scorerVersionId: (await activeScorerVersion()).id,
+      scorerVersionId: (await activeSourceVersion()).id,
       generation: (before?.generation ?? 0) + 1,
     });
   });
@@ -453,7 +463,7 @@ describe("Model Router auto model", () => {
     await seedFitHistory({
       organizationId: org.organizationId,
       modelId: org.trio[2].id,
-      scorerVersionId: (await activeScorerVersion()).id,
+      scorerVersionId: (await activeSourceVersion()).id,
       sessions: 40,
     });
 
@@ -864,7 +874,7 @@ async function publishPlan(
   edit: (plan: RouterPlan) => RouterPlan = (plan) => plan,
   scorerVersionId?: string,
 ) {
-  const scorer = { id: scorerVersionId ?? (await activeScorerVersion()).id };
+  const scorer = { id: scorerVersionId ?? (await activeSourceVersion()).id };
   await AutoRoutingSettingsModel.activateScorerVersion(
     org.organizationId,
     scorer.id,

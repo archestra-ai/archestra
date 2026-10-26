@@ -17,7 +17,7 @@ import type {
   UpdateAutoRoutingSettingsBody,
 } from "@/types/auto-routing-api";
 import { fitNow } from "./fit";
-import { activeScorerVersion } from "./router";
+import { activeSourceVersion } from "./signals";
 import { sharedLongContextThreshold, TIER_NAMES } from "./tiers";
 
 const TIER_FIELDS = {
@@ -197,7 +197,7 @@ async function describe(
     ModelModel.findByIds(tierIds.filter((id): id is string => id !== null)),
     RoutingPlanModel.findActive(organizationId),
     RoutingPlanModel.findLatestOutcome(organizationId),
-    activeScorerVersion(),
+    activeSourceVersion(),
   ]);
   const byId = new Map(models.map((model) => [model.id, model]));
   const tierModel = (id: string | null) => {

@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, max, ne, notLike, or, sql } from "drizzle-orm";
+import { and, desc, eq, max, ne, notInArray, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import {
   lockRoutingPlan,
@@ -6,6 +6,7 @@ import {
 } from "@/models/auto-routing-settings";
 import {
   type RoutingFit,
+  type RoutingFitOutcome,
   type RoutingPlan,
   type RoutingPlanRecord,
   RoutingPlanRecordSchema,
@@ -65,10 +66,7 @@ class RoutingPlanModel {
       .where(
         and(
           eq(plans.organizationId, organizationId),
-          or(
-            isNull(plans.error),
-            notLike(plans.error, `${REJECTED_AT_PUBLICATION}%`),
-          ),
+          ne(plans.status, "rejected"),
         ),
       )
       .orderBy(desc(plans.createdAt), desc(plans.id))
@@ -78,10 +76,10 @@ class RoutingPlanModel {
 
   /**
    * Records a fit's outcome under the routing-plan lock. The fit loses — and is
-   * recorded as failed — when settings changed since it read them, it was
+   * recorded as rejected — when settings changed since it read them, it was
    * fitted for another scorer version than the organization's, or a fit over
    * newer usage was already accepted. An `active` outcome supersedes the serving
-   * plan and a `cold_start` retires it; a failure leaves it serving. Every
+   * plan and a `cold_start` retires it; a failure or rejection leaves it serving. Every
    * outcome marks its generation planned, so a failing fit does not hot-loop.
    */
   static async publish(fit: RoutingFit): Promise<RoutingPublishResult> {
@@ -110,7 +108,7 @@ class RoutingPlanModel {
         .where(
           and(
             eq(plans.organizationId, fit.organizationId),
-            ne(plans.status, "failed"),
+            notInArray(plans.status, ["failed", "rejected"]),
           ),
         );
       const rejection: RoutingPublishRejection | null =
@@ -122,15 +120,16 @@ class RoutingPlanModel {
                 fit.inputWatermark < accepted.inputWatermark
               ? "stale_watermark"
               : null;
-      const outcome = rejection
+      const outcome: PublishedOutcome = rejection
         ? {
-            status: "failed" as const,
-            error: `${REJECTED_AT_PUBLICATION}${rejection}`,
+            status: "rejected",
+            error: rejection,
             diagnostics: fit.outcome.diagnostics,
           }
         : fit.outcome;
+      const columns = outcomeColumns(outcome);
 
-      if (active && outcome.status !== "failed") {
+      if (active && columns.retiresServing) {
         await tx
           .update(plans)
           .set({ status: "superseded" })
@@ -149,10 +148,10 @@ class RoutingPlanModel {
           coreVersion: fit.coreVersion,
           planFormatVersion: fit.planFormatVersion,
           status: outcome.status,
-          plan: outcome.status === "active" ? outcome.plan : null,
-          summary: outcome.status === "failed" ? null : outcome.summary,
+          plan: columns.plan,
+          summary: columns.summary,
           diagnostics: outcome.diagnostics,
-          error: outcome.status === "failed" ? outcome.error : null,
+          error: columns.error,
         })
         .returning();
       await tx
@@ -172,7 +171,40 @@ class RoutingPlanModel {
 
 export default RoutingPlanModel;
 
-const REJECTED_AT_PUBLICATION = "Rejected at publication: ";
+type PublishedOutcome =
+  | RoutingFitOutcome
+  | {
+      status: "rejected";
+      error: RoutingPublishRejection;
+      diagnostics: RoutingFitOutcome["diagnostics"];
+    };
+
+function outcomeColumns(outcome: PublishedOutcome) {
+  switch (outcome.status) {
+    case "active":
+      return {
+        retiresServing: true,
+        plan: outcome.plan,
+        summary: outcome.summary,
+        error: null,
+      };
+    case "cold_start":
+      return {
+        retiresServing: true,
+        plan: null,
+        summary: outcome.summary,
+        error: null,
+      };
+    case "failed":
+    case "rejected":
+      return {
+        retiresServing: false,
+        plan: null,
+        summary: null,
+        error: outcome.error,
+      };
+  }
+}
 
 /** Plans with their scorer version and how many sessions each routed. */
 function planRecords() {

@@ -20,6 +20,7 @@ import {
   parseColdStartDiagnostics,
   parseHoldout,
   parsePlanModels,
+  rejectionReason,
   SIZE_MODEL_TOKEN_SCALE,
 } from "./plan-document";
 
@@ -42,6 +43,14 @@ function PlanDiagnosticsBody({ plan }: { plan: AutoRoutingPlanDetail }) {
           <AlertTriangle />
           <span className="font-medium">Fit failed</span>
           <InlineNoticeText>{plan.error ?? "Unknown error"}</InlineNoticeText>
+        </InlineNotice>
+      );
+    case "rejected":
+      return (
+        <InlineNotice variant="neutral">
+          <Info />
+          <span className="font-medium">Not published</span>
+          <InlineNoticeText>{rejectionReason(plan.error)}</InlineNoticeText>
         </InlineNotice>
       );
     case "cold_start": {

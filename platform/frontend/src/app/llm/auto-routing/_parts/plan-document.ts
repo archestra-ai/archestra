@@ -86,3 +86,14 @@ export function parseColdStartDiagnostics(document: unknown) {
 
 /** The size model's log-scale is `tokens / 1e6`. */
 export const SIZE_MODEL_TOKEN_SCALE = 1_000_000;
+
+const REJECTION_REASONS: Record<string, string> = {
+  stale_generation: "Settings changed while the plan was fitting.",
+  stale_scorer_version: "The scorer changed while the plan was fitting.",
+  stale_watermark: "A plan fitted on newer usage was already published.",
+};
+
+/** Why a `rejected` fit lost at publication, from its stored reason. */
+export function rejectionReason(error: string | null): string {
+  return (error && REJECTION_REASONS[error]) ?? "Superseded by a newer fit.";
+}

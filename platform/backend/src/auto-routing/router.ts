@@ -1,3 +1,21 @@
+/**
+ * Auto routing picks a tier per session from three groups of inputs:
+ *
+ * - Pre-run signals (`./signals`): per-source readings of the session's
+ *   opening, stored in the decision's `features.signals` under the source id
+ *   with its version. A plan and its history are tied to the source version
+ *   (`scorerVersionId`); a version change cold-starts and fences older fits.
+ * - Budget constraints: tier prices, the daily budget and observed volume,
+ *   fed to the fit (`./fit`).
+ * - Post-run signals: not collected yet. They will land in a
+ *   `routing_outcomes(decision_id, source, source_version, kind, value,
+ *   observed_at)` table joined to decisions by id; each decision's logged
+ *   `propensity` and `u` make those outcomes usable for off-policy estimates.
+ *
+ * router-core connects them: estimators turn features into per-tier value and
+ * expected cost, and the allocator solves λ* and q under the budget and routes
+ * one session with its propensity (`decide`).
+ */
 import { randomInt } from "node:crypto";
 import { coreVersion, decide } from "@archestra/router-rs";
 import type { FastifyRequest } from "fastify";
@@ -8,7 +26,6 @@ import { LimitValidationService, ModelModel } from "@/models";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import type { LimitViolationResponse } from "@/models/limit";
 import RoutingDecisionModel from "@/models/routing-decision";
-import RoutingScorerVersionModel from "@/models/routing-scorer-version";
 import { followAppaSessionHeader } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import {
   type ModelRouterAuth,
@@ -21,14 +38,15 @@ import { setAutoRoutingContext } from "@/routes/proxy/utils/auto-routing-context
 import { extractAutoRoutingSessionMetadata } from "@/routes/proxy/utils/headers/session-metadata";
 import { routingPlanCache } from "@/services/routing-plan-cache";
 import { ApiError } from "@/types";
-import type {
-  AutoRoutingSettings,
-  InsertRoutingDecision,
-  RoutingDecision,
-  RoutingDecisionReason,
-  RoutingPlan,
-  RoutingSessionFeatures,
-  RoutingSessionKey,
+import {
+  type AutoRoutingSettings,
+  FEATURES_SCHEMA_VERSION,
+  type InsertRoutingDecision,
+  type RoutingDecision,
+  type RoutingDecisionFeatures,
+  type RoutingDecisionReason,
+  type RoutingPlan,
+  type RoutingSessionKey,
 } from "@/types/auto-routing";
 import {
   checkAutoTierEligibility,
@@ -37,9 +55,13 @@ import {
   type TierEligibility,
 } from "./eligibility";
 import { firstUserText } from "./first-user-text";
-import { JevScorer } from "./scorer/jev-scorer";
-import { specHash } from "./scorer/spec";
-import { ScorerError, type SessionScorer } from "./scorer/types";
+import {
+  activeSourceVersion,
+  decisionFeatures,
+  preRunSource,
+  routerFeatures,
+} from "./signals";
+import { type PreRunInput, SignalSourceError } from "./signals/types";
 import {
   fingerprintMatches,
   loadTrio,
@@ -51,14 +73,10 @@ import {
 
 export const AUTO_MODEL = "auto";
 
-const FEATURES_SCHEMA_VERSION = 1;
-
 const DecisionSchema = z.object({
   tier_index: z.union([z.literal(0), z.literal(1), z.literal(2)]),
   propensity: z.number(),
 });
-
-const sessionScorer: SessionScorer = new JevScorer();
 
 function isAutoModel(model: string): boolean {
   return model.trim() === AUTO_MODEL;
@@ -191,13 +209,17 @@ export function assertNotAutoOnNativeRoute(model: string): void {
 /** `decide` against `plan`; null when the plan cannot route these features. */
 export function decidePlanned(
   plan: RoutingPlan,
-  features: RoutingSessionFeatures,
+  features: RoutingDecisionFeatures,
   u: number,
 ): z.infer<typeof DecisionSchema> | null {
   try {
     return DecisionSchema.parse(
       JSON.parse(
-        decide(JSON.stringify(plan.plan), JSON.stringify(features), u),
+        decide(
+          JSON.stringify(plan.plan),
+          JSON.stringify(routerFeatures(features)),
+          u,
+        ),
       ),
     );
   } catch (error) {
@@ -324,7 +346,7 @@ function tierUnavailable(tier: string, eligibility: IneligibleTier) {
 type Scored =
   | {
       kind: "scored";
-      features: RoutingSessionFeatures;
+      features: RoutingDecisionFeatures;
       costUsd: number | null;
       scorerVersionId: string;
     }
@@ -335,7 +357,7 @@ type DecisionParams = {
   settings: AutoRoutingSettings;
   trio: Trio;
   sessionKey: RoutingSessionKey;
-  scorerInput: Parameters<SessionScorer["score"]>[0];
+  scorerInput: PreRunInput;
 };
 
 /** First-request decisions in flight in this process, by organization and session key. */
@@ -424,45 +446,25 @@ async function decideSession(
 
 async function scoreSession(
   organizationId: string,
-  input: Parameters<SessionScorer["score"]>[0],
+  input: PreRunInput,
 ): Promise<Scored> {
-  const scorerVersionId = (await activeScorerVersion()).id;
+  const scorerVersionId = (await activeSourceVersion()).id;
   try {
-    const result = await sessionScorer.score(input, { organizationId });
+    const reading = await preRunSource.read(input, { organizationId });
     return {
       kind: "scored",
-      features: {
-        tier_needed: result.tierNeeded,
-        p_long: result.pLong,
-        kind: input.kind,
-        source: input.client ?? "unknown",
-      },
-      costUsd: result.costUsd,
+      features: decisionFeatures({ version: scorerVersionId, reading, input }),
+      costUsd: reading.costUsd,
       scorerVersionId,
     };
   } catch (error) {
-    if (!(error instanceof ScorerError)) throw error;
+    if (!(error instanceof SignalSourceError)) throw error;
     logger.warn(
       { organizationId, reason: error.reason, status: error.status },
       "[AutoRouting] Session scorer failed; routing to the normal tier",
     );
     return { kind: "failed", scorerVersionId };
   }
-}
-
-/**
- * The scorer version of the running spec. Upserted by spec hash, so every
- * replica converges on one row; read per new session rather than memoized,
- * as the row is what each decision references.
- */
-export function activeScorerVersion() {
-  const spec = sessionScorer.spec;
-  return RoutingScorerVersionModel.upsert({
-    name: spec.name,
-    model: spec.model,
-    spec,
-    specHash: specHash(spec),
-  });
 }
 
 /** Marks the organization dirty once; the dispatcher then fits a plan for the current trio. */

@@ -2,8 +2,9 @@ import { and, count, eq, gte, isNotNull, type SQL, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import db, { schema, type Transaction } from "@/database";
 import {
+  FEATURES_SCHEMA_VERSION,
   type InsertRoutingUsage,
-  RoutingSessionFeaturesSchema,
+  RoutingDecisionFeaturesSchema,
 } from "@/types/auto-routing";
 
 const decisions = schema.routingDecisionsTable;
@@ -79,7 +80,7 @@ class RoutingUsageModel {
       .orderBy(decisions.createdAt, decisions.id);
     return rows.map((row) => ({
       ...row,
-      features: RoutingSessionFeaturesSchema.parse(row.features),
+      features: RoutingDecisionFeaturesSchema.parse(row.features),
     }));
   }
 }
@@ -100,6 +101,7 @@ function fitWindow(params: FitWindow) {
       eq(decisions.organizationId, params.organizationId),
       eq(decisions.scorerVersionId, params.scorerVersionId),
       isNotNull(decisions.features),
+      eq(decisions.featuresSchemaVersion, FEATURES_SCHEMA_VERSION),
       gte(decisions.createdAt, new Date(watermark - HISTORY_MS)),
     ),
     having: sql`max(${usage.createdAt}) < ${new Date(watermark - IDLE_MS).toISOString()}::timestamptz`,

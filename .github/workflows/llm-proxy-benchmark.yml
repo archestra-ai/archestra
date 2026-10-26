@@ -18,6 +18,11 @@ on:
       - .github/scripts/update-proxy-benchmark-docs*
   workflow_dispatch:
     inputs:
+      compare_litellm:
+        description: Run isolated pinned LiteLLM proxy comparison instead of release benchmarks
+        required: false
+        default: false
+        type: boolean
       baseline_sha:
         description: Optional full baseline commit SHA for a paired comparison on this runner
         required: false
@@ -146,7 +151,11 @@ jobs:
         run: node --test benchmarks/*.test.mjs ../.github/scripts/*proxy-benchmark*.test.mjs
       - name: Validate server timing boundaries
         run: pnpm --dir backend exec vitest run src/server/llm-proxy-timing.unit.test.ts
+      - name: Run controlled LiteLLM comparison
+        if: github.event_name == 'workflow_dispatch' && inputs.compare_litellm
+        run: bash benchmarks/cross-proxy/run.sh
       - name: Run mock inference benchmark
+        if: ${{ !inputs.compare_litellm }}
         # A repeatable shared-runner measurement, not an absolute latency gate.
         env:
           CPU_PROFILE: ${{ github.event_name == 'workflow_dispatch' && inputs.cpu_profile == true }}
@@ -187,6 +196,9 @@ jobs:
       - name: Publish summary
         if: always()
         run: |
+          if [ -f benchmarks/results/cross-proxy/summary.md ]; then
+            cat benchmarks/results/cross-proxy/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
           if [ -f benchmarks/results/ci/summary.md ]; then
             cat benchmarks/results/ci/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi

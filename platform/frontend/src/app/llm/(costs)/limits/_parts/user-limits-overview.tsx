@@ -433,7 +433,7 @@ function EnvironmentOverrides({
     onOpenChange(false);
   };
 
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
     const items = Array.from(
       containerRef.current?.querySelectorAll<HTMLElement>(
@@ -479,6 +479,7 @@ function EnvironmentOverrides({
         align="end"
         aria-labelledby="user-limits-overrides-title"
         className="w-[min(22rem,calc(100vw-2rem))] p-0"
+        onKeyDown={onKeyDown}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           const root = containerRef.current;
@@ -493,12 +494,7 @@ function EnvironmentOverrides({
           if (action) window.setTimeout(action, 0);
         }}
       >
-        <div
-          ref={containerRef}
-          role="group"
-          aria-labelledby="user-limits-overrides-title"
-          onKeyDown={onKeyDown}
-        >
+        <div ref={containerRef}>
           <div className="space-y-0.5 border-b px-3 pt-2.5 pb-2">
             <p id="user-limits-overrides-title" className="text-sm font-medium">
               Environment overrides

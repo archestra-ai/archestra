@@ -483,6 +483,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.OpenAiAudioTranslationsWithAgent]: {},
   [RouteId.AzureImagesWithDefaultAgent]: {},
   [RouteId.AzureImagesWithAgent]: {},
+  [RouteId.OpenAiImagesWithDefaultAgent]: {},
+  [RouteId.OpenAiImagesWithAgent]: {},
   [RouteId.ModelRouterImagesWithDefaultAgent]: {},
   [RouteId.ModelRouterImagesWithAgent]: {},
   [RouteId.ModelRouterImageEditsWithDefaultAgent]: {},

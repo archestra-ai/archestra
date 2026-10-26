@@ -111670,6 +111670,256 @@ export type OpenAiAudioTranslationsWithAgentResponses = {
     200: unknown;
 };
 
+export type OpenAiImagesWithDefaultAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | null;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
+        background?: 'auto' | 'transparent' | 'opaque';
+        output_format?: 'png' | 'jpeg' | 'webp';
+        response_format?: 'url' | 'b64_json';
+        user?: string;
+        safety_identifier?: string | null;
+        n?: number | null;
+        output_compression?: number | null;
+        moderation?: 'auto' | 'low';
+        style?: 'vivid' | 'natural';
+        stream?: false;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/openai/images/generations';
+};
+
+export type OpenAiImagesWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiImagesWithDefaultAgentError = OpenAiImagesWithDefaultAgentErrors[keyof OpenAiImagesWithDefaultAgentErrors];
+
+export type OpenAiImagesWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type OpenAiImagesWithDefaultAgentResponse = OpenAiImagesWithDefaultAgentResponses[keyof OpenAiImagesWithDefaultAgentResponses];
+
+export type OpenAiImagesWithAgentData = {
+    body: {
+        model: string;
+        prompt: string;
+        size?: string | null;
+        quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'standard' | 'hd';
+        background?: 'auto' | 'transparent' | 'opaque';
+        output_format?: 'png' | 'jpeg' | 'webp';
+        response_format?: 'url' | 'b64_json';
+        user?: string;
+        safety_identifier?: string | null;
+        n?: number | null;
+        output_compression?: number | null;
+        moderation?: 'auto' | 'low';
+        style?: 'vivid' | 'natural';
+        stream?: false;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/images/generations';
+};
+
+export type OpenAiImagesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiImagesWithAgentError = OpenAiImagesWithAgentErrors[keyof OpenAiImagesWithAgentErrors];
+
+export type OpenAiImagesWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        model?: string;
+        data?: Array<{
+            b64_json?: string;
+            url?: string;
+            revised_prompt?: string;
+        }>;
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type OpenAiImagesWithAgentResponse = OpenAiImagesWithAgentResponses[keyof OpenAiImagesWithAgentResponses];
+
 export type OpenAiEmbeddingsWithDefaultAgentData = {
     body: {
         model: string;

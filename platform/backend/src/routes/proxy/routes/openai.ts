@@ -8,6 +8,7 @@ import logger from "@/logging";
 import { fetchOpenAiModels } from "@/routes/chat/model-fetchers/openai";
 import {
   ApiError,
+  Azure,
   constructResponseSchema,
   OpenAi,
   UuidIdSchema,
@@ -18,6 +19,7 @@ import {
   openAiResponsesCompactAdapterFactory,
   openaiAdapterFactory,
 } from "../adapters";
+import { openaiImagesAdapterFactory } from "../adapters/openai-images";
 import {
   CHAT_COMPLETIONS_SUFFIX,
   EMBEDDINGS_SUFFIX,
@@ -61,6 +63,7 @@ const CodexModelsSchema = z.object({
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
+  const IMAGES_SUFFIX = "/images/generations";
   await registerAudioRoutes(fastify, "openai");
 
   logger.debug("[UnifiedProxy] Registering unified OpenAI routes");
@@ -77,6 +80,35 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       authenticate: createPassthroughAuthenticator("openai"),
     }),
   });
+
+  for (const withAgent of [false, true]) {
+    fastify.post(
+      `${API_PREFIX}${withAgent ? "/:agentId" : ""}${IMAGES_SUFFIX}`,
+      {
+        bodyLimit: PROXY_BODY_LIMIT,
+        schema: {
+          operationId: withAgent
+            ? RouteId.OpenAiImagesWithAgent
+            : RouteId.OpenAiImagesWithDefaultAgent,
+          description: "Generate images with OpenAI",
+          tags: ["LLM Proxy"],
+          ...(withAgent ? { params: z.object({ agentId: UuidIdSchema }) } : {}),
+          body: Azure.API.ImageGenerationRequestSchema,
+          headers: OpenAi.API.ChatCompletionsHeadersSchema,
+          response: constructResponseSchema(
+            Azure.API.ImageGenerationResponseSchema,
+          ),
+        },
+      },
+      async (request, reply) =>
+        handleLLMProxy(
+          request.body,
+          request,
+          reply,
+          openaiImagesAdapterFactory,
+        ),
+    );
+  }
 
   fastify.post(
     `${API_PREFIX}${EMBEDDINGS_SUFFIX}`,

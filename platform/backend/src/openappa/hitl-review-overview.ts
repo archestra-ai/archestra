@@ -426,36 +426,42 @@ function summaryEntry(summary: string): CardEntry {
 
 /**
  * Gives values way to pointers until the Allow preview fits: the summary
- * first, then long values (the lead, then from the end), then any value a
- * pointer shortens. Returns false when even that leaves no room for the scope;
- * values past the room left are then counted instead of shown. It sets `use`
- * on the layout's own entries, so a layout is fitted once and then rendered.
+ * first, then the lead whatever its length, then long values from the end,
+ * then any value a pointer shortens. The summary and the lead come back once
+ * the values have made room. Returns false when even that leaves no room for
+ * the scope; entries are then hidden, the lead first and the values from the
+ * end, and counted where they were. It sets `use` on the layout's own
+ * entries, so a layout is fitted once and then rendered.
  */
 function fitLayout(layout: CardLayout): boolean {
   const fits = (withScope: boolean) =>
     paneText(render(layout, withScope)).length <= PREVIEW_LIMIT;
+  const shorter = (entry: CardEntry) =>
+    (entry.pointer ?? entry.full).join("\n").length <
+    entry.full.join("\n").length;
   if (!fits(true) && layout.summary?.pointer) layout.summary.use = "pointer";
-  const values = [
-    ...layout.lead,
-    ...[...layout.values, ...layout.change].reverse(),
-  ];
-  const give = (when: (entry: CardEntry) => boolean) => {
-    for (const entry of values) {
+  const give = (
+    entries: readonly CardEntry[],
+    when: (entry: CardEntry) => boolean,
+  ) => {
+    for (const entry of entries) {
       if (fits(true)) return;
       if (entry.use === "full" && entry.pointer && when(entry))
         entry.use = "pointer";
     }
   };
-  give((entry) => entry.full.length > LONG_VALUE_LINES);
-  give(
-    (entry) =>
-      (entry.pointer ?? entry.full).join("\n").length <
-      entry.full.join("\n").length,
-  );
-  // A short summary comes back once the values have made room.
-  if (layout.summary?.use === "pointer") {
-    layout.summary.use = "full";
-    if (!fits(true)) layout.summary.use = "pointer";
+  const values = [...layout.values, ...layout.change].reverse();
+  give(layout.lead, shorter);
+  give(values, (entry) => entry.full.length > LONG_VALUE_LINES);
+  give(values, shorter);
+  // A short summary or lead comes back once the values have made room.
+  for (const entry of [
+    ...(layout.summary ? [layout.summary] : []),
+    ...layout.lead,
+  ]) {
+    if (entry.use !== "pointer") continue;
+    entry.use = "full";
+    if (!fits(true)) entry.use = "pointer";
   }
   if (fits(true)) return true;
   for (const entry of [...layout.lead, ...[...layout.values].reverse()]) {
@@ -472,18 +478,21 @@ function render(layout: CardLayout, withScope: boolean): string {
       : entry.use === "pointer" && entry.pointer
         ? entry.pointer
         : entry.full;
-  const drawn = [...layout.lead, ...layout.values];
-  const values = drawn.flatMap(shown);
-  const hidden = drawn.filter((entry) => entry.use === "hidden").length;
-  if (hidden > 0)
-    values.push(
-      ...wrap(
-        `(${hidden} more argument${hidden === 1 ? "" : "s"}, see Inspect)`,
-      ),
-    );
+  // Hidden entries are counted where they were: the lead's above the values.
+  const counted = (entries: CardEntry[]) => {
+    const hidden = entries.filter((entry) => entry.use === "hidden").length;
+    return hidden > 0
+      ? wrap(`(${hidden} more argument${hidden === 1 ? "" : "s"}, see Inspect)`)
+      : [];
+  };
   return [
     layout.title,
-    values,
+    [
+      ...counted(layout.lead),
+      ...layout.lead.flatMap(shown),
+      ...layout.values.flatMap(shown),
+      ...counted(layout.values),
+    ],
     layout.change.flatMap(shown),
     layout.summary ? shown(layout.summary) : [],
     withScope ? layout.scope : [],

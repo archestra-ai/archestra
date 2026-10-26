@@ -66,7 +66,9 @@ watch_for_completion() {
         else
           : > "${completed_frame}"
         fi
-        tmux capture-pane -p -e -t "${TMUX_PANE}" \
+        # -N keeps each line's trailing cells, so a background that reaches
+        # the line's end survives the capture.
+        tmux capture-pane -p -e -N -t "${TMUX_PANE}" \
           | sed '/?1;2c/d' \
           >> "${completed_frame}" || true
       fi

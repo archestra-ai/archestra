@@ -20,12 +20,14 @@ CLIENTS = {
 
 
 class InteractiveResumeTest(unittest.TestCase):
-    def launch(self, client, prompt):
+    def launch(self, client, prompt, claude_json=None):
         executable, protocol, session_file = CLIENTS[client]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             runtime = root / "runtime"
             runtime.mkdir()
+            if claude_json is not None:
+                (root / ".claude.json").write_text(json.dumps(claude_json))
             if session_file:
                 (runtime / session_file).write_text("saved-session")
             fake = root / executable
@@ -67,6 +69,8 @@ class InteractiveResumeTest(unittest.TestCase):
                 )
             result = subprocess.run(["bash", str(entrypoint)], env=env, cwd=root, text=True, capture_output=True, timeout=10)
             self.assertEqual(result.returncode, 0, result.stderr)
+            if client == "claude-code":
+                self.claude_json = json.loads((root / ".claude.json").read_text())
             return json.loads(result.stdout.strip().splitlines()[-1])
 
     def test_resume_opens_saved_session_without_submitting_a_prompt(self):
@@ -83,6 +87,15 @@ class InteractiveResumeTest(unittest.TestCase):
             with self.subTest(client=client):
                 args = self.launch(client, "Review the saved change")
                 self.assertIn("Review the saved change", args)
+
+    def test_claude_diff_panel_stays_closed_unless_already_chosen(self):
+        # The viewer's browser sets the pane's width; a wide one must not
+        # open Claude's diff panel beside the transcript.
+        self.launch("claude-code", "")
+        self.assertIs(self.claude_json["diffSidebarOpen"], False)
+        self.launch("claude-code", "", claude_json={"diffSidebarOpen": True})
+        self.assertIs(self.claude_json["diffSidebarOpen"], True)
+        self.assertTrue(self.claude_json["hasCompletedOnboarding"])
 
 
 FAKE_GROK = """#!/usr/bin/env python3

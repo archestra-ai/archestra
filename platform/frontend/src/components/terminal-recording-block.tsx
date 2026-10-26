@@ -115,13 +115,17 @@ export function TerminalRecordingBlock({
             }
           >
             {line.runs.map((run) => {
+              // On the grid every run fills its row, as in xterm's own DOM
+              // renderer. An inline background covers only the font's glyph
+              // box, so a coloured block (a client's highlighted prompt)
+              // showed dark seams between its rows.
               const style = {
                 ...run.style,
-                ...(!wrapLines && run.fixedWidth
+                ...(!wrapLines
                   ? {
                       display: "inline-block",
-                      width: `${run.cells}ch`,
                       verticalAlign: "top",
+                      ...(run.fixedWidth ? { width: `${run.cells}ch` } : {}),
                     }
                   : {}),
               };

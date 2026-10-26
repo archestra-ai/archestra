@@ -165,12 +165,12 @@ class ModelCostBackfillService {
     }
     // Checked up front: one overflowing row would fail its batch every retry
     // and leave the history half rewritten.
-    const largestCost = priceSums({
-      pricing,
-      provider: model.provider,
-      tokens: totals.largestRequestBound,
-    });
-    if (largestCost > MAX_STORED_COST) {
+    if (
+      mayOverflow({
+        pricing: { provider: model.provider, ...pricing },
+        bound: totals.largestRequestBound,
+      })
+    ) {
       throw new ApiError(
         400,
         "At these prices one past request would cost more than $999.99, more than a request's cost can hold. Check the prices.",
@@ -426,7 +426,7 @@ const THROTTLE_RATIO = 9;
  */
 const SWEEP_WINDOW_MS = 15 * TimeInMs.Minute;
 
-/** `interactions.cost` is `numeric(13,10)`. */
+/** `interactions.cost`, `cache_cost` and `cache_savings` are `numeric(13,10)`. */
 const MAX_STORED_COST = 999.9999999999;
 
 const PRICES_CHANGED_MESSAGE =
@@ -573,6 +573,56 @@ function sumTokens(all: TokenSums[]): TokenSums {
 function sweepStart(backfill: ModelCostBackfill): Date {
   const start = backfill.cutoff.getTime() - SWEEP_WINDOW_MS;
   return new Date(Math.max(backfill.since.getTime(), start));
+}
+
+/**
+ * Whether a request within `bound` could store an amount (cost, cache cost or
+ * cache savings, which can be negative) past {@link MAX_STORED_COST}. Each
+ * amount is linear in each token kind, so pricing every kind's largest count
+ * on its own and adding the magnitudes bounds what any one request reaches.
+ */
+function mayOverflow(params: {
+  pricing: ModelCostBackfillPricing;
+  bound: TokenSums;
+}): boolean {
+  const { bound } = params;
+  const none = {
+    id: "",
+    createdAt: "",
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    cacheWrite1hTokens: 0,
+  };
+  const kinds: CostBackfillRow[][] = [
+    [{ ...none, inputTokens: bound.inputTokens }],
+    [{ ...none, outputTokens: bound.outputTokens }],
+    [{ ...none, cacheReadTokens: bound.cacheReadTokens }],
+    // Writes at either cache lifetime, whichever amounts to more.
+    [
+      { ...none, cacheWriteTokens: bound.cacheWriteTokens },
+      {
+        ...none,
+        cacheWriteTokens: bound.cacheWriteTokens,
+        cacheWrite1hTokens: bound.cacheWriteTokens,
+      },
+    ],
+  ];
+  const magnitudes = (row: CostBackfillRow) => {
+    const amounts = recompute(row, params.pricing);
+    return [amounts.cost, amounts.cacheCost, amounts.cacheSavings].map(
+      (amount) => Math.abs(Number(amount ?? 0)),
+    );
+  };
+  const totals = [0, 0, 0];
+  for (const rows of kinds) {
+    const each = rows.map(magnitudes);
+    totals.forEach((_, i) => {
+      totals[i] += Math.max(...each.map((amounts) => amounts[i]));
+    });
+  }
+  return totals.some((total) => total > MAX_STORED_COST);
 }
 
 /** A request's cost at the backfill's prices, as the write path stores it. */

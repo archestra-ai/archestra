@@ -80,9 +80,8 @@ class InteractionCostBackfillModel {
         recordedCost: Number(row.recorded_cost),
         tokens: toTokenSums(row),
         settledRequests: row.settled_requests,
-        // Each count's largest value, from whichever request: pricing them
-        // together bounds what any one request can cost. Cache writes count
-        // as 1h writes, the dearer kind.
+        // Each count's largest value, from whichever request: together they
+        // bound what any one request can be charged.
         largestRequestBound: {
           inputTokens: Number(row.max_input_tokens),
           outputTokens: Number(row.max_output_tokens),

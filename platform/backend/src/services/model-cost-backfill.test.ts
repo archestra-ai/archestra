@@ -326,6 +326,32 @@ describe("recomputing past costs", () => {
       }),
     ).rejects.toMatchObject({ statusCode: 400 });
     expect(await modelCostBackfillService.getLatest(model.id)).toBeNull();
+
+    // Cheap in total, but what the cache saved overflows: $0.10 cost against
+    // $1,999.90 saved at a $20,000 input price.
+    const cached = (await ModelModel.update(
+      (
+        await makeAnthropicModel({ input: "20000", output: "1" })
+      ).id,
+      { customPricePerMillionCacheRead: "1" },
+    )) as Model;
+    await makeInteraction(agent.id, {
+      type: "anthropic:messages",
+      model: cached.modelId,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 100_000,
+      cost: "0.1000000000",
+      createdAt: new Date(Date.now() - DAY_MS),
+    });
+    await expect(
+      modelCostBackfillService.start({
+        model: cached,
+        since: null,
+        organizationId: org.id,
+        userId: user.id,
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
   });
 
   test("nothing starts when the prices changed after the caller saved them", async ({

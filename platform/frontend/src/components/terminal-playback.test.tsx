@@ -261,3 +261,76 @@ test("opens a recording on its latest output, follows new output at the end, and
   await waitFor(() => expect(screen.getByText("Row 61")).toBeInTheDocument());
   expect(viewport.scrollTop).toBe(120);
 });
+
+test("shows one screen after a full-screen client redrew for the browser's size", async () => {
+  const size = (cols: number, rows: number) =>
+    `\x1b]777;archestra-terminal-size=${cols}x${rows}\x07`;
+  const draw = (label: string, cols: number, rows: number) =>
+    `\x1b[1;1H\x1b[J${Array.from(
+      { length: rows },
+      (_, row) => `\x1b[${row + 1};1H${`${label} ${row + 1}`.padEnd(cols)}`,
+    ).join("")}`;
+  const answer =
+    "\n===ARCHESTRA-FINAL-ANSWER===\nThe answer.\n===ARCHESTRA-FINAL-ANSWER-END===\n";
+  render(
+    <TerminalPlayback
+      content={`${size(40, 6)}Starting\r\n${"\n".repeat(6)}${draw("Before", 40, 6)}${size(20, 4)}${draw("Narrow", 20, 4)}${size(60, 8)}${draw("Final", 60, 8)}${answer}\x1b[2J\x1b[H${size(60, 8)}${draw("Final", 60, 8)}`}
+    />,
+  );
+  await waitFor(() => expect(screen.getByText("Final 8")).toBeVisible());
+  expect(screen.getAllByText("Final 1")).toHaveLength(1);
+  expect(screen.queryByText(/^(Before|Narrow) /)).toBeNull();
+  expect(screen.queryByText(/FINAL-ANSWER|The answer/)).toBeNull();
+});
+
+test("replays from the start after a failed write", async () => {
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  // The player's own first resize sets the recording's size; the replayer's
+  // resize for the second size event is the one that fails.
+  const original = Terminal.prototype.resize;
+  const resize = vi
+    .spyOn(Terminal.prototype, "resize")
+    .mockImplementation(function (this: Terminal, cols: number, rows: number) {
+      if (resize.mock.calls.length === 2) throw new Error("resize failed");
+      return original.call(this, cols, rows);
+    });
+  render(
+    <TerminalPlayback
+      content={
+        "\x1b]777;archestra-terminal-size=40x6\x07first\r\n\x1b]777;archestra-terminal-size=60x8\x07second\r\n"
+      }
+    />,
+  );
+  await waitFor(() => expect(screen.getByText("second")).toBeVisible());
+  expect(screen.getAllByText("first")).toHaveLength(1);
+  expect(error).toHaveBeenCalledWith(
+    "Terminal recording replay failed",
+    expect.any(Error),
+  );
+  expect(resize.mock.calls.length).toBeGreaterThan(1);
+});
+
+test("gives up after repeated failed writes", async () => {
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  const original = Terminal.prototype.resize;
+  vi.spyOn(Terminal.prototype, "resize").mockImplementation(function (
+    this: Terminal,
+    cols: number,
+    rows: number,
+  ) {
+    if (cols === 60) throw new Error("resize failed");
+    return original.call(this, cols, rows);
+  });
+  render(
+    <TerminalPlayback
+      content={
+        "\x1b]777;archestra-terminal-size=40x6\x07first\r\n\x1b]777;archestra-terminal-size=60x8\x07second\r\n"
+      }
+    />,
+  );
+  // The first attempt and two retries fail; a fourth is not made.
+  await waitFor(() => expect(error).toHaveBeenCalledTimes(3));
+  await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+  expect(error).toHaveBeenCalledTimes(3);
+  expect(screen.queryByText("second")).toBeNull();
+});

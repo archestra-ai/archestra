@@ -224,6 +224,39 @@ describe("getAgentRuntimeModelCompatibility", () => {
     }
   });
 
+  test("serves Chat Completions-only router providers on Chat Completions images only", () => {
+    // The router refuses Kimi on /responses because its translation drops
+    // the reasoning Kimi thinking models replay on tool-call turns, so the
+    // picker and the launch preflight must refuse the same pairing.
+    for (const runtimeCommand of [null, ["archestra-opencode"]] as const) {
+      expect(
+        getAgentRuntimeModelCompatibility({
+          inferenceProtocol: "openai_responses",
+          runtimeCommand,
+          provider: "kimi",
+          modelId: "k3.1-pro",
+        }),
+      ).toMatchObject({
+        compatible: false,
+        message: expect.stringContaining("Chat Completions endpoint only"),
+      });
+    }
+    for (const runtimeCommand of [
+      null,
+      ["archestra-hermes"],
+      ["archestra-grok"],
+    ] as const) {
+      expect(
+        getAgentRuntimeModelCompatibility({
+          inferenceProtocol: "openai_chat",
+          runtimeCommand,
+          provider: "kimi",
+          modelId: "k3.1-pro",
+        }),
+      ).toEqual({ compatible: true });
+    }
+  });
+
   test("matches Anthropic, router-provider, and endpoint constraints", () => {
     expect(
       getAgentRuntimeModelCompatibility({

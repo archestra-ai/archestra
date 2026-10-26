@@ -10,6 +10,7 @@ import {
   DEFAULT_AGENT_SYSTEM_PROMPT,
   DocsPage,
   E2eTestId,
+  type GitHubActionsAccess,
   getAgentRuntimeModelCompatibility,
   getAgentRuntimeProviderCompatibility,
   getDocsUrl,
@@ -98,6 +99,10 @@ import { ClaudeCodeInferenceSettings } from "@/components/claude-code-inference-
 import { ClaudeProviderConnections } from "@/components/claude-provider-connections";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import {
+  GitHubActionsAccessSection,
+  gitHubActionsAccessError,
+} from "@/components/github-actions-access-section";
 import { IdentityFields } from "@/components/identity-fields";
 import {
   type InitialPermissionGrant,
@@ -1123,6 +1128,10 @@ export function AgentForm({
     !!canReadSkills &&
     !agent?.builtIn &&
     (agentType === "mcp_gateway" || agentType === "profile");
+  // Set on a saved gateway, by someone who may edit it. A reader who cannot
+  // change it gets no section at all.
+  const showGitHubActionsAccess =
+    agentType === "mcp_gateway" && !!agent && !readOnly;
   const loadSkills = showSkills;
   const syncSkills = useUpdateAgentSkills();
   const syncSkillExclusions = useUpdateAgentSkillExclusions();
@@ -1346,6 +1355,8 @@ export function AgentForm({
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
+  const [githubActionsAccess, setGithubActionsAccess] =
+    useState<GitHubActionsAccess | null>(null);
   const [runtime, setAgentRuntime] = useState<AgentRuntimeConfig | null>(null);
   const originalRuntimeId =
     initialRuntimeId ??
@@ -1710,6 +1721,7 @@ export function AgentForm({
             scope: agentData.scope,
             initialGrants: [],
             passthroughHeaders: agentData.passthroughHeaders ?? [],
+            githubActionsAccess: agentData.githubActionsAccess ?? null,
             runtime: (agentData.runtime as AgentRuntimeConfig | null) ?? null,
             toolExposureMode: agentData.toolExposureMode ?? "full",
             missingCredentialBehavior:
@@ -1741,6 +1753,7 @@ export function AgentForm({
             scope: "personal",
             initialGrants: [],
             passthroughHeaders: [],
+            githubActionsAccess: null,
             runtime: initialValues?.runtime ?? null,
             // New agents default to "Auto" (implicit access to all tools);
             // admins can switch to "Custom" (explicitly assigned tools).
@@ -1772,6 +1785,7 @@ export function AgentForm({
       setScope(nextValues.scope);
       setInitialGrants(nextValues.initialGrants);
       setPassthroughHeaders(nextValues.passthroughHeaders);
+      setGithubActionsAccess(nextValues.githubActionsAccess);
       setAgentRuntime(nextValues.runtime);
       setToolExposureMode(nextValues.toolExposureMode);
       setMissingCredentialBehavior(nextValues.missingCredentialBehavior);
@@ -2153,6 +2167,14 @@ export function AgentForm({
   const savedEnvironmentId = persistedAgent?.environmentId ?? null;
   const environmentChanged =
     !!persistedAgent && (environmentId ?? null) !== savedEnvironmentId;
+  // Saving it asks whether the editor may use its GitHub App, so it is sent
+  // only when it changed.
+  const githubActionsAccessChanged =
+    !!persistedAgent &&
+    hasUnsavedChanges(
+      persistedAgent.githubActionsAccess ?? null,
+      githubActionsAccess,
+    );
   // The API validates the key and the model against each other, so whichever
   // one moved, both go.
   const llmSelectionChanged =
@@ -2339,6 +2361,8 @@ export function AgentForm({
                 passthroughHeaders:
                   passthroughHeaders.length > 0 ? passthroughHeaders : null,
               }),
+              ...(showGitHubActionsAccess &&
+                githubActionsAccessChanged && { githubActionsAccess }),
             }),
             ...(showRuntimeSection && runtimeEditable && { runtime }),
             // The tools group: what the agent may reach, and how.
@@ -2670,6 +2694,9 @@ export function AgentForm({
     onSaved,
     supportsIdentityProvider,
     passthroughHeaders,
+    showGitHubActionsAccess,
+    githubActionsAccess,
+    githubActionsAccessChanged,
     toolExposureMode,
     missingCredentialBehavior,
     accessAllTools,
@@ -2780,6 +2807,7 @@ export function AgentForm({
     scope,
     initialGrants,
     passthroughHeaders,
+    githubActionsAccess,
     toolExposureMode,
     missingCredentialBehavior,
     accessAllTools,
@@ -2857,7 +2885,8 @@ export function AgentForm({
     !needsRuntimeContainer &&
     !runtimeModelIncompatibility &&
     mcpEnvConflicts.length === 0 &&
-    !environmentConflicts.blocksSave;
+    !environmentConflicts.blocksSave &&
+    !(showGitHubActionsAccess && gitHubActionsAccessError(githubActionsAccess));
   const footerState: AgentFormFooterState = {
     formId,
     isCreate: !agent,
@@ -4159,6 +4188,13 @@ export function AgentForm({
                 </SettingsSection>
               )}
 
+              {showGitHubActionsAccess && (
+                <GitHubActionsAccessSection
+                  value={githubActionsAccess}
+                  onChange={setGithubActionsAccess}
+                />
+              )}
+
               {/* Identity Provider for JWKS auth */}
               {supportsIdentityProvider && identityProviders.length > 0 && (
                 <SettingsSection
@@ -4343,6 +4379,7 @@ type AgentFormFields = {
   connectorIds: string[];
   scope: AgentScope;
   passthroughHeaders: string[];
+  githubActionsAccess: GitHubActionsAccess | null;
   runtime: AgentRuntimeConfig | null;
   toolExposureMode: ToolExposureMode;
   missingCredentialBehavior: MissingCredentialBehavior;

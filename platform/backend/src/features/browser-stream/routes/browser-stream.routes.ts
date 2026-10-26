@@ -1,10 +1,10 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import type { BrowserUserContext } from "@/features/browser-stream/services/browser-stream.service";
 import { ConversationModel } from "@/models";
+import PlaywrightRuntimeModel from "@/models/playwright-runtime";
 import { ApiError, constructResponseSchema } from "@/types";
 
 const ConversationParamsSchema = z.object({
@@ -16,6 +16,10 @@ const NavigateBodySchema = z.object({
 });
 
 const browserStreamRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.addHook("preHandler", async () => {
+    if (!(await PlaywrightRuntimeModel.isEnabled()))
+      throw new ApiError(403, "The built-in browser MCP is disabled");
+  });
   // When feature is disabled, register stub routes that return 404
   if (!browserStreamFeature.isEnabled()) {
     const disabledHandler = async (_req: FastifyRequest, reply: FastifyReply) =>

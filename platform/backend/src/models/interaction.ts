@@ -843,6 +843,7 @@ class InteractionModel {
           baselineModel: schema.interactionsTable.baselineModel,
           billingMode: schema.interactionsTable.billingMode,
           inputTokens: schema.interactionsTable.inputTokens,
+          inputTokensEstimated: schema.interactionsTable.inputTokensEstimated,
           outputTokens: schema.interactionsTable.outputTokens,
           cacheReadTokens: schema.interactionsTable.cacheReadTokens,
           cacheWriteTokens: schema.interactionsTable.cacheWriteTokens,
@@ -850,6 +851,11 @@ class InteractionModel {
           baselineCost: schema.interactionsTable.baselineCost,
           durationMs: schema.interactionsTable.durationMs,
           createdAt: schema.interactionsTable.createdAt,
+          providerApiKeyId: schema.interactionsTable.providerApiKeyId,
+          modelPoolId: schema.interactionsTable.modelPoolId,
+          attempt: schema.interactionsTable.attempt,
+          attemptOutcome: schema.interactionsTable.attemptOutcome,
+          failureReason: schema.interactionsTable.failureReason,
           source: schema.interactionsTable.source,
           // The row's small stored preview (not the payload), so the trace can
           // name a turn by the prompt it served; decrypted below.
@@ -2427,6 +2433,7 @@ class InteractionModel {
         // For single interactions (no session), return the interaction ID for direct navigation
         interactionId: sql<string>`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
         requestCount: count(),
+        failedOverCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.attemptOutcome} = 'failed_over')`,
         totalInputTokens: sum(schema.interactionsTable.inputTokens),
         totalOutputTokens: sum(schema.interactionsTable.outputTokens),
         totalCacheReadTokens: sum(schema.interactionsTable.cacheReadTokens),
@@ -2581,6 +2588,7 @@ class InteractionModel {
         sources: s.sources ?? [],
         interactionId: s.interactionId, // Only set for single interactions (null session)
         requestCount: Number(s.requestCount),
+        failedOverCount: Number(s.failedOverCount),
         totalInputTokens: Number(s.totalInputTokens) || 0,
         totalOutputTokens: Number(s.totalOutputTokens) || 0,
         totalCacheReadTokens: Number(s.totalCacheReadTokens) || 0,

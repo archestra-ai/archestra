@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-23
+lastUpdated: 2026-10-26
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -14,12 +14,12 @@ Agent Runtime becomes available when your Kubernetes cluster serves the Agent Sa
 
 A run uses the agent's instructions, tools, skills, and permissions. Its model calls go through the [LLM Proxy](/docs/llm-proxy) and its tools through the [MCP Gateway](/docs/mcp/gateway), so logs, guardrails, and cost limits apply.
 
-![The Create Agent page with Claude Code, Codex, OpenCode, Hermes, OpenClaw, and Grok Build under Agent Runtimes](/docs/automated_screenshots/agents-runtime_create-agent.webp)
+![The Create Agent page with Claude Code, Codex, OpenCode, Hermes, OpenClaw, Grok Build, and Kimi Code under Agent Runtimes](/docs/automated_screenshots/agents-runtime_create-agent.webp)
 
 ## Create an Agent With a Dedicated Runtime
 
 1. Go to **Agents** and click **Add Agent**.
-2. Under **Agent Runtimes**, pick **Claude Code**, **Codex**, **OpenCode**, **Hermes**, **OpenClaw**, or **Grok Build**. The agent opens prefilled.
+2. Under **Agent Runtimes**, pick **Claude Code**, **Codex**, **OpenCode**, **Hermes**, **OpenClaw**, **Grok Build**, or **Kimi Code**. The agent opens prefilled.
 3. Review **Runtime** on the **Configuration** step. An attention icon marks a setting you must fix. Hover over it to see what to change.
 4. Click **Create and run**, or **Continue setup** to add tools, skills, and knowledge first.
 
@@ -52,6 +52,7 @@ Each run gets a temporary virtual key. Provider keys stay in Archestra.
 - **Claude Code:** your Claude Pro or Max subscription, or an API key for Anthropic, Amazon Bedrock, or Anthropic on Vertex AI.
 - **Codex:** your ChatGPT subscription, connected under **Model Providers**. An OpenAI API key does not replace it.
 - **Grok Build:** your SuperGrok subscription, connected under **Model Providers**, or an xAI API key. Pick an xAI model, such as `grok-4.7`.
+- **Kimi Code:** a Kimi for Coding membership key or a Kimi API Platform key, added as a Moonshot (Kimi) key under **Model Providers**. Pick a Kimi model, such as `k3.1-pro`. Models of other providers work too if they use Chat Completions.
 - **Other agents:** any [model provider](/docs/llm-proxy/providers) configured in Archestra.
 
 What to know:

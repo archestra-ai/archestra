@@ -77,7 +77,7 @@ p = pathlib.Path(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config
 if os.environ.get("ARCH_OC_SECTION") == "mcp" and (p.parent / ${JSON.stringify(client.commentedConfigFile)}).exists():
     raise SystemExit("Node.js is required to disconnect the sibling JSONC gateway configuration.")
 if p.exists():
-    d = json.loads(p.read_text() or "{}")
+    d = json.loads(p.read_text(encoding="utf-8-sig") or "{}")
     section = os.environ["ARCH_OC_SECTION"]
     name = os.environ["ARCH_OC_NAME"]
     entries = d.get(section)
@@ -111,7 +111,7 @@ const opencodeOwnedHasPy = (
   client: OpenCodeFamilyClient,
 ) => `import json, os, pathlib, sys
 p = pathlib.Path(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))) / ${JSON.stringify(client.dir)} / ${JSON.stringify(client.configFile)}
-d = json.loads(p.read_text() or "{}") if p.exists() else {}
+d = json.loads(p.read_text(encoding="utf-8-sig") or "{}") if p.exists() else {}
 sys.exit(1 if os.environ["ARCH_OC_NAME"] in (d.get(os.environ["ARCH_OC_SECTION"]) or {}) else 0)`;
 
 const opencodeOwnedStripNode = (
@@ -121,7 +121,7 @@ const home=process.env.HOME||os.homedir();
 const p=path.join(process.env.XDG_CONFIG_HOME||path.join(home,".config"),${JSON.stringify(client.dir)},${JSON.stringify(client.configFile)});
 const section=process.env.ARCH_OC_SECTION,name=process.env.ARCH_OC_NAME;
 if(fs.existsSync(p)||section==="mcp"){
-  const d=fs.existsSync(p)?JSON.parse(fs.readFileSync(p,"utf8")||"{}"):{};
+  const d=fs.existsSync(p)?JSON.parse(fs.readFileSync(p,"utf8").replace(/^\\uFEFF/,"")||"{}"):{};
   let saveMcpSibling=()=>{};
   if(section==="mcp") {
     const configPath=p,cfg=d;
@@ -158,7 +158,7 @@ const opencodeMcpVerifyNode = (
 ) => `const fs=require("fs"),path=require("path"),os=require("os");
 const home=process.env.HOME||os.homedir();
 const configPath=path.join(process.env.XDG_CONFIG_HOME||path.join(home,".config"),${JSON.stringify(client.dir)},${JSON.stringify(client.configFile)});
-const cfg=fs.existsSync(configPath)?JSON.parse(fs.readFileSync(configPath,"utf8")||"{}"):{};
+const cfg=fs.existsSync(configPath)?JSON.parse(fs.readFileSync(configPath,"utf8").replace(/^\\uFEFF/,"")||"{}"):{};
 process.env.ARCHESTRA_OC_MCP_NAME=process.env.ARCH_OC_NAME;
 process.env.ARCHESTRA_OC_MCP_URL=process.env.ARCH_OC_URL;
 ${openCodeMcpMergeScript(client, "verify").replaceAll("\n", "\n  ")}`;
@@ -168,7 +168,7 @@ const opencodePassthroughStripPy = (
 ) => `import json, os, pathlib
 p = pathlib.Path(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))) / ${JSON.stringify(client.dir)} / ${JSON.stringify(client.configFile)}
 if p.exists():
-    d = json.loads(p.read_text() or "{}")
+    d = json.loads(p.read_text(encoding="utf-8-sig") or "{}")
     providers = d.get("provider")
     expected_routes = json.loads(os.environ["ARCH_OC_PROVIDER_ROUTES"])
     managed_headers = json.loads(os.environ["ARCH_OC_HEADERS"])
@@ -210,7 +210,7 @@ const opencodePassthroughStripNode = (
 const home=process.env.HOME||os.homedir();
 const p=path.join(process.env.XDG_CONFIG_HOME||path.join(home,".config"),${JSON.stringify(client.dir)},${JSON.stringify(client.configFile)});
 if(fs.existsSync(p)){
-  const d=JSON.parse(fs.readFileSync(p,"utf8")||"{}");
+  const d=JSON.parse(fs.readFileSync(p,"utf8").replace(/^\\uFEFF/,"")||"{}");
   const providers=d.provider,expected=JSON.parse(process.env.ARCH_OC_PROVIDER_ROUTES),managed=JSON.parse(process.env.ARCH_OC_HEADERS);
   if(providers&&typeof providers==="object"){
     for(const [providerId,expectedUrl] of Object.entries(expected)){

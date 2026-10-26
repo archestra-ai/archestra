@@ -100,9 +100,15 @@ if (process.platform === "win32") {
   // on the item works because powershell.exe is Windows PowerShell 5.1.
   // One process for both, with room for a slow start and for Windows to apply
   // the new rules to everything under ~/.archestra.
+  try {
   require("node:child_process").execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
     '$ErrorActionPreference="Stop"; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $trusted=@($sid.Value,"S-1-5-18","S-1-5-32-544"); $genericWrite=0x40000000; $genericAll=0x10000000; $writes=([int64][Security.AccessControl.FileSystemRights]"Write,Delete,ChangePermissions,TakeOwnership") -bor $genericWrite -bor $genericAll; $foreign={param($rule) $rule.AccessControlType -eq "Allow" -and $rule.IdentityReference.Value -notin $trusted -and (([int64]$rule.FileSystemRights -band $writes) -ne 0)}; $parent=$env:ARCHESTRA_RUNTIME_ACL_PARENT; $acl=Get-Acl -LiteralPath $parent; if(@($acl.GetAccessRules($false,$true,[Security.Principal.SecurityIdentifier]) | Where-Object {& $foreign $_}).Count -gt 0){$acl.SetAccessRuleProtection($true,$true); (Get-Item -LiteralPath $parent).SetAccessControl($acl); $acl=Get-Acl -LiteralPath $parent}; $changed=$false; if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){$acl.SetOwner($sid); $changed=$true}; foreach($rule in @($acl.GetAccessRules($true,$false,[Security.Principal.SecurityIdentifier]) | Where-Object {& $foreign $_})){[void]$acl.RemoveAccessRuleSpecific($rule); $changed=$true}; if($changed){(Get-Item -LiteralPath $parent).SetAccessControl($acl)}; $acl=Get-Acl -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH; if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){$acl.SetOwner($sid)}; $acl.SetAccessRuleProtection($true,$false); foreach($rule in @($acl.Access)){[void]$acl.RemoveAccessRuleSpecific($rule)}; $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($sid,"FullControl","ContainerInherit,ObjectInherit","None","Allow"))); (Get-Item -LiteralPath $env:ARCHESTRA_RUNTIME_ACL_PATH).SetAccessControl($acl)'
-  ], { env: { ...process.env, ARCHESTRA_RUNTIME_ACL_PARENT: path.dirname(root), ARCHESTRA_RUNTIME_ACL_PATH: root }, timeout: 15000, stdio: "ignore" });
+  ], { env: { ...process.env, ARCHESTRA_RUNTIME_ACL_PARENT: path.dirname(root), ARCHESTRA_RUNTIME_ACL_PATH: root }, timeout: 15000, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  } catch (error) {
+    const detail = error.code === "ETIMEDOUT" ? "PowerShell timed out after 15000 ms" :
+      (error.stderr && String(error.stderr).trim()) || error.code || "PowerShell exited with status " + error.status;
+    throw new Error("Could not secure managed runtime " + root + " and parent " + path.dirname(root) + ": " + detail);
+  }
 }
 if (process.platform !== "win32") fs.chmodSync(root, 0o700);
 const fingerprint = crypto.createHash("sha256").update(bootstrap).digest("hex");
@@ -167,6 +173,10 @@ atomic(path.join(root, "bootstrap.cjs"), bootstrap);
 atomic(path.join(root, "params.json"), JSON.stringify(params));
 atomic(path.join(root, "current.json"), JSON.stringify(manifest));
 atomic(ownerFile, JSON.stringify({ clientId: params.clientId, installation: params.installation, bootstrapHash: fingerprint }));
+// Evaluate the installer-supplied verifier, never unchecked code from disk.
+const verifier = { exports: {} };
+new Function("module", "require", bootstrap)(verifier, require);
+verifier.exports.verify(root);
 // Register the TUI entry of this connection plugin separately: older server
 // plugin loaders treat every export as a server hook. Never load UI there.
 if (params.questionCards) {
@@ -181,7 +191,7 @@ if (params.questionCards) {
     fs.mkdirSync(configDir, { recursive: true });
     check(configDir);
     if (fs.existsSync(tuiConfig)) check(tuiConfig);
-    const cfg = fs.existsSync(tuiConfig) ? JSON.parse(fs.readFileSync(tuiConfig, "utf8")) : {};
+    const cfg = fs.existsSync(tuiConfig) ? JSON.parse(fs.readFileSync(tuiConfig, "utf8").replace(/^\\uFEFF/, "")) : {};
     if (!cfg || typeof cfg !== "object" || Array.isArray(cfg) ||
         (cfg.plugin !== undefined && !Array.isArray(cfg.plugin))) throw new Error("Unsupported TUI configuration");
     const spec = require("node:url").pathToFileURL(tuiEntry).href;

@@ -124,7 +124,7 @@ const os = require("os");
 const path = require("path");
 const configPath = process.env.ARCHESTRA_OC_CONFIG_PATH;
 const raw = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf8") : "";
-const cfg = raw.trim() ? JSON.parse(raw) : {};
+const cfg = raw.trim() ? JSON.parse(raw.replace(/^\\uFEFF/, "")) : {};
 const backupPath = configPath + ".archestra-backup";
 if (fs.existsSync(configPath) && !fs.existsSync(backupPath)) fs.copyFileSync(configPath, backupPath);
 ${includeSchema ? `cfg.$schema ??= ${JSON.stringify(client.schemaUrl)};` : ""}
@@ -182,7 +182,7 @@ const opencodeOwnedMergePy = (
   client: OpenCodeFamilyClient,
 ) => `import json, os, pathlib, shutil
 path = pathlib.Path(os.environ["ARCHESTRA_OC_CONFIG_PATH"])
-raw = path.read_text() if path.exists() else ""
+raw = path.read_text(encoding="utf-8-sig") if path.exists() else ""
 cfg = json.loads(raw) if raw.strip() else {}
 backup = path.with_name(path.name + ".archestra-backup")
 if path.exists() and not backup.exists():
@@ -384,10 +384,17 @@ $archRuntimeInstall = @'
 ${runtime.script}
 '@
 $archPreviousRuntimeMajor = $env:ARCHESTRA_OC_RUNTIME_API_MAJOR
+$archPreviousOutputEncoding = $OutputEncoding
 try {
   $env:ARCHESTRA_OC_RUNTIME_API_MAJOR = [string]$archOcMajor
+  # Native stdin defaults to ASCII in Windows PowerShell 5.1. Keep the exact
+  # UTF-8 artifact sources intact for the managed runtime hash checks.
+  $OutputEncoding = New-Object System.Text.UTF8Encoding $false
   $archRuntimeInstall | & node -
-} finally { $env:ARCHESTRA_OC_RUNTIME_API_MAJOR = $archPreviousRuntimeMajor }
+} finally {
+  $env:ARCHESTRA_OC_RUNTIME_API_MAJOR = $archPreviousRuntimeMajor
+  $OutputEncoding = $archPreviousOutputEncoding
+}
 if ($LASTEXITCODE -ne 0) { throw 'Could not install managed launcher updates' }`
     : ""
 }

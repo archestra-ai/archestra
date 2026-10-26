@@ -329,3 +329,32 @@ test("Kilo Code gets the key file and state under its own names", () => {
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test.each([
+  OPENCODE_CLIENT,
+  KILO_CLIENT,
+])("$label primary setup and disconnect accept a BOM without losing preferences", (client) => {
+  const home = mkdtempSync(path.join(tmpdir(), "primary-bom-"));
+  const configPath = path.join(home, ".config", client.dir, client.configFile);
+  const original = {
+    model: "anthropic/claude-test",
+    instructions: ["custom.md"],
+  };
+  const script = openCodePrimaryConfigScript(client);
+  try {
+    mkdirSync(path.dirname(configPath), { recursive: true });
+    writeFileSync(configPath, `\uFEFF${JSON.stringify(original)}`);
+    runScript(script, home, openCodePrimaryConfig(PROXY, "Acme"));
+    expect(JSON.parse(readFileSync(configPath, "utf8"))).toEqual(original);
+    writeFileSync(configPath, `\uFEFF${readFileSync(configPath, "utf8")}`);
+    runScript(script, home, null);
+    expect(JSON.parse(readFileSync(configPath, "utf8"))).toEqual(original);
+    expect(
+      existsSync(
+        path.join(home, ".archestra", `${client.stateName}-primary.key`),
+      ),
+    ).toBe(false);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});

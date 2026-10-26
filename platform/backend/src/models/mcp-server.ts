@@ -25,7 +25,7 @@ import {
 import { alias } from "drizzle-orm/pg-core";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
-import db, { schema, type Transaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import { constructFrozenMcpDeploymentName } from "@/k8s/shared";
@@ -1997,7 +1997,14 @@ class McpServerModel {
     return updatedServer || null;
   }
 
-  static async delete(id: string, opts?: { at?: Date }): Promise<boolean> {
+  static async delete(
+    id: string,
+    opts?: {
+      at?: Date;
+      strictCleanup?: boolean;
+      requirePlaywrightDisabled?: boolean;
+    },
+  ): Promise<boolean> {
     // Fetch the (active) server for teardown context. Idempotent: an
     // already-soft-deleted server is not found (findById filters notDeleted),
     // so a repeat delete is a no-op and returns false.
@@ -2016,6 +2023,7 @@ class McpServerModel {
         { err: error },
         `Failed to clean up MCP HTTP sessions for MCP server ${mcpServer.name}:`,
       );
+      if (opts?.strictCleanup) throw error;
       // Continue with deletion even if session cleanup fails
     }
 
@@ -2034,7 +2042,14 @@ class McpServerModel {
         "@/k8s/mcp-server-runtime"
       );
       try {
-        await McpServerRuntimeManager.removeMcpServer(id);
+        if (opts?.strictCleanup) {
+          await McpServerRuntimeManager.removeMcpServer(id, {
+            strictCleanup: true,
+            requirePlaywrightDisabled: opts.requirePlaywrightDisabled,
+          });
+        } else {
+          await McpServerRuntimeManager.removeMcpServer(id);
+        }
         logger.info(
           `Cleaned up K8s deployment for MCP server: ${mcpServer.name}`,
         );
@@ -2043,6 +2058,7 @@ class McpServerModel {
           { err: error },
           `Failed to clean up K8s deployment for MCP server ${mcpServer.name}:`,
         );
+        if (opts?.strictCleanup) throw error;
         // Continue with deletion even if pod cleanup fails
       }
     }
@@ -2053,12 +2069,29 @@ class McpServerModel {
     // secret. `opts.at` lets a catalog cascade stamp this install (with its
     // siblings and tools) with one shared timestamp — the restore correlation key.
     logger.info(`Soft-deleting MCP server: ${mcpServer.name} with id: ${id}`);
-    const count = await softDelete(
-      db,
-      schema.mcpServersTable,
-      eq(schema.mcpServersTable.id, id),
-      opts?.at,
-    );
+    const count = opts?.requirePlaywrightDisabled
+      ? await withDbTransaction(async (tx) => {
+          // Serialize final retirement with enable/provision transactions. A
+          // late cleanup cannot soft-delete a runtime that was just revived.
+          const [organization] = await tx
+            .select({ enabled: schema.organizationsTable.playwrightMcpEnabled })
+            .from(schema.organizationsTable)
+            .limit(1)
+            .for("update");
+          if (organization?.enabled !== false) return 0;
+          return softDelete(
+            tx,
+            schema.mcpServersTable,
+            eq(schema.mcpServersTable.id, id),
+            opts.at,
+          );
+        })
+      : await softDelete(
+          db,
+          schema.mcpServersTable,
+          eq(schema.mcpServersTable.id, id),
+          opts?.at,
+        );
     return count > 0;
   }
 

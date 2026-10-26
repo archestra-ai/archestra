@@ -1032,6 +1032,10 @@ export const requiredEndpointPermissionsMap: Partial<
     chat: ["read"],
   },
   [RouteId.GetLlmModels]: {},
+  [RouteId.GetModelPools]: { llmModel: ["read"] },
+  [RouteId.CreateModelPool]: { llmModel: ["update"] },
+  [RouteId.UpdateModelPool]: { llmModel: ["update"] },
+  [RouteId.DeleteModelPool]: { llmModel: ["update"] },
   [RouteId.GetLlmProviderModelLabelKeys]: { llmModel: ["read"] },
   [RouteId.GetLlmProviderModelLabelValues]: { llmModel: ["read"] },
   [RouteId.SyncLlmModels]: {
@@ -1211,6 +1215,12 @@ export const requiredEndpointPermissionsMap: Partial<
     llmLimit: ["create"],
   },
   [RouteId.UpdateDefaultUserLimit]: {
+    llmLimit: ["update"],
+  },
+  [RouteId.ListUserLimitUsage]: {
+    llmLimit: ["read"],
+  },
+  [RouteId.ResetUserLimitUsage]: {
     llmLimit: ["update"],
   },
   [RouteId.DeleteDefaultUserLimit]: {
@@ -2086,6 +2096,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/proxy/virtual-keys": { llmVirtualKey: ["read"] },
   "/llm/model-providers": { llmProviderApiKey: ["read"] },
   "/llm/models": { llmModel: ["read"] },
+  "/llm/model-pools": { llmModel: ["read"] },
   // Intentionally ungated: this page is fixed to the caller's own usage.
   "/llm/usage": {},
   "/llm/costs": { llmCost: ["read"] },

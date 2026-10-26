@@ -1,0 +1,10 @@
+{
+  "mcpVersion": "0.0.83",
+  "image": "mcr.microsoft.com/playwright/mcp@sha256:690763cbb437ee7233f538a953bb5390bf03791eb5c965b471e59d17a6132fcb",
+  "nodeVersion": "24.21.0",
+  "playwrightVersion": "1.64.0-alpha-1790635538000",
+  "architectures": [
+    "amd64",
+    "arm64"
+  ]
+}

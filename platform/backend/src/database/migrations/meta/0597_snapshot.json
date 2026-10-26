@@ -1,5 +1,5 @@
 {
-  "id": "1e7e8986-d8a3-44d1-a895-733e60792808",
+  "id": "9b7b705a-efcb-408a-b9e4-8ac8a20afcfc",
   "prevId": "71537334-ce96-4773-ad66-b85fd54092e7",
   "version": "7",
   "dialect": "postgresql",
@@ -11770,6 +11770,36 @@
           "primaryKey": false,
           "notNull": false
         },
+        "provider_api_key_id": {
+          "name": "provider_api_key_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "model_pool_id": {
+          "name": "model_pool_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attempt": {
+          "name": "attempt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attempt_outcome": {
+          "name": "attempt_outcome",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failure_reason": {
+          "name": "failure_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "session_id": {
           "name": "session_id",
           "type": "varchar",
@@ -18205,238 +18235,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.model_cost_backfills": {
-      "name": "model_cost_backfills",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "model_id": {
-          "name": "model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "since": {
-          "name": "since",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "cutoff": {
-          "name": "cutoff",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "pricing": {
-          "name": "pricing",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "phase": {
-          "name": "phase",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'main'"
-        },
-        "cursor_created_at": {
-          "name": "cursor_created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cursor_id": {
-          "name": "cursor_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "rows_scanned": {
-          "name": "rows_scanned",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "rows_updated": {
-          "name": "rows_updated",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "rows_estimated": {
-          "name": "rows_estimated",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lease_owner": {
-          "name": "lease_owner",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "lease_expires_at": {
-          "name": "lease_expires_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "lease_epoch": {
-          "name": "lease_epoch",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "consecutive_failures": {
-          "name": "consecutive_failures",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "error": {
-          "name": "error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_by_user_id": {
-          "name": "created_by_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "completed_at": {
-          "name": "completed_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "model_cost_backfills_active_model_idx": {
-          "name": "model_cost_backfills_active_model_idx",
-          "columns": [
-            {
-              "expression": "model_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"model_cost_backfills\".\"status\" in ('pending', 'running')",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "model_cost_backfills_model_created_at_idx": {
-          "name": "model_cost_backfills_model_created_at_idx",
-          "columns": [
-            {
-              "expression": "model_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "model_cost_backfills_organization_id_organization_id_fk": {
-          "name": "model_cost_backfills_organization_id_organization_id_fk",
-          "tableFrom": "model_cost_backfills",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "model_cost_backfills_model_id_models_id_fk": {
-          "name": "model_cost_backfills_model_id_models_id_fk",
-          "tableFrom": "model_cost_backfills",
-          "tableTo": "models",
-          "columnsFrom": [
-            "model_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "model_cost_backfills_created_by_user_id_user_id_fk": {
-          "name": "model_cost_backfills_created_by_user_id_user_id_fk",
-          "tableFrom": "model_cost_backfills",
-          "tableTo": "user",
-          "columnsFrom": [
-            "created_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.model_labels": {
       "name": "model_labels",
       "schema": "",
@@ -18518,6 +18316,276 @@
           ]
         }
       },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.model_pool_members": {
+      "name": "model_pool_members",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "pool_id": {
+          "name": "pool_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider_api_key_id": {
+          "name": "provider_api_key_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model_id": {
+          "name": "model_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "priority": {
+          "name": "priority",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "weight": {
+          "name": "weight",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "model_pool_members_provider_api_key_id_idx": {
+          "name": "model_pool_members_provider_api_key_id_idx",
+          "columns": [
+            {
+              "expression": "provider_api_key_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "model_pool_members_pool_id_model_pools_id_fk": {
+          "name": "model_pool_members_pool_id_model_pools_id_fk",
+          "tableFrom": "model_pool_members",
+          "tableTo": "model_pools",
+          "columnsFrom": [
+            "pool_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "model_pool_members_provider_api_key_id_chat_api_keys_id_fk": {
+          "name": "model_pool_members_provider_api_key_id_chat_api_keys_id_fk",
+          "tableFrom": "model_pool_members",
+          "tableTo": "chat_api_keys",
+          "columnsFrom": [
+            "provider_api_key_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "model_pool_members_pool_key_model_unique": {
+          "name": "model_pool_members_pool_key_model_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "pool_id",
+            "provider_api_key_id",
+            "model_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.model_pool_virtual_api_keys": {
+      "name": "model_pool_virtual_api_keys",
+      "schema": "",
+      "columns": {
+        "pool_id": {
+          "name": "pool_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "virtual_api_key_id": {
+          "name": "virtual_api_key_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "model_pool_virtual_api_keys_virtual_api_key_id_idx": {
+          "name": "model_pool_virtual_api_keys_virtual_api_key_id_idx",
+          "columns": [
+            {
+              "expression": "virtual_api_key_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "model_pool_virtual_api_keys_pool_id_model_pools_id_fk": {
+          "name": "model_pool_virtual_api_keys_pool_id_model_pools_id_fk",
+          "tableFrom": "model_pool_virtual_api_keys",
+          "tableTo": "model_pools",
+          "columnsFrom": [
+            "pool_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "model_pool_virtual_api_keys_virtual_api_key_id_virtual_api_keys_id_fk": {
+          "name": "model_pool_virtual_api_keys_virtual_api_key_id_virtual_api_keys_id_fk",
+          "tableFrom": "model_pool_virtual_api_keys",
+          "tableTo": "virtual_api_keys",
+          "columnsFrom": [
+            "virtual_api_key_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "model_pool_virtual_api_keys_pk": {
+          "name": "model_pool_virtual_api_keys_pk",
+          "columns": [
+            "pool_id",
+            "virtual_api_key_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.model_pools": {
+      "name": "model_pools",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "model_pools_org_name_unique": {
+          "name": "model_pools_org_name_unique",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

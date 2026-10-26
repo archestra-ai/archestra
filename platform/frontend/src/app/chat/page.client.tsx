@@ -161,6 +161,7 @@ import {
   clearPendingActions,
   getPendingActions,
 } from "@/lib/chat/pending-tool-state";
+import { getQueueInterruptBlockedReason } from "@/lib/chat/queue-interrupt";
 import { useStreamStall } from "@/lib/chat/stream-stall.hook";
 import {
   foldConfirmedThinkingEffort,
@@ -478,7 +479,10 @@ export function ChatPageContent({
     enabled: canLoadApiKeys,
     toastOnError: false,
   });
-  const { data: organization, isPending: isOrgLoading } = useOrganization();
+  const { data: organization, isPending: isOrgLoading } = useOrganization(
+    true,
+    { refetchInterval: 5000, refetchOnWindowFocus: "always" },
+  );
 
   // A new chat started from a project (`/chat?project=<id>`) takes the
   // project's pinned agent. `isPending` stays true while the query is disabled,
@@ -1932,6 +1936,7 @@ export function ChatPageContent({
   // Show while loading so it doesn't flash hidden for members whose agent already has playwright
   // tools. Once loading is done, hides only if the user lacks permission AND agent has no tools.
   const showBrowserButton =
+    organization?.playwrightMcpEnabled === true &&
     !isReadOnlyConversation &&
     (canUpdateAgent ||
       hasPlaywrightMcpTools ||
@@ -2233,6 +2238,15 @@ export function ChatPageContent({
     }
   });
 
+  const handleInterruptQueue = useStableCallback(() => {
+    if (!conversationId) return;
+    stop?.({
+      preserveQueuedMessages: true,
+      interruptQueued: true,
+      stopServer: () => stopChatStreamMutation.mutateAsync(conversationId),
+    });
+  });
+
   const handleSubmit = useStableCallback<
     Parameters<ArchestraPromptInputProps["onSubmit"]>,
     ReturnType<ArchestraPromptInputProps["onSubmit"]>
@@ -2448,7 +2462,15 @@ export function ChatPageContent({
     }
   });
 
-  const isBrowserPanelVisible = isBrowserPanelOpen;
+  const isBrowserPanelVisible =
+    isBrowserPanelOpen && organization?.playwrightMcpEnabled === true;
+  useEffect(() => {
+    if (organization?.playwrightMcpEnabled === false) {
+      setIsBrowserPanelOpen(false);
+      setActiveRightTab((tab) => (tab === "browser" ? "files" : tab));
+      setPendingBrowserUrl(undefined);
+    }
+  }, [organization?.playwrightMcpEnabled]);
   const isRightPanelOpen =
     isArtifactOpen || isBrowserPanelVisible || isAppsTabOpen || isRunsTabOpen;
 
@@ -3533,6 +3555,19 @@ export function ChatPageContent({
                                 conversationNotRecommended
                               }
                               onStop={handleStopStreaming}
+                              onInterruptQueue={handleInterruptQueue}
+                              isInterruptingQueue={
+                                stopChatStreamMutation.isPending
+                              }
+                              interruptQueueDisabledReason={getQueueInterruptBlockedReason(
+                                {
+                                  messages,
+                                  hasPendingQuestion:
+                                    !!chatSession?.pendingMcpElicitations
+                                      ?.length,
+                                  isCompacting: isContextCompacting,
+                                },
+                              )}
                               status={status}
                               selectedModel={conversationModelId ?? ""}
                               onModelChange={handleModelChange}

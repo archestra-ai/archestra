@@ -64,7 +64,7 @@ import {
   peekHitlDecision,
   stageHitlReview,
 } from "@/openappa/hitl-review";
-import { buildNoticeArguments } from "@/openappa/notice";
+import { buildNoticeArguments, readNotice } from "@/openappa/notice";
 import * as appaService from "@/openappa/service";
 import { appendSessionReceipt } from "@/openappa/session-token";
 import {
@@ -3692,6 +3692,107 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         "approved OpenAPPA offer IDs",
       );
       expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+    });
+
+    test.each([
+      true,
+      false,
+    ])("carries a denial on an undeclared notice call when the gateway tools are not loaded, and restores it next request (stream=%s)", async (stream) => {
+      // Claude Code 2.1.310 answers a call to a tool it never declared with an
+      // error result and goes on; the next request carries both back.
+      const withoutGatewayTools = (body: Record<string, unknown>) => ({
+        ...body,
+        tools: (body.tools as { name: string }[]).filter(
+          (tool) => !tool.name.startsWith("archestra__"),
+        ),
+      });
+      const send = (history: unknown[]) =>
+        app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: { ...internalCallHeader(), ...claudeCode() },
+          payload: withoutGatewayTools(deferring(payload(stream, history))),
+        });
+      const call = {
+        id: "toolu_denied_carried",
+        name: "get_weather",
+        input: { location: "SF" },
+      };
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        nonStreamingToolUse: call,
+        streamingToolUse: call,
+      };
+      block = true;
+      const opening = [{ role: "user", content: "Check the weather" }];
+
+      const denied = await send(opening);
+
+      expect(denied.statusCode, denied.body).toBe(200);
+      const carrier = noticeFrom(denied.body, stream);
+      expect(carrier).toMatchObject({
+        id: call.id,
+        name: "archestra__get_remedy_plans",
+      });
+      const notice = readNotice({ callId: call.id, arguments: carrier.input });
+      expect(notice).toMatchObject({
+        tool: "get_weather",
+        original: { arguments: call.input },
+      });
+
+      block = false;
+      options = { includeToolUse: false, streamStopReason: "end_turn" };
+      providerRequests.length = 0;
+      const answered = await send([
+        ...opening,
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: carrier.id,
+              name: carrier.name,
+              input: carrier.input,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: carrier.id,
+              is_error: true,
+              content:
+                "<tool_use_error>Error: No such tool available: archestra__get_remedy_plans</tool_use_error>",
+            },
+          ],
+        },
+      ]);
+
+      expect(answered.statusCode, answered.body).toBe(200);
+      const sent = providerRequests.at(-1) as {
+        messages: { role: string; content: Record<string, unknown>[] }[];
+      };
+      expect(sent.messages[1].content).toEqual([
+        {
+          type: "tool_use",
+          id: call.id,
+          name: "get_weather",
+          input: call.input,
+        },
+      ]);
+      expect(sent.messages).toHaveLength(3);
+      expect(sent.messages[2].content).toEqual([
+        expect.objectContaining({
+          type: "tool_result",
+          tool_use_id: call.id,
+          is_error: true,
+          content: notice?.result,
+        }),
+      ]);
     });
   });
 

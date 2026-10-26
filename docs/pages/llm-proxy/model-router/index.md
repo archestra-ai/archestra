@@ -47,7 +47,7 @@ The router speaks the OpenAI API. It supports these endpoints:
 | Endpoint | Works with |
 | --- | --- |
 | `/chat/completions` | All router providers |
-| `/responses` | All router providers |
+| `/responses` | All router providers except Kimi (Moonshot AI), whose thinking models need their reasoning sent back on tool-call turns, which the Responses translation does not carry |
 | `/models` | Lists only the models your credential can reach |
 | `/embeddings` | All router providers except Anthropic, Bedrock, Cohere, and GitHub Copilot |
 

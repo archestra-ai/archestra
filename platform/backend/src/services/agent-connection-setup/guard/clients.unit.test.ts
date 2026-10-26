@@ -69,7 +69,7 @@ test.each([
   { guard: KILO_GUARD_CLIENT, client: KILO_CLIENT, orphan: true },
   { guard: OPENCODE_GUARD_CLIENT, client: OPENCODE_CLIENT, orphan: false },
   { guard: OPENCODE_GUARD_CLIENT, client: OPENCODE_CLIENT, orphan: true },
-])("$client.label disconnect disables matching JSONC aliases and verifies both files (orphan: $orphan)", async ({
+])("$client.label disconnect accepts BOM and disables matching JSONC aliases and verifies both files (orphan: $orphan)", async ({
   guard,
   client,
   orphan,
@@ -88,9 +88,9 @@ test.each([
     functions: ["disconnect_actions", "disconnect_verify"],
     invoke: "disconnect_actions mcp\ndisconnect_verify mcp",
     files: {
-      [ownedPath]: JSON.stringify(
-        orphan ? {} : { mcp: { prod_gateway: registration } },
-      ),
+      [ownedPath]:
+        "\uFEFF" +
+        JSON.stringify(orphan ? {} : { mcp: { prod_gateway: registration } }),
       [siblingPath]: JSON.stringify({
         mcp: {
           ...(orphan ? {} : { prod_gateway: registration }),

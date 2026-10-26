@@ -314,6 +314,16 @@ console.log(JSON.stringify({ updated: cfg.updatedGeneration, headers: output.hea
     );
   });
 
+  test("reconnect refuses a retained file that would fail launcher ownership checks", async () => {
+    const files = await fixture();
+    const checked = path.join(files.root, "last-check.json");
+    await writeFile(checked, "{}", { mode: 0o666 });
+    await chmod(checked, 0o666);
+    await expect(
+      exec(process.execPath, ["-e", files.install.script], { env: files.env }),
+    ).rejects.toThrow("Unsafe managed runtime ownership");
+  });
+
   test("serializes concurrent launches and never exposes a partially-written generation", async () => {
     const files = await fixture();
     const fetch = vi.fn().mockImplementation(async () => {
@@ -458,12 +468,12 @@ describe("pre-bind local repair", () => {
   test.each([
     KILO_CLIENT,
     OPENCODE_CLIENT,
-  ])("$label repairs offline and preserves JSONC authentication/comments and snapshots", async (client) => {
+  ])("$label repairs BOM-prefixed JSON offline and preserves JSONC authentication/comments and snapshots", async (client) => {
     const files = await fixture(client);
     const canonical = { type: "remote", url };
     await writeFile(
       files.configPath,
-      JSON.stringify({ mcp: { [name]: canonical } }),
+      `\uFEFF${JSON.stringify({ mcp: { [name]: canonical } })}`,
       { mode: 0o600 },
     );
     const sibling = `// preserved\n{"mcp":{"my_gateway":{"type":"remote","url":"${url}","headers":{"Authorization":"Bearer example-token"},"oauth":false}}}`;

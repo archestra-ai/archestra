@@ -398,7 +398,10 @@ class StartupTest(unittest.TestCase):
                     # ~10s after a gateway error) bounded time to write the failure.
                     observed = 40 if failure in ("timeout", "empty") else 12
                     elapsed = time.monotonic() - started
-                    if elapsed > observed and (Path(turn_prefix + ".failure").exists() or elapsed > observed + 30):
+                    # The envelope is published before the helper writes its
+                    # completion marker. Wait for both before asserting on them.
+                    completed_failure = Path(turn_prefix + ".failure").exists() and (runtime / "turn-complete.failed").exists()
+                    if elapsed > observed and (completed_failure or elapsed > observed + 30):
                         break
                 if server.list_started.is_set() and not server.release.is_set():
                     held_since = held_since or time.monotonic()

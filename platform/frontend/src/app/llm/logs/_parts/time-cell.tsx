@@ -15,10 +15,11 @@ export function TimeCell({
 }: {
   session: Pick<
     LogSession,
-    "firstRequestTime" | "lastRequestTime" | "requestCount"
+    "firstRequestTime" | "lastRequestTime" | "requestCount" | "failedOverCount"
   >;
 }) {
-  const { firstRequestTime, lastRequestTime, requestCount } = session;
+  const { firstRequestTime, lastRequestTime, requestCount, failedOverCount } =
+    session;
   if (!lastRequestTime) {
     return <div className="text-right text-xs text-muted-foreground">—</div>;
   }
@@ -38,6 +39,12 @@ export function TimeCell({
             <span>{requestCount.toLocaleString()} req</span>
             {span ? <span> · {span}</span> : null}
           </span>
+          {/* Its own line: beside the count and span it overflows the column. */}
+          {failedOverCount > 0 ? (
+            <span className="block text-xs leading-4 whitespace-nowrap text-red-700 dark:text-red-400">
+              {failedOverCount.toLocaleString()} failed over
+            </span>
+          ) : null}
         </UnstyledButton>
       </TooltipTrigger>
       <TooltipContent className="px-2 py-1.5">

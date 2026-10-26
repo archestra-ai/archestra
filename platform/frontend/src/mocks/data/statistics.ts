@@ -122,7 +122,7 @@ export function proxyCostStatisticsFor(
   }
   const credentials = selected
     .map((s) => ({
-      ...roundUsage(s.total),
+      ...proxyUsage(s.total),
       authMethod: s.authMethod,
       credentialId: s.credentialId,
       credentialName: s.credentialName,
@@ -132,7 +132,7 @@ export function proxyCostStatisticsFor(
 
   const timeSeries = window.buckets
     .map((bucket, i) => ({
-      ...roundUsage(
+      ...proxyUsage(
         selected.reduce((acc, s) => addUsage(acc, s.points[i]), emptyUsage()),
       ),
       timestamp: iso(bucket.start),
@@ -140,12 +140,12 @@ export function proxyCostStatisticsFor(
     .filter((p) => p.requests > 0);
 
   return {
-    totals: roundUsage(
+    totals: proxyUsage(
       selected.reduce((acc, s) => addUsage(acc, s.total), emptyUsage()),
     ),
     timeSeries,
     methods: [...methods.entries()]
-      .map(([method, usage]) => ({ ...roundUsage(usage), authMethod: method }))
+      .map(([method, usage]) => ({ ...proxyUsage(usage), authMethod: method }))
       .filter((m) => m.requests > 0)
       .sort((a, b) => b.billedCost - a.billedCost || b.requests - a.requests),
     credentials: credentials.slice(offset, offset + limit),
@@ -879,6 +879,11 @@ function roundUsage(u: Usage): Usage & { totalTokens: number } {
     billedCost: money(u.billedCost),
     subscriptionCost: money(u.subscriptionCost),
   };
+}
+
+/** Proxy usage; the mock data has no model pools, so nothing failed over. */
+function proxyUsage(u: Usage) {
+  return { ...roundUsage(u), failedOverAttempts: 0 };
 }
 
 function scaleUsage(u: Usage, share: number, seed: string): Usage {

@@ -1220,6 +1220,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateDefaultUserLimit]: {
     llmLimit: ["update"],
   },
+  [RouteId.ListUserLimitUsage]: {
+    llmLimit: ["read"],
+  },
+  [RouteId.ResetUserLimitUsage]: {
+    llmLimit: ["update"],
+  },
   [RouteId.DeleteDefaultUserLimit]: {
     llmLimit: ["delete"],
   },

@@ -73,6 +73,7 @@ export const AGENT_CATALOG_NAMES: Record<AgentCatalogId, string> = {
   hermes: "Hermes",
   openclaw: "OpenClaw",
   grok: "Grok Build",
+  kimi: "Kimi Code",
 };
 
 /** Every maintained CLI template, in catalog order. */
@@ -171,6 +172,7 @@ const CATALOG_RUNTIME_PROFILES: Record<
   hermes: { inferenceProtocol: "openai_chat" },
   openclaw: { inferenceProtocol: "openai_chat" },
   grok: { inferenceProtocol: "openai_chat" },
+  kimi: { inferenceProtocol: "openai_chat" },
 };
 
 /** An image reference without its tag. A registry port is not a tag. */

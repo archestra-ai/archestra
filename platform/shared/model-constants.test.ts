@@ -212,6 +212,10 @@ describe("getAgentRuntimeModelCompatibility", () => {
         runtimeCommand: ["archestra-grok"],
         inferenceProtocol: "openai_chat",
       },
+      {
+        runtimeCommand: ["archestra-kimi"],
+        inferenceProtocol: "openai_chat",
+      },
     ] as const) {
       expect(
         getAgentRuntimeModelCompatibility({
@@ -525,6 +529,9 @@ describe("getAgentRuntimeAllowedProtocols", () => {
       "openai_chat",
     ]);
     expect(getAgentRuntimeAllowedProtocols(["archestra-grok"])).toEqual([
+      "openai_chat",
+    ]);
+    expect(getAgentRuntimeAllowedProtocols(["archestra-kimi"])).toEqual([
       "openai_chat",
     ]);
     for (const command of [

@@ -41,6 +41,7 @@ import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
+import UserLimitUsageResetModel from "@/models/user-limit-usage-reset";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 
@@ -158,6 +159,10 @@ export const AUDIT_DECISIONS = {
     model: KnowledgeBaseConnectorModel,
   },
   limitsTable: { audited: true, model: LimitModel },
+  userLimitUsageResetsTable: {
+    audited: true,
+    model: UserLimitUsageResetModel,
+  },
   llmProviderApiKeysTable: { audited: true, model: LlmProviderApiKeyModel },
   mcpServersTable: { audited: true, model: McpServerModel },
   membersTable: { audited: true, model: MemberModel },

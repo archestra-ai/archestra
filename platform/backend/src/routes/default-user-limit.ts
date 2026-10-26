@@ -3,19 +3,25 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { EnvironmentDefaultUserLimitModel, EnvironmentModel } from "@/models";
 import {
+  listUserLimitUsage,
+  resetUserLimitUsage,
+} from "@/services/user-limit-usage";
+import {
   ApiError,
   CreateEnvironmentDefaultUserLimitSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   SelectEnvironmentDefaultUserLimitSchema,
   UpdateEnvironmentDefaultUserLimitSchema,
+  UserLimitUsageQuerySchema,
+  UserLimitUsageResponseSchema,
   UuidIdSchema,
 } from "@/types";
 
 /**
- * Per-environment default user limits. These specialize the org-wide default
- * user limit (managed on the organization via LLM settings): a row here
- * overrides the org-wide default for requests in its environment.
+ * Default user limits: the organization-wide default (no environment) and
+ * per-environment overrides, plus each user's usage against the limit that
+ * applies to them and a per-user usage reset.
  */
 const defaultUserLimitRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -23,7 +29,8 @@ const defaultUserLimitRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.ListDefaultUserLimits,
-        description: "List per-environment default user limits for the org.",
+        description:
+          "List the organization's default user limits: the organization-wide default and per-environment overrides.",
         tags: ["Limits"],
         response: constructResponseSchema(
           z.array(SelectEnvironmentDefaultUserLimitSchema),
@@ -36,6 +43,48 @@ const defaultUserLimitRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
         ),
       );
+    },
+  );
+
+  fastify.get(
+    "/api/default-user-limits/users",
+    {
+      schema: {
+        operationId: RouteId.ListUserLimitUsage,
+        description:
+          "List organization members with their spend this window against the limit that applies to them (custom, environment override, or organization default), closest to their limit first.",
+        tags: ["Limits"],
+        querystring: UserLimitUsageQuerySchema,
+        response: constructResponseSchema(UserLimitUsageResponseSchema),
+      },
+    },
+    async ({ query, organizationId }, reply) => {
+      return reply.send(await listUserLimitUsage({ organizationId, query }));
+    },
+  );
+
+  fastify.post(
+    "/api/default-user-limits/users/:userId/reset",
+    {
+      schema: {
+        operationId: RouteId.ResetUserLimitUsage,
+        description:
+          "Start a user's limit usage over from $0 now so their requests are allowed again. The next scheduled reset is unchanged and past usage stays in cost reports.",
+        tags: ["Limits"],
+        params: z.object({ userId: z.string().min(1) }),
+        response: constructResponseSchema(
+          z.object({ userId: z.string(), resetAt: z.string() }),
+        ),
+      },
+    },
+    async ({ params: { userId }, organizationId, user }, reply) => {
+      const result = await resetUserLimitUsage({
+        organizationId,
+        userId,
+        resetByUserId: user.id,
+      });
+      if (!result) throw new ApiError(404, "User not found");
+      return reply.send(result);
     },
   );
 
@@ -102,7 +151,8 @@ const defaultUserLimitRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateDefaultUserLimit,
-        description: "Update a per-environment default user limit.",
+        description:
+          "Update a default user limit (organization-wide or per-environment).",
         tags: ["Limits"],
         params: z.object({ id: UuidIdSchema }),
         body: UpdateEnvironmentDefaultUserLimitSchema,
@@ -135,7 +185,8 @@ const defaultUserLimitRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.DeleteDefaultUserLimit,
-        description: "Delete a per-environment default user limit.",
+        description:
+          "Delete a default user limit (organization-wide or per-environment).",
         tags: ["Limits"],
         params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(DeleteObjectResponseSchema),

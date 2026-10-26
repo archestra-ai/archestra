@@ -7,6 +7,7 @@ import {
   type ActiveChatRunNotifier,
   createActiveChatRunNotifier,
 } from "@/services/active-chat-run-notifier";
+import { ApiError } from "@/types";
 import type { ChatActiveRunStatus } from "@/types/chat-active-run";
 
 const EVENT_FLUSH_INTERVAL_MS = 500;
@@ -163,8 +164,9 @@ export class ActiveChatRunService {
    * never will, so a run whose liveness touch is older than the stale window
    * is failed here instead of waiting for the reaper — the user asked to stop
    * it, and a live owner keeps its row fresh, so only an ownerless run
-   * qualifies. Bounded by `timeoutMs` so Stop always resolves; a run still
-   * `running` at the deadline is left to its owner or the reaper.
+   * qualifies. Bounded by `timeoutMs`; a run still `running` at the deadline
+   * rejects the hand-off so the client keeps waiting rather than sending an
+   * overlapping turn. Its owner or the reaper still owns terminalization.
    */
   async waitForTerminal(
     runId: string,
@@ -201,7 +203,10 @@ export class ActiveChatRunService {
           { runId, conversationId: run.conversationId },
           "Active chat run still running after stop wait deadline",
         );
-        return;
+        throw new ApiError(
+          409,
+          "The response is still stopping. Queued messages will wait until it finishes.",
+        );
       }
 
       // Terminal transitions publish on the event channel. The timeout is a

@@ -664,6 +664,8 @@ export const RouteId = {
   CreateDefaultUserLimit: "createDefaultUserLimit",
   UpdateDefaultUserLimit: "updateDefaultUserLimit",
   DeleteDefaultUserLimit: "deleteDefaultUserLimit",
+  ListUserLimitUsage: "listUserLimitUsage",
+  ResetUserLimitUsage: "resetUserLimitUsage",
 
   // Onboarding Routes
   GetOnboardingSeenNavItems: "getOnboardingSeenNavItems",

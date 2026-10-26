@@ -4,6 +4,7 @@ import {
   eq,
   getTableColumns,
   inArray,
+  isNotNull,
   isNull,
   lt,
   or,
@@ -294,6 +295,242 @@ class LimitModel {
       );
     }
     return breakdowns;
+  }
+
+  /**
+   * Current cost of several token_cost limits, keyed by limit id. `incomplete`
+   * marks a limit whose usage includes unpriced media, which enforcement
+   * treats as exhausted.
+   */
+  static async getTokenCostTotals(
+    limitIds: string[],
+  ): Promise<Map<string, { cost: number; incomplete: boolean }>> {
+    const totals = new Map<string, { cost: number; incomplete: boolean }>(
+      limitIds.map((id) => [id, { cost: 0, incomplete: false }]),
+    );
+    if (limitIds.length === 0) return totals;
+
+    const modelUsages = await db
+      .select(usageSelection)
+      .from(schema.limitModelUsageTable)
+      .leftJoin(schema.limitBillingUsageTable, billingJoin)
+      .where(inArray(schema.limitModelUsageTable.limitId, limitIds));
+    const pricing = await ModelModel.findByModelIdsOnly([
+      ...new Set(modelUsages.map((usage) => usage.model)),
+    ]);
+    const usagesByLimitId = new Map<string, LimitModelUsageRecord[]>();
+    for (const usage of modelUsages) {
+      const list = usagesByLimitId.get(usage.limitId) ?? [];
+      list.push(usage);
+      usagesByLimitId.set(usage.limitId, list);
+    }
+    for (const [limitId, usages] of usagesByLimitId) {
+      const { cost, incomplete } = computeModelUsageCosts(usages, pricing);
+      totals.set(limitId, { cost, incomplete });
+    }
+    return totals;
+  }
+
+  /**
+   * How many users spent in each environment inside the window, keyed by
+   * environment id. Same counting rules as `getDefaultUserLimitUsageByUser`.
+   */
+  static async countUsersWithSpendByEnvironment(params: {
+    organizationId: string;
+    cleanupInterval: LimitCleanupInterval;
+  }): Promise<Map<string, number>> {
+    const interactions = schema.interactionsTable;
+    const rows = await db
+      .select({
+        environmentId: sql<string>`${interactions.environmentId}`,
+        users: sql<number>`count(distinct ${interactions.userId})::integer`,
+      })
+      .from(interactions)
+      .innerJoin(
+        schema.environmentsTable,
+        eq(interactions.environmentId, schema.environmentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.environmentsTable.organizationId, params.organizationId),
+          isNotNull(interactions.userId),
+          eq(interactions.billingMode, "metered"),
+          isNull(interactions.billingTeamId),
+          buildUsagePeriodStartCondition(params.cleanupInterval),
+        ),
+      )
+      .groupBy(interactions.environmentId);
+    return new Map(rows.map((row) => [row.environmentId, row.users]));
+  }
+
+  /**
+   * Spend counted toward a default user limit, for every user at once, keyed
+   * by user id. Same rules as the per-request check (metered, not team-billed,
+   * inside the window, after the user's last reset, within `models`), but
+   * aggregated in SQL so an organization-wide read stays one round trip.
+   * Users without spend are absent from the map.
+   */
+  static async getDefaultUserLimitUsageByUser(params: {
+    organizationId: string;
+    models: string[] | null;
+    cleanupInterval: LimitCleanupInterval;
+    /** Count only this environment's spend; omit for the whole organization. */
+    environmentId?: string | null;
+  }): Promise<Map<string, { cost: number; incomplete: boolean }>> {
+    const interactions = schema.interactionsTable;
+    const costUnavailable = sql`coalesce(${interactions.response}->'__mediaUsage'->>'costAvailable' = 'false', false)`;
+    const conditions: SQL[] = [
+      isNotNull(interactions.userId),
+      eq(interactions.billingMode, "metered"),
+      isNull(interactions.billingTeamId),
+      buildUsagePeriodStartCondition(params.cleanupInterval),
+      buildAfterUsageResetCondition({
+        organizationId: params.organizationId,
+        userId: interactions.userId,
+        createdAt: interactions.createdAt,
+      }),
+      sql`NOT EXISTS (SELECT 1 FROM ${schema.interactionBillingTable} WHERE ${schema.interactionBillingTable.interactionId} = ${interactions.id} AND ${schema.interactionBillingTable.usage}->>'mode' = 'enforce')`,
+    ];
+    if (params.models && params.models.length > 0) {
+      conditions.push(inArray(interactions.model, params.models) as SQL);
+    }
+
+    const selection = {
+      userId: sql<string>`${interactions.userId}`,
+      model: interactions.model,
+      knownCost: sql<string>`coalesce(sum(${interactions.cost}) FILTER (WHERE ${interactions.cost} IS NOT NULL AND NOT ${costUnavailable}), 0)::text`,
+      unpricedTokensIn: sql<number>`coalesce(sum(${interactions.inputTokens}) FILTER (WHERE ${interactions.cost} IS NULL AND NOT ${costUnavailable}), 0)::bigint`,
+      unpricedTokensOut: sql<number>`coalesce(sum(${interactions.outputTokens}) FILTER (WHERE ${interactions.cost} IS NULL AND NOT ${costUnavailable}), 0)::bigint`,
+      unavailable: sql<boolean>`bool_or(${costUnavailable})`,
+    };
+    // Mirrors getDefaultUserLimitUsage: an environment filter uses the
+    // environment snapshotted on the interaction; the organization-wide sum
+    // goes through the (not deleted) agent's organization.
+    const groups = params.environmentId
+      ? await db
+          .select(selection)
+          .from(interactions)
+          .where(
+            and(
+              ...conditions,
+              eq(interactions.environmentId, params.environmentId),
+            ),
+          )
+          .groupBy(interactions.userId, interactions.model)
+      : await db
+          .select(selection)
+          .from(interactions)
+          .innerJoin(
+            schema.agentsTable,
+            eq(interactions.profileId, schema.agentsTable.id),
+          )
+          .where(
+            and(
+              ...conditions,
+              eq(schema.agentsTable.organizationId, params.organizationId),
+              notDeleted(schema.agentsTable),
+            ),
+          )
+          .groupBy(interactions.userId, interactions.model);
+
+    const pricing = await ModelModel.findByModelIdsOnly([
+      ...new Set(
+        groups
+          .filter(
+            (group) =>
+              group.model !== null &&
+              (Number(group.unpricedTokensIn) > 0 ||
+                Number(group.unpricedTokensOut) > 0),
+          )
+          .map((group) => group.model as string),
+      ),
+    ]);
+
+    const costs = new Map<string, string>();
+    const incomplete = new Set<string>();
+    for (const group of groups) {
+      if (group.unavailable) incomplete.add(group.userId);
+      let groupCost = group.knownCost;
+      if (group.model) {
+        const modelPricing = ModelModel.getEffectivePricing(
+          pricing.get(group.model) ?? null,
+          group.model,
+        );
+        groupCost = sumMoney([
+          groupCost,
+          priceTokens(
+            {
+              inputTokens: Number(group.unpricedTokensIn),
+              outputTokens: Number(group.unpricedTokensOut),
+              cacheReadTokens: 0,
+              cacheWriteTokens: 0,
+              cacheWrite1hTokens: 0,
+            },
+            {
+              input: modelPricing.pricePerMillionInput,
+              output: modelPricing.pricePerMillionOutput,
+              cacheRead: null,
+              cacheWrite: null,
+              cacheWrite1h: null,
+              source: modelPricing.source,
+            },
+          ),
+        ]);
+      }
+      costs.set(
+        group.userId,
+        sumMoney([costs.get(group.userId) ?? "0", groupCost]),
+      );
+    }
+
+    const receipt = schema.interactionBillingTable;
+    const componentMatches = params.models?.length
+      ? inArray(sql`component->>'model'`, params.models)
+      : sql`true`;
+    const settled = await db
+      .select({
+        userId: sql<string>`${receipt.userId}`,
+        cost: sql<string>`COALESCE(sum((component->>'cost')::numeric) FILTER (WHERE ${componentMatches}), 0)::text`,
+        incomplete: sql<number>`count(*) FILTER (WHERE ${receipt.usage}->>'status' = 'incomplete')::integer`,
+      })
+      .from(receipt)
+      .leftJoin(
+        sql`LATERAL jsonb_array_elements(${receipt.usage}->'components') AS component`,
+        sql`true`,
+      )
+      .where(
+        and(
+          eq(receipt.organizationId, params.organizationId),
+          isNotNull(receipt.userId),
+          eq(receipt.billingMode, "metered"),
+          isNull(receipt.billingTeamId),
+          sql`${receipt.usage}->>'mode' = 'enforce'`,
+          buildUsagePeriodStartCondition(
+            params.cleanupInterval,
+            receipt.createdAt,
+          ),
+          buildAfterUsageResetCondition({
+            organizationId: params.organizationId,
+            userId: receipt.userId,
+            createdAt: receipt.createdAt,
+          }),
+          params.environmentId
+            ? eq(receipt.environmentId, params.environmentId)
+            : undefined,
+        ),
+      )
+      .groupBy(receipt.userId);
+    for (const row of settled) {
+      if (row.incomplete > 0) incomplete.add(row.userId);
+      costs.set(row.userId, sumMoney([costs.get(row.userId) ?? "0", row.cost]));
+    }
+
+    return new Map(
+      [...costs].map(([userId, cost]) => [
+        userId,
+        { cost: Number(cost), incomplete: incomplete.has(userId) },
+      ]),
+    );
   }
 
   /**
@@ -2260,6 +2497,11 @@ async function getDefaultUserLimitUsage(params: {
     // Team-billed traffic is charged to the team, not to the caller.
     isNull(schema.interactionsTable.billingTeamId),
     buildUsagePeriodStartCondition(params.cleanupInterval),
+    buildAfterUsageResetCondition({
+      organizationId: params.organizationId,
+      userId: sql`${params.userId}`,
+      createdAt: schema.interactionsTable.createdAt,
+    }),
     sql`NOT EXISTS (SELECT 1 FROM ${schema.interactionBillingTable} WHERE ${schema.interactionBillingTable.interactionId} = ${schema.interactionsTable.id} AND ${schema.interactionBillingTable.usage}->>'mode' = 'enforce')`,
   ];
 
@@ -2349,6 +2591,11 @@ async function getDefaultUserLimitUsage(params: {
           params.cleanupInterval,
           receipt.createdAt,
         ),
+        buildAfterUsageResetCondition({
+          organizationId: params.organizationId,
+          userId: sql`${params.userId}`,
+          createdAt: receipt.createdAt,
+        }),
         params.environmentId
           ? eq(receipt.environmentId, params.environmentId)
           : undefined,
@@ -2414,6 +2661,24 @@ async function getDefaultUserLimitUsage(params: {
     tokensIn,
     tokensOut,
   };
+}
+
+/**
+ * Only spend after the user's last admin reset counts toward a default user
+ * limit. A user who was never reset has no marker, so nothing is excluded.
+ */
+function buildAfterUsageResetCondition(params: {
+  organizationId: string;
+  userId:
+    | SQL
+    | typeof schema.interactionsTable.userId
+    | typeof schema.interactionBillingTable.userId;
+  createdAt:
+    | typeof schema.interactionsTable.createdAt
+    | typeof schema.interactionBillingTable.createdAt;
+}): SQL {
+  const resets = schema.userLimitUsageResetsTable;
+  return sql`NOT EXISTS (SELECT 1 FROM ${resets} WHERE ${resets.organizationId} = ${params.organizationId} AND ${resets.userId} = ${params.userId} AND ${resets.resetAt} > ${params.createdAt})`;
 }
 
 function buildLimitViolationResponse(params: {

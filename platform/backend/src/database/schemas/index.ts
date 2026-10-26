@@ -290,6 +290,7 @@ export { default as toolObservationsTable } from "./tool-observation";
 export { default as twoFactorsTable } from "./two-factor";
 export { default as usersTable } from "./user";
 export { default as userCredentialsTable } from "./user-credential";
+export { default as userLimitUsageResetsTable } from "./user-limit-usage-reset";
 export { default as userOnboardingSeenItemsTable } from "./user-onboarding-seen-item";
 export { default as userTokensTable } from "./user-token";
 export { default as verificationsTable } from "./verification";

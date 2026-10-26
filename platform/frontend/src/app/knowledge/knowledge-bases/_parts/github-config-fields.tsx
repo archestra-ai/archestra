@@ -344,19 +344,20 @@ export function GithubConfigFields({
                   name={`${prefix}.repositoryPathFilters.${index}.repository`}
                   rules={{
                     required: "Repository is required",
-                    pattern: {
-                      value: /^[^/\\\s]+(?:\/[^/\\\s]+)?$/,
-                      message: "Use a repository name or owner/repo",
+                    validate: {
+                      format: (value: string) =>
+                        /^[^/\\\s]+(?:\/[^/\\\s]+)?$/.test(value.trim()) ||
+                        "Use a repository name or owner/repo",
+                      unique: (value: string) =>
+                        form
+                          .getValues(`${prefix}.repositoryPathFilters`)
+                          .filter(
+                            (entry: { repository: string }) =>
+                              entry.repository.trim().toLowerCase() ===
+                              value.trim().toLowerCase(),
+                          ).length === 1 ||
+                        "Repository path filters must be unique",
                     },
-                    validate: (value: string) =>
-                      form
-                        .getValues(`${prefix}.repositoryPathFilters`)
-                        .filter(
-                          (entry: { repository: string }) =>
-                            entry.repository.trim().toLowerCase() ===
-                            value.trim().toLowerCase(),
-                        ).length === 1 ||
-                      "Repository path filters must be unique",
                   }}
                   render={({ field }) => (
                     <FormItem>

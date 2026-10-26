@@ -172,16 +172,16 @@ describe("CreateConnectorDialog", () => {
       screen.getByRole("switch", { name: /Include Repository Files/ }),
     );
     for (const [repository, include, exclude] of [
-      ["repo-a", "docs, handbook", "docs/internal"],
+      [" repo-a ", "docs, handbook", "docs/internal"],
       ["example-org/repo-b", "guides", "guides/drafts"],
     ]) {
       await user.click(
         screen.getByRole("button", { name: "Add repository filter" }),
       );
-      fireEvent.change(
+      await user.click(
         screen.getAllByLabelText(/^Repository$/).at(-1) as HTMLElement,
-        { target: { value: repository } },
       );
+      await user.paste(repository);
       fireEvent.change(
         screen.getAllByLabelText(/^Include paths$/).at(-1) as HTMLElement,
         { target: { value: include } },

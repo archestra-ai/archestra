@@ -1432,9 +1432,9 @@ function getRepositoryPathFilter({
 /**
  * Normalize the configured folders into repo-root-relative prefixes: users
  * paste `/docs`, `docs/`, or `./docs` interchangeably, and a tree path never
- * carries a leading slash. Entries that just name the repository root (`/`,
- * `./`, `.`, blank) normalize away, leaving no filter at all rather than a
- * prefix that matches nothing.
+ * carries a leading slash. Root entries (`/`, `./`, `.`) normalize away for
+ * includes. Exclusions use keepRoot to retain an empty prefix that matches
+ * every file. Blank entries are always discarded.
  */
 function normalizePathPrefixes(paths: string[], keepRoot = false): string[] {
   return paths

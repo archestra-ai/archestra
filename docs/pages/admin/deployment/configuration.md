@@ -518,6 +518,16 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_JEV_BASE_URL`** - Full Jev decisions endpoint. See [Jev](/docs/llm-proxy/providers#jev).
   - Default: `https://api.typesafe.ai/v1/systemone`
 
+- **`ARCHESTRA_AUTO_ROUTING_ENABLED`** - Turns on the alpha [Auto Routing](/docs/llm-proxy/auto-routing) model for the Model Router.
+  - Default: unset (off)
+  - Values: `true`, `false`. Blank follows [`ARCHESTRA_BETA`](/docs/admin/deployment/configuration#ARCHESTRA_BETA).
+
+- **`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`** - How long the session scorer may take before the router falls back to the normal model.
+  - Default: `2000`
+
+- **`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`** - Finished sessions needed before auto routing publishes a plan instead of using the normal model.
+  - Default: `100`
+
 - **`ARCHESTRA_VLLM_BASE_URL`** - Base URL of your OpenAI-compatible server (vLLM, llama.cpp, LM Studio, SGLang, TGI, LocalAI).
   - Default: unset (provider off)
   - Values: a URL, for example `http://localhost:8000/v1`

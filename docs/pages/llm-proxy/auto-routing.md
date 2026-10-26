@@ -1,0 +1,55 @@
+---
+title: Auto Routing
+description: Let the Model Router pick a cheap, normal, or smart model for each agent session
+order: 5
+alpha: "Set [`ARCHESTRA_AUTO_ROUTING_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_ENABLED) to turn it on."
+lastUpdated: 2026-10-26
+---
+
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
+Send `auto` as the model name, and Archestra picks a fast, normal, or smart model for each agent session so that average daily spend stays near your target. Easy sessions run on the cheap model, hard ones on the smart model. The app code does not change.
+
+## Set It Up
+
+Auto routing works on the [Model Router](/docs/llm-proxy/model-router) only. Native provider routes answer `auto` with a 400 error.
+
+1. Add a Jev API key under [Model Providers](/docs/llm-proxy/providers#jev). Jev scores each new session.
+2. Go to **LLM → Auto Routing**, pick the **fast**, **normal**, and **smart** models, and set a daily budget in USD.
+3. Turn auto routing on.
+4. Send `auto` as the model from an app that uses a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys).
+
+The three models can come from different providers. `auto` appears in a key's model list only when the key can reach all three.
+
+## How Sessions Are Routed
+
+A session is routed once, on its first request, and keeps that model for its whole life.
+
+- **Session identity:** the session id if the client sends one. Otherwise the virtual key plus the first user message, so identical first messages under one key share a model.
+- **Budget:** the daily budget is an average target, not a cap. Spend on a given day can go above or below it. Hard caps come from [limits](/docs/llm-proxy/costs-and-limits/limits).
+- **Plans:** a background job builds a routing plan from past sessions. Changing the settings triggers a new plan within about a minute, and every organization is re-planned at least daily. Each plan is versioned.
+
+## When It Falls Back to the Normal Model
+
+Archestra uses the normal model when it cannot make a better choice:
+
+- **Cold start:** fewer than the minimum number of finished sessions exist. See [`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS).
+- **No plan yet**, or the plan is stale because the three models or their prices changed.
+- **Scorer error or timeout.** See [`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS).
+- **No user text** in the request to score.
+
+The session keeps that fallback until it ends.
+
+## Savings
+
+The page shows estimated savings against the smart model: what the same tokens would have cost on it. Treat the number as an estimate.
+
+## Long-Context Prices
+
+Some models charge more for long prompts. On a model's settings, add a threshold and four long-context prices. Prompts above the threshold use them. This applies to all traffic of that model, not only auto routing.
+
+## What to Know
+
+- Routing decisions are kept for 90 days. After that, the same session is routed again as a new one.
+- Every request still goes through your existing [cost limits](/docs/llm-proxy/costs-and-limits) and guardrails.
+- Without a Jev key for the organization, every session uses the normal model.

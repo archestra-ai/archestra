@@ -36,38 +36,46 @@ export function createTerminalReplayer(terminal: Terminal): TerminalReplayer {
   let unfinished = "";
   /** The scroll region the client set, in rows from 1; null for the screen. */
   let region: ScrollRegion | null = null;
-  terminal.parser.registerCsiHandler({ prefix: "?", final: "h" }, (params) => {
-    if (!alternateScreenMode(params.filter(isPlainParam))) return false;
-    alternate = true;
-    return true;
-  });
-  terminal.parser.registerCsiHandler({ prefix: "?", final: "l" }, (params) => {
-    if (!alternateScreenMode(params.filter(isPlainParam))) return false;
-    alternate = false;
-    return true;
-  });
-  terminal.parser.registerCsiHandler({ final: "r" }, (params) => {
-    const top = numberParam(params[0]) || 1;
-    const bottom = Math.min(
-      numberParam(params[1]) || terminal.rows,
-      terminal.rows,
-    );
-    // xterm keeps its region when the rows do not make one.
-    if (top < bottom)
-      region = top === 1 && bottom === terminal.rows ? null : { top, bottom };
-    return false;
-  });
-  // A full reset (RIS) opens the region, in tmux as in xterm.
-  terminal.parser.registerEscHandler({ final: "c" }, () => {
-    region = null;
-    return false;
-  });
-  // tmux does not implement a soft reset (DECSTR), so xterm must not
-  // perform its own: the region, origin mode and attributes stay.
-  terminal.parser.registerCsiHandler(
-    { intermediates: "!", final: "p" },
-    () => true,
-  );
+  const handlers = [
+    terminal.parser.registerCsiHandler(
+      { prefix: "?", final: "h" },
+      (params) => {
+        if (!alternateScreenMode(params.filter(isPlainParam))) return false;
+        alternate = true;
+        return true;
+      },
+    ),
+    terminal.parser.registerCsiHandler(
+      { prefix: "?", final: "l" },
+      (params) => {
+        if (!alternateScreenMode(params.filter(isPlainParam))) return false;
+        alternate = false;
+        return true;
+      },
+    ),
+    terminal.parser.registerCsiHandler({ final: "r" }, (params) => {
+      const top = numberParam(params[0]) || 1;
+      const bottom = Math.min(
+        numberParam(params[1]) || terminal.rows,
+        terminal.rows,
+      );
+      // xterm keeps its region when the rows do not make one.
+      if (top < bottom)
+        region = top === 1 && bottom === terminal.rows ? null : { top, bottom };
+      return false;
+    }),
+    // A full reset (RIS) opens the region, in tmux as in xterm.
+    terminal.parser.registerEscHandler({ final: "c" }, () => {
+      region = null;
+      return false;
+    }),
+    // tmux does not implement a soft reset (DECSTR), so xterm must not
+    // perform its own: the region, origin mode and attributes stay.
+    terminal.parser.registerCsiHandler(
+      { intermediates: "!", final: "p" },
+      () => true,
+    ),
+  ];
   return {
     async write(content) {
       const { frames, rest } = splitTerminalRecording(unfinished + content);
@@ -105,6 +113,7 @@ export function createTerminalReplayer(terminal: Terminal): TerminalReplayer {
     },
     stop() {
       stopped = true;
+      for (const handler of handlers) handler.dispose();
     },
   };
 }
@@ -120,7 +129,7 @@ export interface TerminalReplayer {
    * stopped: `stop` is for the terminal's disposal.
    */
   reset(): void;
-  /** Write nothing more, before the terminal is disposed. */
+  /** Write nothing more and drop the parser handlers, before disposal. */
   stop(): void;
 }
 
@@ -180,6 +189,7 @@ const SCREEN_EVENTS =
   // biome-ignore lint/suspicious/noControlCharactersInRegex: size events and screen modes are terminal protocol bytes
   /\x1b\]777;(archestra-terminal-size=\d+x\d+)(?:\x07|\x1b\\)|\x1b\[\?([\d;]*)h/g;
 
+/** An empty parameter, NaN after `Number`, names no mode. */
 function alternateScreenMode(modes: number[]): boolean {
   return modes.some((mode) => ALTERNATE_SCREEN_MODES.has(mode));
 }

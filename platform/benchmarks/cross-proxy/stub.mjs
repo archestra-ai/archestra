@@ -17,7 +17,8 @@ export function createStub() {
     const parts = [];
     for await (const part of req) parts.push(part);
     const body = JSON.parse(Buffer.concat(parts));
-    const base = { id: `chatcmpl-${body.user}`, created: 1, model: body.model };
+    const id = body.messages[0].content.split("Correlation: ").at(-1);
+    const base = { id: `chatcmpl-${id}`, created: 1, model: body.model };
     const usage = {
       prompt_tokens: 12,
       completion_tokens: 20,
@@ -68,7 +69,8 @@ export function createStub() {
     }
     res.end();
     samples.push({
-      id: body.user,
+      id,
+      user: body.user,
       model: body.model,
       stream: !!body.stream,
       requestBytes: Buffer.concat(parts).length,

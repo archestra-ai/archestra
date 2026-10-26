@@ -28,9 +28,14 @@ const headers =
       : {};
 const bodyFor = (id, stream) => ({
   model: "gpt-4o-mini",
-  messages: [{ role: "user", content: "Reply with the benchmark marker." }],
+  messages: [
+    {
+      role: "user",
+      content: `Reply with the benchmark marker. Correlation: ${id.padEnd(96, "_")}`,
+    },
+  ],
   max_tokens: 32,
-  user: id.padEnd(96, "_"),
+  user: "benchmark-user",
   ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}),
 });
 // Exercise real auth before any measured load; a missing key must be rejected.
@@ -166,6 +171,7 @@ for (const streaming of [false, true]) {
       const u = byId.get(s.id);
       assert.ok(u, `Missing per-request upstream evidence ${s.id}`);
       assert.equal(u.model, "gpt-4o-mini");
+      assert.equal(u.user, "benchmark-user");
       assert.deepEqual(u.messages, bodyFor(s.id, streaming).messages);
       assert.equal(u.max_tokens, 32);
       assert.equal(u.stream, streaming);

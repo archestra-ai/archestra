@@ -36,7 +36,9 @@ requests, at concurrency 50 with HTTP/1.1 connection reuse. Direct controls run
 between proxy runs. The stub emits identical fixed content and synthetic usage
 (12 input, 20 output tokens), or 20 content events with a nominal 10 ms cadence.
 The request uses `gpt-4o-mini`, a short prompt and `max_tokens=32`; only the
-fixed-width correlation `user` varies (identical request and stub response byte sizes). The mock validates upstream model/payload semantics.
+fixed-width correlation marker in the prompt varies (identical request and stub
+response byte sizes). OpenAI `user` is constant so correlation does not create
+distinct end users or inflate identity/accounting cardinality. The mock validates upstream model/payload semantics.
 
 Client added latency is computed **per request** as full client duration minus
 its correlated stub receipt-to-response-end duration. This includes gateway

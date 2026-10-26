@@ -11,9 +11,11 @@ test("stub preserves correlation and token usage for complete JSON and SSE reque
   try {
     for (const stream of [false, true]) {
       const body = {
-        user: `probe-${stream}`,
+        user: "benchmark-user",
         model: "gpt-4o-mini",
-        messages: [{ role: "user", content: "marker" }],
+        messages: [
+          { role: "user", content: `marker Correlation: probe-${stream}` },
+        ],
         max_tokens: 32,
         stream,
         ...(stream ? { stream_options: { include_usage: true } } : {}),
@@ -50,6 +52,7 @@ test("stub preserves correlation and token usage for complete JSON and SSE reque
     assert.ok(samples[1].durationMs > samples[1].firstContentMs);
     assert.equal(samples[1].stream_options.include_usage, true);
     assert.equal(samples[1].max_tokens, 32);
+    assert.ok(samples.every((s) => s.user === "benchmark-user"));
     assert.equal(samples[1].usage.total_tokens, 32);
   } finally {
     server.closeAllConnections();

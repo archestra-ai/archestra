@@ -65,6 +65,7 @@ import {
   githubCopilotAdapterFactory,
   githubCopilotResponsesAdapterFactory,
   groqAdapterFactory,
+  kimiAdapterFactory,
   minimaxAdapterFactory,
   mistralAdapterFactory,
   ollamaAdapterFactory,
@@ -336,6 +337,8 @@ const ROUTABLE_PROVIDER_CASES: Array<{
   // separately below.
   { provider: "github-copilot", modelId: "gpt-4o" },
   { provider: "groq", modelId: "llama-3.1-8b-instant" },
+  // A Kimi for Coding plan id, served over the same chat completions wire.
+  { provider: "kimi", modelId: "k3.1-pro" },
   { provider: "minimax", modelId: "MiniMax-M1" },
   { provider: "mistral", modelId: "mistral-large-latest" },
   { provider: "ollama", modelId: "llama3.1" },
@@ -618,6 +621,7 @@ describe("model router proxy routes", () => {
       cerebrasAdapterFactory,
       deepseekAdapterFactory,
       groqAdapterFactory,
+      kimiAdapterFactory,
       minimaxAdapterFactory,
       mistralAdapterFactory,
       ollamaAdapterFactory,

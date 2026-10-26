@@ -487,6 +487,7 @@ export const MODEL_ROUTER_SUPPORTED_PROVIDERS = [
   "cerebras",
   "deepseek",
   "groq",
+  "kimi",
   "minimax",
   "mistral",
   "ollama",
@@ -1183,6 +1184,11 @@ export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
     llama: "openai",
     deepseek: "deepseek",
     moonshotai: "kimi",
+    // Kimi for Coding membership keys serve the same provider from the Kimi
+    // Code endpoints with plan model ids (k3.1-pro, kimi-for-coding, ...)
+    // priced at $0; both regions list the same ids.
+    "kimi-code-plan-global": "kimi",
+    "kimi-code-plan-cn": "kimi",
     groq: "groq",
     "fireworks-ai": "openai",
     togetherai: "openai",

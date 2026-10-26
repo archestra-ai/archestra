@@ -152,7 +152,7 @@ const keyPath = path.join(home, ".archestra", ${JSON.stringify(`${client.stateNa
 const input = JSON.parse(process.env.ARCHESTRA_OC_PRIMARY === "stdin" ? fs.readFileSync(0, "utf8") : process.env.ARCHESTRA_OC_PRIMARY || "null");
 if (!input && !fs.existsSync(statePath)) process.exit(0);
 const original = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf8") : null;
-const config = original ? JSON.parse(original) : {};
+const config = original ? JSON.parse(original.replace(/^\uFEFF/, "")) : {};
 if (fs.existsSync(statePath)) {
   const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
   for (const [section, entries] of Object.entries(state.sections ?? {})) {

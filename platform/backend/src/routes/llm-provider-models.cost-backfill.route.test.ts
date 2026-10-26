@@ -53,10 +53,40 @@ describe("model cost backfill routes", () => {
       window: { requests: 1, recordedCost: 50, recomputedCost: 2 },
     });
 
+    // Save, then start at the saved prices, as the edit dialog does. A price
+    // written differently from how it's stored still matches.
+    const saved = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/llm-models/${model.id}`,
+      payload: {
+        customPricePerMillionInput: "2",
+        customPricePerMillionOutput: "10.0",
+        customPricePerMillionCacheRead: null,
+        customPricePerMillionCacheWrite: null,
+      },
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    const stale = await ctx.app.inject({
+      method: "POST",
+      url: `/api/llm-models/${model.id}/cost-backfill`,
+      payload: {
+        since: "2026-09-01T00:00:00.000Z",
+        prices: { input: "3", output: "15", cacheRead: null, cacheWrite: null },
+      },
+    });
+    expect(stale.statusCode, stale.body).toBe(409);
     const started = await ctx.app.inject({
       method: "POST",
       url: `/api/llm-models/${model.id}/cost-backfill`,
-      payload: { since: "2026-09-01T00:00:00.000Z" },
+      payload: {
+        since: "2026-09-01T00:00:00.000Z",
+        prices: {
+          input: "2",
+          output: "10",
+          cacheRead: null,
+          cacheWrite: null,
+        },
+      },
     });
     expect(started.statusCode, started.body).toBe(200);
     expect(started.json()).toMatchObject({
@@ -88,8 +118,13 @@ describe("model cost backfill routes", () => {
       limit: 10,
       offset: 0,
     });
-    // The refused second start is recorded too, as a failure; previews aren't.
-    expect(audit.data).toHaveLength(2);
+    // The save, and each start including the refused ones; previews aren't.
+    expect(audit.data.map((row) => row.action).sort()).toEqual([
+      "llmModel.cost_backfill_started",
+      "llmModel.cost_backfill_started",
+      "llmModel.cost_backfill_started",
+      "llmModel.updated",
+    ]);
     expect(audit.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -104,7 +139,7 @@ describe("model cost backfill routes", () => {
           after: expect.objectContaining({
             id: started.json().id,
             since: "2026-09-01T00:00:00.000Z",
-            pricing: expect.objectContaining({ pricePerMillionInput: "3.00" }),
+            pricing: expect.objectContaining({ pricePerMillionInput: "2.00" }),
           }),
         }),
       ]),

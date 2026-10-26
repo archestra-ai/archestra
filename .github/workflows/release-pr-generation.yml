@@ -11,6 +11,9 @@ permissions: {}
 jobs:
   select:
     name: Select release generation
+    concurrency:
+      group: release-generation-select-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     if: >-
       github.event.pull_request.user.login == 'archestra-ci[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -121,7 +124,7 @@ jobs:
     uses: $/.github/workflows/llm-proxy-benchmark.yml
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: write # The reusable benchmark maintains the saved measurement comment.
     with:
       release-generation: true
 

@@ -2893,6 +2893,49 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
   });
 
+  test("block mode governs Claude Desktop sessions and admits its native background probes", async () => {
+    await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
+    const probe = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "x-archestra-agent-id": "anthropic_claude_desktop",
+      },
+      payload: {
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1,
+        messages: [{ role: "user", content: "hi" }],
+      },
+    });
+    expect(probe.statusCode, probe.body).toBe(200);
+    expect(events).toEqual([]);
+
+    options = {};
+    const governed = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "x-archestra-agent-id": "anthropic_claude_desktop",
+        "x-claude-code-session-id": "desktop-session",
+      },
+      payload: payload(false) as Record<string, unknown>,
+    });
+    expect(governed.statusCode, governed.body).toBe(200);
+    const callerId = `user:${userId}`;
+    expect(events.filter((event) => event.event === "session_start")).toEqual([
+      expect.objectContaining({
+        organization_id: agent.organizationId,
+        caller_id: callerId,
+        session_id: `${callerId}|desktop-session`,
+      }),
+    ]);
+  });
+
   test("an encrypted chat that started while the switch was off stays unenforced; a new one requires a key and escrow", async ({
     makeConversation,
   }) => {

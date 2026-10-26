@@ -214,6 +214,75 @@ describe("client trajectory identity", () => {
     });
   });
 
+  describe("Claude Desktop", () => {
+    const desktopHeaders = {
+      "user-agent": "claude-cli/2.1.258 (external, cli)",
+      "x-archestra-agent-id": "anthropic_claude_desktop",
+      "x-claude-code-session-id": CLAUDE_SESSION,
+    };
+
+    test("roots on Claude Desktop's session id as its own native client", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {},
+          headers: desktopHeaders,
+        }),
+      ).toMatchObject({
+        sessionId: CLAUDE_SESSION,
+        provenance: "claude-desktop-header",
+      });
+    });
+
+    test.each([
+      {
+        label: "cowork billing entrypoint",
+        system: [
+          {
+            type: "text",
+            text: "x-anthropic-billing-header: cc_version=2.1.195; cc_entrypoint=cowork;",
+          },
+        ],
+      },
+      {
+        label: "claude-desktop billing entrypoint",
+        system:
+          "x-anthropic-billing-header: cc_version=2.1.195; cc_entrypoint=claude-desktop;",
+      },
+    ])("recognizes Claude Desktop from its $label and metadata.user_id", ({
+      system,
+    }) => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {
+            system,
+            metadata: {
+              user_id: JSON.stringify({ session_id: CLAUDE_SESSION }),
+            },
+          },
+          headers: { "user-agent": "claude-cli/2.1.258 (external, cli)" },
+        }),
+      ).toMatchObject({
+        sessionId: CLAUDE_SESSION,
+        provenance: "claude-desktop-metadata",
+      });
+    });
+
+    test("names a delegated child's parent like Claude Code does", () => {
+      expect(
+        nativeSpawnParentId({
+          headers: {
+            ...desktopHeaders,
+            "x-claude-code-agent-id": "child-agent",
+          },
+          body: {},
+          sessionId: CLAUDE_SESSION,
+        }),
+      ).toBe(CLAUDE_SESSION);
+    });
+  });
+
   describe("Codex", () => {
     test("roots on the durable thread id, not the per-run session id", () => {
       expect(

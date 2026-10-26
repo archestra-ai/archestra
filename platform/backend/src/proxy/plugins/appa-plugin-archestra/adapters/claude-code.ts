@@ -1,3 +1,5 @@
+import { EXTERNAL_AGENT_ID_HEADER } from "@archestra/shared/consts";
+import { isClaudeDesktopClientAgentId } from "@archestra/shared/interactions/client";
 import { verifyChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import { parseClaudeMetadataSessionId } from "@/routes/proxy/utils/headers/session-id";
@@ -42,6 +44,13 @@ export function claudeCodeNativeChildIds(context: AppaMatchContext): {
   };
 }
 
+/** Whether an adapter id belongs to the Claude Code / Claude Desktop family. */
+export function isClaudeCodeFamilyAdapter(
+  id: string | undefined,
+): id is "claude-code" | "claude-desktop" {
+  return id === "claude-code" || id === "claude-desktop";
+}
+
 /** A skill runs in the spawner's trajectory. An agent opens a new child trajectory. */
 const CHILD_SPAWN_TOOLS = new Set(["Agent", "Task"]);
 const HANDBACK_TOOLS = new Set(["SubagentHandback"]);
@@ -79,8 +88,15 @@ const MAX_CHILD_ID_LENGTH = 128;
 
 /** Identifies Claude Code Messages requests and normalizes local tool names. */
 export class AppaClaudeCodeAdapter implements AppaClientAdapter {
-  readonly id = "claude-code" as const;
-  readonly trajectoryPrefix = "cc";
+  readonly id: "claude-code" | "claude-desktop" = "claude-code";
+  readonly trajectoryPrefix: string = "cc";
+  protected readonly provenance: {
+    header: NonNullable<AppaSessionIdentity["provenance"]>;
+    metadata: NonNullable<AppaSessionIdentity["provenance"]>;
+  } = {
+    header: "claude-code-header",
+    metadata: "claude-code-metadata",
+  };
   readonly childTranscriptPaths = CHILD_PATHS;
   readonly nativeQuestion = {
     toolName: "AskUserQuestion",
@@ -154,13 +170,13 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     context: AppaMatchContext,
   ): AppaSessionIdentity | undefined {
     const sessionId = readHeader(context.headers, "x-claude-code-session-id");
-    if (sessionId) return { sessionId, provenance: "claude-code-header" };
+    if (sessionId) return { sessionId, provenance: this.provenance.header };
     const userId = stringField(
       asRecord(asRecord(context.requestBody)?.metadata)?.user_id,
     );
     const metadataSession = parseClaudeMetadataSessionId(userId);
     return metadataSession
-      ? { sessionId: metadataSession, provenance: "claude-code-metadata" }
+      ? { sessionId: metadataSession, provenance: this.provenance.metadata }
       : undefined;
   }
 
@@ -417,6 +433,60 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
       return;
     }
   }
+}
+
+/**
+ * Identifies Claude Desktop requests. Claude Desktop's Code and Cowork tabs
+ * share Claude Code's runtime, tool names (`Bash`, `Agent`, `SendMessage`,
+ * `AskUserQuestion`, `WaitForMcpServers`), and session/subagent wire format.
+ * Only its identity and gateway setup instructions differ: the
+ * `anthropic_claude_desktop` agent id header set by Desktop's setup, a
+ * `claude-desktop` User-Agent, or a `cowork`/`claude-desktop` Anthropic billing
+ * entrypoint in the system prompt.
+ */
+export class AppaClaudeDesktopAdapter extends AppaClaudeCodeAdapter {
+  override readonly id = "claude-desktop" as const;
+  override readonly trajectoryPrefix = "claude-desktop";
+  protected override readonly provenance = {
+    header: "claude-desktop-header",
+    metadata: "claude-desktop-metadata",
+  } as const;
+
+  override gatewayToolsHint(serverName: string): string {
+    return `In Claude Desktop, open Settings → Connectors, select "${serverName}", and complete sign-in if needed. In your conversation, open + → Connectors and enable "${serverName}" if it is off. If it is not listed, connect Claude Desktop again and start a new session. Then send your message again.`;
+  }
+
+  override matches(context: AppaMatchContext): boolean {
+    const userAgent = (
+      readHeader(context.headers, "user-agent") ?? ""
+    ).toLowerCase();
+    return (
+      isClaudeDesktopClientAgentId(
+        readHeader(context.headers, EXTERNAL_AGENT_ID_HEADER),
+      ) ||
+      userAgent.includes("claude-desktop") ||
+      hasClaudeDesktopBillingEntrypoint(context.requestBody)
+    );
+  }
+}
+
+const CLAUDE_DESKTOP_BILLING_ENTRYPOINT_RE =
+  /cc_entrypoint=(?:cowork|claude-desktop)(?=[;\s]|$)/i;
+
+function hasClaudeDesktopBillingEntrypoint(requestBody: unknown): boolean {
+  const system = asRecord(requestBody)?.system;
+  const text =
+    typeof system === "string"
+      ? system
+      : Array.isArray(system)
+        ? system
+            .map((block) => stringField(asRecord(block)?.text) ?? "")
+            .join("\n")
+        : "";
+  return (
+    text.toLowerCase().includes("x-anthropic-billing-header") &&
+    CLAUDE_DESKTOP_BILLING_ENTRYPOINT_RE.test(text)
+  );
 }
 
 /**

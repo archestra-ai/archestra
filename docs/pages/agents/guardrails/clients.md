@@ -19,7 +19,9 @@ These clients work without extra configuration:
 
 - **Archestra Chat**
 - **Claude Code**
+- **Claude Desktop** (Code and Cowork tabs)
 - **Codex CLI**
+- **Pi**
 - **OpenCode**
 - **Kilo Code**
 

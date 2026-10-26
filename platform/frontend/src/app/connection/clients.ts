@@ -407,7 +407,7 @@ claude`,
   },
   {
     id: "claude-desktop",
-    label: "Claude Desktop",
+    label: NATIVE_SESSION_CLIENT_LABELS["claude-desktop"],
     sub: "Anthropic desktop app",
     ...markFields(CLAUDE_MARK),
     mcp: {

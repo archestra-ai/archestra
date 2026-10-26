@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.7](https://github.com/archestra-ai/archestra/compare/platform-v1.4.6...platform-v1.4.7) (2026-10-26)
+
+
+### Bug Fixes
+
+* **agent:** patch Debian OpenSSL on stable ([#9657](https://github.com/archestra-ai/archestra/issues/9657)) ([1bbf8f5](https://github.com/archestra-ai/archestra/commit/1bbf8f59e2002b84ed68a502040a8996aec44d9e))
+
 ## [1.4.6](https://github.com/archestra-ai/archestra/compare/platform-v1.4.5...platform-v1.4.6) (2026-10-26)
 
 

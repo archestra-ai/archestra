@@ -9,6 +9,7 @@ import {
   GITHUB_REPOSITORY_FULL_NAME_REGEX,
   type GitHubActionsAccess,
   GitHubActionsAccessSchema,
+  isGitHubActionsAppCredential,
 } from "@archestra/shared";
 import { X } from "lucide-react";
 import { type KeyboardEvent, useId, useState } from "react";
@@ -32,7 +33,8 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
-  type RuntimeCredentialDefinition,
+  useCanAttachCredential,
+  useCanUseEveryCredential,
   useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
 
@@ -50,8 +52,24 @@ export function GitHubActionsAccessSection({
   const appName = useAppName();
   const switchId = useId();
   const appSelectId = useId();
-  const { data: credentials = [] } = useRuntimeCredentials();
-  const apps = credentials.filter(isGitHubComApp);
+  const credentials = useRuntimeCredentials();
+  const { data: canUseEveryCredential } = useCanUseEveryCredential();
+  const canAttachCredential = useCanAttachCredential();
+  // Saving needs `use` on the App, the same check the server makes.
+  const apps = (credentials.data ?? []).filter(
+    (credential) =>
+      isGitHubActionsAppCredential(credential) &&
+      canAttachCredential(credential.id),
+  );
+  // With no App in reach, say whether none exists or the editor may not use
+  // one. A list the editor cannot read, or that grants item by item, may hide
+  // an App they lack `use` on.
+  const unavailable =
+    apps.length > 0 || credentials.isPending
+      ? null
+      : credentials.isError || canUseEveryCredential !== true
+        ? "permission"
+        : "missing";
   const docsUrl = getFrontendDocsUrl(
     DocsPage.McpGatewayAuthentication,
     "github-actions",
@@ -68,6 +86,8 @@ export function GitHubActionsAccessSection({
           <Switch
             id={switchId}
             checked={value !== null}
+            // Turning it off never needs an App.
+            disabled={value === null && apps.length === 0}
             onCheckedChange={(checked) =>
               onChange(
                 checked
@@ -100,6 +120,20 @@ export function GitHubActionsAccessSection({
             </>
           ) : null}
         </FieldDescription>
+        {value === null && unavailable === "permission" && (
+          <p className="text-sm text-muted-foreground">
+            You need permission to use a GitHub App credential to turn this on.
+          </p>
+        )}
+        {value === null && unavailable === "missing" && (
+          <p className="text-sm text-muted-foreground">
+            No GitHub App for GitHub.com yet. Add one under{" "}
+            <SettingsLink href="/settings/credentials" className="underline">
+              Credentials
+            </SettingsLink>
+            .
+          </p>
+        )}
       </div>
 
       {value && (
@@ -109,45 +143,32 @@ export function GitHubActionsAccessSection({
             <FieldDescription>
               The workflow posts its review as this App.
             </FieldDescription>
-            {apps.length === 0 && !value.githubAppCredentialKey ? (
-              <p className="text-sm text-muted-foreground">
-                No GitHub App for GitHub.com yet. Add one under{" "}
-                <SettingsLink
-                  href="/settings/credentials"
-                  className="underline"
-                >
-                  Credentials
-                </SettingsLink>
-                .
-              </p>
-            ) : (
-              <Select
-                value={value.githubAppCredentialKey || undefined}
-                onValueChange={(githubAppCredentialKey) =>
-                  onChange({ ...value, githubAppCredentialKey })
-                }
-              >
-                <SelectTrigger id={appSelectId}>
-                  <SelectValue placeholder="Select a GitHub App" />
-                </SelectTrigger>
-                <SelectContent>
-                  {apps.map((app) => (
-                    <SelectItem key={app.key} value={app.key}>
-                      {app.name}
+            <Select
+              value={value.githubAppCredentialKey || undefined}
+              onValueChange={(githubAppCredentialKey) =>
+                onChange({ ...value, githubAppCredentialKey })
+              }
+            >
+              <SelectTrigger id={appSelectId}>
+                <SelectValue placeholder="Select a GitHub App" />
+              </SelectTrigger>
+              <SelectContent>
+                {apps.map((app) => (
+                  <SelectItem key={app.key} value={app.key}>
+                    {app.name}
+                  </SelectItem>
+                ))}
+                {/* A saved App this editor cannot use stays shown. */}
+                {value.githubAppCredentialKey &&
+                  !apps.some(
+                    (app) => app.key === value.githubAppCredentialKey,
+                  ) && (
+                    <SelectItem value={value.githubAppCredentialKey}>
+                      {value.githubAppCredentialKey}
                     </SelectItem>
-                  ))}
-                  {/* A saved App this viewer cannot read stays selectable. */}
-                  {value.githubAppCredentialKey &&
-                    !apps.some(
-                      (app) => app.key === value.githubAppCredentialKey,
-                    ) && (
-                      <SelectItem value={value.githubAppCredentialKey}>
-                        {value.githubAppCredentialKey}
-                      </SelectItem>
-                    )}
-                </SelectContent>
-              </Select>
-            )}
+                  )}
+              </SelectContent>
+            </Select>
           </div>
 
           <ListEditor
@@ -193,17 +214,6 @@ export function gitHubActionsAccessError(
 }
 
 // ===================== Internals =====================
-
-function isGitHubComApp(credential: RuntimeCredentialDefinition) {
-  // GitHub Actions OIDC tokens come from GitHub.com.
-  return (
-    credential.kind === "github_app" &&
-    credential.allowOrganization &&
-    credential.githubUrl === "https://api.github.com" &&
-    !!credential.appId &&
-    !!credential.installationId
-  );
-}
 
 function ListEditor({
   label,

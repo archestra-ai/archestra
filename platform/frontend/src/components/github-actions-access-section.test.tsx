@@ -20,18 +20,23 @@ import {
   it,
   vi,
 } from "vitest";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { runtimeCredentialsQueryKey } from "@/lib/runtime-credentials.query";
 import {
   GitHubActionsAccessSection,
   gitHubActionsAccessError,
 } from "./github-actions-access-section";
 
 vi.mock("@/lib/hooks/use-app-name");
+vi.mock("@/lib/auth/auth.query");
 
 const API_ORIGIN = "http://localhost:9000";
 const WORKFLOW =
   "acme/review-workflows/.github/workflows/review.yml@refs/heads/main";
+const REVIEW_APP_ID = "00000000-0000-4000-8000-000000000001";
 
 const server = setupServer();
 
@@ -40,10 +45,16 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   archestraApiClient.setConfig({ baseUrl: API_ORIGIN });
   vi.mocked(useAppName).mockReturnValue("Archestra");
+  // The editor may use the review App, and no credential beyond it.
+  allowCredentialUse([REVIEW_APP_ID]);
   server.use(
     http.get(`${API_ORIGIN}/api/credentials`, () =>
       HttpResponse.json([
-        credential({ key: "review-app", name: "Code Review App" }),
+        credential({
+          id: REVIEW_APP_ID,
+          key: "review-app",
+          name: "Code Review App",
+        }),
         // Not usable: GitHub Actions tokens come from GitHub.com.
         credential({
           key: "enterprise-app",
@@ -64,18 +75,15 @@ afterAll(() => {
 });
 
 describe("GitHubActionsAccessSection", () => {
-  it("turns on with the organization's only GitHub.com App selected", async () => {
+  it("turns on with the only GitHub.com App the editor may use selected", async () => {
     const user = userEvent.setup();
-    const { queryClient, onChange } = renderSection(null);
-    await waitFor(() =>
-      expect(
-        queryClient.getQueryData(runtimeCredentialsQueryKey),
-      ).toBeDefined(),
-    );
+    const { onChange } = renderSection(null);
+    const toggle = screen.getByRole("switch", {
+      name: "Accept GitHub Actions tokens",
+    });
+    await waitFor(() => expect(toggle).toBeEnabled());
 
-    await user.click(
-      screen.getByRole("switch", { name: "Accept GitHub Actions tokens" }),
-    );
+    await user.click(toggle);
 
     expect(screen.getByRole("combobox")).toHaveTextContent("Code Review App");
     expect(onChange).toHaveBeenLastCalledWith({
@@ -139,6 +147,40 @@ describe("GitHubActionsAccessSection", () => {
     ).toBeVisible();
   });
 
+  it.each([
+    ["holds no use grant on the App", () => allowCredentialUse([])],
+    [
+      "cannot list credentials",
+      () =>
+        server.use(
+          http.get(`${API_ORIGIN}/api/credentials`, () =>
+            HttpResponse.json(
+              {
+                error: {
+                  message: "Forbidden",
+                  type: "api_authorization_error",
+                },
+              },
+              { status: 403 },
+            ),
+          ),
+        ),
+    ],
+  ])("keeps it off for an editor who %s", async (_case, arrange) => {
+    arrange();
+    renderSection(null);
+
+    expect(
+      await screen.findByText(
+        "You need permission to use a GitHub App credential to turn this on.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("switch", { name: "Accept GitHub Actions tokens" }),
+    ).toBeDisabled();
+    expect(screen.queryByText(/No GitHub App for GitHub.com yet/)).toBeNull();
+  });
+
   it("turns the exchange off", async () => {
     const user = userEvent.setup();
     const { onChange } = renderSection({
@@ -155,6 +197,20 @@ describe("GitHubActionsAccessSection", () => {
     expect(screen.queryByLabelText("Repositories")).not.toBeInTheDocument();
   });
 });
+
+/** `use` grants on these credentials, and no wildcard grant. */
+function allowCredentialUse(credentialIds: string[]) {
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: false,
+  } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useScopedCapabilities).mockReturnValue({
+    data: credentialIds.map((scope) => ({
+      resource: "credential",
+      action: "use",
+      scope,
+    })),
+  } as unknown as ReturnType<typeof useScopedCapabilities>);
+}
 
 function renderSection(initial: GitHubActionsAccess | null) {
   const queryClient = new QueryClient({

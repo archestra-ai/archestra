@@ -1,14 +1,10 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import type {
-  AutoRoutingPlanDetail,
-  AutoRoutingPlanSummary,
-} from "@/lib/auto-routing.query";
+import type { AutoRoutingPlanSummary } from "@/lib/auto-routing.query";
 import { rejectionReason } from "../_parts/plan-document";
 import AutoRoutingPlansPage from "./page";
 
@@ -63,27 +59,9 @@ const rejected: AutoRoutingPlanSummary = {
   decisionCount: 0,
 };
 
-const detail: AutoRoutingPlanDetail = {
-  ...base,
-  tiersFingerprint: {},
-  plan: {
-    size_model: {
-      kind: "poisson_glm",
-      baseline: "unknown",
-      intercept: Math.log(0.05),
-      source_effects: [{ source: "claude-code", coef: Math.log(3) }],
-      p_long: Math.log(2),
-    },
-    long_share: { intercept: -0.5, log_size: 0.1, is_subagent: 0.05 },
-  },
-};
-
 const server = setupServer(
   http.get(`${API_ORIGIN}/api/auto-routing/plans`, () =>
     HttpResponse.json([base, failed, rejected]),
-  ),
-  http.get(`${API_ORIGIN}/api/auto-routing/plans/${base.id}`, () =>
-    HttpResponse.json(detail),
   ),
 );
 
@@ -124,24 +102,5 @@ describe("AutoRoutingPlansPage", () => {
     expect(
       within(row).getByText(rejectionReason("stale_watermark")),
     ).not.toHaveClass("text-destructive");
-  });
-
-  it("opens a plan's fitted models and holdout check from its row", async () => {
-    const user = userEvent.setup();
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <AutoRoutingPlansPage />
-      </QueryClientProvider>,
-    );
-    await user.click(await screen.findByText("420"));
-
-    const dialog = await screen.findByRole("dialog");
-    expect(
-      await within(dialog).findByText("50,000 tokens"),
-    ).toBeInTheDocument();
-    expect(within(dialog).getByText("× 3.00 tokens")).toBeInTheDocument();
-    expect(within(dialog).getByText("× 2.00 tokens")).toBeInTheDocument();
-    expect(within(dialog).getByText("0.812")).toBeInTheDocument();
-    expect(within(dialog).getByText("1,350,000")).toBeInTheDocument();
   });
 });

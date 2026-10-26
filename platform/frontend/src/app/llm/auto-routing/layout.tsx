@@ -11,7 +11,6 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 
 const TABS = [
   { label: "Overview", href: "/llm/auto-routing" },
-  { label: "Diagnostics", href: "/llm/auto-routing/diagnostics" },
   { label: "Plans", href: "/llm/auto-routing/plans" },
 ];
 

@@ -2105,7 +2105,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/costs": { llmCost: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
   "/llm/auto-routing": { llmProxy: ["read"] },
-  "/llm/auto-routing/diagnostics": { llmProxy: ["read"] },
   "/llm/auto-routing/plans": { llmProxy: ["read"] },
 
   // MCP

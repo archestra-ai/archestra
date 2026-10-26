@@ -1,56 +1,27 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   type AutoRoutingPlanSummary,
   useAutoRoutingPlans,
 } from "@/lib/auto-routing.query";
 import { formatDate } from "@/lib/utils/date-time";
 import { formatCurrency } from "@/lib/utils/format-currency";
-import { PlanDiagnostics } from "../_parts/plan-diagnostics";
 import { rejectionReason } from "../_parts/plan-document";
 
 export default function AutoRoutingPlansPage() {
   const { data: plans = [], isPending } = useAutoRoutingPlans();
-  const [selected, setSelected] = useState<AutoRoutingPlanSummary | null>(null);
 
   return (
-    <>
-      <DataTable
-        columns={COLUMNS}
-        data={plans}
-        getRowId={(plan) => plan.id}
-        onRowClick={setSelected}
-        isLoading={isPending}
-        emptyMessage="No plans yet"
-      />
-      <Dialog
-        open={selected !== null}
-        onOpenChange={(open) => !open && setSelected(null)}
-      >
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              Plan of{" "}
-              {selected ? formatDate({ date: selected.createdAt }) : null}
-            </DialogTitle>
-          </DialogHeader>
-          <DialogBody>
-            {selected && <PlanDiagnostics planId={selected.id} />}
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
-    </>
+    <DataTable
+      columns={COLUMNS}
+      data={plans}
+      getRowId={(plan) => plan.id}
+      isLoading={isPending}
+      emptyMessage="No plans yet"
+    />
   );
 }
 

@@ -30,13 +30,13 @@ describe("AutoRoutingLayout", () => {
     vi.mocked(useAppName).mockReturnValue("Archestra");
   });
 
-  it("offers the three tabs while the alpha is enabled", () => {
+  it("offers the overview and plans tabs while the alpha is enabled", () => {
     vi.mocked(useFeature).mockReturnValue(true);
 
     render(<AutoRoutingLayout>content</AutoRoutingLayout>);
 
     expect(screen.getByTestId("tabs")).toHaveTextContent(
-      "/llm/auto-routing,/llm/auto-routing/diagnostics,/llm/auto-routing/plans",
+      "/llm/auto-routing,/llm/auto-routing/plans",
     );
     expect(screen.getByText("content")).toBeInTheDocument();
   });

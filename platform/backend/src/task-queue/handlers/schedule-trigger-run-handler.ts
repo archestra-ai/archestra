@@ -5,6 +5,7 @@ import {
   type A2AExecuteResult,
   executeA2AMessage,
 } from "@/agents/a2a-executor";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import logger from "@/logging";
 import {
@@ -28,6 +29,7 @@ import {
   recordRunConversationError,
 } from "@/services/scheduled-run-conversation";
 import type { Conversation } from "@/types";
+import { hasUnavailableScheduleReview } from "./schedule-review-outcome";
 
 export async function handleScheduleTriggerRunExecution(
   payload: Record<string, unknown>,
@@ -241,6 +243,20 @@ export async function handleScheduleTriggerRunExecution(
     if (abortController.signal.aborted) {
       throw new Error("Scheduled run was stopped before completion");
     }
+    if (
+      hasUnavailableScheduleReview(executeResult.responseUiMessage, (name) =>
+        archestraMcpBranding.getToolShortName(name),
+      )
+    ) {
+      status = "failed";
+      errorMessage =
+        "Human review was unavailable for a guarded tool call (review_unavailable). The dependent call did not run and remains blocked.";
+      runChatError = {
+        code: ChatErrorCode.Unknown,
+        message: errorMessage,
+        isRetryable: false,
+      };
+    }
   } catch (error) {
     if (error instanceof ScheduledRuntimeAlreadyStartedError) return;
     if (await wasStoppedByUser()) {
@@ -268,18 +284,15 @@ export async function handleScheduleTriggerRunExecution(
     }
   }
 
-  // For a project-scoped run that executed successfully (or that the user
-  // stopped, keeping whatever it produced), persist the chat transcript from the executor's own result (the user prompt + the complete
-  // assistant turn). This is race-free — unlike reading the `interactions` rows,
+  // For a project-scoped run with an executor result (including a normally
+  // finished turn whose required review was unavailable), persist the transcript
+  // from the executor's own result (the prompt + the complete assistant turn).
+  // This is race-free — unlike reading the `interactions` rows,
   // which the proxy commits after the stream is flushed and so may not yet be
   // visible at completion. So the conversation isn't blank (or missing its final
   // answer) when opened from any surface (project chat list, sidebar, direct
   // link). Best-effort: a persist failure must not fail the already-completed run.
-  if (
-    (status === "success" || status === "cancelled") &&
-    runConversation &&
-    executeResult
-  ) {
+  if (runConversation && executeResult) {
     try {
       await persistRunConversationMessages({
         conversation: runConversation,
@@ -296,17 +309,20 @@ export async function handleScheduleTriggerRunExecution(
         "Failed to persist scheduled run conversation messages",
       );
     }
-  } else if (status === "failed" && runConversation) {
+  }
+  if (status === "failed" && runConversation) {
     // A failed project-scoped run keeps its conversation: persist the scheduled
     // prompt as the user message (so the chat carries it and the scheduled-run
     // "Try again" can resend it) and record the structured error as a chat error
     // so the run's chat shows an inline error card rather than a blank transcript.
     // Best-effort: this must not fail the already-failed run.
     try {
-      await persistRunUserMessage({
-        conversation: runConversation,
-        userText: trigger.messageTemplate,
-      });
+      if (!executeResult) {
+        await persistRunUserMessage({
+          conversation: runConversation,
+          userText: trigger.messageTemplate,
+        });
+      }
       if (runChatError) {
         await recordRunConversationError({
           conversationId: runConversation.id,

@@ -4205,8 +4205,15 @@
     {
       "idx": 600,
       "version": "7",
-      "when": 1793054957692,
-      "tag": "0600_flawless_krista_starr",
+      "when": 1793053680270,
+      "tag": "0600_model_cost_backfills",
+      "breakpoints": true
+    },
+    {
+      "idx": 601,
+      "version": "7",
+      "when": 1793056851225,
+      "tag": "0601_flawless_krista_starr",
       "breakpoints": true
     }
   ]

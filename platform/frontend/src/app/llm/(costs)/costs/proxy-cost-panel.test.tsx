@@ -22,6 +22,7 @@ const totals = {
   cacheReadTokens: 100,
   billedCost: 3.5,
   subscriptionCost: 7,
+  failedOverAttempts: 0,
 };
 const data: archestraApiTypes.GetProxyCostStatisticsResponses["200"] = {
   totals,

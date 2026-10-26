@@ -120100,6 +120100,22 @@ export type GetProxyCostStatisticsData = {
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         credentialId?: string;
         /**
+         * Limit usage to calls served by this provider key.
+         */
+        providerApiKeyId?: string;
+        /**
+         * Limit usage to calls balanced through this model pool.
+         */
+        modelPoolId?: string;
+        /**
+         * Also group usage by the provider key that served each call.
+         */
+        includeProviderKeys?: string;
+        /**
+         * Also group usage by the model pool each call went through.
+         */
+        includeModelPools?: string;
+        /**
          * Include the distinct historical label keys in the filtered proxy usage.
          */
         includeLabelKeys?: string;
@@ -120201,6 +120217,10 @@ export type GetProxyCostStatisticsResponses = {
             cacheReadTokens: number;
             billedCost: number;
             subscriptionCost: number;
+            /**
+             * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
+             */
+            failedOverAttempts: number;
         };
         timeSeries: Array<{
             requests: number;
@@ -120209,6 +120229,10 @@ export type GetProxyCostStatisticsResponses = {
             cacheReadTokens: number;
             billedCost: number;
             subscriptionCost: number;
+            /**
+             * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
+             */
+            failedOverAttempts: number;
             timestamp: string;
         }>;
         methods: Array<{
@@ -120218,6 +120242,10 @@ export type GetProxyCostStatisticsResponses = {
             cacheReadTokens: number;
             billedCost: number;
             subscriptionCost: number;
+            /**
+             * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
+             */
+            failedOverAttempts: number;
             authMethod: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
         }>;
         credentials: Array<{
@@ -120227,6 +120255,10 @@ export type GetProxyCostStatisticsResponses = {
             cacheReadTokens: number;
             billedCost: number;
             subscriptionCost: number;
+            /**
+             * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
+             */
+            failedOverAttempts: number;
             authMethod: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'personal_token' | 'internal' | 'unknown';
             credentialId: string | null;
             credentialName: string | null;
@@ -120236,6 +120268,35 @@ export type GetProxyCostStatisticsResponses = {
             offset: number;
             total: number;
         };
+        providerKeys?: Array<{
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            billedCost: number;
+            subscriptionCost: number;
+            /**
+             * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
+             */
+            failedOverAttempts: number;
+            providerApiKeyId: string | null;
+            providerApiKeyName: string | null;
+            provider: string | null;
+        }>;
+        modelPools?: Array<{
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            billedCost: number;
+            subscriptionCost: number;
+            /**
+             * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
+             */
+            failedOverAttempts: number;
+            modelPoolId: string | null;
+            modelPoolName: string | null;
+        }>;
         labelKeys?: Array<string>;
         labels?: {
             key: string;
@@ -120246,6 +120307,10 @@ export type GetProxyCostStatisticsResponses = {
                 cacheReadTokens: number;
                 billedCost: number;
                 subscriptionCost: number;
+                /**
+                 * Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.
+                 */
+                failedOverAttempts: number;
                 value: string | null;
             }>;
             pagination: {

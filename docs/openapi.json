@@ -458321,7 +458321,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "LLM Proxy usage by authentication method and credential, including legacy proxy profiles. Each request is counted once. Billed spend excludes subscription-covered list-price estimates. Credential details are paginated; totals and time series cover the entire filtered result. Null credential IDs mean unavailable or not applicable; provider secrets are never returned. With labelKey, also return separately paginated label groups. Labels are captured at request admission: authenticated virtual-key or OAuth-client labels override labels on its billing team. Caller metadata cannot override these labels. Label edits and deletions do not rewrite history; requests without a snapshot value form the null/unassigned group. All totals, trends and groupings apply the same label filters.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics",
+        "description": "LLM Proxy usage by authentication method and credential, including legacy proxy profiles. Each request is counted once. Billed spend excludes subscription-covered list-price estimates. Credential details are paginated; totals and time series cover the entire filtered result. Null credential IDs mean unavailable or not applicable; provider secrets are never returned. With labelKey, also return separately paginated label groups. Labels are captured at request admission: authenticated virtual-key or OAuth-client labels override labels on its billing team. Caller metadata cannot override these labels. Label edits and deletions do not rewrite history; requests without a snapshot value form the null/unassigned group. All totals, trends and groupings apply the same label filters. With includeProviderKeys or includeModelPools, also return usage grouped by the provider key that served each call or the model pool it went through; null groups are calls with no recorded key or no pool. A request a model pool failed over writes one row per attempt: failed attempts count as requests at zero cost and tokens, and failedOverAttempts counts them.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {
@@ -458392,6 +458392,46 @@
             "in": "query",
             "name": "credentialId",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "query",
+            "name": "providerApiKeyId",
+            "required": false,
+            "description": "Limit usage to calls served by this provider key."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "query",
+            "name": "modelPoolId",
+            "required": false,
+            "description": "Limit usage to calls balanced through this model pool."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "includeProviderKeys",
+            "required": false,
+            "description": "Also group usage by the provider key that served each call."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "includeModelPools",
+            "required": false,
+            "description": "Also group usage by the model pool each call went through."
           },
           {
             "schema": {
@@ -458484,6 +458524,10 @@
                         },
                         "subscriptionCost": {
                           "type": "number"
+                        },
+                        "failedOverAttempts": {
+                          "type": "number",
+                          "description": "Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens."
                         }
                       },
                       "required": [
@@ -458492,7 +458536,8 @@
                         "outputTokens",
                         "cacheReadTokens",
                         "billedCost",
-                        "subscriptionCost"
+                        "subscriptionCost",
+                        "failedOverAttempts"
                       ],
                       "additionalProperties": false
                     },
@@ -458519,6 +458564,10 @@
                           "subscriptionCost": {
                             "type": "number"
                           },
+                          "failedOverAttempts": {
+                            "type": "number",
+                            "description": "Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens."
+                          },
                           "timestamp": {
                             "type": "string"
                           }
@@ -458530,6 +458579,7 @@
                           "cacheReadTokens",
                           "billedCost",
                           "subscriptionCost",
+                          "failedOverAttempts",
                           "timestamp"
                         ],
                         "additionalProperties": false
@@ -458558,6 +458608,10 @@
                           "subscriptionCost": {
                             "type": "number"
                           },
+                          "failedOverAttempts": {
+                            "type": "number",
+                            "description": "Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens."
+                          },
                           "authMethod": {
                             "type": "string",
                             "enum": [
@@ -458580,6 +458634,7 @@
                           "cacheReadTokens",
                           "billedCost",
                           "subscriptionCost",
+                          "failedOverAttempts",
                           "authMethod"
                         ],
                         "additionalProperties": false
@@ -458607,6 +458662,10 @@
                           },
                           "subscriptionCost": {
                             "type": "number"
+                          },
+                          "failedOverAttempts": {
+                            "type": "number",
+                            "description": "Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens."
                           },
                           "authMethod": {
                             "type": "string",
@@ -458638,6 +458697,7 @@
                           "cacheReadTokens",
                           "billedCost",
                           "subscriptionCost",
+                          "failedOverAttempts",
                           "authMethod",
                           "credentialId",
                           "credentialName"
@@ -458664,6 +458724,111 @@
                         "total"
                       ],
                       "additionalProperties": false
+                    },
+                    "providerKeys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "requests": {
+                            "type": "number"
+                          },
+                          "inputTokens": {
+                            "type": "number"
+                          },
+                          "outputTokens": {
+                            "type": "number"
+                          },
+                          "cacheReadTokens": {
+                            "type": "number"
+                          },
+                          "billedCost": {
+                            "type": "number"
+                          },
+                          "subscriptionCost": {
+                            "type": "number"
+                          },
+                          "failedOverAttempts": {
+                            "type": "number",
+                            "description": "Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens."
+                          },
+                          "providerApiKeyId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "providerApiKeyName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "provider": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "requests",
+                          "inputTokens",
+                          "outputTokens",
+                          "cacheReadTokens",
+                          "billedCost",
+                          "subscriptionCost",
+                          "failedOverAttempts",
+                          "providerApiKeyId",
+                          "providerApiKeyName",
+                          "provider"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "modelPools": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "requests": {
+                            "type": "number"
+                          },
+                          "inputTokens": {
+                            "type": "number"
+                          },
+                          "outputTokens": {
+                            "type": "number"
+                          },
+                          "cacheReadTokens": {
+                            "type": "number"
+                          },
+                          "billedCost": {
+                            "type": "number"
+                          },
+                          "subscriptionCost": {
+                            "type": "number"
+                          },
+                          "failedOverAttempts": {
+                            "type": "number",
+                            "description": "Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens."
+                          },
+                          "modelPoolId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "modelPoolName": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "requests",
+                          "inputTokens",
+                          "outputTokens",
+                          "cacheReadTokens",
+                          "billedCost",
+                          "subscriptionCost",
+                          "failedOverAttempts",
+                          "modelPoolId",
+                          "modelPoolName"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "labelKeys": {
                       "type": "array",
@@ -458700,6 +458865,10 @@
                               "subscriptionCost": {
                                 "type": "number"
                               },
+                              "failedOverAttempts": {
+                                "type": "number",
+                                "description": "Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens."
+                              },
                               "value": {
                                 "nullable": true,
                                 "type": "string"
@@ -458712,6 +458881,7 @@
                               "cacheReadTokens",
                               "billedCost",
                               "subscriptionCost",
+                              "failedOverAttempts",
                               "value"
                             ],
                             "additionalProperties": false

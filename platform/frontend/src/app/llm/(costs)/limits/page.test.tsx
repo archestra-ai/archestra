@@ -929,10 +929,9 @@ describe("LimitsPage", () => {
     expect(
       screen.queryByText(/new limits use the default cleanup schedule/i),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /llm settings/i })).toHaveAttribute(
-      "href",
-      "/settings/llm",
-    );
+    expect(
+      screen.queryByRole("link", { name: /llm settings/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("hides the default user limit settings notice without settings permission", () => {

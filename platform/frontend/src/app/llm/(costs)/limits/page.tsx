@@ -839,15 +839,8 @@ export default function LimitsPage() {
             <Info />
             <InlineNoticeText>
               {defaultUserLimits.length > 0
-                ? "A default user spend limit applies to every user. Custom per-user spend limits override it. Set it in "
-                : "No default user spend limit is set. Set one for every user in "}
-              <Link
-                href="/settings/llm"
-                className="font-medium underline underline-offset-4"
-              >
-                LLM settings
-              </Link>
-              .
+                ? "A default user spend limit applies to every user. Custom per-user spend limits override it."
+                : "No default user spend limit is set."}
             </InlineNoticeText>
           </InlineNotice>
         </div>

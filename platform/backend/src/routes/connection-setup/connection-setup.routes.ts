@@ -37,6 +37,7 @@ import {
   OrganizationModel,
   PluginModel,
   SkillMarketplaceCredentialModel,
+  SkillMarketplaceRepoModel,
   SkillModel,
   SkillShareLinkModel,
   TeamModel,
@@ -1120,6 +1121,16 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Desktop configuration requires a Claude Desktop setup.",
           );
         const { context, marketplaceRender } = await buildScriptContext(setup);
+        // Clients register the shared marketplace under the served manifest's
+        // name, which this user's repo froze on first clone. Re-deriving it
+        // after an app or org rename would remove and guard a name the client
+        // never registered.
+        const marketplaceRepo = marketplaceRender
+          ? await SkillMarketplaceRepoModel.findForViewer({
+              organizationId: setup.organizationId,
+              userId: setup.userId,
+            })
+          : null;
 
         // Skill-link creation + attach + render commit together: a rendered
         // clone URL exists iff its link row committed.
@@ -1164,7 +1175,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             staticUrl.password = encodeURIComponent(marketplaceToken);
             skills = {
               cloneUrl: staticUrl.toString(),
-              marketplaceName: marketplaceRender.marketplaceName,
+              marketplaceName:
+                marketplaceRepo?.marketplaceName ??
+                marketplaceRender.marketplaceName,
               hasSkills: true,
               pluginNames: [],
             };

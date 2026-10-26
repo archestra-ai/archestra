@@ -104,7 +104,7 @@ Then:
    POST <Archestra URL>/api/github-actions/token
    Content-Type: application/json
 
-   {"token": "<GitHub OIDC token>", "resource": "<Archestra URL>/v1/mcp/<gateway id>"}
+   {"token": "<GitHub OIDC token>", "resource": "<Archestra URL>/v1/mcp/<gateway id or slug>"}
    ```
 
 4. Check that the response holds an `access_token` for the gateway and a `github_token` for the repository.
@@ -112,19 +112,20 @@ Then:
 What to know:
 
 - The job that asks must come from a reusable workflow called at a branch, a tag, or a commit SHA. A workflow file in the pull request is never trusted, because the pull request can change it.
-- Only `pull_request` runs from the repository itself qualify. Pull requests from forks are refused.
+- Only `pull_request` runs from the repository itself, started by the pull request's author, qualify. A run that a collaborator starts by pushing to someone else's pull request is refused, and so is a pull request from a fork.
 - The gateway token lasts three hours. The GitHub token is limited to that one repository and lasts up to one hour.
 
 A refusal names its reason in `error`:
 
 | `error` | Cause | Fix |
 | --- | --- | --- |
-| `not_linked` | The author has not connected GitHub through the App | The author connects it under **Credentials**, then re-runs the job |
+| `not_author` | Someone other than the author started the run | The author pushes to the pull request or re-runs the job |
+| `not_linked` | The author has not connected GitHub through the App, or that connection expired or was revoked | The author connects it under **Credentials**, then re-runs the job |
 | `ambiguous_link` | Several accounts connected the same GitHub user | Disconnect it from all but one account |
 | `forbidden` | The author's account cannot use the gateway | Share the gateway with the author |
 | `not_trusted` | The repository, workflow, or event is not allowed, the pull request is from a fork, or the App cannot read it | Check the gateway's **GitHub Actions** settings and the App's installation |
 | `invalid_token` | Wrong audience, expired, or already exchanged | Request a new token with the right audience |
-| `github_error` | GitHub refused a request, for example because the App lacks one of the permissions above | Check the App's permissions and installation |
+| `github_error` | GitHub refused a request, for example because the App lacks one of the permissions above, or the App's private key cannot be used | Check the App's permissions, installation, and private key |
 
 <span id="identity-assertion-jwt-authorization-grant-id-jag"></span>
 

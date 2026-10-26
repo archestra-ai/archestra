@@ -40,7 +40,7 @@ docker pull "$lite_image"
 docker pull "$pg_image"
 docker build -f benchmarks/cross-proxy/archestra.Dockerfile -t "$project-runtime" benchmarks/cross-proxy
 for image in "$lite_image" "$pg_image" "$project-runtime"; do docker image inspect "$image"; done > "$out/images.json"
-docker run --entrypoint python "$lite_image" -m pip freeze > "$out/litellm-pip-freeze.txt"
+docker run --rm --entrypoint python "$lite_image" -c 'from importlib.metadata import distributions,version; assert version("litellm")=="1.106.4"; print("\n".join(sorted(f"{d.metadata["Name"]}=={d.version}" for d in distributions())))' > "$out/litellm-pip-freeze.txt"
 docker run -d --name "$project-db" --cpuset-cpus=6-7 --cpus=2 --memory=2g --shm-size=256m \
   -p 127.0.0.1:15432:5432 --tmpfs /var/lib/postgresql/data \
   -e POSTGRES_USER=benchmark -e POSTGRES_PASSWORD=benchmark -e POSTGRES_DB=benchmark "$pg_image"

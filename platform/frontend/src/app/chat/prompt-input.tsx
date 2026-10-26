@@ -351,6 +351,7 @@ const PromptInputContent = ({
   const footerRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const trailingRef = useRef<HTMLDivElement>(null);
+  const [isDictating, setIsDictating] = useState(false);
   const isNarrow = useToolbarCollapse({
     availableRef: footerRef,
     contentRef: toolbarRef,
@@ -1179,8 +1180,12 @@ const PromptInputContent = ({
         <div ref={trailingRef} className="flex shrink-0 items-center gap-2">
           {!runtimeMode && (
             <PromptInputSpeechButton
+              key={conversationId ?? "new-chat"}
               textareaRef={textareaRef}
               onTranscriptionChange={handleTranscriptionChange}
+              onActiveChange={setIsDictating}
+              disabled={composerLocked}
+              sendDisabled={isSendBlocked}
             />
           )}
           <Tooltip>
@@ -1188,7 +1193,7 @@ const PromptInputContent = ({
                 hangs off a wrapper that still does — otherwise a blocked
                 Send gives no hint why. */}
             <TooltipTrigger asChild>
-              <span className="inline-flex">
+              <span className={cn("inline-flex", isDictating && "hidden")}>
                 <PromptInputSubmit
                   className="!h-8"
                   aria-label={

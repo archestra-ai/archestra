@@ -82,6 +82,8 @@ export function prepareTerminalRecording(content: string): {
 // backend reads it: a client can scroll an earlier one back into view. An
 // answer with nothing after it stays, as the only output of a run without a
 // terminal.
+// The tempered match is linear in the answer's length for each fence, and
+// a fenced answer is a few kilobytes.
 const FENCED_ANSWER_BEFORE_CAPTURE =
   // biome-ignore lint/suspicious/noControlCharactersInRegex: the clear that starts the capture is a terminal control
   /\r?\n?===ARCHESTRA-FINAL-ANSWER===(?:(?!===ARCHESTRA-FINAL-ANSWER===)[\s\S])*?===ARCHESTRA-FINAL-ANSWER-END===\r?\n?(?=(?:\x1b\[[0-?]*[ -/]*[@-~])*?\x1b\[2J)/g;

@@ -236,3 +236,20 @@ test("cuts the alternate screen's top rows under origin mode and a scroll region
     terminal.dispose();
   }
 });
+
+test("keeps the client's scroll region when it enters the alternate screen", async () => {
+  // No resize happens on entry, so the region the client set stays, as in
+  // tmux: its origin-relative addresses keep meaning the same rows.
+  const terminal = new Terminal({ cols: 20, rows: 5, scrollback: 10_000 });
+  try {
+    await createTerminalReplayer(terminal).write(
+      `${size(20, 5)}before\r\n\x1b[2;4r\x1b[?6h\x1b[1;1H\x1b[?1049h\x1b[2J\x1b[1;1HALT`,
+    );
+    const buffer = terminal.buffer.active;
+    expect(buffer.baseY).toBe(1);
+    expect(rows(terminal).slice(0, 3)).toEqual(["before", "", "ALT"]);
+    expect(terminal.modes.originMode).toBe(true);
+  } finally {
+    terminal.dispose();
+  }
+});

@@ -452,6 +452,7 @@ export const UpdateAppearanceSettingsSchema = z.object({
 });
 
 export const UpdateSecuritySettingsSchema = z.object({
+  playwrightMcpEnabled: z.boolean().optional(),
   allowChatFileUploads: z.boolean().optional(),
   allowUnauthenticatedLlmProxyRequests: z.boolean().optional(),
   newAppsDisabledByDefault: z.boolean().optional(),

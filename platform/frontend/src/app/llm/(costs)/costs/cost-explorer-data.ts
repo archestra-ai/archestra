@@ -7,9 +7,11 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   type StatisticsTimeFrame,
+  type SupportedProvider,
 } from "@archestra/shared";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useProxyLabelCosts } from "@/lib/proxy-label-costs.query";
 import {
   useProfileStatistics,
@@ -56,6 +58,8 @@ export const DIM_IDS = [
   "tool",
   "method",
   "key",
+  "providerKey",
+  "pool",
   "label",
 ] as const;
 export type DimId = (typeof DIM_IDS)[number];
@@ -123,6 +127,8 @@ export const DIMS: Record<DimId, { label: string; plural: string }> = {
   tool: { label: "Tool", plural: "tools" },
   method: { label: "Access method", plural: "access methods" },
   key: { label: "Key", plural: "keys" },
+  providerKey: { label: "Provider key", plural: "provider keys" },
+  pool: { label: "Model pool", plural: "model pools" },
   label: { label: "Label", plural: "label values" },
 };
 
@@ -144,6 +150,8 @@ const SUPPORT: Record<DimId, MetricId[]> = {
   tool: ["toolCalls"],
   method: LLM_METRICS,
   key: LLM_METRICS,
+  providerKey: LLM_METRICS,
+  pool: LLM_METRICS,
   label: LLM_METRICS,
 };
 
@@ -223,6 +231,16 @@ export const SAVED_VIEWS: { id: string; label: string; q: PivotQuery }[] = [
     id: "keys",
     label: "Keys by spend",
     q: { metric: "billed", group: "key", split: "none", chart: "table" },
+  },
+  {
+    id: "provider-keys",
+    label: "Provider keys by spend",
+    q: {
+      metric: "billed",
+      group: "providerKey",
+      split: "none",
+      chart: "table",
+    },
   },
   {
     id: "skills",
@@ -412,8 +430,11 @@ export function usePivotCube(
   const proxyQ = useProxyCostStatistics({
     timeframe,
     limit: 50,
+    ...(q.group === "providerKey" ? { includeProviderKeys: "true" } : {}),
+    ...(q.group === "pool" ? { includeModelPools: "true" } : {}),
     enabled: on("proxy") && q.group !== "label",
   });
+  const providerCatalog = useModelProviderCatalog();
   const labelQ = useProxyLabelCosts({
     timeframe,
     labelKey: q.labelKey ?? "cost_center",
@@ -436,8 +457,10 @@ export function usePivotCube(
             : { labelValue: value }),
         } as ProxyFilter,
       }));
-    return proxyBy && proxyQ.data ? proxyItemsFor(proxyBy, proxyQ.data) : [];
-  }, [proxyBy, proxyQ.data, labelQ.data, q.labelKey]);
+    return proxyBy && proxyQ.data
+      ? proxyItemsFor(proxyBy, proxyQ.data, providerCatalog.label)
+      : [];
+  }, [proxyBy, proxyQ.data, labelQ.data, q.labelKey, providerCatalog]);
   const itemQs = useQueries({
     queries: proxyItems.map((item) => ({
       queryKey: ["cost-explorer", "proxy-item", timeframe, item.filter],
@@ -785,8 +808,10 @@ export function usePivotCube(
         const facts: Fact[] = [];
         const totals = new Map<string, number>();
         const meta = new Map<string, Omit<Fact, "b" | "v">>();
+        const failedOver = new Map<string, number>();
         proxyItems.forEach((item, i) => {
           totals.set(item.key, pointValue(metric, item.totals));
+          failedOver.set(item.key, item.totals.failedOverAttempts);
           meta.set(item.key, {
             g: item.key,
             gLabel: item.label,
@@ -807,9 +832,23 @@ export function usePivotCube(
             });
           }
         });
+        const cube = assemble(facts, { totals, meta });
+        // A pool that failed over wrote one request per attempt; show how
+        // many of the requests were attempts the client never saw.
+        const showFailedOver =
+          metric === "requests" &&
+          proxyItems.some((item) => item.totals.failedOverAttempts > 0);
+        if (showFailedOver) {
+          for (const row of cube.rows) {
+            row.extras.failedOver = failedOver.get(row.key) ?? 0;
+          }
+        }
         return {
-          ...assemble(facts, { totals, meta }),
+          ...cube,
           ...base,
+          extraCols: showFailedOver
+            ? [{ id: "failedOver", label: "Failed over", format: formatInt }]
+            : [],
           isLoading:
             primary.isLoading || itemQs.some((query) => query.isLoading),
         };
@@ -872,7 +911,7 @@ type Source =
   | { kind: "agent" }
   | { kind: "model" }
   | { kind: "user"; models: boolean }
-  | { kind: "proxy"; by: "method" | "key" | "label" };
+  | { kind: "proxy"; by: ProxyGroup };
 
 function resolveSource(q: PivotQuery): Source {
   const split = q.split === "none" ? null : q.split;
@@ -908,7 +947,13 @@ function resolveSource(q: PivotQuery): Source {
   if (q.group === "team") return { kind: "team" };
   if (q.group === "agent") return { kind: "agent" };
   if (q.group === "model") return { kind: "model" };
-  if (q.group === "method" || q.group === "key" || q.group === "label")
+  if (
+    q.group === "method" ||
+    q.group === "key" ||
+    q.group === "providerKey" ||
+    q.group === "pool" ||
+    q.group === "label"
+  )
     return { kind: "proxy", by: q.group };
   return { kind: "user", models: split === "model" };
 }
@@ -932,6 +977,10 @@ function apiFor(src: Source, tf: string, q: PivotQuery) {
     case "proxy":
       if (q.group === "label")
         return `GET /api/statistics/llm-proxy?timeframe=${tf}&labelKey=${encodeURIComponent(q.labelKey ?? "cost_center")}`;
+      if (q.group === "providerKey")
+        return `GET /api/statistics/llm-proxy?timeframe=${tf}&includeProviderKeys=true`;
+      if (q.group === "pool")
+        return `GET /api/statistics/llm-proxy?timeframe=${tf}&includeModelPools=true`;
       return `GET /api/statistics/llm-proxy?timeframe=${tf}${q.group === "key" ? "&credentialId={id}" : "&authMethod={method}"}`;
   }
 }
@@ -1091,13 +1140,50 @@ function assemble(
 }
 
 type ProxyData = archestraApiTypes.GetProxyCostStatisticsResponses["200"];
+type ProxyGroup = "method" | "key" | "providerKey" | "pool" | "label";
 type ProxyFilter =
   | { credentialId: string }
+  | { providerApiKeyId: string }
+  | { modelPoolId: string }
   | { authMethod: ProxyData["methods"][number]["authMethod"] }
   | { labelKey: string; labelValue: string }
   | { labelKey: string; labelUnassigned: "true" };
 
-function proxyItemsFor(by: "method" | "key", data: ProxyData) {
+function proxyItemsFor(
+  by: Exclude<ProxyGroup, "label">,
+  data: ProxyData,
+  providerLabel: (provider: SupportedProvider) => string,
+) {
+  if (by === "providerKey") {
+    return (data.providerKeys ?? []).map((k) => ({
+      key: k.providerApiKeyId ?? "none",
+      label:
+        k.providerApiKeyName ??
+        (k.providerApiKeyId ? "Deleted provider key" : "No provider key"),
+      sub: k.providerApiKeyId
+        ? `ID ${k.providerApiKeyId}`
+        : "The caller's own key, or a call from before keys were recorded",
+      tag: k.provider
+        ? providerLabel(k.provider as SupportedProvider)
+        : undefined,
+      totals: k,
+      filter: k.providerApiKeyId
+        ? ({ providerApiKeyId: k.providerApiKeyId } as ProxyFilter)
+        : null,
+    }));
+  }
+  if (by === "pool") {
+    return (data.modelPools ?? []).map((p) => ({
+      key: p.modelPoolId ?? "none",
+      label: p.modelPoolName ?? (p.modelPoolId ? "Deleted pool" : "Not pooled"),
+      sub: p.modelPoolId ? `ID ${p.modelPoolId}` : undefined,
+      tag: undefined as string | undefined,
+      totals: p,
+      filter: p.modelPoolId
+        ? ({ modelPoolId: p.modelPoolId } as ProxyFilter)
+        : null,
+    }));
+  }
   if (by === "method") {
     return data.methods.map((m) => ({
       key: m.authMethod,

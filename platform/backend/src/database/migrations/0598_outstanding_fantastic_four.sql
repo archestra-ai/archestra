@@ -1,3 +1,0 @@
--- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=auto_routing_fit is a new task type no released build enqueues, so no existing row can violate the partial index and no older writer inserts into it.
-CREATE UNIQUE INDEX "tasks_auto_routing_fit_single_flight_idx" ON "tasks" USING btree (("payload" ->> 'organizationId')) WHERE "tasks"."task_type" = 'auto_routing_fit' AND "tasks"."status" IN ('pending', 'processing');

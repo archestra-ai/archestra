@@ -36,6 +36,8 @@ import {
   type DeclaredToolSpelling,
   declaredToolEntries,
   declaredToolNamespaces,
+  type HistoryWire,
+  historyWire,
   isClientRunToolType,
   type ProviderToolCall,
   type ProviderWire,
@@ -148,11 +150,12 @@ export function prepareAppaRequest(params: {
    */
   clientWire?: { family: AppaWireFamily; body: unknown };
 }): AppaPreparedRequest {
-  // A wire family this proxy cannot restore notices on — Gemini, Bedrock,
-  // Cohere, native Ollama — is governed in part rather than refused: calls
-  // and results are still ruled on, but a notice stays in the history as the
-  // notice call the client ran, and no turn accounting runs unless a Model
-  // Router route kept the client's own wire to count turns on.
+  // A wire outside the APPA families — Gemini, Bedrock, Cohere, native
+  // Ollama — is governed in part rather than refused: calls and results are
+  // still ruled on, but no turn accounting runs unless a Model Router route
+  // kept the client's own wire to count turns on. Bedrock Converse still
+  // restores notices; on the others a notice stays in the history as the
+  // notice call the client ran.
   const family = appaWireFamily(params.interactionType);
   const entries = declaredToolEntries(params.body);
   const declared = entries.map((entry) => entry.tool);
@@ -238,19 +241,21 @@ export function prepareAppaRequest(params: {
   const session = params.session ?? {
     provenance: "none" as const,
   };
-  if (family) {
-    const ours = platformToolMatchers(params.identity);
+  const history = historyWire(params.interactionType);
+  if (history) {
     // The plugin stamps the current trajectory. History is not a source of
     // offer claims.
     const restored = restoreHistory({
-      family,
+      family: history,
       body: params.body,
-      ours,
+      ours: platformToolMatchers(params.identity),
       declaredCount: declared.length,
     });
     historicalControlToolName = restored.historicalControlToolName;
     if (restored.noticeCallIds.size > 0)
       restoredNoticeCallIds = restored.noticeCallIds;
+  }
+  if (family) {
     // Read before the strip: every request of a child carries its opening
     // message, and with it the marker that binds it.
     delegation = {
@@ -548,10 +553,10 @@ export function sanitizeProviderBoundRequest(params: {
   const wire = providerWire(params.interactionType);
   if (!wire) return 0;
   const ours = platformToolMatchers(params.identity);
-  const family = appaWireFamily(params.interactionType);
-  const restored = family
+  const history = historyWire(params.interactionType);
+  const restored = history
     ? restoreHistory({
-        family,
+        family: history,
         body: params.body,
         ours,
         declaredCount: declaredToolEntries(params.body).length,
@@ -666,7 +671,7 @@ function platformToolMatchers(
  * and the provider-bound sanitizer, so both show the provider the same bytes.
  */
 function restoreHistory(params: {
-  family: AppaWireFamily;
+  family: HistoryWire;
   body: unknown;
   ours: PlatformToolMatchers;
   /** Declarations the request made, before any was stripped. */

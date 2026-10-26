@@ -4,6 +4,7 @@ import { vi } from "vitest";
 import { WebSocket as WS } from "ws";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import AgentModel from "@/models/agent";
+import OrganizationModel from "@/models/organization";
 import {
   afterAll,
   beforeAll,
@@ -40,6 +41,31 @@ describe("websocket browser-stream screenshot handling", () => {
     service.browserStreamContext.clearSubscriptions();
     // Mock Playwright tools as assigned so browser stream tests can proceed
     vi.spyOn(AgentModel, "hasPlaywrightToolsAssigned").mockResolvedValue(true);
+  });
+
+  test("rejects browser subscriptions while policy is disabled", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await OrganizationModel.patch(org.id, { playwrightMcpEnabled: false });
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+    service.clientContexts.set(ws, { userId: user.id, organizationId: org.id });
+    const selectTab = vi.spyOn(browserStreamFeature, "selectOrCreateTab");
+    await service.handleMessage(
+      {
+        type: "subscribe_browser_stream",
+        payload: { conversationId: "disabled-conversation" },
+      },
+      ws,
+    );
+    expect(selectTab).not.toHaveBeenCalled();
+    expect(ws.send).toHaveBeenCalledWith(expect.stringContaining("disabled"));
   });
 
   test("sends an error when screenshot data is missing", async ({

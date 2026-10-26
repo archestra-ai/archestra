@@ -536,6 +536,7 @@ export function AppSidebar() {
   const showConnect = Boolean(canReadMcpGateway || canReadLlmProxy);
   const { data: guardrailsDeployment } = useGuardrailsDeployment();
   const autoRoutingEnabled = useFeature("autoRoutingEnabled");
+  const modelPoolsEnabled = useFeature("llmModelPoolsEnabled") === true;
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
@@ -567,9 +568,12 @@ export function AppSidebar() {
       contentNavGroups.map((group) => ({
         ...group,
         items: group.items
+          // Model pools are a beta feature, off unless this deployment's flag
+          // is on, so the row waits for the answer rather than flashing.
           .filter(
             (item) =>
-              item.url !== AUTO_ROUTING_URL || autoRoutingEnabled === true,
+              (item.url !== "/llm/model-pools" || modelPoolsEnabled) &&
+              (item.url !== AUTO_ROUTING_URL || autoRoutingEnabled === true),
           )
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
@@ -608,7 +612,12 @@ export function AppSidebar() {
             return item;
           }),
       })),
-    [guardrailsDeployment?.enabled, permissionMap, autoRoutingEnabled],
+    [
+      guardrailsDeployment?.enabled,
+      modelPoolsEnabled,
+      permissionMap,
+      autoRoutingEnabled,
+    ],
   );
 
   return (

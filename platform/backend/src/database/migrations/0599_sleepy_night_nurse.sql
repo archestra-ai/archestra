@@ -1,1 +1,0 @@
-CREATE INDEX "routing_decisions_org_plan_idx" ON "routing_decisions" USING btree ("organization_id","plan_id");

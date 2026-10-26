@@ -52,6 +52,35 @@ describe("PATCH /api/organization/security-settings", () => {
       payload,
     });
 
+  test("uploads and the built-in browser default on, and administrators can disable and re-enable the browser", async () => {
+    expect(
+      (await OrganizationModel.getById(organizationId))?.allowChatFileUploads,
+    ).toBe(true);
+    expect(
+      (await OrganizationModel.getById(organizationId))?.playwrightMcpEnabled,
+    ).toBe(true);
+    expect((await patch({ playwrightMcpEnabled: false })).statusCode).toBe(200);
+    expect(
+      (await OrganizationModel.getById(organizationId))?.playwrightMcpEnabled,
+    ).toBe(false);
+    expect(
+      (await patch({ playwrightMcpEnabled: true })).json().playwrightMcpEnabled,
+    ).toBe(true);
+  });
+
+  test("non-administrators cannot change browser policy even when allowed to update other settings", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    adminUser = await makeUser();
+    await makeMember(adminUser.id, organizationId, { role: "member" });
+    expect((await patch({ playwrightMcpEnabled: false })).statusCode).toBe(403);
+    expect(
+      (await OrganizationModel.getById(organizationId))?.playwrightMcpEnabled,
+    ).toBe(true);
+    expect((await patch({ allowChatFileUploads: false })).statusCode).toBe(200);
+  });
+
   test("LLM proxy requests need a platform credential until an admin opts out", async () => {
     expect(
       await OrganizationModel.allowsUnauthenticatedLlmProxyRequests(

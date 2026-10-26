@@ -12,6 +12,7 @@ import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
 import { BrowserTabStateModel, ToolModel } from "@/models";
+import PlaywrightRuntimeModel from "@/models/playwright-runtime";
 import { ApiError, agentOwner } from "@/types";
 import {
   shouldLogBrowserStreamScreenshots,
@@ -154,6 +155,8 @@ export class BrowserStreamService {
     content: unknown;
     isError: boolean;
   }> {
+    if (!(await PlaywrightRuntimeModel.isEnabled()))
+      throw new Error("The built-in browser MCP is disabled");
     const { toolName, args, agentId, conversationId, userContext } = params;
 
     const mcpGwToken = await selectMCPGatewayToken(
@@ -245,6 +248,8 @@ export class BrowserStreamService {
    * @param agentId - The agent ID
    */
   async checkAvailability(agentId: string): Promise<AvailabilityResult> {
+    if (!(await PlaywrightRuntimeModel.isEnabled()))
+      return { available: false, tools: [] };
     const tools = await this.getToolsForAgent(agentId);
 
     // Only include tools from the builtin playwright-browser catalog

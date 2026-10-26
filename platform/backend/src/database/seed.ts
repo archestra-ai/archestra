@@ -49,6 +49,7 @@ import {
 } from "@/models";
 import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import playwrightMcpImage from "@/playwright-mcp-image.json";
 import { secretManager } from "@/secrets-manager";
 import { verifySecretsEncryptionKey } from "@/secrets-manager/encryption-key-guard";
 import { createAppBacking } from "@/services/apps/app-mcp-backing";
@@ -577,30 +578,17 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
 async function seedPlaywrightCatalog(): Promise<void> {
   const LEGACY_PLAYWRIGHT_MCP_SERVER_NAME = "playwright-browser";
   const playwrightLocalConfig = {
-    // Pinned to v0.0.64 digest because v0.0.67 renamed --no-sandbox to --no-chromium-sandbox
-    // but the image entrypoint still uses --no-sandbox, causing immediate crashes.
-    dockerImage:
-      "mcr.microsoft.com/playwright/mcp@sha256:50fee3932984dbf40fe67be11fe22d0050eca40705cf108099d7a1e0fe6a181c",
+    // Track the upstream MCP image by immutable digest. Its runtime/package
+    // versions are recorded together for the daily client-version updater.
+    dockerImage: playwrightMcpImage.image,
     transportType: "streamable-http" as const,
-    // Explicit command overrides the image ENTRYPOINT to avoid breakage from upstream image changes.
-    // v0.0.67 broke the entrypoint by renaming --no-sandbox to --no-chromium-sandbox without
-    // updating the Dockerfile. Using explicit command+args makes us resilient to such changes.
+    // Use an absolute path: upstream images have changed their working directory.
     command: "node",
-    // Full arguments including cli.js entry point and all Chromium/server flags:
-    //   cli.js: the Playwright MCP server entry point
-    //   --headless: run Chromium in headless mode
-    //   --browser chromium: use Chromium browser
-    //   --no-sandbox: required when running as root in containers (renamed to --no-chromium-sandbox in v0.0.67)
-    //   --host 0.0.0.0: bind to all interfaces so K8s Service can route traffic to the pod
-    //   --port 8080: enable HTTP transport mode (without --port, it runs in stdio mode and exits)
-    //   --allowed-hosts *: allow connections from K8s Service DNS (default only allows localhost)
-    //   --isolated: each Mcp-Session-Id gets its own browser context for session isolation
-    //
-    // Multi-replica support: The Mcp-Session-Id is stored in the database after the first
-    // connection and reused by all backend pods so they share the same Playwright browser context.
-    // See mcp-client.ts for session ID persistence logic.
+    // Explicit flags also avoid depending on the upstream image ENTRYPOINT.
+    // --isolated gives each Mcp-Session-Id a separate browser context. The stored
+    // session ID is reused across backend replicas (see mcp-client.ts).
     arguments: [
-      "cli.js",
+      "/app/cli.js",
       "--headless",
       "--browser",
       "chromium",

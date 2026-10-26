@@ -17,12 +17,13 @@ import {
   autoModelAvailable,
   resolveAutoModel,
 } from "@/auto-routing/router";
-import { getProviderConfiguredBaseUrl } from "@/config";
+import config, { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
   ManagedOauthClientModel as LlmOauthClientModel,
   LlmProviderApiKeyModel,
   MemberModel,
+  ModelPoolModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
   TeamModel,
@@ -95,6 +96,7 @@ import {
   type LLMProxyAuthOverride,
   sendUsageLimitRefusal,
 } from "../llm-proxy-handler";
+import { type ModelPoolCaller, mayUseModelPool } from "../model-pool-failover";
 import {
   type ModelRouterAuth,
   type ModelRouterMappedProviderKey,
@@ -446,6 +448,13 @@ async function routeChatCompletion(
     ? await getModelRouterAgent(params.agentId)
     : await getDefaultModelRouterAgent();
   await ensureModelRouterAgentAccess({ agent, auth });
+  // A model pool's name is served by the pool's members, LiteLLM style: the
+  // proxy picks a member and its key, when the caller may use the pool.
+  const poolId = await usableModelPoolId({ auth, model: body.model });
+  if (poolId) {
+    applyModelPoolAuthOverride({ request, auth, poolId });
+    return handleLLMProxy(body, request, reply, openaiAdapterFactory);
+  }
   const auto = await resolveAutoModel({
     request,
     auth,
@@ -870,6 +879,16 @@ async function listModels(params: { auth: ModelRouterAuth }) {
           : undefined,
     includeEmbeddings: true,
   });
+  // Pools come first: their names are what clients are meant to ask for.
+  const pools = (
+    config.llmProxy.modelPoolsEnabled
+      ? await ModelPoolModel.list(params.auth.organizationId)
+      : []
+  ).filter(
+    (pool) =>
+      pool.members.some((member) => member.enabled) &&
+      mayUseModelPool({ pool, caller: modelPoolCaller(params.auth) }),
+  );
 
   const autoModel = (await autoModelAvailable(params.auth))
     ? [
@@ -884,6 +903,12 @@ async function listModels(params: { auth: ModelRouterAuth }) {
   return {
     object: "list" as const,
     data: [
+      ...pools.map((pool) => ({
+        id: pool.name,
+        object: "model" as const,
+        created: Math.floor(pool.createdAt.getTime() / 1000),
+        owned_by: "model-pool",
+      })),
       ...autoModel,
       ...chatModels.map((model) => ({
         id: buildRoutableModelId(model),
@@ -1050,6 +1075,47 @@ function assertNever(value: never): never {
   throw new ApiError(500, `Unhandled model router provider "${value}".`);
 }
 
+/** The pool named `model` when the caller may use it and it has members. */
+async function usableModelPoolId(params: {
+  auth: ModelRouterAuth;
+  model: string;
+}): Promise<string | null> {
+  if (!config.llmProxy.modelPoolsEnabled) return null;
+  const pool = await ModelPoolModel.findByName({
+    organizationId: params.auth.organizationId,
+    name: params.model.trim(),
+  });
+  if (!pool || pool.members.length === 0) return null;
+  return mayUseModelPool({ pool, caller: modelPoolCaller(params.auth) })
+    ? pool.id
+    : null;
+}
+
+function modelPoolCaller(auth: ModelRouterAuth): ModelPoolCaller {
+  return {
+    virtualKeyId:
+      auth.authMethod === "virtual_key" ? auth.virtualKeyId : undefined,
+    providerApiKeyIds: getMappedApiKeyIds(auth),
+  };
+}
+
+function applyModelPoolAuthOverride(params: {
+  request: FastifyRequest;
+  auth: ModelRouterAuth;
+  poolId: string;
+}): void {
+  (
+    params.request as FastifyRequest & {
+      llmProxyAuthOverride?: LLMProxyAuthOverride;
+    }
+  ).llmProxyAuthOverride = {
+    apiKey: undefined,
+    baseUrl: undefined,
+    ...modelRouterCaller(params.auth),
+    modelPoolId: params.poolId,
+  };
+}
+
 async function applyModelRouterAuthOverride(params: {
   request: FastifyRequest;
   auth: ModelRouterAuth;
@@ -1066,23 +1132,29 @@ async function applyModelRouterAuthOverride(params: {
     apiKey,
     baseUrl: mappedApiKey.baseUrl ?? undefined,
     chatApiKeyId: mappedApiKey.providerApiKeyId,
+    ...modelRouterCaller(params.auth),
+  };
+}
+
+function modelRouterCaller(
+  auth: ModelRouterAuth,
+): Omit<LLMProxyAuthOverride, "apiKey" | "baseUrl" | "chatApiKeyId"> {
+  return {
     authenticated: true,
     source: "model_router",
-    authMethod: params.auth.authMethod,
-    serviceAccountId: params.auth.serviceAccountId,
+    authMethod: auth.authMethod,
+    serviceAccountId: auth.serviceAccountId,
     virtualKeyId:
-      params.auth.authMethod === "virtual_key"
-        ? params.auth.virtualKeyId
-        : undefined,
+      auth.authMethod === "virtual_key" ? auth.virtualKeyId : undefined,
     authenticatedApp:
-      params.auth.authMethod === "oauth_user"
-        ? (params.auth.oauthClient ?? undefined)
-        : params.auth.oauthClient,
-    userId: modelRouterAuthenticatedUserId(params.auth),
+      auth.authMethod === "oauth_user"
+        ? (auth.oauthClient ?? undefined)
+        : auth.oauthClient,
+    userId: modelRouterAuthenticatedUserId(auth),
     billingTeamId:
-      params.auth.authMethod === "oauth_user"
+      auth.authMethod === "oauth_user"
         ? undefined
-        : (params.auth.billingTeamId ?? undefined),
+        : (auth.billingTeamId ?? undefined),
   };
 }
 

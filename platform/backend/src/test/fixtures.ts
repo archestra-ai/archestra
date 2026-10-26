@@ -996,6 +996,11 @@ async function makeInteraction(
       | "serviceAccountId"
       | "appId"
       | "source"
+      | "providerApiKeyId"
+      | "modelPoolId"
+      | "attempt"
+      | "attemptOutcome"
+      | "failureReason"
       | "createdAt"
     >
   > = {},

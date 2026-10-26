@@ -59,6 +59,53 @@ describe("chatMessageQueue", () => {
     expect(localStorage.getItem(storageKey(conversationId))).toBeNull();
   });
 
+  it("takes the entire requested batch once, preserving metadata and attachments", () => {
+    const id = freshConversationId();
+    const first = chatMessageQueue.enqueue(id, {
+      text: "first",
+      files: [
+        {
+          url: "data:text/plain;base64,SGk=",
+          mediaType: "text/plain",
+          filename: "note.txt",
+        },
+      ],
+      skill: { id: "skill-1", name: "review" },
+    });
+    const second = chatMessageQueue.enqueue(id, { text: "second" });
+    chatMessageQueue.requestBatch(id);
+    expect(chatMessageQueue.takeForTurn(id)).toEqual([first, second]);
+    expect(chatMessageQueue.takeForTurn(id)).toEqual([]);
+    expect(localStorage.getItem(`${storageKey(id)}:batch`)).toBeNull();
+    chatMessageQueue.enqueue(id, { text: "later" });
+    chatMessageQueue.enqueue(id, { text: "still later" });
+    expect(chatMessageQueue.takeForTurn(id)).toHaveLength(1);
+  });
+
+  it("restores batch intent from storage and includes additions made while stopping", () => {
+    const id = freshConversationId();
+    chatMessageQueue.enqueue(id, { text: "first" });
+    localStorage.setItem(`${storageKey(id)}:batch`, "true");
+    chatMessageQueue.enqueue(id, { text: "second" });
+    expect(chatMessageQueue.takeForTurn(id).map(({ text }) => text)).toEqual([
+      "first",
+      "second",
+    ]);
+  });
+
+  it("does not batch an explicit sandbox command added while stopping", () => {
+    const id = freshConversationId();
+    chatMessageQueue.enqueue(id, { text: "first" });
+    chatMessageQueue.requestBatch(id);
+    chatMessageQueue.enqueue(id, { text: "!echo hello", sandboxCommand: true });
+    expect(chatMessageQueue.takeForTurn(id).map(({ text }) => text)).toEqual([
+      "first",
+    ]);
+    expect(chatMessageQueue.takeForTurn(id).map(({ text }) => text)).toEqual([
+      "!echo hello",
+    ]);
+  });
+
   it("removes a specific queued message by id", () => {
     const conversationId = freshConversationId();
     chatMessageQueue.enqueue(conversationId, { text: "keep" });

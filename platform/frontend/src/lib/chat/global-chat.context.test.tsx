@@ -1879,6 +1879,95 @@ describe("stopping with queued messages", () => {
       expect(chatMessageQueue.get(conversationId)).toHaveLength(1);
   });
 
+  it.each([
+    true,
+    false,
+  ])("sends the full queue in one turn after interrupt (aborted=%s)", async (isAbort) => {
+    let session: ChatSessionSnapshot;
+    let finishStop: () => void = () => {};
+    const stopServer = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishStop = resolve;
+        }),
+    );
+    const tree = () => (
+      <ChatProvider>
+        <RegisterChatSession conversationId={conversationId} />
+        <CaptureChatSession
+          conversationId={conversationId}
+          onSession={(value) => {
+            session = value;
+          }}
+        />
+      </ChatProvider>
+    );
+    const { rerender } = render(tree());
+    await waitFor(() => expect(session).toBeDefined());
+    act(() => {
+      chatMessageQueue.enqueue(conversationId, {
+        text: "first correction",
+        files: [
+          {
+            url: "data:text/plain;base64,SGk=",
+            mediaType: "text/plain",
+            filename: "note.txt",
+          },
+        ],
+      });
+      chatMessageQueue.enqueue(conversationId, { text: "second correction" });
+      session?.stop({
+        preserveQueuedMessages: true,
+        interruptQueued: true,
+        stopServer,
+      });
+      session?.stop({
+        preserveQueuedMessages: true,
+        interruptQueued: true,
+        stopServer,
+      });
+    });
+    expect(stopServer).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await chatOptions?.onFinish?.({
+        message: { id: "interrupted", role: "assistant", parts: [] },
+        isAbort,
+        isError: false,
+      });
+    });
+    status = "ready";
+    rerender(tree());
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+    await act(async () => finishStop());
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledTimes(1));
+    expect(mocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: [{ type: "text", text: "second correction" }],
+      }),
+    );
+    const append = mocks.setMessages.mock.calls.at(-1)?.[0];
+    expect(typeof append).toBe("function");
+    if (typeof append !== "function")
+      throw new Error("Missing batch transcript update");
+    expect(append([])).toEqual([
+      expect.objectContaining({
+        role: "user",
+        parts: [
+          { type: "text", text: "first correction" },
+          {
+            type: "file",
+            url: "data:text/plain;base64,SGk=",
+            mediaType: "text/plain",
+            filename: "note.txt",
+          },
+        ],
+      }),
+    ]);
+    expect(chatMessageQueue.get(conversationId)).toHaveLength(0);
+    rerender(tree());
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
   it("sends the oldest queued message immediately after a steering interrupt", async () => {
     const latestSessionRef: { current: ChatSessionSnapshot } = {
       current: undefined,

@@ -109,7 +109,7 @@ for (const viewport of [
               ]),
             );
           }
-          const sent: string[] = [];
+          const sent: string[][] = [];
           Object.defineProperty(window, "__queueInterruptSent", {
             value: sent,
           });
@@ -134,10 +134,16 @@ for (const viewport of [
                 const body = JSON.parse(String(init?.body));
                 sent.push(
                   body.messages
-                    .at(-1)
-                    .parts.find(
-                      (part: { type: string }) => part.type === "text",
-                    ).text,
+                    .filter(
+                      (message: { role: string }) => message.role === "user",
+                    )
+                    .map(
+                      (message: { parts: { type: string; text?: string }[] }) =>
+                        message.parts
+                          .filter((part) => part.type === "text")
+                          .map((part) => part.text)
+                          .join(""),
+                    ),
                 );
               }
               const chunks = isSend
@@ -210,12 +216,29 @@ for (const viewport of [
       ).toHaveCount(2);
       await action.focus();
       const tooltip = page.getByRole("tooltip");
-      await expect(tooltip).toHaveText(
-        "Stop this response and send the next message.",
-      );
-      const tooltipBox = await tooltip.boundingBox();
+      await expect(tooltip).toHaveText("Stop and send queued messages.");
+      const tooltipPanel = page.locator('[data-slot="tooltip-content"]');
+      await expect(tooltipPanel).toHaveCSS("opacity", "1");
+      const tooltipBox = await tooltipPanel.boundingBox();
       if (!tooltipBox) throw new Error("Queue action tooltip is not visible");
       expect(tooltipBox.width).toBeLessThanOrEqual(240);
+      const textAndPaddingWidth = await tooltipPanel.evaluate((element) => {
+        const range = document.createRange();
+        const text = Array.from(element.childNodes).find(
+          (node) => node.nodeType === Node.TEXT_NODE,
+        );
+        if (!text) throw new Error("Missing visible tooltip text");
+        range.selectNodeContents(text);
+        const style = getComputedStyle(element);
+        return (
+          range.getBoundingClientRect().width +
+          parseFloat(style.paddingLeft) +
+          parseFloat(style.paddingRight) +
+          parseFloat(style.borderLeftWidth) +
+          parseFloat(style.borderRightWidth)
+        );
+      });
+      expect(tooltipBox.width).toBeLessThanOrEqual(textAndPaddingWidth + 1);
       expect(tooltipBox.x).toBeGreaterThanOrEqual(0);
       expect(tooltipBox.x + tooltipBox.width).toBeLessThanOrEqual(
         viewport.width,
@@ -244,10 +267,16 @@ for (const viewport of [
       expect(
         await page.evaluate(
           () =>
-            (window as typeof window & { __queueInterruptSent: string[] })
+            (window as typeof window & { __queueInterruptSent: string[][] })
               .__queueInterruptSent,
         ),
-      ).toEqual(["Focus on the risks first", "Then give a short summary"]);
+      ).toEqual([
+        [
+          "Check the weekly report",
+          "Focus on the risks first",
+          "Then give a short summary",
+        ],
+      ]);
       await page.screenshot({
         path: testInfo.outputPath("queue-interrupt-after.png"),
         fullPage: true,

@@ -911,6 +911,11 @@ const PromptInputContent = ({
   // Messages queued while a response was in-flight; sent automatically (in
   // order) by the conversation's chat session once each turn settles.
   const queuedMessages = useConversationMessageQueue(conversationId);
+  const interruptBlockedReason =
+    interruptQueueDisabledReason ??
+    (queuedMessages.some((message) => message.sandboxCommand)
+      ? "Send sandbox commands separately."
+      : undefined);
 
   // Composer keyboard shortcuts layered on top of the primitive textarea:
   //   • Esc — stop the in-flight response (mirrors the Stop button).
@@ -1268,13 +1273,13 @@ const PromptInputContent = ({
               </span>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span tabIndex={interruptQueueDisabledReason ? 0 : undefined}>
+                  <span tabIndex={interruptBlockedReason ? 0 : undefined}>
                     <Button
                       size="xs"
                       variant="outline"
                       type="button"
                       disabled={
-                        !!interruptQueueDisabledReason ||
+                        !!interruptBlockedReason ||
                         isInterruptingQueue ||
                         isContextCompacting
                       }
@@ -1288,9 +1293,8 @@ const PromptInputContent = ({
                     </Button>
                   </span>
                 </TooltipTrigger>
-                <TooltipContent className="max-w-60" align="end">
-                  {interruptQueueDisabledReason ??
-                    "Stop this response and send the next message."}
+                <TooltipContent className="max-w-60 text-wrap" align="end">
+                  {interruptBlockedReason ?? "Stop and send queued messages."}
                 </TooltipContent>
               </Tooltip>
             </div>

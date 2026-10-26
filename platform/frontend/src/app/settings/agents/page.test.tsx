@@ -149,6 +149,7 @@ vi.mock("@/lib/organization.query");
 
 import {
   useAppearanceSettings,
+  useIsGlobalAdmin,
   useOrganization,
   useUpdateAgentSettings,
   useUpdateIntegrationSettings,
@@ -180,6 +181,7 @@ beforeEach(() => {
     defaultLlmApiKeyId: "key-1",
     defaultAgentId: null,
     allowChatFileUploads: true,
+    playwrightMcpEnabled: true,
     allowToolAutoAssignment: true,
   };
   mockApiKeys = [
@@ -192,6 +194,10 @@ beforeEach(() => {
   ];
   mockRuntimeBackend = null;
 
+  vi.mocked(useIsGlobalAdmin).mockReturnValue({
+    isGlobalAdmin: true,
+    isLoading: false,
+  });
   vi.mocked(useOrganization).mockReturnValue({
     data: mockOrganization,
   } as unknown as ReturnType<typeof useOrganization>);

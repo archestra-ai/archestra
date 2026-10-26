@@ -80,6 +80,7 @@ export * from "./mcp-tool-call";
 export * from "./member";
 export * from "./message";
 export * from "./model";
+export * from "./model-pool";
 export * from "./oauth-client";
 export * from "./organization";
 export * from "./plugin";

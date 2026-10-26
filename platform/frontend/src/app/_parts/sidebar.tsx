@@ -68,6 +68,7 @@ import { prefetchApps } from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
+import { useFeature } from "@/lib/config/config.query";
 import { useDocsScreenshotMode } from "@/lib/docs-screenshot-mode";
 import { useGithubStars } from "@/lib/github/github.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
@@ -533,6 +534,7 @@ export function AppSidebar() {
   });
   const showConnect = Boolean(canReadMcpGateway || canReadLlmProxy);
   const { data: guardrailsDeployment } = useGuardrailsDeployment();
+  const modelPoolsEnabled = useFeature("llmModelPoolsEnabled") === true;
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
@@ -564,6 +566,11 @@ export function AppSidebar() {
       contentNavGroups.map((group) => ({
         ...group,
         items: group.items
+          // Model pools are a beta feature, off unless this deployment's flag
+          // is on, so the row waits for the answer rather than flashing.
+          .filter(
+            (item) => item.url !== "/llm/model-pools" || modelPoolsEnabled,
+          )
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.
@@ -601,7 +608,7 @@ export function AppSidebar() {
             return item;
           }),
       })),
-    [guardrailsDeployment?.enabled, permissionMap],
+    [guardrailsDeployment?.enabled, modelPoolsEnabled, permissionMap],
   );
 
   return (

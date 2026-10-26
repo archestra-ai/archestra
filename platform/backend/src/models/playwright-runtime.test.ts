@@ -1,12 +1,65 @@
 import { PLAYWRIGHT_MCP_CATALOG_ID } from "@archestra/shared";
 import { and, eq, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { EnvironmentModel, McpServerModel } from "@/models";
+import { EnvironmentModel, McpServerModel, OrganizationModel } from "@/models";
 import { describe, expect, mustExist, test } from "@/test";
 import { agentOwner, appOwner } from "@/types";
 import PlaywrightRuntimeModel from "./playwright-runtime";
 
 describe("PlaywrightRuntimeModel", () => {
+  test("defaults on, blocks provisioning and lookup while disabled, and restores stable runtime IDs", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+    makeAgent,
+  }) => {
+    const organization = await makeOrganization();
+    expect(organization.playwrightMcpEnabled).toBe(true);
+    const environment = await EnvironmentModel.create({
+      organizationId: organization.id,
+      name: "Browser test",
+      namespace: "browser-test",
+    });
+    await makeInternalMcpCatalog({
+      id: PLAYWRIGHT_MCP_CATALOG_ID,
+      organizationId: null,
+      name: "microsoft__playwright-mcp",
+      serverType: "local",
+    });
+    const servers = await PlaywrightRuntimeModel.reconcileAll();
+    expect(servers).toHaveLength(2);
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      environmentId: environment.id,
+    });
+    expect(await PlaywrightRuntimeModel.findForAgent(agent.id)).not.toBeNull();
+    await OrganizationModel.patch(organization.id, {
+      playwrightMcpEnabled: false,
+    });
+    const { McpServerRuntimeManager } = await import(
+      "@/k8s/mcp-server-runtime/manager"
+    );
+    await expect(
+      new McpServerRuntimeManager().startServer(servers[0]),
+    ).rejects.toThrow("built-in browser MCP is disabled");
+    expect(await PlaywrightRuntimeModel.findForAgent(agent.id)).toBeNull();
+    expect(await PlaywrightRuntimeModel.findForEnvironment(null)).toBeNull();
+    expect(await PlaywrightRuntimeModel.reconcileAll()).toEqual([]);
+    expect(
+      await PlaywrightRuntimeModel.ensureForEnvironment({
+        organizationId: organization.id,
+        environmentId: environment.id,
+      }),
+    ).toBeNull();
+    // Retained rows are available to cleanup even though execution is blocked.
+    expect(await PlaywrightRuntimeModel.findAllInstallations()).toHaveLength(2);
+    await OrganizationModel.patch(organization.id, {
+      playwrightMcpEnabled: true,
+    });
+    expect(
+      (await PlaywrightRuntimeModel.reconcileAll()).map((s) => s.id).sort(),
+    ).toEqual(servers.map((s) => s.id).sort());
+  });
+
   test("reconciles one system runtime per Environment and retires legacy installs", async ({
     makeAgent,
     makeApp,

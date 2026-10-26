@@ -1,9 +1,11 @@
 import {
   credentialRequiresPerUserScope,
   hasArchestraTokenPrefix,
+  isChatCompletionsOnlyRouterProvider,
   LLM_PROXY_OAUTH_SCOPE,
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
   perUserCredentialLabel,
+  providerDisplayNames,
   providerHasEndpointLocalModels,
   type ResourceVisibilityScope,
   RouteId,
@@ -16,12 +18,13 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { isAzureOpenAiFirstPartyModelName } from "@/clients/azure-url";
-import { getProviderConfiguredBaseUrl } from "@/config";
+import config, { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
   ManagedOauthClientModel as LlmOauthClientModel,
   LlmProviderApiKeyModel,
   MemberModel,
+  ModelPoolModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
   TeamModel,
@@ -56,6 +59,7 @@ import {
   githubCopilotAdapterFactory,
   githubCopilotResponsesAdapterFactory,
   groqAdapterFactory,
+  kimiAdapterFactory,
   makeOpenAiCompatibleEmbeddingsAdapterFactory,
   minimaxAdapterFactory,
   mistralAdapterFactory,
@@ -95,6 +99,7 @@ import {
   handleLLMProxy,
   type LLMProxyAuthOverride,
 } from "../llm-proxy-handler";
+import { type ModelPoolCaller, mayUseModelPool } from "../model-pool-failover";
 import {
   buildRoutableModelId,
   listRoutableModels,
@@ -240,6 +245,7 @@ const openAiWireProviders = {
   deepseek: deepseekAdapterFactory,
   "github-copilot": githubCopilotAdapterFactory,
   groq: groqAdapterFactory,
+  kimi: kimiAdapterFactory,
   minimax: minimaxAdapterFactory,
   mistral: mistralAdapterFactory,
   ollama: ollamaAdapterFactory,
@@ -491,6 +497,13 @@ async function routeChatCompletion(
     ? await getModelRouterAgent(params.agentId)
     : await getDefaultModelRouterAgent();
   await ensureModelRouterAgentAccess({ agent, auth });
+  // A model pool's name is served by the pool's members, LiteLLM style: the
+  // proxy picks a member and its key, when the caller may use the pool.
+  const poolId = await usableModelPoolId({ auth, model: body.model });
+  if (poolId) {
+    applyModelPoolAuthOverride({ request, auth, poolId });
+    return handleLLMProxy(body, request, reply, openaiAdapterFactory);
+  }
   const resolution = await resolveModelRoute({
     requestedModel: body.model,
     allowedProviders: getMappedProviders(auth),
@@ -560,6 +573,15 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
       request,
       reply,
       nativeResponsesAdapter,
+    );
+  }
+
+  // The shared list keeps this refusal, the model picker and the runtime
+  // launch preflight in agreement: see CHAT_COMPLETIONS_ONLY_ROUTER_PROVIDERS.
+  if (isChatCompletionsOnlyRouterProvider(resolution.provider)) {
+    throw new ApiError(
+      501,
+      `${providerDisplayNames[resolution.provider]} models are available through the model router's Chat Completions endpoint only: the Responses translation cannot carry the reasoning their thinking models need on tool-call turns.`,
     );
   }
 
@@ -910,15 +932,33 @@ async function listModels(params: { auth: ModelRouterAuth }) {
           : undefined,
     includeEmbeddings: true,
   });
+  // Pools come first: their names are what clients are meant to ask for.
+  const pools = (
+    config.llmProxy.modelPoolsEnabled
+      ? await ModelPoolModel.list(params.auth.organizationId)
+      : []
+  ).filter(
+    (pool) =>
+      pool.members.some((member) => member.enabled) &&
+      mayUseModelPool({ pool, caller: modelPoolCaller(params.auth) }),
+  );
 
   return {
     object: "list" as const,
-    data: chatModels.map((model) => ({
-      id: buildRoutableModelId(model),
-      object: "model" as const,
-      created: Math.floor(model.createdAt.getTime() / 1000),
-      owned_by: model.provider,
-    })),
+    data: [
+      ...pools.map((pool) => ({
+        id: pool.name,
+        object: "model" as const,
+        created: Math.floor(pool.createdAt.getTime() / 1000),
+        owned_by: "model-pool",
+      })),
+      ...chatModels.map((model) => ({
+        id: buildRoutableModelId(model),
+        object: "model" as const,
+        created: Math.floor(model.createdAt.getTime() / 1000),
+        owned_by: model.provider,
+      })),
+    ],
   };
 }
 
@@ -1077,6 +1117,47 @@ function assertNever(value: never): never {
   throw new ApiError(500, `Unhandled model router provider "${value}".`);
 }
 
+/** The pool named `model` when the caller may use it and it has members. */
+async function usableModelPoolId(params: {
+  auth: ModelRouterAuth;
+  model: string;
+}): Promise<string | null> {
+  if (!config.llmProxy.modelPoolsEnabled) return null;
+  const pool = await ModelPoolModel.findByName({
+    organizationId: params.auth.organizationId,
+    name: params.model.trim(),
+  });
+  if (!pool || pool.members.length === 0) return null;
+  return mayUseModelPool({ pool, caller: modelPoolCaller(params.auth) })
+    ? pool.id
+    : null;
+}
+
+function modelPoolCaller(auth: ModelRouterAuth): ModelPoolCaller {
+  return {
+    virtualKeyId:
+      auth.authMethod === "virtual_key" ? auth.virtualKeyId : undefined,
+    providerApiKeyIds: getMappedApiKeyIds(auth),
+  };
+}
+
+function applyModelPoolAuthOverride(params: {
+  request: FastifyRequest;
+  auth: ModelRouterAuth;
+  poolId: string;
+}): void {
+  (
+    params.request as FastifyRequest & {
+      llmProxyAuthOverride?: LLMProxyAuthOverride;
+    }
+  ).llmProxyAuthOverride = {
+    apiKey: undefined,
+    baseUrl: undefined,
+    ...modelRouterCaller(params.auth),
+    modelPoolId: params.poolId,
+  };
+}
+
 async function applyModelRouterAuthOverride(params: {
   request: FastifyRequest;
   auth: ModelRouterAuth;
@@ -1132,29 +1213,34 @@ async function applyModelRouterAuthOverride(params: {
     apiKey,
     baseUrl: mappedApiKey.baseUrl ?? undefined,
     chatApiKeyId: mappedApiKey.providerApiKeyId,
+    ...modelRouterCaller(params.auth),
+  };
+}
+
+function modelRouterCaller(
+  auth: ModelRouterAuth,
+): Omit<LLMProxyAuthOverride, "apiKey" | "baseUrl" | "chatApiKeyId"> {
+  return {
     authenticated: true,
     source: "model_router",
-    authMethod: params.auth.authMethod,
-    serviceAccountId: params.auth.serviceAccountId,
+    authMethod: auth.authMethod,
+    serviceAccountId: auth.serviceAccountId,
     virtualKeyId:
-      params.auth.authMethod === "virtual_key"
-        ? params.auth.virtualKeyId
-        : undefined,
+      auth.authMethod === "virtual_key" ? auth.virtualKeyId : undefined,
     authenticatedApp:
-      params.auth.authMethod === "oauth_user"
-        ? (params.auth.oauthClient ?? undefined)
-        : params.auth.oauthClient,
+      auth.authMethod === "oauth_user"
+        ? (auth.oauthClient ?? undefined)
+        : auth.oauthClient,
     userId:
-      params.auth.authMethod === "oauth_user"
-        ? params.auth.userId
-        : params.auth.authMethod === "virtual_key" &&
-            params.auth.virtualKeyIsPersonal
-          ? (params.auth.virtualKeyAuthorId ?? undefined)
+      auth.authMethod === "oauth_user"
+        ? auth.userId
+        : auth.authMethod === "virtual_key" && auth.virtualKeyIsPersonal
+          ? (auth.virtualKeyAuthorId ?? undefined)
           : undefined,
     billingTeamId:
-      params.auth.authMethod === "oauth_user"
+      auth.authMethod === "oauth_user"
         ? undefined
-        : (params.auth.billingTeamId ?? undefined),
+        : (auth.billingTeamId ?? undefined),
   };
 }
 

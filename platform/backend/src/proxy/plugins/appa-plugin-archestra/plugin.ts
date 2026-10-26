@@ -653,7 +653,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         outputSource: "runtime",
         denied: true,
       };
-    for (const answer of toolResults) {
+    const carriedKeys = toolResults.map((answer) =>
+      carriedRulingKey({
+        session: this.governedSession(binding),
+        callId: answer.id,
+      }),
+    );
+    const carriedRulings = binding.adapter?.answersUndeclaredCalls
+      ? await cacheManager.getMany<string>(carriedKeys)
+      : new Map<AllowedCacheKey, string>();
+    for (const [index, answer] of toolResults.entries()) {
       // Read, not consumed: the client sends this result on every later
       // request, and the model must read the same text each time.
       const ruling = await cacheManager.get<string>(
@@ -682,6 +691,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           approved.content += NO_REMEDY_PLAN_HINT;
         }
       }
+      // Already complete, and with no plan this client could act on.
+      const carried = carriedRulings.get(carriedKeys[index]);
+      if (typeof carried === "string")
+        result.toolResultUpdates[answer.id] = {
+          content: carried,
+          outputSource: "runtime",
+          denied: true,
+          offers: [],
+        };
     }
     binding.requiresRemedyContinuation = await hasRemedyOfferResult({
       binding,
@@ -1657,30 +1675,32 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           released.push({ id: call.id, name: wait, arguments: "{}" });
           continue;
         }
-        // Refuses the call and cancels admitted calls when the client declares no notice tool.
-        await cancelCalls(
-          session,
-          rest.flatMap((each) =>
-            decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
-          ),
-          policy,
-        );
         // Clients connect MCP servers in the background, so a session's first
         // request often leaves before the gateway's tool list arrives. One
         // resend normally carries the tools; only a repeat within the same
         // session is a client that cannot receive remedies.
-        const transient =
-          !binding.request.defersTools &&
-          binding.request.declaredTools.length > 0 &&
-          !(await this.remedyToolsMissingBefore(session));
-        // A client that defers tools has not failed to receive remedies: it
-        // has not loaded the tools yet.
-        if (!transient && !binding.request.defersTools) {
-          await recordOpenAppaClientFailure({
-            session,
-            toolCallId: call.id,
-            ruling: decision.feedback,
-          });
+        const admitted = rest.flatMap((each) =>
+          decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
+        );
+        let transient: boolean;
+        try {
+          transient =
+            !binding.request.defersTools &&
+            binding.request.declaredTools.length > 0 &&
+            !(await this.remedyToolsMissingBefore(session));
+          // A client that defers tools has not failed to receive remedies: it
+          // has not loaded the tools yet.
+          if (!transient && !binding.request.defersTools) {
+            await recordOpenAppaClientFailure({
+              session,
+              toolCallId: call.id,
+              ruling: decision.feedback,
+            });
+          }
+        } catch (error) {
+          // The batch never reaches the client, so its admitted calls never run.
+          await cancelCalls(session, admitted, policy);
+          throw error;
         }
         // A call that only needs loading gets that one instruction. A client
         // that defers tools can still load the remedy tools and act on the
@@ -1698,6 +1718,40 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             : noPlan
               ? `${withoutRemedySections(decision.feedback)}${clarification}${NO_REMEDY_PLAN_HINT}`
               : `${withoutRemedySections(decision.feedback)}${clarification}\n\n${remedylessRefusalNote({ binding, transient })}`;
+        // The ruling reaches the model as the result of an undeclared notice
+        // call. The client answers it with an error, and the next request
+        // restores the denied call and the ruling from the call's arguments.
+        const carrier = await this.undeclaredNoticeCarrier({
+          binding,
+          context,
+          session,
+          callId: call.id,
+          ruling: contentMessage,
+        });
+        if (carrier) {
+          blocked.push({
+            id: call.id,
+            name: call.name,
+            reason: decision.feedback,
+          });
+          released.push({
+            id: call.id,
+            name: carrier,
+            arguments: JSON.stringify(
+              buildNoticeArguments({
+                id: call.id,
+                tool: identity.name,
+                arguments: identity.arguments,
+                result: contentMessage,
+                custom: identity.custom,
+                namespace: identity.namespace,
+              }),
+            ),
+          });
+          continue;
+        }
+        // Refuses the call and cancels admitted calls when the client declares no notice tool.
+        await cancelCalls(session, admitted, policy);
         return {
           decision: "refuse",
           refusal: {
@@ -2119,6 +2173,47 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
    * Whether this session was already refused once for a request without the
    * gateway remedy tools. Records the current refusal so the next one counts.
    */
+  /**
+   * The notice tool name a denial is released under when the client declares
+   * no notice tool, for a client that answers an undeclared call with an error
+   * result. The ruling the call's result shows is kept first: the runtime
+   * would answer it with the plans this client cannot act on. None when the
+   * client declares that name, where it would run, or the ruling is not kept.
+   */
+  private async undeclaredNoticeCarrier(params: {
+    binding: AppaPluginBinding;
+    context: LlmProxyToolCallsContext;
+    session: OpenAppaSession;
+    callId: string;
+    ruling: string;
+  }): Promise<string | undefined> {
+    const { binding } = params;
+    if (
+      !binding.adapter?.answersUndeclaredCalls ||
+      params.context.interactionType !== "anthropic:messages"
+    )
+      return undefined;
+    const name = archestraMcpBranding.getToolName(
+      TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+    );
+    const declared = [
+      ...binding.request.declaredTools,
+      ...(binding.request.heldTools ?? []),
+    ];
+    if (declared.some((tool) => tool.name === name)) return undefined;
+    try {
+      await cacheManager.set(
+        carriedRulingKey({ session: params.session, callId: params.callId }),
+        params.ruling,
+        TimeInMs.Day,
+      );
+    } catch (error) {
+      logger.warn({ err: error }, "OpenAPPA could not keep a carried ruling");
+      return undefined;
+    }
+    return name;
+  }
+
   private async remedyToolsMissingBefore(
     session: OpenAppaSession,
   ): Promise<boolean> {
@@ -2212,6 +2307,15 @@ function notLoadedRulingKey(params: {
   callId: string;
 }): AllowedCacheKey {
   return `${CacheKey.OpenAppaNotLoadedRuling}-${Buffer.from(
+    `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
+  ).toString("base64url")}`;
+}
+
+function carriedRulingKey(params: {
+  session: OpenAppaSession;
+  callId: string;
+}): AllowedCacheKey {
+  return `${CacheKey.OpenAppaCarriedRuling}-${Buffer.from(
     `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
   ).toString("base64url")}`;
 }

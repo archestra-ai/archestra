@@ -28,6 +28,13 @@ import OrganizationCostsPage from "./page";
 vi.mock("next/navigation");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/config/config.query")>()),
+  useFeature: () => false,
+}));
+vi.mock("@/lib/integration-overrides", () => ({
+  useModelProviderCatalog: () => ({ label: (provider: string) => provider }),
+}));
 vi.mock("sonner");
 const origin = "http://localhost:9000";
 const server = setupServer();

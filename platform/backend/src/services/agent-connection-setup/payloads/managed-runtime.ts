@@ -94,7 +94,7 @@ module.exports.disk = (params, loader) => {
     before.set(file, realFs.existsSync(file) ? realFs.readFileSync(file, "utf8") : null);
   }
   if (!before.get(configPath) && !before.get(siblingPath)) return;
-  const cfg = before.get(configPath)?.trim() ? JSON.parse(before.get(configPath)) : {};
+  const cfg = before.get(configPath)?.trim() ? JSON.parse(before.get(configPath).replace(/^\\uFEFF/, "")) : {};
   const fs = { ...realFs,
     writeFileSync: (file, bytes) => {
       const current = realFs.existsSync(file) ? realFs.readFileSync(file, "utf8") : null;
@@ -114,7 +114,7 @@ module.exports.disk = (params, loader) => {
     const current = realFs.existsSync(file) ? realFs.readFileSync(file, "utf8") : null;
     if (current !== original) throw new Error("MCP config changed during alias repair");
   }
-  if (JSON.stringify(cfg) !== JSON.stringify(before.get(configPath)?.trim() ? JSON.parse(before.get(configPath)) : {})) {
+  if (JSON.stringify(cfg) !== JSON.stringify(before.get(configPath)?.trim() ? JSON.parse(before.get(configPath).replace(/^\\uFEFF/, "")) : {})) {
     const backup = configPath + ".archestra-backup";
     if (realFs.existsSync(configPath) && !realFs.existsSync(backup)) fs.copyFileSync(configPath, backup);
     fs.writeFileSync(configPath, updated);

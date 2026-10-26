@@ -29,6 +29,7 @@ import {
 import ConnectionSetupModel from "@/models/connection-setup";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaYellModel from "@/models/openappa-yell";
+import { readNotice } from "@/openappa/notice";
 import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { issueConnectionRuntimeToken } from "@/services/connection-runtime-token";
@@ -840,7 +841,7 @@ describe("Gateway tool attestation on the LLM proxy", () => {
 
       test.each(
         loadedTools,
-      )("withholds %s from the model, and a call to it, with arguments the model wrote, is refused unruled", async (advertised) => {
+      )("withholds %s from the model, and a call to it, with arguments the model wrote, is carried unruled", async (advertised) => {
         const spelled = claudeCode.spell("gw", advertised);
         block = false;
         claudeCode.modelCalls({
@@ -860,9 +861,10 @@ describe("Gateway tool attestation on the LLM proxy", () => {
             claudeCode.spell("gw", each),
           );
         }
-        expect(claudeCode.released(response.body)).toEqual([]);
+        const notice = carriedNotice(response.body);
+        expect(notice.tool).toBe(spelled);
         expect(toolCallEvents()).toEqual([]);
-        expect(response.body).toContain(
+        expect(notice.result).toContain(
           `${spelled} cannot be used until get_remedy_plans and execute_remedy_plan are both loaded. Search for the one that is missing with your tool search, then call it again.`,
         );
         expect(JSON.stringify(providerRequests)).not.toContain(MARKER);
@@ -988,11 +990,7 @@ describe("Gateway tool attestation on the LLM proxy", () => {
 
       const response = await claudeCode.send(deferredTools(false));
 
-      const text = (
-        JSON.parse(response.body).content as Array<{ text?: string }>
-      )
-        .map((block) => block.text ?? "")
-        .join("");
+      const text = carriedNotice(response.body).result;
       expect(text.match(/\[appa\]/g)).toHaveLength(1);
       expect(text).toContain(
         `${UNLOADED} is not loaded in this session. Search for it with your tool search, then call it again.`,
@@ -1106,7 +1104,7 @@ describe("Gateway tool attestation on the LLM proxy", () => {
       ).toEqual([]);
     });
 
-    test("refuses a denied call, naming the tools to load, when the remedy tools are deferred too", async () => {
+    test("carries a denied call, naming the tools to load, when the remedy tools are deferred too", async () => {
       block = true;
       claudeCode.modelCalls({ name: UNLOADED, input: {} });
 
@@ -1116,8 +1114,7 @@ describe("Gateway tool attestation on the LLM proxy", () => {
       );
 
       expect(response.statusCode, response.body).toBe(200);
-      expect(claudeCode.released(response.body)).toEqual([]);
-      expect(response.body).toContain(
+      expect(carriedNotice(response.body).result).toContain(
         "Search for get_remedy_plans and execute_remedy_plan with your tool search",
       );
     });
@@ -1771,3 +1768,21 @@ describe("Gateway tool attestation on the LLM proxy", () => {
     ]);
   });
 });
+
+/**
+ * The ruling Claude Code receives for a denied call while it declares no
+ * notice tool: the one call it is sent, an undeclared notice call.
+ */
+function carriedNotice(body: string) {
+  const calls = (
+    (JSON.parse(body).content ?? []) as Record<string, unknown>[]
+  ).filter((block) => block.type === "tool_use");
+  expect(calls).toHaveLength(1);
+  expect(calls[0].name).toBe("archestra__get_remedy_plans");
+  const notice = readNotice({
+    callId: calls[0].id as string,
+    arguments: calls[0].input,
+  });
+  if (!notice) throw new Error("no notice carried");
+  return notice;
+}

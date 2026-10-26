@@ -1,4 +1,7 @@
-import type { McpDeploymentState } from "@archestra/shared";
+import {
+  type McpDeploymentState,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+} from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import { Watch } from "@kubernetes/client-node";
 import config from "@/config";
@@ -27,6 +30,7 @@ import {
   McpServerModel,
   OrganizationModel,
 } from "@/models";
+import PlaywrightRuntimeModel from "@/models/playwright-runtime";
 import { secretManager } from "@/secrets-manager";
 import { resolveMcpCredentials } from "@/services/credentials";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
@@ -849,6 +853,12 @@ export class McpServerRuntimeManager {
     },
   ): Promise<void> {
     if (
+      mcpServer.catalogId === PLAYWRIGHT_MCP_CATALOG_ID &&
+      !(await PlaywrightRuntimeModel.isEnabled())
+    ) {
+      throw new Error("The built-in browser MCP is disabled");
+    }
+    if (
       !this.k8sApi ||
       !this.k8sAppsApi ||
       !this.k8sNetworkingApi ||
@@ -1059,6 +1069,15 @@ export class McpServerRuntimeManager {
       }
 
       const start = async (lease: ClusterLeaseGuard) => {
+        // Recheck inside the physical deployment lease. Disable cleanup takes
+        // the same lease, so an in-flight start always precedes its teardown.
+        if (
+          catalogItem &&
+          PlaywrightRuntimeModel.isManagedCatalogConfig(catalogItem) &&
+          !(await PlaywrightRuntimeModel.isEnabled())
+        ) {
+          throw new Error("The built-in browser MCP is disabled");
+        }
         await lease.assertOwned();
         // Resolve after lease acquisition. A policy fetched while waiting can
         // be older than a concurrent settings change and must never overwrite
@@ -1158,11 +1177,20 @@ export class McpServerRuntimeManager {
   /**
    * Stop a single MCP server deployment
    */
-  async stopServer(mcpServerId: string): Promise<void> {
+  async stopServer(
+    mcpServerId: string,
+    options?: { strictCleanup?: boolean; requirePlaywrightDisabled?: boolean },
+  ): Promise<void> {
     // Try to get from memory first, or lazy-load from database
     const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
 
-    if (!k8sDeployment) return;
+    if (!k8sDeployment) {
+      if (options?.strictCleanup)
+        throw new Error(
+          "Cannot verify browser runtime teardown: Kubernetes deployment is unavailable",
+        );
+      return;
+    }
     const physicalKey =
       McpServerRuntimeManager.physicalDeploymentKey(k8sDeployment);
 
@@ -1173,6 +1201,16 @@ export class McpServerRuntimeManager {
         timeoutMs: MCP_DEPLOYMENT_TRANSITION_DEADLINE_MS,
       },
       async (lease) => {
+        // A stale disable worker must not tear down a newly enabled runtime.
+        // Recheck after taking the same physical lease used by startServer.
+        if (
+          options?.requirePlaywrightDisabled &&
+          (await PlaywrightRuntimeModel.isEnabled())
+        ) {
+          throw new Error(
+            "Browser policy changed during cleanup; retry reconciliation",
+          );
+        }
         // Multi-tenant catalogs share one K8s deployment across all callers.
         // Only the last caller out should delete shared resources.
         const sharedWithOthers =
@@ -1388,11 +1426,15 @@ export class McpServerRuntimeManager {
   /**
    * Remove an MCP server deployment completely
    */
-  async removeMcpServer(mcpServerId: string): Promise<void> {
+  async removeMcpServer(
+    mcpServerId: string,
+    options?: { strictCleanup?: boolean; requirePlaywrightDisabled?: boolean },
+  ): Promise<void> {
     logger.info(`Removing MCP server deployment for: ${mcpServerId}`);
 
     try {
-      await this.stopServer(mcpServerId);
+      if (options) await this.stopServer(mcpServerId, options);
+      else await this.stopServer(mcpServerId);
       logger.info(`Successfully removed MCP server deployment ${mcpServerId}`);
     } catch (error) {
       logger.error(

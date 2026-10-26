@@ -82,6 +82,7 @@ export function makeConfig(
       // including its Application Account (OAuth) fields.
       kbMfilesConnectorEnabled: true,
       kbMfilesOauthEnabled: true,
+      llmModelPoolsEnabled: false,
       kbBm25DefaultK1: 1.2,
       kbBm25DefaultB: 0.75,
       kbContextualRetrievalDefaultMode: "disabled",

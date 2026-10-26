@@ -517,8 +517,8 @@ export const SHOTS: Shot[] = [
   {
     asset: "automated_screenshots/agents-runtime_create-agent",
     route: () => "/agents/new",
-    // Tall enough for the third row of runtime cards: a default 900px frame
-    // cuts it off, so a new card changes too few pixels to refresh the image.
+    // Tall enough for the third row of runtime cards, which the default 900px
+    // frame cuts off.
     viewport: { width: 1440, height: 1040 },
   },
   {

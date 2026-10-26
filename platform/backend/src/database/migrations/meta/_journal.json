@@ -4194,6 +4194,13 @@
       "when": 1793040979142,
       "tag": "0598_military_riptide",
       "breakpoints": true
+    },
+    {
+      "idx": 599,
+      "version": "7",
+      "when": 1793045870405,
+      "tag": "0599_fair_tag",
+      "breakpoints": true
     }
   ]
 }

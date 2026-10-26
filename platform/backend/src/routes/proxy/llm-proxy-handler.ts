@@ -4323,7 +4323,11 @@ async function persistProxyInteraction({
   record = {
     ...record,
     attributionLabels,
-    durationMs: Math.max(0, Date.now() - streamTiming.requestReceivedAt),
+    durationMs: Math.max(
+      0,
+      Date.now() -
+        (upstreamAttempt?.startedAt ?? streamTiming.requestReceivedAt),
+    ),
     // A pooled attempt records the member model it was sent as; the pool's
     // name stays the baseline the client asked for.
     model: upstreamAttempt?.modelId ?? record.model,

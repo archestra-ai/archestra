@@ -62,6 +62,11 @@ export interface UpstreamAttempt {
    * prompt, and the provider bills that input whether or not we kept the answer.
    */
   cutOff?: boolean;
+  /**
+   * When a member after the first was tried, so its row's duration covers its
+   * own attempt rather than the whole request. Unset on the first attempt.
+   */
+  startedAt?: number;
   /** The answering member's provider and model id, which price the attempt. */
   provider?: SupportedProvider;
   modelId?: string;
@@ -282,6 +287,7 @@ export async function openThroughModelPool<T>(params: {
     attempt.attempt = index + 1;
     attempt.failureReason = undefined;
     attempt.cutOff = undefined;
+    attempt.startedAt = index > 0 ? Date.now() : undefined;
     const isLast = index === plan.members.length - 1;
     const abort = new AbortController();
     try {

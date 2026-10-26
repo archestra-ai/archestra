@@ -400,6 +400,8 @@ describe("openThroughModelPool", () => {
       attempt: 2,
       attemptOutcome: "answered",
       failureReason: undefined,
+      // Its row's duration starts here, not when the request arrived.
+      startedAt: expect.any(Number),
     });
   });
 

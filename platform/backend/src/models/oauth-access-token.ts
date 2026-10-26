@@ -95,6 +95,15 @@ class OAuthAccessTokenModel {
     return result;
   }
 
+  /** Delete one access token by its hashed value; true when it existed. */
+  static async deleteByTokenHash(tokenHash: string): Promise<boolean> {
+    const rows = await db
+      .delete(schema.oauthAccessTokensTable)
+      .where(eq(schema.oauthAccessTokensTable.token, tokenHash))
+      .returning({ id: schema.oauthAccessTokensTable.id });
+    return rows.length > 0;
+  }
+
   /**
    * Update the persisted expiry for a hashed access token.
    */

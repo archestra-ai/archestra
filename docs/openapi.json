@@ -185532,7 +185532,7 @@
         "tags": [
           "GitHub Actions"
         ],
-        "description": "Trade a GitHub Actions OIDC token from a pull_request workflow run for an MCP gateway token that acts as the pull request's author, plus a GitHub App installation token for that repository. The gateway must allow the repository and workflow in its GitHub Actions setting, and the author must have connected GitHub through the gateway's GitHub App.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Trade a GitHub Actions OIDC token from a pull_request workflow run, started by the pull request's author, for an MCP gateway token that acts as that author, plus a GitHub App installation token for that repository. The gateway must allow the repository and workflow in its GitHub Actions setting, and the author must have connected GitHub through the gateway's GitHub App.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -185622,11 +185622,13 @@
                         "invalid_request",
                         "invalid_token",
                         "not_trusted",
+                        "not_author",
                         "not_linked",
                         "ambiguous_link",
                         "forbidden",
                         "rate_limited",
-                        "github_error"
+                        "github_error",
+                        "server_error"
                       ]
                     },
                     "message": {
@@ -185658,11 +185660,13 @@
                         "invalid_request",
                         "invalid_token",
                         "not_trusted",
+                        "not_author",
                         "not_linked",
                         "ambiguous_link",
                         "forbidden",
                         "rate_limited",
-                        "github_error"
+                        "github_error",
+                        "server_error"
                       ]
                     },
                     "message": {
@@ -185694,11 +185698,13 @@
                         "invalid_request",
                         "invalid_token",
                         "not_trusted",
+                        "not_author",
                         "not_linked",
                         "ambiguous_link",
                         "forbidden",
                         "rate_limited",
-                        "github_error"
+                        "github_error",
+                        "server_error"
                       ]
                     },
                     "message": {
@@ -185730,11 +185736,51 @@
                         "invalid_request",
                         "invalid_token",
                         "not_trusted",
+                        "not_author",
                         "not_linked",
                         "ambiguous_link",
                         "forbidden",
                         "rate_limited",
-                        "github_error"
+                        "github_error",
+                        "server_error"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "login": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "invalid_request",
+                        "invalid_token",
+                        "not_trusted",
+                        "not_author",
+                        "not_linked",
+                        "ambiguous_link",
+                        "forbidden",
+                        "rate_limited",
+                        "github_error",
+                        "server_error"
                       ]
                     },
                     "message": {
@@ -185766,11 +185812,13 @@
                         "invalid_request",
                         "invalid_token",
                         "not_trusted",
+                        "not_author",
                         "not_linked",
                         "ambiguous_link",
                         "forbidden",
                         "rate_limited",
-                        "github_error"
+                        "github_error",
+                        "server_error"
                       ]
                     },
                     "message": {

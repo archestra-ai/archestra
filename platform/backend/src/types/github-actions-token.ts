@@ -1,9 +1,10 @@
+import { GitHubActionsTokenErrorCodeSchema } from "@archestra/shared";
 import { z } from "zod";
 
 export const GitHubActionsTokenRequestSchema = z.object({
   /** The job's GitHub Actions OIDC token, requested with this deployment's URL as audience. */
   token: z.string().min(1).max(16_384),
-  /** The MCP gateway URL the token is for: `<base URL>/v1/mcp/<gateway id>`. */
+  /** The MCP gateway URL the token is for: `<base URL>/v1/mcp/<gateway id or slug>`. */
   resource: z.string().min(1).max(2048),
 });
 
@@ -26,31 +27,7 @@ export type GitHubActionsTokenResponse = z.infer<
   typeof GitHubActionsTokenResponseSchema
 >;
 
-/**
- * - `invalid_request`: the body is malformed, or `resource` is not this
- *   deployment's MCP gateway URL.
- * - `invalid_token`: the OIDC token is not genuine, not for this deployment,
- *   expired, or already exchanged.
- * - `not_trusted`: the gateway does not accept this repository, workflow or
- *   event, the pull request comes from a fork, or the GitHub App cannot read it.
- * - `not_linked`: the pull request's author has not connected GitHub to an
- *   account here through the gateway's GitHub App.
- * - `ambiguous_link`: more than one account here connected that GitHub user.
- * - `forbidden`: the author's account may not use the gateway.
- * - `rate_limited`: too many requests from this address.
- * - `github_error`: GitHub refused or failed a request.
- */
-export const GitHubActionsTokenErrorCodeSchema = z.enum([
-  "invalid_request",
-  "invalid_token",
-  "not_trusted",
-  "not_linked",
-  "ambiguous_link",
-  "forbidden",
-  "rate_limited",
-  "github_error",
-]);
-
+/** Every refusal; `error` is a stable code a workflow can branch on. */
 export const GitHubActionsTokenErrorSchema = z.object({
   error: GitHubActionsTokenErrorCodeSchema,
   message: z.string(),

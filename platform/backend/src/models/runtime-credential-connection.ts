@@ -211,15 +211,16 @@ export default class RuntimeCredentialConnectionModel {
   }
 
   /**
-   * Current organization members who connected this GitHub account through a
-   * personal GitHub sign-in credential of the named GitHub.com App. More than
-   * one id means the account is linked to several people.
+   * Personal connections of this GitHub account, held by current organization
+   * members, through a GitHub sign-in credential of the named GitHub.com App:
+   * who holds each, and under which credential. More than one distinct user
+   * means the account is linked to several people.
    */
-  static async findGitHubAppUserIds(params: {
+  static async findGitHubAppConnections(params: {
     organizationId: string;
     githubAppCredentialKey: string;
     githubId: GitHubUserId;
-  }): Promise<string[]> {
+  }): Promise<Array<{ userId: string; credentialKey: string }>> {
     const connections = schema.runtimeCredentialConnectionsTable;
     const userCredential = alias(
       schema.runtimeCredentialDefinitionsTable,
@@ -229,8 +230,11 @@ export default class RuntimeCredentialConnectionModel {
       schema.runtimeCredentialDefinitionsTable,
       "github_app",
     );
-    const rows = await db
-      .selectDistinct({ userId: schema.membersTable.userId })
+    return db
+      .selectDistinct({
+        userId: schema.membersTable.userId,
+        credentialKey: userCredential.key,
+      })
       .from(connections)
       .innerJoin(
         userCredential,
@@ -267,7 +271,6 @@ export default class RuntimeCredentialConnectionModel {
           eq(connections.githubId, params.githubId),
         ),
       );
-    return rows.map((row) => row.userId);
   }
 
   static async findForAudit(params: {

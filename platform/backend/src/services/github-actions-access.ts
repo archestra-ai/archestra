@@ -1,6 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import type { GitHubActionsAccess } from "@archestra/shared";
+import {
+  type GitHubActionsAccess,
+  type GitHubActionsTokenErrorCode,
+  isGitHubActionsAppCredential,
+} from "@archestra/shared";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { CacheKey, cacheManager } from "@/cache-manager";
@@ -17,10 +21,11 @@ import {
   RuntimeCredentialConnectionModel,
   RuntimeCredentialDefinitionModel,
 } from "@/models";
+import { MCP_GATEWAY_PREFIX } from "@/routes/route-paths";
 import { CredentialAccess } from "@/services/credential-access";
+import { githubUserConnectionManager } from "@/services/github-user-connection";
 import {
   buildOAuthIssuer,
-  extractProfileIdFromMcpResource,
   MCP_RESOURCE_REFERENCE_PREFIX,
 } from "@/services/identity-providers/enterprise-managed/authorization";
 import { jwksValidator } from "@/services/jwks-validator";
@@ -29,14 +34,13 @@ import {
   type AgentAccessContext,
   type AgentType,
   ApiError,
-  GITHUB_COM_API_URL,
   GitHubUserIdSchema,
-  type RuntimeCredentialDefinition,
 } from "@/types";
 import type {
   GitHubActionsTokenError,
   GitHubActionsTokenResponse,
 } from "@/types/github-actions-token";
+import { isUuid } from "@/utils/uuid";
 
 /**
  * Trade a GitHub Actions OIDC token from a pull-request job for a token on an
@@ -50,16 +54,16 @@ export async function exchangeGitHubActionsToken(params: {
   | { ok: true; body: GitHubActionsTokenResponse }
   | {
       ok: false;
-      statusCode: 400 | 401 | 403 | 502;
+      statusCode: 400 | 401 | 403 | 500 | 502;
       body: GitHubActionsTokenError;
     }
 > {
-  const gatewayId = extractProfileIdFromMcpResource(params.resource);
-  if (!gatewayId)
+  const gatewayRef = parseGatewayResource(params.resource);
+  if (!gatewayRef)
     return refuse(
       400,
       "invalid_request",
-      `resource must be an MCP gateway URL of this deployment: ${buildOAuthIssuer()}/v1/mcp/<gateway id>`,
+      `resource must be an MCP gateway URL of this deployment: ${buildOAuthIssuer()}${MCP_GATEWAY_PREFIX}/<gateway id or slug>`,
     );
 
   const claims = await verifyOidcToken(params.token);
@@ -70,40 +74,38 @@ export async function exchangeGitHubActionsToken(params: {
       `The GitHub Actions OIDC token is not valid here. Request it with the audience ${buildOAuthIssuer()}.`,
     );
 
-  const gateway = await AgentModel.findGitHubActionsGateway(gatewayId);
-  const access =
-    gateway?.agentType === "mcp_gateway" ? gateway.githubActionsAccess : null;
-  if (!gateway || !access)
-    return refuse(
-      403,
-      "not_trusted",
-      "This MCP gateway does not accept GitHub Actions tokens.",
-    );
-
+  // Until the run is trusted, every refusal reads the same, so a caller with
+  // any GitHub token cannot map out which gateways accept which runs.
+  const run = {
+    resource: params.resource,
+    repository: claims.repository,
+    workflow: claims.job_workflow_ref,
+    event: claims.event_name,
+    ref: claims.ref,
+  };
+  const gatewayId = await AgentModel.resolveIdFromIdOrSlug(gatewayRef);
+  const gateway = gatewayId
+    ? await AgentModel.findGitHubActionsGateway(gatewayId)
+    : null;
+  if (!gatewayId || !gateway) return untrusted("no such gateway", run);
+  if (gateway.agentType !== "mcp_gateway")
+    return untrusted("not an MCP gateway", run);
+  const access = gateway.githubActionsAccess;
+  if (!access) return untrusted("GitHub Actions access is off", run);
   const { repository } = claims;
   const pullNumber = Number(PULL_REQUEST_MERGE_REF.exec(claims.ref)?.[1]);
-  if (claims.event_name !== "pull_request" || !Number.isSafeInteger(pullNumber))
-    return refuse(
-      403,
-      "not_trusted",
-      "Only workflow runs for a pull_request event can use this gateway.",
-    );
+  if (claims.event_name !== "pull_request")
+    return untrusted("event is not pull_request", run);
+  if (!Number.isSafeInteger(pullNumber))
+    return untrusted("ref is not a pull request merge ref", run);
   if (
     !access.repositories.some(
       (allowed) => allowed.toLowerCase() === repository.toLowerCase(),
     )
   )
-    return refuse(
-      403,
-      "not_trusted",
-      `This gateway does not accept workflow runs from ${repository}.`,
-    );
+    return untrusted("repository is not listed", run);
   if (!access.workflows.includes(claims.job_workflow_ref))
-    return refuse(
-      403,
-      "not_trusted",
-      `This gateway does not trust the workflow ${claims.job_workflow_ref}.`,
-    );
+    return untrusted("workflow is not trusted", run);
 
   const app = await resolveGitHubApp({
     organizationId: gateway.organizationId,
@@ -138,12 +140,23 @@ export async function exchangeGitHubActionsToken(params: {
       "Pull requests from forks cannot use this gateway.",
       login,
     );
+  // A collaborator who pushes to someone else's pull request starts the run;
+  // the token must never act as an author who did not.
+  if (claims.actor_id !== String(pullRequest.user.id))
+    return refuse(
+      403,
+      "not_author",
+      `This run was started by ${claims.actor ?? `GitHub user ${claims.actor_id}`} on a pull request by ${login}; reviews run only when the author triggers them.`,
+      login,
+    );
 
-  const userIds = await RuntimeCredentialConnectionModel.findGitHubAppUserIds({
-    organizationId: gateway.organizationId,
-    githubAppCredentialKey: access.githubAppCredentialKey,
-    githubId: pullRequest.user.id,
-  });
+  const connections =
+    await RuntimeCredentialConnectionModel.findGitHubAppConnections({
+      organizationId: gateway.organizationId,
+      githubAppCredentialKey: access.githubAppCredentialKey,
+      githubId: pullRequest.user.id,
+    });
+  const userIds = [...new Set(connections.map((entry) => entry.userId))];
   const appName = archestraMcpBranding.appName;
   if (userIds.length === 0)
     return refuse(
@@ -169,6 +182,20 @@ export async function exchangeGitHubActionsToken(params: {
       login,
     );
 
+  if (
+    !(await hasUsableConnection({
+      organizationId: gateway.organizationId,
+      userId,
+      credentialKeys: connections.map((entry) => entry.credentialKey),
+    }))
+  )
+    return refuse(
+      403,
+      "not_linked",
+      `The GitHub connection of ${login} in ${appName} has expired or was revoked. Sign in to ${appName}, open ${PERSONAL_CREDENTIALS_PATH}, connect GitHub again, then re-run the workflow.`,
+      login,
+    );
+
   if (!(await claimTokenId(claims)))
     return refuse(
       401,
@@ -176,42 +203,61 @@ export async function exchangeGitHubActionsToken(params: {
       "This GitHub Actions OIDC token was already exchanged. Request a new one.",
     );
 
-  let githubToken: { token: string; expiresAt: number };
+  let gatewayToken: { value: string; hash: string } | null = null;
   try {
-    githubToken = await createRepositoryInstallationToken({
-      ...app,
-      repository: repository.slice(repository.indexOf("/") + 1),
-      permissions: GITHUB_TOKEN_PERMISSIONS,
-    });
+    gatewayToken = await mintGatewayAccessToken({ gatewayId, userId });
+    let githubToken: { token: string; expiresAt: number };
+    try {
+      githubToken = await createRepositoryInstallationToken({
+        ...app,
+        repository: repository.slice(repository.indexOf("/") + 1),
+        permissions: GITHUB_TOKEN_PERMISSIONS,
+      });
+    } catch (error) {
+      await OAuthAccessTokenModel.deleteByTokenHash(gatewayToken.hash);
+      return githubFailure({ error, gatewayId, repository });
+    }
+
+    logger.info(
+      {
+        organizationId: gateway.organizationId,
+        gatewayId,
+        repository,
+        pullRequest: pullNumber,
+        githubLogin: login,
+        userId,
+      },
+      "[github-actions] Issued an MCP gateway token for a pull request author",
+    );
+
+    return {
+      ok: true,
+      body: {
+        access_token: gatewayToken.value,
+        token_type: "Bearer",
+        expires_in: ACCESS_TOKEN_LIFETIME_SECONDS,
+        github_token: githubToken.token,
+        github_token_expires_at: new Date(githubToken.expiresAt).toISOString(),
+        github_login: login,
+        user_id: userId,
+      },
+    };
   } catch (error) {
-    return githubFailure({ error, gatewayId, repository });
+    // Nobody holds a token minted before the failure; take it back.
+    if (gatewayToken)
+      await OAuthAccessTokenModel.deleteByTokenHash(gatewayToken.hash).catch(
+        () => undefined,
+      );
+    logger.error(
+      { gatewayId, repository, ...describeError(error) },
+      "[github-actions] Token exchange failed",
+    );
+    return refuse(
+      500,
+      "server_error",
+      "The token exchange failed. Request a new OIDC token and try again.",
+    );
   }
-  const accessToken = await mintGatewayAccessToken({ gatewayId, userId });
-
-  logger.info(
-    {
-      organizationId: gateway.organizationId,
-      gatewayId,
-      repository,
-      pullRequest: pullNumber,
-      githubLogin: login,
-      userId,
-    },
-    "[github-actions] Issued an MCP gateway token for a pull request author",
-  );
-
-  return {
-    ok: true,
-    body: {
-      access_token: accessToken,
-      token_type: "Bearer",
-      expires_in: ACCESS_TOKEN_LIFETIME_SECONDS,
-      github_token: githubToken.token,
-      github_token_expires_at: new Date(githubToken.expiresAt).toISOString(),
-      github_login: login,
-      user_id: userId,
-    },
-  };
 }
 
 /**
@@ -249,7 +295,7 @@ export async function assertGitHubActionsAccessChange(params: {
     organizationId: params.organizationId,
     key: next.githubAppCredentialKey,
   });
-  if (!isUsableGitHubApp(definition))
+  if (!isGitHubActionsAppCredential(definition))
     throw new ApiError(
       400,
       "Pick an organization GitHub App credential for GitHub.com with an app ID and installation ID",
@@ -263,7 +309,13 @@ const GITHUB_ACTIONS_OIDC_ISSUER =
 const GITHUB_ACTIONS_OIDC_JWKS_URL = `${GITHUB_ACTIONS_OIDC_ISSUER}/.well-known/jwks`;
 const ACCESS_TOKEN_LIFETIME_SECONDS = 3 * 60 * 60;
 const PULL_REQUEST_MERGE_REF = /^refs\/pull\/(\d+)\/merge$/;
+/** A slug the agents table generates: lowercase words joined by hyphens. */
+const GATEWAY_SLUG = /^[a-z0-9](?:[a-z0-9-]{0,198}[a-z0-9])?$/;
 const PERSONAL_CREDENTIALS_PATH = "/account/credentials";
+const UNTRUSTED_RUN_MESSAGE =
+  "This MCP gateway does not accept this GitHub Actions run.";
+const UNUSABLE_APP_MESSAGE =
+  "The GitHub App credential could not be used; check its private key, App ID and installation ID.";
 /** Enough to read the change and post a review; issue comments are not needed. */
 const GITHUB_TOKEN_PERMISSIONS = {
   pull_requests: "write",
@@ -283,6 +335,9 @@ const OidcClaimsSchema = z.object({
   ref: z.string(),
   repository: z.string(),
   job_workflow_ref: z.string(),
+  /** Who started the run; GitHub sends the numeric id as a string. */
+  actor_id: z.union([z.string().min(1), z.number()]).transform(String),
+  actor: z.string().optional(),
 });
 type OidcClaims = z.infer<typeof OidcClaimsSchema>;
 
@@ -303,8 +358,8 @@ type GitHubApp = {
 };
 
 function refuse(
-  statusCode: 400 | 401 | 403 | 502,
-  error: GitHubActionsTokenError["error"],
+  statusCode: 400 | 401 | 403 | 500 | 502,
+  error: GitHubActionsTokenErrorCode,
   message: string,
   login?: string,
 ) {
@@ -315,24 +370,94 @@ function refuse(
   };
 }
 
+/** The one answer for a run the gateway does not accept; the reason is logged. */
+function untrusted(
+  reason: string,
+  run: {
+    resource: string;
+    repository: string;
+    workflow: string;
+    event: string;
+    ref: string;
+  },
+) {
+  logger.info(
+    { ...run, reason },
+    "[github-actions] Refused an untrusted workflow run",
+  );
+  return refuse(403, "not_trusted", UNTRUSTED_RUN_MESSAGE);
+}
+
 function githubFailure(params: {
   error: unknown;
   gatewayId: string;
   repository: string;
 }) {
-  const message =
-    params.error instanceof ApiError
-      ? params.error.message
-      : "GitHub could not be reached";
+  const { error } = params;
+  const context = {
+    gatewayId: params.gatewayId,
+    repository: params.repository,
+  };
+  // GitHub answered, or the credential was refused with a reason worth showing.
+  if (error instanceof ApiError) {
+    logger.warn(
+      { ...context, error: error.message },
+      "[github-actions] GitHub request failed during token exchange",
+    );
+    return refuse(502, "github_error", error.message);
+  }
   logger.warn(
-    {
-      gatewayId: params.gatewayId,
-      repository: params.repository,
-      error: message,
-    },
+    { ...context, ...describeError(error) },
     "[github-actions] GitHub request failed during token exchange",
   );
-  return refuse(502, "github_error", message);
+  if (isNetworkFailure(error))
+    return refuse(
+      502,
+      "github_error",
+      "GitHub could not be reached. Try again.",
+    );
+  // A local failure: the key does not parse or cannot sign.
+  return refuse(502, "github_error", UNUSABLE_APP_MESSAGE);
+}
+
+/** An error's class and message, never the values it was given. */
+function describeError(error: unknown) {
+  return error instanceof Error
+    ? { errorClass: error.name, error: error.message }
+    : { errorClass: typeof error, error: String(error) };
+}
+
+/** fetch rejects with a TypeError when no response arrives, and times out by name. */
+function isNetworkFailure(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === "TimeoutError" ||
+      error.name === "AbortError" ||
+      (error instanceof TypeError && /fetch/i.test(error.message)))
+  );
+}
+
+/**
+ * The gateway id or slug in this deployment's MCP gateway URL, or null for
+ * anything else. Checked before any lookup, since the id column is a uuid.
+ */
+function parseGatewayResource(resource: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(resource);
+  } catch {
+    return null;
+  }
+  if (url.origin !== new URL(buildOAuthIssuer()).origin) return null;
+  const prefix = `${MCP_GATEWAY_PREFIX}/`;
+  if (!url.pathname.startsWith(prefix)) return null;
+  let segment: string;
+  try {
+    segment = decodeURIComponent(url.pathname.slice(prefix.length));
+  } catch {
+    return null;
+  }
+  return isUuid(segment) || GATEWAY_SLUG.test(segment) ? segment : null;
 }
 
 async function verifyOidcToken(token: string): Promise<OidcClaims | null> {
@@ -356,7 +481,7 @@ async function resolveGitHubApp(params: {
   key: string;
 }): Promise<GitHubApp | null> {
   const definition = await RuntimeCredentialDefinitionModel.find(params);
-  if (!isUsableGitHubApp(definition)) return null;
+  if (!isGitHubActionsAppCredential(definition)) return null;
   const privateKey = await RuntimeCredentialConnectionModel.resolveValue({
     organizationId: params.organizationId,
     credentialId: params.key,
@@ -369,23 +494,6 @@ async function resolveGitHubApp(params: {
     installationId: definition.installationId,
     privateKey,
   };
-}
-
-function isUsableGitHubApp(
-  definition: RuntimeCredentialDefinition | null,
-): definition is RuntimeCredentialDefinition & {
-  githubUrl: string;
-  appId: string;
-  installationId: string;
-} {
-  // GitHub Actions OIDC tokens come from GitHub.com, so the App must live there.
-  return (
-    definition?.kind === "github_app" &&
-    definition.allowOrganization &&
-    definition.githubUrl === GITHUB_COM_API_URL &&
-    !!definition.appId &&
-    !!definition.installationId
-  );
 }
 
 /** The pull request, or null when the App cannot see it. */
@@ -444,6 +552,37 @@ async function userCanUseGateway(params: {
   });
 }
 
+/**
+ * Whether one of the user's connections still yields a GitHub token, resolved
+ * as a runtime launch would (refreshing it when due). A revoked or expired
+ * authorization no longer counts as a link.
+ */
+async function hasUsableConnection(params: {
+  organizationId: string;
+  userId: string;
+  credentialKeys: string[];
+}): Promise<boolean> {
+  for (const credentialId of params.credentialKeys) {
+    try {
+      const resolved = await githubUserConnectionManager.resolve({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        credentialId,
+      });
+      if (resolved) return true;
+    } catch (error) {
+      // GitHub sign-in reports a revoked, expired, or reconfigured
+      // authorization as a 400; anything else is a failure of its own.
+      if (!(error instanceof ApiError) || error.statusCode !== 400) throw error;
+      logger.info(
+        { userId: params.userId, credentialId, error: error.message },
+        "[github-actions] A GitHub connection can no longer be used",
+      );
+    }
+  }
+  return false;
+}
+
 /** Record the token's `jti` until it expires; false when it is already there. */
 async function claimTokenId(claims: OidcClaims): Promise<boolean> {
   const key =
@@ -462,20 +601,21 @@ async function claimTokenId(claims: OidcClaims): Promise<boolean> {
 async function mintGatewayAccessToken(params: {
   gatewayId: string;
   userId: string;
-}): Promise<string> {
+}): Promise<{ value: string; hash: string }> {
   await OAuthClientModel.ensurePlatformIssuedClient({
     id: GITHUB_ACTIONS_OAUTH_CLIENT_ID,
     clientId: GITHUB_ACTIONS_OAUTH_CLIENT_ID,
     name: "GitHub Actions",
   });
-  const accessToken = randomBytes(32).toString("base64url");
+  const value = randomBytes(32).toString("base64url");
+  const hash = OAuthAccessTokenModel.hashTokenForLookup(value);
   await OAuthAccessTokenModel.create({
-    tokenHash: OAuthAccessTokenModel.hashTokenForLookup(accessToken),
+    tokenHash: hash,
     clientId: GITHUB_ACTIONS_OAUTH_CLIENT_ID,
     userId: params.userId,
     expiresAt: new Date(Date.now() + ACCESS_TOKEN_LIFETIME_SECONDS * 1000),
     scopes: ["mcp"],
     referenceId: `${MCP_RESOURCE_REFERENCE_PREFIX}${params.gatewayId}`,
   });
-  return accessToken;
+  return { value, hash };
 }

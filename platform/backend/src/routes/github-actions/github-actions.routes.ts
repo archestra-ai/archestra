@@ -4,7 +4,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { GITHUB_ACTIONS_TOKEN_PATH } from "@/routes/route-paths";
 import { exchangeGitHubActionsToken } from "@/services/github-actions-access";
-import { oauthTokenRateLimiter } from "@/services/oauth-token-rate-limit";
+import { githubActionsTokenRateLimiter } from "@/services/oauth-token-rate-limit";
 import {
   GitHubActionsTokenErrorSchema,
   GitHubActionsTokenRequestSchema,
@@ -25,7 +25,7 @@ const githubActionsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ExchangeGitHubActionsToken,
         description:
-          "Trade a GitHub Actions OIDC token from a pull_request workflow run for an MCP gateway token that acts as the pull request's author, plus a GitHub App installation token for that repository. The gateway must allow the repository and workflow in its GitHub Actions setting, and the author must have connected GitHub through the gateway's GitHub App.",
+          "Trade a GitHub Actions OIDC token from a pull_request workflow run, started by the pull request's author, for an MCP gateway token that acts as that author, plus a GitHub App installation token for that repository. The gateway must allow the repository and workflow in its GitHub Actions setting, and the author must have connected GitHub through the gateway's GitHub App.",
         tags: ["GitHub Actions"],
         body: GitHubActionsTokenRequestSchema,
         response: {
@@ -34,12 +34,13 @@ const githubActionsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           401: GitHubActionsTokenErrorSchema,
           403: GitHubActionsTokenErrorSchema,
           429: GitHubActionsTokenErrorSchema,
+          500: GitHubActionsTokenErrorSchema,
           502: GitHubActionsTokenErrorSchema,
         },
       },
       async onRequest(request, reply) {
         if (config.authRateLimitDisabled) return;
-        const limit = await oauthTokenRateLimiter.consume(request.ip);
+        const limit = await githubActionsTokenRateLimiter.consume(request.ip);
         if (limit.allowed) return;
         return reply
           .header("Retry-After", limit.retryAfter)
@@ -61,7 +62,24 @@ const githubActionsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           message: "The body must be JSON with a token and a resource.",
         });
 
-      const result = await exchangeGitHubActionsToken(request.body);
+      let result: Awaited<ReturnType<typeof exchangeGitHubActionsToken>>;
+      try {
+        result = await exchangeGitHubActionsToken(request.body);
+      } catch (error) {
+        logger.error(
+          {
+            resource: request.body.resource,
+            errorClass: error instanceof Error ? error.name : typeof error,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "[github-actions] Token exchange failed",
+        );
+        return reply.code(500).send({
+          error: "server_error",
+          message:
+            "The token exchange failed. Request a new OIDC token and try again.",
+        });
+      }
       if (result.ok) return reply.send(result.body);
 
       logger.info(

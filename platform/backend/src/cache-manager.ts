@@ -37,6 +37,8 @@ export const CacheKey = {
   OAuthTokenRateLimit: "oauth-token-rate-limit",
   /** GitHub Actions OIDC token ids already exchanged, until they expire. */
   GitHubActionsTokenJti: "github-actions-token-jti",
+  /** GitHub Actions token exchange requests, before verifying the OIDC token. */
+  GitHubActionsTokenRateLimit: "github-actions-token-rate-limit",
   /** MCP Gateway session state */
   McpSession: "mcp-session",
   /** Legacy HTTP+SSE stream records for the MCP Gateway */

@@ -51218,7 +51218,7 @@ export type ExchangeGitHubActionsTokenErrors = {
      * Default Response
      */
     400: {
-        error: 'invalid_request' | 'invalid_token' | 'not_trusted' | 'not_linked' | 'ambiguous_link' | 'forbidden' | 'rate_limited' | 'github_error';
+        error: 'invalid_request' | 'invalid_token' | 'not_trusted' | 'not_author' | 'not_linked' | 'ambiguous_link' | 'forbidden' | 'rate_limited' | 'github_error' | 'server_error';
         message: string;
         login?: string;
     };
@@ -51226,7 +51226,7 @@ export type ExchangeGitHubActionsTokenErrors = {
      * Default Response
      */
     401: {
-        error: 'invalid_request' | 'invalid_token' | 'not_trusted' | 'not_linked' | 'ambiguous_link' | 'forbidden' | 'rate_limited' | 'github_error';
+        error: 'invalid_request' | 'invalid_token' | 'not_trusted' | 'not_author' | 'not_linked' | 'ambiguous_link' | 'forbidden' | 'rate_limited' | 'github_error' | 'server_error';
         message: string;
         login?: string;
     };
@@ -51234,7 +51234,7 @@ export type ExchangeGitHubActionsTokenErrors = {
      * Default Response
      */
     403: {
-        error: 'invalid_request' | 'invalid_token' | 'not_trusted' | 'not_linked' | 'ambiguous_link' | 'forbidden' | 'rate_limited' | 'github_error';
+        error: 'invalid_request' | 'invalid_token' | 'not_trusted' | 'not_author' | 'not_linked' | 'ambiguous_link' | 'forbidden' | 'rate_limited' | 'github_error' | 'server_error';
         message: string;
         login?: string;
     };
@@ -51242,7 +51242,15 @@ export type ExchangeGitHubActionsTokenErrors = {
      * Default Response
      */
     429: {
-        error: 'invalid_request' | 'invalid_token' | 'not_trusted' | 'not_linked' | 'ambiguous_link' | 'forbidden' | 'rate_limited' | 'github_error';
+        error: 'invalid_request' | 'invalid_token' | 'not_trusted' | 'not_author' | 'not_linked' | 'ambiguous_link' | 'forbidden' | 'rate_limited' | 'github_error' | 'server_error';
+        message: string;
+        login?: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: 'invalid_request' | 'invalid_token' | 'not_trusted' | 'not_author' | 'not_linked' | 'ambiguous_link' | 'forbidden' | 'rate_limited' | 'github_error' | 'server_error';
         message: string;
         login?: string;
     };
@@ -51250,7 +51258,7 @@ export type ExchangeGitHubActionsTokenErrors = {
      * Default Response
      */
     502: {
-        error: 'invalid_request' | 'invalid_token' | 'not_trusted' | 'not_linked' | 'ambiguous_link' | 'forbidden' | 'rate_limited' | 'github_error';
+        error: 'invalid_request' | 'invalid_token' | 'not_trusted' | 'not_author' | 'not_linked' | 'ambiguous_link' | 'forbidden' | 'rate_limited' | 'github_error' | 'server_error';
         message: string;
         login?: string;
     };

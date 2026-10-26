@@ -19,22 +19,57 @@ export function joinIfArray(value: unknown): string {
     : ((value as string) ?? "");
 }
 
+const GITHUB_INHERITABLE_OVERRIDE_FIELDS = new Set([
+  "includeIssues",
+  "includePullRequests",
+  "includeRepositoryFiles",
+  "labelsToSkip",
+  "fileTypes",
+  "includePaths",
+  "excludePaths",
+]);
+
+/** Null is a form-only inheritance value; undefined can restore a loaded Controller default. */
+export function githubRepositoryOverrideDraft(
+  override: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    ...override,
+    ...Object.fromEntries(
+      [...GITHUB_INHERITABLE_OVERRIDE_FIELDS].map((field) => [
+        field,
+        override[field] ?? null,
+      ]),
+    ),
+  };
+}
+
 /** Convert comma-separated string fields to arrays before sending to the API. */
 export function transformConfigArrayFields(
   config: Record<string, unknown>,
 ): Record<string, unknown> {
   const result = { ...config };
 
-  if (Array.isArray(config.repositoryPathFilters)) {
-    result.repositoryPathFilters = config.repositoryPathFilters.map(
-      (filter: Record<string, unknown>) => ({
-        ...transformConfigArrayFields(filter),
+  const repositoryOverrides =
+    config.repositoryOverrides ?? config.repositoryPathFilters;
+  if (Array.isArray(repositoryOverrides)) {
+    result.repositoryOverrides = repositoryOverrides.map(
+      (override: Record<string, unknown>) => ({
+        ...Object.fromEntries(
+          Object.entries(transformConfigArrayFields(override)).filter(
+            ([field, value]) =>
+              value !== undefined &&
+              (value !== null ||
+                !GITHUB_INHERITABLE_OVERRIDE_FIELDS.has(field)),
+          ),
+        ),
         repository:
-          typeof filter.repository === "string"
-            ? filter.repository.trim()
-            : filter.repository,
+          typeof override.repository === "string"
+            ? override.repository.trim()
+            : override.repository,
       }),
     );
+    delete result.repositoryPathFilters;
   }
 
   // String array fields: split by comma, trim, filter empty

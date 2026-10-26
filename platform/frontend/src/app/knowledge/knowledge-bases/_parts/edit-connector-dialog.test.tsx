@@ -7,7 +7,9 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Button } from "@/components/ui/button";
 import { EditConnectorDialog } from "./edit-connector-dialog";
 
 // Radix Popper / floating-ui needs ResizeObserver as a real constructor
@@ -111,15 +113,14 @@ function renderDialog(connector: ConnectorFixture = makeAsanaConnector()) {
   return { onOpenChange };
 }
 
-describe("EditConnectorDialog - GitHub repository path filters", () => {
+describe("EditConnectorDialog - GitHub repository settings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockMutateAsync.mockResolvedValue({ id: "conn-github" });
   });
 
-  it("reloads saved arrays, edits one repository, and removes a rule without changing the other", async () => {
-    const user = userEvent.setup();
-    renderDialog({
+  const legacyConnector = () =>
+    ({
       ...makeAsanaConnector(),
       id: "conn-github",
       connectorType: "github",
@@ -128,8 +129,11 @@ describe("EditConnectorDialog - GitHub repository path filters", () => {
         githubUrl: "https://api.github.com",
         owner: "example-org",
         repos: ["repo-a", "repo-b"],
+        includeIssues: false,
+        includePullRequests: true,
         includeRepositoryFiles: true,
         includePaths: ["legacy"],
+        labelsToSkip: ["skip"],
         repositoryPathFilters: [
           {
             repository: "repo-a",
@@ -143,27 +147,228 @@ describe("EditConnectorDialog - GitHub repository path filters", () => {
           },
         ],
       },
-    } as ConnectorFixture);
+    }) as ConnectorFixture;
+
+  function loadedOverridesConnector(): ConnectorFixture {
+    const connector = legacyConnector();
+    connector.config = {
+      ...connector.config,
+      includeIssues: true,
+      includePaths: ["docs"],
+      repositoryOverrides: [
+        {
+          repository: "repo-a",
+          includeIssues: false,
+          includePaths: ["custom-docs"],
+        },
+      ],
+    } as ConnectorFixture["config"];
+    return connector;
+  }
+
+  it("shows inheritance after changing a loaded false override to defaults", async () => {
+    const user = userEvent.setup();
+    renderDialog(loadedOverridesConnector());
     await user.click(screen.getByRole("button", { name: /Advanced/ }));
-    expect(screen.getAllByLabelText(/^Include paths$/)[0]).toHaveValue("docs");
-    expect(screen.getAllByLabelText(/^Exclude paths$/)[1]).toHaveValue(
-      "drafts",
+    await user.click(
+      screen.getByRole("button", { name: "Repository settings for repo-a" }),
     );
-    fireEvent.change(screen.getAllByLabelText(/^Include paths$/)[1], {
+    const row = within(
+      screen.getByRole("group", { name: "Repository repo-a" }),
+    );
+    expect(
+      row.getByRole("combobox", { name: "Include Issues" }),
+    ).toHaveTextContent("Off");
+    await user.click(row.getByRole("combobox", { name: "Include Issues" }));
+    await user.click(screen.getByRole("option", { name: "Use default (on)" }));
+    expect(
+      row.getByRole("combobox", { name: "Include Issues" }),
+    ).toHaveTextContent("Use default (on)");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    expect(
+      mockMutateAsync.mock.calls[0][0].body.config.repositoryOverrides[0],
+    ).not.toHaveProperty("includeIssues");
+  });
+
+  it("shows inherited folders after changing a loaded list override to defaults", async () => {
+    const user = userEvent.setup();
+    renderDialog(loadedOverridesConnector());
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Repository settings for repo-a" }),
+    );
+    const row = within(
+      screen.getByRole("group", { name: "Repository repo-a" }),
+    );
+    expect(row.getByLabelText("Include paths")).toHaveValue("custom-docs");
+    await user.click(row.getByLabelText("Use default include paths"));
+    expect(row.getByLabelText("Use default include paths")).toBeChecked();
+    expect(row.getByLabelText("Include paths")).toBeDisabled();
+    expect(row.getByLabelText("Include paths")).toHaveValue("docs");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    expect(
+      mockMutateAsync.mock.calls[0][0].body.config.repositoryOverrides[0],
+    ).not.toHaveProperty("includePaths");
+  });
+
+  it("does not resurrect loaded defaults when resetting and customizing the same row", async () => {
+    const user = userEvent.setup();
+    renderDialog(loadedOverridesConnector());
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Reset repo-a to defaults" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Customize repo-a" }));
+    const row = within(
+      screen.getByRole("group", { name: "Repository repo-a" }),
+    );
+    expect(
+      row.getByRole("combobox", { name: "Include Issues" }),
+    ).toHaveTextContent("Use default (on)");
+    expect(row.getByLabelText("Use default include paths")).toBeChecked();
+    expect(row.getByLabelText("Include paths")).toBeDisabled();
+    expect(row.getByLabelText("Include paths")).toHaveValue("docs");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    expect(
+      mockMutateAsync.mock.calls[0][0].body.config.repositoryOverrides,
+    ).toEqual([{ repository: "repo-a" }]);
+  });
+
+  it("reloads legacy rules, resets one repository, and preserves the other's explicit empty includes", async () => {
+    const user = userEvent.setup();
+    renderDialog(legacyConnector());
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Repository settings for repo-a" }),
+    );
+    expect(
+      within(
+        screen.getByRole("group", { name: "Repository repo-a" }),
+      ).getByLabelText("Include paths"),
+    ).toHaveValue("docs");
+    await user.click(
+      screen.getByRole("button", { name: "Repository settings for repo-b" }),
+    );
+    const row = within(
+      screen.getByRole("group", { name: "Repository repo-b" }),
+    );
+    expect(row.getByLabelText("Exclude paths")).toHaveValue("drafts");
+    fireEvent.change(row.getByLabelText("Include paths"), {
       target: { value: "" },
     });
     await user.click(
-      screen.getAllByRole("button", { name: "Remove repository filter" })[0],
+      screen.getByRole("button", { name: "Reset repo-a to defaults" }),
     );
-    expect(screen.getAllByLabelText(/^Repository$/)).toHaveLength(1);
-    expect(screen.getByLabelText(/^Repository$/)).toHaveValue("repo-b");
+    expect(
+      screen.getByRole("button", { name: "Customize repo-a" }),
+    ).toBeVisible();
+    expect(screen.getByLabelText(/^Repositories$/)).toHaveValue(
+      "repo-a, repo-b",
+    );
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    const config = mockMutateAsync.mock.calls[0][0].body.config;
+    expect(config).toMatchObject({
+      includeIssues: false,
+      includePullRequests: true,
+      includeRepositoryFiles: true,
+      includePaths: ["legacy"],
+      labelsToSkip: ["skip"],
+      repositoryOverrides: [
+        { repository: "repo-b", includePaths: [], excludePaths: ["drafts"] },
+      ],
+    });
+    expect(config).not.toHaveProperty("repositoryPathFilters");
+  });
+
+  it("resets both bare and qualified overrides for the same repository", async () => {
+    const user = userEvent.setup();
+    const connector = legacyConnector();
+    connector.config = {
+      ...connector.config,
+      repositoryOverrides: [
+        { repository: "repo-a", includeIssues: false },
+        { repository: "example-org/repo-a", includePullRequests: false },
+      ],
+    } as ConnectorFixture["config"];
+    renderDialog(connector);
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Reset repo-a to defaults" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    expect(
+      mockMutateAsync.mock.calls[0][0].body.config.repositoryOverrides,
+    ).toEqual([]);
+  });
+
+  it("discards repository edits on cancel and reloads saved settings on reopen", async () => {
+    const user = userEvent.setup();
+    const connector = legacyConnector();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <Button onClick={() => setOpen(true)}>Reopen connector</Button>
+          <EditConnectorDialog
+            connector={connector}
+            open={open}
+            onOpenChange={setOpen}
+          />
+        </>
+      );
+    }
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Harness />
+      </QueryClientProvider>,
+    );
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Repository settings for repo-a" }),
+    );
+    fireEvent.change(
+      within(
+        screen.getByRole("group", { name: "Repository repo-a" }),
+      ).getByLabelText("Include paths"),
+      {
+        target: { value: "unsaved" },
+      },
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Reopen connector" }));
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Repository settings for repo-a" }),
+    );
+    expect(
+      within(
+        screen.getByRole("group", { name: "Repository repo-a" }),
+      ).getByLabelText("Include paths"),
+    ).toHaveValue("docs");
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("keeps overrides inactive when their repository leaves the explicit selection", async () => {
+    const user = userEvent.setup();
+    renderDialog(legacyConnector());
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    fireEvent.change(screen.getByLabelText(/^Repositories$/), {
+      target: { value: "repo-b" },
+    });
+    expect(screen.getByText(/Other overrides are inactive/)).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
     await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
     expect(mockMutateAsync.mock.calls[0][0].body.config).toMatchObject({
-      includePaths: ["legacy"],
-      repositoryPathFilters: [
-        { repository: "repo-b", includePaths: [], excludePaths: ["drafts"] },
-      ],
+      repos: ["repo-b"],
+      repositoryOverrides: [{ repository: "repo-a" }, { repository: "repo-b" }],
     });
   });
 });

@@ -23,25 +23,20 @@ Let agents answer from your GitHub repositories: "Why did we drop Redis?" finds 
 | GitHub API URL        | API endpoint (e.g., `https://api.github.com` for GitHub.com, or your GHE API URL)               |
 | Owner                 | GitHub organization or username that owns the repositories                                      |
 | Credential | Saved organization secret or GitHub App from **Settings → Credentials** |
-| Repositories          | Comma-separated repository names to sync (optional -- leave blank to sync all org repositories) |
-| Include Issues        | Toggle to sync issues and their comments (default: on)                                          |
-| Include Pull Requests | Toggle to sync pull requests and their comments (default: on)                                   |
-| Include Repository Files | Toggle to sync repository files (default: off)                                               |
-| File Types            | Comma-separated extensions (`.md`, `.tm.hcl`) or file names (`Dockerfile`, `Makefile`) to index when repository files are enabled, in any folder. `*` indexes every text file and skips binaries. Defaults to `.md`, `.mdx`, `.yaml`, `.yml` |
-| Default folders       | Comma-separated folders to index for repositories without an include override. Leave blank to index the whole repository. |
-| Repository path filters | Independent include and exclude lists for each repository. Exclusions take precedence. |
+| Repository selection | Choose **Selected repositories** or **All accessible repositories** in **Advanced**. |
 
-## Filter Repository Files
+## Configure Repository Settings
 
-Index `docs` in one repository and `handbook` in another without including their private subfolders.
+Sync issues from one repository and selected documentation from another, using shared defaults for everything else.
 
-1. Open **Advanced** and enable **Include Repository Files**.
-2. Click **Add repository filter**. Enter the **Repository**, such as `example-org/service`, and comma-separated **Include paths** and **Exclude paths**.
-3. Add another filter for the second repository. Save the connector, then reopen it to check both lists.
+1. Open **Advanced**. Choose **Selected repositories** and enter comma-separated names or `owner/repo` entries. Each selected repository gets a settings row. Choose **All accessible repositories** to use automatic discovery instead.
+2. Expand **Repository defaults**. Set issues, pull requests and skipped labels together. Under **Repository files**, choose whether to sync files, their types, and their include/exclude paths.
+3. Click **Customize** on a repository that needs different settings. Keep **Use default** selected for inherited values; change only the settings that differ. In discovery mode, **Add repository override** adds an exception without selecting an additional source repository.
+4. Save the connector, reopen **Advanced**, and check each repository's summary. **Reset to defaults** removes its customization while keeping it selected.
 
-- A bare repository name uses the configured **Owner**. An `owner/repo` rule takes precedence over a bare-name rule. Filters also apply to automatically discovered repositories; a filter does not select an additional repository to sync.
-- Paths name files or folders relative to the repository root, not globs. `docs` includes `docs/guide.md`, not `docs-internal/guide.md`. Git paths are case-sensitive; repository names are not. Excluding `docs/internal` skips that folder even when `docs` is included; excluding `/` skips every file.
-- A blank **Include paths** list indexes the whole repository, replacing **Default folders** for that repository. A blank **Exclude paths** list excludes nothing. Repositories without a filter keep **Default folders**. These filters do not affect issues or pull requests.
+- Inherited settings follow the defaults, including for newly discovered repositories. Explicit **Off** disables a category. Clearing the selected-repository list does not enable discovery; choose **All accessible repositories** explicitly. A qualified `owner/repo` override takes precedence over a bare name under **Owner**.
+- Custom blank **Include paths** means the whole repository; blank **Exclude paths** or **Labels to Skip** means none. Blank **File Types** uses `.md`, `.mdx`, `.yaml` and `.yml`; `*` includes every text file. Paths are repository-relative, not globs: `docs` includes `docs/guide.md`, not `docs-internal/guide.md`. Exclusions win and affect files only.
+- Existing connector settings remain the defaults until you change them. Changing selection or filters affects later syncs; it does not automatically remove previously indexed documents.
 
 ## GitHub Auto-Sync Permissions
 

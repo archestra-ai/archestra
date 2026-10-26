@@ -18,7 +18,7 @@ describe("transformConfigArrayFields", () => {
       ],
     };
     const result = transformConfigArrayFields(config);
-    expect(result.repositoryPathFilters).toEqual([
+    expect(result.repositoryOverrides).toEqual([
       {
         repository: "repo-a",
         includePaths: ["docs", "handbook"],
@@ -34,6 +34,77 @@ describe("transformConfigArrayFields", () => {
     expect(config.repositoryPathFilters[0].includePaths).toBe(
       "docs, handbook, ",
     );
+  });
+
+  it("preserves inheritance, explicit false and empty overrides, and canonical precedence", () => {
+    expect(
+      transformConfigArrayFields({
+        type: "github",
+        repositoryPathFilters: [{ repository: "old", includePaths: ["docs"] }],
+        repositoryOverrides: [
+          {
+            repository: " org/repo ",
+            includeIssues: false,
+            includePullRequests: true,
+            includePaths: undefined,
+            labelsToSkip: "",
+            excludePaths: "",
+            fileTypes: "",
+          },
+        ],
+      }),
+    ).toEqual({
+      type: "github",
+      repositoryOverrides: [
+        {
+          repository: "org/repo",
+          includeIssues: false,
+          includePullRequests: true,
+          labelsToSkip: [],
+          excludePaths: [],
+          fileTypes: [],
+        },
+      ],
+    });
+    expect(
+      transformConfigArrayFields({
+        type: "github",
+        repositoryOverrides: [],
+        repositoryPathFilters: [{ repository: "old" }],
+      }),
+    ).toEqual({ type: "github", repositoryOverrides: [] });
+  });
+
+  it("omits form inheritance sentinels only for known override settings", () => {
+    const result = transformConfigArrayFields({
+      type: "github",
+      excludePaths: null,
+      repositoryOverrides: [
+        {
+          repository: "repo-a",
+          includeIssues: null,
+          includePullRequests: false,
+          includeRepositoryFiles: null,
+          labelsToSkip: [],
+          fileTypes: null,
+          includePaths: null,
+          excludePaths: null,
+          unknownMetadata: null,
+        },
+      ],
+    });
+    expect(result).toEqual({
+      type: "github",
+      excludePaths: null,
+      repositoryOverrides: [
+        {
+          repository: "repo-a",
+          includePullRequests: false,
+          labelsToSkip: [],
+          unknownMetadata: null,
+        },
+      ],
+    });
   });
 
   it("converts comma-separated string fields to arrays", () => {

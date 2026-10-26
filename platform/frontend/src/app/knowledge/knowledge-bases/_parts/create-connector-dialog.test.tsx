@@ -155,58 +155,222 @@ describe("CreateConnectorDialog", () => {
     vi.mocked(usePathname).mockReturnValue("/knowledge/knowledge-bases");
   });
 
-  it("creates GitHub connectors with independent repository include and exclude paths", async () => {
+  it("keeps default folders when customizing only repository exclusions", async () => {
     mockMutateAsync.mockResolvedValue({ id: "connector-1" });
     const { user } = await renderGithubConfigureStep();
-    await user.type(
-      screen.getByLabelText(/^Name$/),
-      "Repository documentation",
-    );
-    await user.type(screen.getByLabelText(/^Owner$/), "example-org");
-    await user.type(
-      screen.getByLabelText(/Personal Access Token/),
-      "local-placeholder",
-    );
+    for (const [label, value] of [
+      [/^Name$/, "Inherited folders"],
+      [/^Owner$/, "example-org"],
+      [/Personal Access Token/, "local-placeholder"],
+    ] as const) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
     await user.click(screen.getByRole("button", { name: /Advanced/ }));
     await user.click(
-      screen.getByRole("switch", { name: /Include Repository Files/ }),
+      screen.getByRole("combobox", { name: "Repository selection" }),
+    );
+    await user.click(
+      screen.getByRole("option", {
+        name: "Selected repositories",
+      }),
+    );
+    fireEvent.change(screen.getByLabelText(/^Repositories$/), {
+      target: { value: "repo-a" },
+    });
+    await user.click(
+      screen.getByRole("button", {
+        name: "Repository settings for Repository defaults",
+      }),
+    );
+    await user.click(
+      screen.getByRole("switch", { name: "Include Repository Files" }),
+    );
+    fireEvent.change(screen.getByLabelText("Include paths"), {
+      target: { value: "docs" },
+    });
+    await user.click(
+      screen.getByRole("button", {
+        name: "Repository settings for Repository defaults",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Customize repo-a" }));
+    const row = within(
+      screen.getByRole("group", { name: "Repository repo-a" }),
+    );
+    expect(row.getByLabelText("Use default include paths")).toBeChecked();
+    expect(row.getByLabelText("Include paths")).toHaveValue("docs");
+    await user.click(row.getByLabelText("Use default exclude paths"));
+    fireEvent.change(row.getByLabelText("Exclude paths"), {
+      target: { value: "generated" },
+    });
+    await user.click(screen.getByRole("button", { name: "Create Connector" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    const config = mockMutateAsync.mock.calls[0][0].config;
+    expect(config.includePaths).toEqual(["docs"]);
+    expect(config.repositoryOverrides).toEqual([
+      { repository: "repo-a", excludePaths: ["generated"] },
+    ]);
+    expect(config.repositoryOverrides[0]).not.toHaveProperty("includePaths");
+  });
+
+  it("creates GitHub connectors with independent repository settings", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "connector-1" });
+    const { user } = await renderGithubConfigureStep();
+    for (const [label, value] of [
+      [/^Name$/, "Repository documentation"],
+      [/^Owner$/, "example-org"],
+      [/Personal Access Token/, "local-placeholder"],
+    ] as const) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("combobox", { name: "Repository selection" }),
+    );
+    await user.click(
+      screen.getByRole("option", {
+        name: "Selected repositories",
+      }),
+    );
+    await user.click(screen.getByLabelText(/^Repositories$/));
+    await user.paste(" repo-a , example-org/repo-b ");
+    await user.click(
+      screen.getByRole("button", {
+        name: "Repository settings for Repository defaults",
+      }),
+    );
+    await user.click(
+      screen.getByRole("switch", { name: "Include Repository Files" }),
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: "Repository settings for Repository defaults",
+      }),
     );
     for (const [repository, include, exclude] of [
-      [" repo-a ", "docs, handbook", "docs/internal"],
+      ["repo-a", "docs, handbook", "docs/internal"],
       ["example-org/repo-b", "guides", "guides/drafts"],
     ]) {
       await user.click(
-        screen.getByRole("button", { name: "Add repository filter" }),
+        screen.getByRole("button", { name: `Customize ${repository}` }),
       );
-      await user.click(
-        screen.getAllByLabelText(/^Repository$/).at(-1) as HTMLElement,
+      const row = within(
+        screen.getByRole("group", { name: `Repository ${repository}` }),
       );
-      await user.paste(repository);
-      fireEvent.change(
-        screen.getAllByLabelText(/^Include paths$/).at(-1) as HTMLElement,
-        { target: { value: include } },
-      );
-      fireEvent.change(
-        screen.getAllByLabelText(/^Exclude paths$/).at(-1) as HTMLElement,
-        { target: { value: exclude } },
-      );
+      await user.click(row.getByLabelText("Use default include paths"));
+      fireEvent.change(row.getByLabelText("Include paths"), {
+        target: { value: include },
+      });
+      await user.click(row.getByLabelText("Use default exclude paths"));
+      fireEvent.change(row.getByLabelText("Exclude paths"), {
+        target: { value: exclude },
+      });
     }
+    const row = within(
+      screen.getByRole("group", { name: "Repository example-org/repo-b" }),
+    );
+    await user.click(row.getByRole("combobox", { name: "Include Issues" }));
+    await user.click(screen.getByRole("option", { name: "Off" }));
+    await user.click(row.getByLabelText("Use default labels to skip"));
     await user.click(screen.getByRole("button", { name: "Create Connector" }));
     await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    expect(mockMutateAsync.mock.calls[0][0].config.repositoryOverrides).toEqual(
+      [
+        {
+          repository: "repo-a",
+          includePaths: ["docs", "handbook"],
+          excludePaths: ["docs/internal"],
+        },
+        {
+          repository: "example-org/repo-b",
+          includeIssues: false,
+          labelsToSkip: [],
+          includePaths: ["guides"],
+          excludePaths: ["guides/drafts"],
+        },
+      ],
+    );
+  });
+
+  it("does not turn a cleared explicit repository selection into discovery", async () => {
+    const { user } = await renderGithubConfigureStep();
+    for (const [label, value] of [
+      [/^Name$/, "Explicit repositories"],
+      [/^Owner$/, "example-org"],
+      [/Personal Access Token/, "local-placeholder"],
+    ] as const) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("combobox", { name: "Repository selection" }),
+    );
+    await user.click(
+      screen.getByRole("option", {
+        name: "Selected repositories",
+      }),
+    );
+    fireEvent.change(screen.getByLabelText(/^Repositories$/), {
+      target: { value: "repo-a" },
+    });
+    fireEvent.change(screen.getByLabelText(/^Repositories$/), {
+      target: { value: "" },
+    });
+    await user.click(screen.getByRole("button", { name: "Create Connector" }));
     expect(
-      mockMutateAsync.mock.calls[0][0].config.repositoryPathFilters,
-    ).toEqual([
-      {
-        repository: "repo-a",
-        includePaths: ["docs", "handbook"],
-        excludePaths: ["docs/internal"],
-      },
-      {
-        repository: "example-org/repo-b",
-        includePaths: ["guides"],
-        excludePaths: ["guides/drafts"],
-      },
-    ]);
+      await screen.findByText(
+        "Select at least one repository or choose All accessible repositories.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("combobox", { name: "Repository selection" }),
+    ).toHaveTextContent("Selected repositories");
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("keeps required General errors visible before repository validation errors", async () => {
+    const { user } = await renderGithubConfigureStep();
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("combobox", { name: "Repository selection" }),
+    );
+    await user.click(
+      screen.getByRole("option", {
+        name: "Selected repositories",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Create Connector" }));
+    expect(await screen.findByLabelText(/^Name$/)).toBeVisible();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("expands an invalid discovery override and prevents submission", async () => {
+    const { user } = await renderGithubConfigureStep();
+    for (const [label, value] of [
+      [/^Name$/, "Discovery overrides"],
+      [/^Owner$/, "example-org"],
+      [/Personal Access Token/, "local-placeholder"],
+    ] as const) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Add repository override" }),
+    );
+    fireEvent.change(screen.getByLabelText(/^Repository$/), {
+      target: { value: "invalid/owner/repo" },
+    });
+    await user.click(
+      screen.getByRole("button", {
+        name: "Repository settings for invalid/owner/repo",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Create Connector" }));
+    expect(
+      await screen.findByText("Use a repository name or owner/repo"),
+    ).toBeVisible();
+    expect(screen.getByLabelText(/^Repository$/)).toBeVisible();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
   });
 
   // SPDX-SnippetBegin
@@ -333,26 +497,27 @@ describe("CreateConnectorDialog", () => {
 
       expect(screen.getByText("Owner")).toBeInTheDocument();
       expect(screen.getByText("Credential")).toBeInTheDocument();
-      expect(screen.getByText("Labels to Skip (optional)")).not.toBeVisible();
+      expect(screen.getByLabelText("Labels to Skip")).not.toBeVisible();
 
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
 
-      await waitFor(() => {
-        expect(
-          screen.getByText("Include Repository Files"),
-        ).toBeInTheDocument();
-      });
-      expect(screen.getByText("Labels to Skip (optional)")).toBeInTheDocument();
+      await user.click(
+        screen.getByRole("button", {
+          name: "Repository settings for Repository defaults",
+        }),
+      );
       expect(
-        screen.queryByText("File Types (optional)"),
-      ).not.toBeInTheDocument();
+        screen.getByRole("switch", { name: "Include Repository Files" }),
+      ).toBeVisible();
+      expect(screen.getByLabelText("Labels to Skip")).toBeInTheDocument();
+      expect(screen.queryByLabelText("File Types")).not.toBeInTheDocument();
 
       await user.click(
         screen.getByRole("switch", { name: /Include Repository Files/ }),
       );
 
       await waitFor(() => {
-        expect(screen.getByText("File Types (optional)")).toBeInTheDocument();
+        expect(screen.getByLabelText("File Types")).toBeInTheDocument();
       });
     });
 
@@ -361,11 +526,14 @@ describe("CreateConnectorDialog", () => {
 
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
 
-      await waitFor(() => {
-        expect(
-          screen.getByText("Include Repository Files"),
-        ).toBeInTheDocument();
-      });
+      await user.click(
+        screen.getByRole("button", {
+          name: "Repository settings for Repository defaults",
+        }),
+      );
+      expect(
+        screen.getByRole("switch", { name: "Include Repository Files" }),
+      ).toBeVisible();
 
       expect(screen.getAllByText("Credential")).toHaveLength(1);
     });

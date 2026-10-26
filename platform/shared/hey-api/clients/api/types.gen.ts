@@ -77824,6 +77824,17 @@ export type GetConnectorsResponses = {
                 includeRepositoryFiles?: boolean;
                 fileTypes?: Array<string>;
                 includePaths?: Array<string>;
+                excludePaths?: Array<string>;
+                repositoryOverrides?: Array<{
+                    repository: string;
+                    includeIssues?: boolean;
+                    includePullRequests?: boolean;
+                    includeRepositoryFiles?: boolean;
+                    labelsToSkip?: Array<string>;
+                    fileTypes?: Array<string>;
+                    includePaths?: Array<string>;
+                    excludePaths?: Array<string>;
+                }>;
                 repositoryPathFilters?: Array<{
                     repository: string;
                     /**
@@ -78071,6 +78082,17 @@ export type CreateConnectorData = {
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             includePaths?: Array<string>;
+            excludePaths?: Array<string>;
+            repositoryOverrides?: Array<{
+                repository: string;
+                includeIssues?: boolean;
+                includePullRequests?: boolean;
+                includeRepositoryFiles?: boolean;
+                labelsToSkip?: Array<string>;
+                fileTypes?: Array<string>;
+                includePaths?: Array<string>;
+                excludePaths?: Array<string>;
+            }>;
             repositoryPathFilters?: Array<{
                 repository: string;
                 /**
@@ -78391,6 +78413,17 @@ export type CreateConnectorResponses = {
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             includePaths?: Array<string>;
+            excludePaths?: Array<string>;
+            repositoryOverrides?: Array<{
+                repository: string;
+                includeIssues?: boolean;
+                includePullRequests?: boolean;
+                includeRepositoryFiles?: boolean;
+                labelsToSkip?: Array<string>;
+                fileTypes?: Array<string>;
+                includePaths?: Array<string>;
+                excludePaths?: Array<string>;
+            }>;
             repositoryPathFilters?: Array<{
                 repository: string;
                 /**
@@ -78789,6 +78822,17 @@ export type GetConnectorResponses = {
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             includePaths?: Array<string>;
+            excludePaths?: Array<string>;
+            repositoryOverrides?: Array<{
+                repository: string;
+                includeIssues?: boolean;
+                includePullRequests?: boolean;
+                includeRepositoryFiles?: boolean;
+                labelsToSkip?: Array<string>;
+                fileTypes?: Array<string>;
+                includePaths?: Array<string>;
+                excludePaths?: Array<string>;
+            }>;
             repositoryPathFilters?: Array<{
                 repository: string;
                 /**
@@ -79018,6 +79062,17 @@ export type UpdateConnectorData = {
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             includePaths?: Array<string>;
+            excludePaths?: Array<string>;
+            repositoryOverrides?: Array<{
+                repository: string;
+                includeIssues?: boolean;
+                includePullRequests?: boolean;
+                includeRepositoryFiles?: boolean;
+                labelsToSkip?: Array<string>;
+                fileTypes?: Array<string>;
+                includePaths?: Array<string>;
+                excludePaths?: Array<string>;
+            }>;
             repositoryPathFilters?: Array<{
                 repository: string;
                 /**
@@ -79320,6 +79375,17 @@ export type UpdateConnectorResponses = {
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             includePaths?: Array<string>;
+            excludePaths?: Array<string>;
+            repositoryOverrides?: Array<{
+                repository: string;
+                includeIssues?: boolean;
+                includePullRequests?: boolean;
+                includeRepositoryFiles?: boolean;
+                labelsToSkip?: Array<string>;
+                fileTypes?: Array<string>;
+                includePaths?: Array<string>;
+                excludePaths?: Array<string>;
+            }>;
             repositoryPathFilters?: Array<{
                 repository: string;
                 /**

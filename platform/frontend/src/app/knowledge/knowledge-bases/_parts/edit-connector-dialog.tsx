@@ -61,11 +61,15 @@ import {
   NotionAutoSyncPermissionsNote,
 } from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { hasOnlyGithubRepositorySettingsErrors } from "./github-repository-settings-errors";
 import { PerforcePermissionSyncFields } from "./perforce-config-fields";
 import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
 import { SchedulePicker } from "./schedule-picker";
 import { TextSearchLanguagePicker } from "./text-search-language-picker";
-import { transformConfigArrayFields } from "./transform-config-array-fields";
+import {
+  githubRepositoryOverrideDraft,
+  transformConfigArrayFields,
+} from "./transform-config-array-fields";
 
 type ConnectorItem = Pick<
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number],
@@ -101,6 +105,18 @@ type EditConnectorFormValues = {
 };
 
 function editableConnectorConfig(connector: ConnectorItem) {
+  if (connector.connectorType === "github") {
+    const config = connector.config as Record<string, unknown>;
+    const overrides =
+      config.repositoryOverrides ?? config.repositoryPathFilters ?? [];
+    return {
+      ...config,
+      repositoryOverrides: Array.isArray(overrides)
+        ? overrides.map(githubRepositoryOverrideDraft)
+        : overrides,
+    };
+  }
+
   if (connector.connectorType === "salesforce") {
     return {
       ...connector.config,
@@ -336,8 +352,13 @@ export function EditConnectorDialog({
       ]}
       isDirty={permissionsDirty}
       onActiveSectionChange={setActiveSection}
-      onSubmit={form.handleSubmit(handleSubmit, () =>
-        setActiveSection("general"),
+      onSubmit={form.handleSubmit(handleSubmit, (errors) =>
+        setActiveSection(
+          connectorType === "github" &&
+            hasOnlyGithubRepositorySettingsErrors(errors)
+            ? "advanced"
+            : "general",
+        ),
       )}
       wrapForm={(children) => <Form {...form}>{children}</Form>}
       headerExtra={

@@ -5,6 +5,7 @@ import { GithubConnector } from "./github-connector";
 
 // Mock @octokit/rest SDK
 const mockGetAuthenticated = vi.fn();
+const mockSearchIssuesAndPullRequests = vi.fn();
 const mockListReposAccessibleToInstallation = vi.fn();
 const mockListForRepo = vi.fn();
 const mockListForOrg = vi.fn();
@@ -45,6 +46,7 @@ vi.mock("@octokit/rest", () => ({
         listCollaborators: mockListCollaborators,
         listTeams: mockReposListTeams,
       },
+      search: { issuesAndPullRequests: mockSearchIssuesAndPullRequests },
       issues: {
         listForRepo: mockListForRepo,
         listComments: mockListComments,
@@ -108,6 +110,17 @@ describe("GithubConnector", () => {
     test("returns valid for correct config", async () => {
       const result = await connector.validateConfig(validConfig);
       expect(result).toEqual({ valid: true });
+    });
+
+    test("rejects ambiguous case-insensitive repository override duplicates", async () => {
+      const result = await connector.validateConfig({
+        ...validConfig,
+        repositoryOverrides: [
+          { repository: "my-repo", includeIssues: false },
+          { repository: "MY-REPO", includePullRequests: false },
+        ],
+      });
+      expect(result.valid).toBe(false);
     });
 
     test("returns invalid when githubUrl is missing", async () => {
@@ -714,6 +727,231 @@ describe("GithubConnector", () => {
       expect(mockListForRepo).toHaveBeenCalledTimes(1);
     });
 
+    test("applies independent issue, PR, label, file type and path overrides", async () => {
+      mockListForRepo.mockResolvedValue({
+        data: [
+          makeIssue(1, "Kept issue"),
+          makeIssue(2, "Labeled issue", { labels: ["skip"] }),
+          makeIssue(3, "Pull request", { isPr: true }),
+        ],
+      });
+      mockListComments.mockResolvedValue({ data: [] });
+      mockGetRef.mockResolvedValue({ data: { object: { sha: "tree" } } });
+      mockGetTree.mockResolvedValue({
+        data: {
+          tree: [
+            "README.md",
+            "README.txt",
+            "docs/public.md",
+            "docs/private/internal.md",
+            "docs/private/internal.txt",
+          ].map((path) => ({ type: "blob", path, sha: path })),
+        },
+      });
+      mockGetContent.mockResolvedValue({
+        data: { content: Buffer.from("fixture content").toString("base64") },
+      });
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          ...validConfig,
+          repos: ["repo-a", "repo-b", "repo-c", "repo-disabled"],
+          includeIssues: false,
+          includePullRequests: false,
+          includeRepositoryFiles: false,
+          labelsToSkip: ["skip"],
+          fileTypes: [".md"],
+          includePaths: ["docs"],
+          excludePaths: ["docs/private"],
+          repositoryOverrides: [
+            {
+              repository: "repo-a",
+              includeIssues: true,
+              includeRepositoryFiles: true,
+              labelsToSkip: [],
+            },
+            {
+              repository: "repo-b",
+              includePullRequests: true,
+              includeRepositoryFiles: true,
+              fileTypes: [".txt"],
+              includePaths: [],
+              excludePaths: [],
+            },
+            { repository: "repo-c", includeRepositoryFiles: true },
+          ],
+        },
+        credentials,
+        checkpoint: null,
+      }))
+        batches.push(batch);
+      expect(
+        batches
+          .flatMap((batch) => batch.documents)
+          .map((doc) => [
+            doc.metadata.repo,
+            doc.metadata.kind,
+            doc.metadata.filePath ?? doc.metadata.number,
+          ]),
+      ).toEqual([
+        ["test-org/repo-a", "issue", 1],
+        ["test-org/repo-a", "issue", 2],
+        ["test-org/repo-a", "repository_file", "docs/public.md"],
+        ["test-org/repo-b", "pr", 3],
+        ["test-org/repo-b", "repository_file", "README.txt"],
+        ["test-org/repo-b", "repository_file", "docs/private/internal.txt"],
+        ["test-org/repo-c", "repository_file", "docs/public.md"],
+      ]);
+      expect(mockListForRepo).toHaveBeenCalledTimes(2);
+      expect(mockGetTree).toHaveBeenCalledTimes(3);
+      expect(batches.slice(0, -1).every((batch) => batch.hasMore)).toBe(true);
+      expect(batches.at(-1)?.hasMore).toBe(false);
+    });
+
+    test("customizing without an include override keeps legacy folder restrictions", async () => {
+      mockGetRef.mockResolvedValue({ data: { object: { sha: "tree" } } });
+      mockGetTree.mockResolvedValue({
+        data: {
+          tree: ["README.md", "docs/public.md"].map((path) => ({
+            type: "blob",
+            path,
+            sha: path,
+          })),
+        },
+      });
+      mockGetContent.mockResolvedValue({
+        data: { content: Buffer.from("fixture").toString("base64") },
+      });
+      const documents = [];
+      for await (const batch of connector.sync({
+        config: {
+          ...validConfig,
+          includeIssues: false,
+          includePullRequests: false,
+          includeRepositoryFiles: true,
+          includePaths: ["docs"],
+          repositoryOverrides: [{ repository: "my-repo" }],
+        },
+        credentials,
+        checkpoint: null,
+      }))
+        documents.push(...batch.documents);
+      expect(documents.map((doc) => doc.metadata.filePath)).toEqual([
+        "docs/public.md",
+      ]);
+    });
+
+    test("finishes a zero-work selection without advancing its checkpoint", async () => {
+      const checkpoint = {
+        type: "github",
+        lastSyncedAt: "2024-01-10T00:00:00.000Z",
+      };
+      const batches = [];
+      for await (const batch of connector.sync({
+        config: {
+          ...validConfig,
+          includeIssues: false,
+          includePullRequests: false,
+          includeRepositoryFiles: false,
+        },
+        credentials,
+        checkpoint,
+      }))
+        batches.push(batch);
+      expect(batches).toEqual([{ documents: [], checkpoint, hasMore: false }]);
+      expect(mockListForRepo).not.toHaveBeenCalled();
+      expect(mockGetTree).not.toHaveBeenCalled();
+    });
+
+    test("uses canonical overrides for discovered repositories and preserves explicit false", async () => {
+      mockListForOrg.mockResolvedValue({
+        data: [
+          { name: "repo-a", html_url: "https://github.com/test-org/repo-a" },
+          { name: "repo-b", html_url: "https://github.com/test-org/repo-b" },
+        ],
+      });
+      mockListForRepo.mockResolvedValue({
+        data: [makeIssue(1, "Issue"), makeIssue(2, "PR", { isPr: true })],
+      });
+      mockListComments.mockResolvedValue({ data: [] });
+      const documents = [];
+      for await (const batch of connector.sync({
+        config: {
+          ...validConfig,
+          repos: [],
+          repositoryOverrides: [
+            { repository: "repo-a", includeIssues: false },
+            { repository: "test-org/repo-b", includePullRequests: false },
+          ],
+        },
+        credentials,
+        checkpoint: null,
+      }))
+        documents.push(...batch.documents);
+      expect(
+        documents.map((doc) => [doc.metadata.repo, doc.metadata.kind]),
+      ).toEqual([
+        ["test-org/repo-a", "pr"],
+        ["test-org/repo-b", "issue"],
+      ]);
+      expect(mockListForOrg).toHaveBeenCalledTimes(1);
+    });
+
+    test("a qualified override wins as one rule rather than cascading through a bare rule", async () => {
+      mockListForRepo.mockResolvedValue({
+        data: [makeIssue(1, "Issue"), makeIssue(2, "PR", { isPr: true })],
+      });
+      mockListComments.mockResolvedValue({ data: [] });
+      const documents = [];
+      for await (const batch of connector.sync({
+        config: {
+          ...validConfig,
+          repositoryOverrides: [
+            { repository: "my-repo", includeIssues: false },
+            { repository: "TEST-ORG/MY-REPO", includePullRequests: false },
+          ],
+        },
+        credentials,
+        checkpoint: null,
+      }))
+        documents.push(...batch.documents);
+      expect(documents.map((doc) => doc.metadata.kind)).toEqual(["issue"]);
+    });
+
+    test("canonical empty overrides clear the legacy alias without changing legacy defaults", async () => {
+      mockListForRepo.mockResolvedValue({ data: [] });
+      mockGetRef.mockResolvedValue({ data: { object: { sha: "tree" } } });
+      mockGetTree.mockResolvedValue({
+        data: {
+          tree: ["README.md", "docs/public.md", "docs/source.txt"].map(
+            (path) => ({ type: "blob", path, sha: path }),
+          ),
+        },
+      });
+      mockGetContent.mockResolvedValue({
+        data: { content: Buffer.from("fixture").toString("base64") },
+      });
+      const documents = [];
+      for await (const batch of connector.sync({
+        config: {
+          ...validConfig,
+          includeIssues: false,
+          includePullRequests: false,
+          includeRepositoryFiles: true,
+          fileTypes: [],
+          includePaths: ["docs"],
+          repositoryPathFilters: [{ repository: "my-repo", includePaths: [] }],
+          repositoryOverrides: [],
+        },
+        credentials,
+        checkpoint: null,
+      }))
+        documents.push(...batch.documents);
+      expect(documents.map((doc) => doc.metadata.filePath)).toEqual([
+        "docs/public.md",
+      ]);
+    });
+
     test("builds source URL correctly", async () => {
       mockListForRepo.mockResolvedValueOnce({
         data: [makeIssue(42, "Test issue")],
@@ -956,6 +1194,60 @@ describe("GithubConnector", () => {
         lastSyncedAt?: string;
       };
       expect(checkpoint.lastSyncedAt).toBe("2024-01-10T00:00:00.000Z");
+    });
+  });
+
+  describe("repository-aware estimation", () => {
+    test("counts only enabled issue/PR groups even when defaults enable files", async () => {
+      mockSearchIssuesAndPullRequests.mockImplementation(
+        async ({ q }: { q: string }) => ({
+          data: { total_count: q.endsWith("is:issue") ? 5 : 7 },
+        }),
+      );
+      const total = await connector.estimateTotalItems({
+        config: {
+          ...validConfig,
+          repos: ["repo-a", "repo-b"],
+          includeRepositoryFiles: true,
+          repositoryOverrides: [
+            {
+              repository: "repo-a",
+              includeRepositoryFiles: false,
+              includePullRequests: false,
+            },
+            {
+              repository: "repo-b",
+              includeRepositoryFiles: false,
+              includeIssues: false,
+            },
+          ],
+        },
+        credentials,
+        checkpoint: null,
+      });
+      expect(total).toBe(12);
+      expect(
+        mockSearchIssuesAndPullRequests.mock.calls.map(([query]) => query.q),
+      ).toEqual([
+        "repo:test-org/repo-a is:issue",
+        "repo:test-org/repo-b is:pr",
+      ]);
+    });
+
+    test("returns unknown if any selected repository enables files", async () => {
+      const total = await connector.estimateTotalItems({
+        config: {
+          ...validConfig,
+          repos: ["repo-a", "repo-b"],
+          repositoryOverrides: [
+            { repository: "repo-b", includeRepositoryFiles: true },
+          ],
+        },
+        credentials,
+        checkpoint: null,
+      });
+      expect(total).toBeNull();
+      expect(mockSearchIssuesAndPullRequests).not.toHaveBeenCalled();
     });
   });
 

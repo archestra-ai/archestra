@@ -15,6 +15,7 @@ import {
 import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, softDelete } from "@/database/soft-delete";
+import { getGithubRepositoryOverrides } from "@/knowledge-base/connectors/github/github-repository-settings";
 import { connectorInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import type {
   InsertKnowledgeBaseConnector,
@@ -1131,6 +1132,39 @@ class KnowledgeBaseConnectorModel {
                   repository,
                   includePaths: includePaths ?? null,
                   excludePaths: excludePaths ?? [],
+                }),
+              ),
+            },
+            githubRepositorySettings: {
+              defaults: {
+                includeIssues: row.config.includeIssues ?? true,
+                includePullRequests: row.config.includePullRequests ?? true,
+                includeRepositoryFiles:
+                  row.config.includeRepositoryFiles ?? false,
+                labelsToSkip: row.config.labelsToSkip ?? [],
+                fileTypes: row.config.fileTypes ?? [],
+                includePaths: row.config.includePaths ?? [],
+                excludePaths: row.config.excludePaths ?? [],
+              },
+              repositories: getGithubRepositoryOverrides(row.config).map(
+                ({
+                  repository,
+                  includeIssues,
+                  includePullRequests,
+                  includeRepositoryFiles,
+                  labelsToSkip,
+                  fileTypes,
+                  includePaths,
+                  excludePaths,
+                }) => ({
+                  repository,
+                  includeIssues: includeIssues ?? null,
+                  includePullRequests: includePullRequests ?? null,
+                  includeRepositoryFiles: includeRepositoryFiles ?? null,
+                  labelsToSkip: labelsToSkip ?? null,
+                  fileTypes: fileTypes ?? null,
+                  includePaths: includePaths ?? null,
+                  excludePaths: excludePaths ?? null,
                 }),
               ),
             },

@@ -300558,6 +300558,61 @@
                                           "type": "string"
                                         }
                                       },
+                                      "excludePaths": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "repositoryOverrides": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "repository": {
+                                              "type": "string",
+                                              "pattern": "^[^/\\\\\\s]+(?:\\/[^/\\\\\\s]+)?$"
+                                            },
+                                            "includeIssues": {
+                                              "type": "boolean"
+                                            },
+                                            "includePullRequests": {
+                                              "type": "boolean"
+                                            },
+                                            "includeRepositoryFiles": {
+                                              "type": "boolean"
+                                            },
+                                            "labelsToSkip": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "fileTypes": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "includePaths": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "excludePaths": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "repository"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
                                       "repositoryPathFilters": {
                                         "type": "array",
                                         "items": {
@@ -302146,6 +302201,60 @@
                               "type": "string"
                             }
                           },
+                          "excludePaths": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "repositoryOverrides": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "repository": {
+                                  "type": "string",
+                                  "pattern": "^[^/\\\\\\s]+(?:\\/[^/\\\\\\s]+)?$"
+                                },
+                                "includeIssues": {
+                                  "type": "boolean"
+                                },
+                                "includePullRequests": {
+                                  "type": "boolean"
+                                },
+                                "includeRepositoryFiles": {
+                                  "type": "boolean"
+                                },
+                                "labelsToSkip": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "fileTypes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "includePaths": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "excludePaths": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "repository"
+                              ]
+                            }
+                          },
                           "repositoryPathFilters": {
                             "type": "array",
                             "items": {
@@ -303454,6 +303563,61 @@
                               "type": "array",
                               "items": {
                                 "type": "string"
+                              }
+                            },
+                            "excludePaths": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "repositoryOverrides": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "repository": {
+                                    "type": "string",
+                                    "pattern": "^[^/\\\\\\s]+(?:\\/[^/\\\\\\s]+)?$"
+                                  },
+                                  "includeIssues": {
+                                    "type": "boolean"
+                                  },
+                                  "includePullRequests": {
+                                    "type": "boolean"
+                                  },
+                                  "includeRepositoryFiles": {
+                                    "type": "boolean"
+                                  },
+                                  "labelsToSkip": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "fileTypes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "includePaths": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "excludePaths": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "repository"
+                                ],
+                                "additionalProperties": false
                               }
                             },
                             "repositoryPathFilters": {
@@ -304995,6 +305159,61 @@
                                     "type": "string"
                                   }
                                 },
+                                "excludePaths": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "repositoryOverrides": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "repository": {
+                                        "type": "string",
+                                        "pattern": "^[^/\\\\\\s]+(?:\\/[^/\\\\\\s]+)?$"
+                                      },
+                                      "includeIssues": {
+                                        "type": "boolean"
+                                      },
+                                      "includePullRequests": {
+                                        "type": "boolean"
+                                      },
+                                      "includeRepositoryFiles": {
+                                        "type": "boolean"
+                                      },
+                                      "labelsToSkip": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "fileTypes": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "includePaths": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "excludePaths": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "repository"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
                                 "repositoryPathFilters": {
                                   "type": "array",
                                   "items": {
@@ -306409,6 +306628,60 @@
                               "type": "string"
                             }
                           },
+                          "excludePaths": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "repositoryOverrides": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "repository": {
+                                  "type": "string",
+                                  "pattern": "^[^/\\\\\\s]+(?:\\/[^/\\\\\\s]+)?$"
+                                },
+                                "includeIssues": {
+                                  "type": "boolean"
+                                },
+                                "includePullRequests": {
+                                  "type": "boolean"
+                                },
+                                "includeRepositoryFiles": {
+                                  "type": "boolean"
+                                },
+                                "labelsToSkip": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "fileTypes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "includePaths": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "excludePaths": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "repository"
+                              ]
+                            }
+                          },
                           "repositoryPathFilters": {
                             "type": "array",
                             "items": {
@@ -307583,6 +307856,61 @@
                               "type": "array",
                               "items": {
                                 "type": "string"
+                              }
+                            },
+                            "excludePaths": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "repositoryOverrides": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "repository": {
+                                    "type": "string",
+                                    "pattern": "^[^/\\\\\\s]+(?:\\/[^/\\\\\\s]+)?$"
+                                  },
+                                  "includeIssues": {
+                                    "type": "boolean"
+                                  },
+                                  "includePullRequests": {
+                                    "type": "boolean"
+                                  },
+                                  "includeRepositoryFiles": {
+                                    "type": "boolean"
+                                  },
+                                  "labelsToSkip": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "fileTypes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "includePaths": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "excludePaths": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "repository"
+                                ],
+                                "additionalProperties": false
                               }
                             },
                             "repositoryPathFilters": {

@@ -24,6 +24,7 @@ import {
   REQUEST_TIMEOUT_MS,
 } from "../base-connector";
 import { ConnectorIdentityCache } from "../identity-cache";
+import { resolveGithubRepositorySettings } from "./github-repository-settings";
 
 const BATCH_SIZE = 50;
 /**
@@ -149,10 +150,6 @@ export class GithubConnector extends BaseConnector {
     const parsed = parseGithubConfig(params.config);
     if (!parsed) return null;
 
-    // Repository file count cannot be estimated without fetching the full repo
-    // tree, so skip estimation entirely when file syncing is enabled.
-    if (parsed.includeRepositoryFiles) return null;
-
     this.log.debug(
       { owner: parsed.owner, repos: parsed.repos },
       "Estimating total items",
@@ -160,11 +157,18 @@ export class GithubConnector extends BaseConnector {
 
     try {
       const octokit = await createOctokit(parsed, params.credentials, this.log);
-      const repos = await getRepos(octokit, parsed);
+      const repos = (await getRepos(octokit, parsed)).map((repo) => ({
+        repo,
+        settings: resolveGithubRepositorySettings(parsed, repo),
+      }));
+      // File totals require fetching the complete tree for that repository.
+      if (repos.some(({ settings }) => settings.includeRepositoryFiles)) {
+        return null;
+      }
       let total = 0;
 
-      for (const repo of repos) {
-        if (parsed.includeIssues !== false) {
+      for (const { repo, settings } of repos) {
+        if (settings.includeIssues) {
           const result = await octokit.rest.search.issuesAndPullRequests({
             q: `repo:${repo.owner}/${repo.name} is:issue`,
             per_page: 1,
@@ -172,7 +176,7 @@ export class GithubConnector extends BaseConnector {
           total += result.data.total_count;
         }
 
-        if (parsed.includePullRequests !== false) {
+        if (settings.includePullRequests) {
           const result = await octokit.rest.search.issuesAndPullRequests({
             q: `repo:${repo.owner}/${repo.name} is:pr`,
             per_page: 1,
@@ -223,43 +227,46 @@ export class GithubConnector extends BaseConnector {
       "Starting sync",
     );
 
-    for (let repoIdx = 0; repoIdx < repos.length; repoIdx++) {
-      const repo = repos[repoIdx];
-      const isLastRepo = repoIdx === repos.length - 1;
-      const hasRepositoryFiles = parsed.includeRepositoryFiles === true;
-
-      if (parsed.includeIssues !== false) {
-        yield* this.syncRepoItems({
-          octokit,
-          config: parsed,
-          repo,
-          checkpoint,
-          kind: "issue",
-          isLastGroup:
-            isLastRepo &&
-            parsed.includePullRequests === false &&
-            !hasRepositoryFiles,
-        });
+    const groups: {
+      repo: GithubRepo;
+      config: GithubConfig;
+      kind: "issue" | "pr" | "files";
+    }[] = [];
+    for (const repo of repos) {
+      const settings = resolveGithubRepositorySettings(parsed, repo);
+      const config = { ...parsed, ...settings };
+      if (settings.includeIssues) groups.push({ repo, config, kind: "issue" });
+      if (settings.includePullRequests)
+        groups.push({ repo, config, kind: "pr" });
+      if (settings.includeRepositoryFiles) {
+        groups.push({ repo, config, kind: "files" });
       }
+    }
 
-      if (parsed.includePullRequests !== false) {
-        yield* this.syncRepoItems({
-          octokit,
-          config: parsed,
-          repo,
-          checkpoint,
-          kind: "pr",
-          isLastGroup: isLastRepo && !hasRepositoryFiles,
-        });
-      }
+    if (groups.length === 0) {
+      yield { documents: [], checkpoint, hasMore: false };
+      return;
+    }
 
-      if (hasRepositoryFiles) {
+    // The final enabled group may precede repositories with every type disabled.
+    for (const [index, group] of groups.entries()) {
+      const isLastGroup = index === groups.length - 1;
+      if (group.kind === "files") {
         yield* this.syncRepoFiles({
           octokit,
-          config: parsed,
-          repo,
+          config: group.config,
+          repo: group.repo,
           checkpoint,
-          isLastGroup: isLastRepo,
+          isLastGroup,
+        });
+      } else {
+        yield* this.syncRepoItems({
+          octokit,
+          config: group.config,
+          repo: group.repo,
+          checkpoint,
+          kind: group.kind,
+          isLastGroup,
         });
       }
     }
@@ -387,12 +394,11 @@ export class GithubConnector extends BaseConnector {
     const { octokit, config, repo, checkpoint, isLastGroup } = params;
     const repoFullName = `${repo.owner}/${repo.name}`;
     const fileTypeFilter = getFileTypeFilter(config);
-    const repositoryFilter = getRepositoryPathFilter({ config, repo });
     const indexedPathPrefixes = normalizePathPrefixes(
-      repositoryFilter?.includePaths ?? config.includePaths ?? [],
+      config.includePaths ?? [],
     );
     const excludedPathPrefixes = normalizePathPrefixes(
-      repositoryFilter?.excludePaths ?? [],
+      config.excludePaths ?? [],
       true,
     );
 
@@ -1408,25 +1414,6 @@ function isIndexedRepositoryFile(
  */
 function looksBinary(content: string): boolean {
   return content.slice(0, 8000).includes("\u0000");
-}
-
-function getRepositoryPathFilter({
-  config,
-  repo,
-}: {
-  config: GithubConfig;
-  repo: GithubRepo;
-}) {
-  const filters = config.repositoryPathFilters ?? [];
-  const fullName = `${repo.owner}/${repo.name}`.toLowerCase();
-  return (
-    filters.find((filter) => filter.repository.toLowerCase() === fullName) ??
-    filters.find(
-      (filter) =>
-        repo.owner.toLowerCase() === config.owner.toLowerCase() &&
-        filter.repository.toLowerCase() === repo.name.toLowerCase(),
-    )
-  );
 }
 
 /**

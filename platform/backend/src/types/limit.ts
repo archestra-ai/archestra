@@ -54,22 +54,28 @@ export const BudgetCleanupIntervalSchema = LimitCleanupIntervalSchema.exclude([
 ]);
 export type BudgetCleanupInterval = z.infer<typeof BudgetCleanupIntervalSchema>;
 
+/** Why an admin set a limit (shown with custom per-user limits). */
+const LimitReasonSchema = z.string().trim().max(500).nullable().optional();
+
 /**
  * Base database schema derived from Drizzle
  */
 export const SelectLimitSchema = createSelectSchema(schema.limitsTable, {
+  reason: z.string().nullable().optional(),
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),
   cleanupInterval: LimitCleanupIntervalSchema.optional(),
 });
 export const InsertLimitSchema = createInsertSchema(schema.limitsTable, {
+  reason: LimitReasonSchema,
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),
   cleanupInterval: LimitCleanupIntervalSchema.optional(),
 });
 export const UpdateLimitSchema = createUpdateSchema(schema.limitsTable, {
+  reason: LimitReasonSchema,
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),

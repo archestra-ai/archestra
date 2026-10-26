@@ -54,10 +54,11 @@ Each limit resets or recovers according to its **Interval**:
 
 <span id="default-user-limits"></span>
 
-Instead of creating a separate rule for each person, go to **Settings → LLM** and set **Default User Spend Limit** with a dollar amount and reset interval. Every user gets their own individual spend allowance of that size.
+At the top of **Costs & Limits → Limits**, the **Default user limit** card sets a baseline per-user spend allowance without creating a separate rule for every member. Click **Set default** (or **Edit**), enter a **Limit per user ($)**, choose an **Interval**, and pick **All models** or specific models. Every user gets their own individual counter of that size, while any matching organization, team, virtual key, agent, OAuth client, or environment rules in **Explicit limits** still apply on top.
 
-- **Override for one user:** create a **User** spend limit in **Costs & Limits → Limits**. That custom rule replaces the default user spend limit for the selected person.
-- **Override for an environment:** set a default user spend limit on an [Environment](/docs/admin/environments) to give users in that environment a different default cap.
+- **Environment override:** click **Environment override** (or **N environment overrides → Add environment override**) on the card to set a different default per-user cap for a specific [Environment](/docs/admin/environments).
+- **Custom limit for one user:** under **Who's affected**, click **All N** to open **Users and their limits**, open a user's actions menu (**...**), and select **Set custom limit** (or create a **User** spend limit in **Explicit limits**). You can include an optional **Reason** note that appears in the drawer and table. A custom user limit overrides any environment override and the organization default, and starts its own counter at `$0`.
+- **Reset a user's current window:** in **Users and their limits**, click **Reset** on a user at their limit (or **Reset usage** from **...**, or **Reset all N** when filtered to **At limit**) to zero their spend for the current window immediately. The next scheduled reset stays unchanged and past usage remains in cost reports.
 
 ## How Usage Is Counted
 

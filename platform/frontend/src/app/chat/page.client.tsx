@@ -3552,7 +3552,7 @@ export function ChatPageContent({
                                   messages,
                                   hasPendingQuestion:
                                     !!chatSession?.pendingMcpElicitations
-                                      .length,
+                                      ?.length,
                                   isCompacting: isContextCompacting,
                                 },
                               )}

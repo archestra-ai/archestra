@@ -3,6 +3,7 @@ import {
   BUILT_IN_AGENT_IDS,
   CreatedByNullableSchema,
   DOMAIN_VALIDATION_REGEX,
+  GitHubActionsAccessSchema,
   HEADER_NAME_REGEX,
   HEADER_NAME_VALIDATION_MESSAGE,
   IncomingEmailSecurityModeSchema,
@@ -189,6 +190,7 @@ const selectExtendedFields = {
   missingCredentialBehavior: MissingCredentialBehaviorSchema,
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable(),
   passthroughHeaders: z.array(z.string()).nullable(),
+  githubActionsAccess: GitHubActionsAccessSchema.nullable(),
   runtime: AgentRuntimeSchema.nullable(),
   activationSkillMode: AgentActivationSkillModeSchema,
   /**
@@ -208,6 +210,7 @@ const insertExtendedFields = {
   missingCredentialBehavior: MissingCredentialBehaviorSchema.optional(),
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable().optional(),
   passthroughHeaders: PassthroughHeadersSchema,
+  githubActionsAccess: GitHubActionsAccessSchema.nullable().optional(),
   runtime: AgentRuntimeSchema.nullable().optional(),
   activationSkillMode: AgentActivationSkillModeSchema.optional(),
 };
@@ -510,6 +513,9 @@ export const InsertAgentSchemaBase = createInsertSchema(
     latestVersion: true,
     // Stamped by AgentUsageModel when the agent is used; never client-settable.
     lastUsedAt: true,
+    // Set on an existing gateway by the update route, which checks the
+    // editor may use the GitHub App it names. A new agent starts without it.
+    githubActionsAccess: true,
   });
 
 // Full schema with validation refinement

@@ -35,6 +35,8 @@ export const CacheKey = {
   OAuthState: "oauth-state",
   /** Token endpoint requests, before verifying client credentials. */
   OAuthTokenRateLimit: "oauth-token-rate-limit",
+  /** GitHub Actions OIDC token ids already exchanged, until they expire. */
+  GitHubActionsTokenJti: "github-actions-token-jti",
   /** MCP Gateway session state */
   McpSession: "mcp-session",
   /** Legacy HTTP+SSE stream records for the MCP Gateway */

@@ -49551,6 +49551,43 @@
                                       "type": "string"
                                     }
                                   },
+                                  "githubActionsAccess": {
+                                    "nullable": true,
+                                    "type": "object",
+                                    "properties": {
+                                      "githubAppCredentialKey": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 200
+                                      },
+                                      "repositories": {
+                                        "minItems": 1,
+                                        "maxItems": 50,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "maxLength": 140,
+                                          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                                        }
+                                      },
+                                      "workflows": {
+                                        "minItems": 1,
+                                        "maxItems": 50,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "maxLength": 400,
+                                          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "githubAppCredentialKey",
+                                      "repositories",
+                                      "workflows"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "toolExposureMode": {
                                     "type": "string",
                                     "enum": [
@@ -49986,6 +50023,7 @@
                                   "runtime",
                                   "runtimeSecretId",
                                   "passthroughHeaders",
+                                  "githubActionsAccess",
                                   "toolExposureMode",
                                   "missingCredentialBehavior",
                                   "accessAllTools",
@@ -51253,6 +51291,43 @@
                               "type": "string"
                             }
                           },
+                          "githubActionsAccess": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "githubAppCredentialKey": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "repositories": {
+                                "minItems": 1,
+                                "maxItems": 50,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "maxLength": 140,
+                                  "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                                }
+                              },
+                              "workflows": {
+                                "minItems": 1,
+                                "maxItems": 50,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "maxLength": 400,
+                                  "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                                }
+                              }
+                            },
+                            "required": [
+                              "githubAppCredentialKey",
+                              "repositories",
+                              "workflows"
+                            ],
+                            "additionalProperties": false
+                          },
                           "toolExposureMode": {
                             "type": "string",
                             "enum": [
@@ -51688,6 +51763,7 @@
                           "runtime",
                           "runtimeSecretId",
                           "passthroughHeaders",
+                          "githubActionsAccess",
                           "toolExposureMode",
                           "missingCredentialBehavior",
                           "accessAllTools",
@@ -53115,6 +53191,43 @@
                         "type": "string"
                       }
                     },
+                    "githubActionsAccess": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "githubAppCredentialKey": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "repositories": {
+                          "minItems": 1,
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 140,
+                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                          }
+                        },
+                        "workflows": {
+                          "minItems": 1,
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 400,
+                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                          }
+                        }
+                      },
+                      "required": [
+                        "githubAppCredentialKey",
+                        "repositories",
+                        "workflows"
+                      ],
+                      "additionalProperties": false
+                    },
                     "toolExposureMode": {
                       "type": "string",
                       "enum": [
@@ -53533,6 +53646,7 @@
                     "runtime",
                     "runtimeSecretId",
                     "passthroughHeaders",
+                    "githubActionsAccess",
                     "toolExposureMode",
                     "missingCredentialBehavior",
                     "accessAllTools",
@@ -58331,6 +58445,43 @@
                         "type": "string"
                       }
                     },
+                    "githubActionsAccess": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "githubAppCredentialKey": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "repositories": {
+                          "minItems": 1,
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 140,
+                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                          }
+                        },
+                        "workflows": {
+                          "minItems": 1,
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 400,
+                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                          }
+                        }
+                      },
+                      "required": [
+                        "githubAppCredentialKey",
+                        "repositories",
+                        "workflows"
+                      ],
+                      "additionalProperties": false
+                    },
                     "toolExposureMode": {
                       "type": "string",
                       "enum": [
@@ -58761,6 +58912,7 @@
                     "runtime",
                     "runtimeSecretId",
                     "passthroughHeaders",
+                    "githubActionsAccess",
                     "toolExposureMode",
                     "missingCredentialBehavior",
                     "accessAllTools",
@@ -59722,6 +59874,43 @@
                             "type": "string"
                           }
                         },
+                        "githubActionsAccess": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "githubAppCredentialKey": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "repositories": {
+                              "minItems": 1,
+                              "maxItems": 50,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 140,
+                                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                              }
+                            },
+                            "workflows": {
+                              "minItems": 1,
+                              "maxItems": 50,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 400,
+                                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                              }
+                            }
+                          },
+                          "required": [
+                            "githubAppCredentialKey",
+                            "repositories",
+                            "workflows"
+                          ],
+                          "additionalProperties": false
+                        },
                         "toolExposureMode": {
                           "type": "string",
                           "enum": [
@@ -60140,6 +60329,7 @@
                         "runtime",
                         "runtimeSecretId",
                         "passthroughHeaders",
+                        "githubActionsAccess",
                         "toolExposureMode",
                         "missingCredentialBehavior",
                         "accessAllTools",
@@ -60786,6 +60976,43 @@
                         "type": "string"
                       }
                     },
+                    "githubActionsAccess": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "githubAppCredentialKey": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "repositories": {
+                          "minItems": 1,
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 140,
+                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                          }
+                        },
+                        "workflows": {
+                          "minItems": 1,
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 400,
+                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                          }
+                        }
+                      },
+                      "required": [
+                        "githubAppCredentialKey",
+                        "repositories",
+                        "workflows"
+                      ],
+                      "additionalProperties": false
+                    },
                     "toolExposureMode": {
                       "type": "string",
                       "enum": [
@@ -61204,6 +61431,7 @@
                     "runtime",
                     "runtimeSecretId",
                     "passthroughHeaders",
+                    "githubActionsAccess",
                     "toolExposureMode",
                     "missingCredentialBehavior",
                     "accessAllTools",
@@ -61768,6 +61996,42 @@
                       "pattern": "^[!#$%&'*+\\-.^_`|~0-9A-Za-z]+$"
                     }
                   },
+                  "githubActionsAccess": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "githubAppCredentialKey": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "repositories": {
+                        "minItems": 1,
+                        "maxItems": 50,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 140,
+                          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                        }
+                      },
+                      "workflows": {
+                        "minItems": 1,
+                        "maxItems": 50,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 400,
+                          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                        }
+                      }
+                    },
+                    "required": [
+                      "githubAppCredentialKey",
+                      "repositories",
+                      "workflows"
+                    ]
+                  },
                   "toolExposureMode": {
                     "type": "string",
                     "enum": [
@@ -62269,6 +62533,43 @@
                         "type": "string"
                       }
                     },
+                    "githubActionsAccess": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "githubAppCredentialKey": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "repositories": {
+                          "minItems": 1,
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 140,
+                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                          }
+                        },
+                        "workflows": {
+                          "minItems": 1,
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 400,
+                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                          }
+                        }
+                      },
+                      "required": [
+                        "githubAppCredentialKey",
+                        "repositories",
+                        "workflows"
+                      ],
+                      "additionalProperties": false
+                    },
                     "toolExposureMode": {
                       "type": "string",
                       "enum": [
@@ -62687,6 +62988,7 @@
                     "runtime",
                     "runtimeSecretId",
                     "passthroughHeaders",
+                    "githubActionsAccess",
                     "toolExposureMode",
                     "missingCredentialBehavior",
                     "accessAllTools",
@@ -64964,6 +65266,43 @@
                         "type": "string"
                       }
                     },
+                    "githubActionsAccess": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "githubAppCredentialKey": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "repositories": {
+                          "minItems": 1,
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 140,
+                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                          }
+                        },
+                        "workflows": {
+                          "minItems": 1,
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 400,
+                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                          }
+                        }
+                      },
+                      "required": [
+                        "githubAppCredentialKey",
+                        "repositories",
+                        "workflows"
+                      ],
+                      "additionalProperties": false
+                    },
                     "toolExposureMode": {
                       "type": "string",
                       "enum": [
@@ -65382,6 +65721,7 @@
                     "runtime",
                     "runtimeSecretId",
                     "passthroughHeaders",
+                    "githubActionsAccess",
                     "toolExposureMode",
                     "missingCredentialBehavior",
                     "accessAllTools",
@@ -66145,6 +66485,43 @@
                         "type": "string"
                       }
                     },
+                    "githubActionsAccess": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "githubAppCredentialKey": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "repositories": {
+                          "minItems": 1,
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 140,
+                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                          }
+                        },
+                        "workflows": {
+                          "minItems": 1,
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 400,
+                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                          }
+                        }
+                      },
+                      "required": [
+                        "githubAppCredentialKey",
+                        "repositories",
+                        "workflows"
+                      ],
+                      "additionalProperties": false
+                    },
                     "toolExposureMode": {
                       "type": "string",
                       "enum": [
@@ -66563,6 +66940,7 @@
                     "runtime",
                     "runtimeSecretId",
                     "passthroughHeaders",
+                    "githubActionsAccess",
                     "toolExposureMode",
                     "missingCredentialBehavior",
                     "accessAllTools",
@@ -74137,6 +74515,43 @@
                         "type": "string"
                       }
                     },
+                    "githubActionsAccess": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "githubAppCredentialKey": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "repositories": {
+                          "minItems": 1,
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 140,
+                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                          }
+                        },
+                        "workflows": {
+                          "minItems": 1,
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 400,
+                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                          }
+                        }
+                      },
+                      "required": [
+                        "githubAppCredentialKey",
+                        "repositories",
+                        "workflows"
+                      ],
+                      "additionalProperties": false
+                    },
                     "toolExposureMode": {
                       "type": "string",
                       "enum": [
@@ -74555,6 +74970,7 @@
                     "runtime",
                     "runtimeSecretId",
                     "passthroughHeaders",
+                    "githubActionsAccess",
                     "toolExposureMode",
                     "missingCredentialBehavior",
                     "accessAllTools",
@@ -134771,6 +135187,43 @@
                                 "type": "string"
                               }
                             },
+                            "githubActionsAccess": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "githubAppCredentialKey": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "repositories": {
+                                  "minItems": 1,
+                                  "maxItems": 50,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "maxLength": 140,
+                                    "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                                  }
+                                },
+                                "workflows": {
+                                  "minItems": 1,
+                                  "maxItems": 50,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "maxLength": 400,
+                                    "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "githubAppCredentialKey",
+                                "repositories",
+                                "workflows"
+                              ],
+                              "additionalProperties": false
+                            },
                             "toolExposureMode": {
                               "type": "string",
                               "enum": [
@@ -135189,6 +135642,7 @@
                             "runtime",
                             "runtimeSecretId",
                             "passthroughHeaders",
+                            "githubActionsAccess",
                             "toolExposureMode",
                             "missingCredentialBehavior",
                             "accessAllTools",
@@ -137793,6 +138247,43 @@
                                     "type": "string"
                                   }
                                 },
+                                "githubActionsAccess": {
+                                  "nullable": true,
+                                  "type": "object",
+                                  "properties": {
+                                    "githubAppCredentialKey": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "repositories": {
+                                      "minItems": 1,
+                                      "maxItems": 50,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "maxLength": 140,
+                                        "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                                      }
+                                    },
+                                    "workflows": {
+                                      "minItems": 1,
+                                      "maxItems": 50,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "maxLength": 400,
+                                        "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "githubAppCredentialKey",
+                                    "repositories",
+                                    "workflows"
+                                  ],
+                                  "additionalProperties": false
+                                },
                                 "toolExposureMode": {
                                   "type": "string",
                                   "enum": [
@@ -138211,6 +138702,7 @@
                                 "runtime",
                                 "runtimeSecretId",
                                 "passthroughHeaders",
+                                "githubActionsAccess",
                                 "toolExposureMode",
                                 "missingCredentialBehavior",
                                 "accessAllTools",
@@ -185040,6 +185532,277 @@
           "permissions": [
             "credential:read"
           ]
+        }
+      }
+    },
+    "/api/github-actions/token": {
+      "post": {
+        "operationId": "exchangeGitHubActionsToken",
+        "tags": [
+          "GitHub Actions"
+        ],
+        "description": "Trade a GitHub Actions OIDC token from a pull_request workflow run for an MCP gateway token that acts as the pull request's author, plus a GitHub App installation token for that repository. The gateway must allow the repository and workflow in its GitHub Actions setting, and the author must have connected GitHub through the gateway's GitHub App.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 16384
+                  },
+                  "resource": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  }
+                },
+                "required": [
+                  "token",
+                  "resource"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "access_token": {
+                      "type": "string"
+                    },
+                    "token_type": {
+                      "type": "string",
+                      "enum": [
+                        "Bearer"
+                      ]
+                    },
+                    "expires_in": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    },
+                    "github_token": {
+                      "type": "string"
+                    },
+                    "github_token_expires_at": {
+                      "type": "string"
+                    },
+                    "github_login": {
+                      "type": "string"
+                    },
+                    "user_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "access_token",
+                    "token_type",
+                    "expires_in",
+                    "github_token",
+                    "github_token_expires_at",
+                    "github_login",
+                    "user_id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "invalid_request",
+                        "invalid_token",
+                        "not_trusted",
+                        "not_linked",
+                        "ambiguous_link",
+                        "forbidden",
+                        "rate_limited",
+                        "github_error"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "login": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "invalid_request",
+                        "invalid_token",
+                        "not_trusted",
+                        "not_linked",
+                        "ambiguous_link",
+                        "forbidden",
+                        "rate_limited",
+                        "github_error"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "login": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "invalid_request",
+                        "invalid_token",
+                        "not_trusted",
+                        "not_linked",
+                        "ambiguous_link",
+                        "forbidden",
+                        "rate_limited",
+                        "github_error"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "login": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "invalid_request",
+                        "invalid_token",
+                        "not_trusted",
+                        "not_linked",
+                        "ambiguous_link",
+                        "forbidden",
+                        "rate_limited",
+                        "github_error"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "login": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "invalid_request",
+                        "invalid_token",
+                        "not_trusted",
+                        "not_linked",
+                        "ambiguous_link",
+                        "forbidden",
+                        "rate_limited",
+                        "github_error"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "login": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },

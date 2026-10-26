@@ -14614,6 +14614,11 @@ export type GetAgentCatalogResponses = {
                 } | null;
                 runtimeSecretId: string | null;
                 passthroughHeaders: Array<string> | null;
+                githubActionsAccess: {
+                    githubAppCredentialKey: string;
+                    repositories: Array<string>;
+                    workflows: Array<string>;
+                } | null;
                 toolExposureMode: 'full' | 'search_and_run_only';
                 missingCredentialBehavior: 'allow' | 'warn' | 'block';
                 accessAllTools: boolean;
@@ -14995,6 +15000,11 @@ export type GetAgentsResponses = {
             } | null;
             runtimeSecretId: string | null;
             passthroughHeaders: Array<string> | null;
+            githubActionsAccess: {
+                githubAppCredentialKey: string;
+                repositories: Array<string>;
+                workflows: Array<string>;
+            } | null;
             toolExposureMode: 'full' | 'search_and_run_only';
             missingCredentialBehavior: 'allow' | 'warn' | 'block';
             accessAllTools: boolean;
@@ -15410,6 +15420,11 @@ export type CreateAgentResponses = {
         } | null;
         runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
+        githubActionsAccess: {
+            githubAppCredentialKey: string;
+            repositories: Array<string>;
+            workflows: Array<string>;
+        } | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
@@ -16674,6 +16689,11 @@ export type GetDefaultMcpGatewayResponses = {
         } | null;
         runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
+        githubActionsAccess: {
+            githubAppCredentialKey: string;
+            repositories: Array<string>;
+            workflows: Array<string>;
+        } | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
@@ -16974,6 +16994,11 @@ export type ImportAgentResponses = {
             } | null;
             runtimeSecretId: string | null;
             passthroughHeaders: Array<string> | null;
+            githubActionsAccess: {
+                githubAppCredentialKey: string;
+                repositories: Array<string>;
+                workflows: Array<string>;
+            } | null;
             toolExposureMode: 'full' | 'search_and_run_only';
             missingCredentialBehavior: 'allow' | 'warn' | 'block';
             accessAllTools: boolean;
@@ -17283,6 +17308,11 @@ export type GetAgentResponses = {
         } | null;
         runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
+        githubActionsAccess: {
+            githubAppCredentialKey: string;
+            repositories: Array<string>;
+            workflows: Array<string>;
+        } | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
@@ -17412,6 +17442,11 @@ export type UpdateAgentData = {
             idleTimeoutMinutes: number | null;
         } | null;
         passthroughHeaders?: Array<string> | null;
+        githubActionsAccess?: {
+            githubAppCredentialKey: string;
+            repositories: Array<string>;
+            workflows: Array<string>;
+        } | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
         missingCredentialBehavior?: 'allow' | 'warn' | 'block';
         accessAllTools?: boolean;
@@ -17582,6 +17617,11 @@ export type UpdateAgentResponses = {
         } | null;
         runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
+        githubActionsAccess: {
+            githubAppCredentialKey: string;
+            repositories: Array<string>;
+            workflows: Array<string>;
+        } | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
@@ -18165,6 +18205,11 @@ export type RestoreAgentVersionResponses = {
         } | null;
         runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
+        githubActionsAccess: {
+            githubAppCredentialKey: string;
+            repositories: Array<string>;
+            workflows: Array<string>;
+        } | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
@@ -18403,6 +18448,11 @@ export type CloneAgentResponses = {
         } | null;
         runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
+        githubActionsAccess: {
+            githubAppCredentialKey: string;
+            repositories: Array<string>;
+            workflows: Array<string>;
+        } | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
@@ -20880,6 +20930,11 @@ export type RestoreAgentResponses = {
         } | null;
         runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
+        githubActionsAccess: {
+            githubAppCredentialKey: string;
+            repositories: Array<string>;
+            workflows: Array<string>;
+        } | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
@@ -37422,6 +37477,11 @@ export type GetNewChatBootstrapResponses = {
                 } | null;
                 runtimeSecretId: string | null;
                 passthroughHeaders: Array<string> | null;
+                githubActionsAccess: {
+                    githubAppCredentialKey: string;
+                    repositories: Array<string>;
+                    workflows: Array<string>;
+                } | null;
                 toolExposureMode: 'full' | 'search_and_run_only';
                 missingCredentialBehavior: 'allow' | 'warn' | 'block';
                 accessAllTools: boolean;
@@ -37973,6 +38033,11 @@ export type GetConversationBootstrapResponses = {
                     } | null;
                     runtimeSecretId: string | null;
                     passthroughHeaders: Array<string> | null;
+                    githubActionsAccess: {
+                        githubAppCredentialKey: string;
+                        repositories: Array<string>;
+                        workflows: Array<string>;
+                    } | null;
                     toolExposureMode: 'full' | 'search_and_run_only';
                     missingCredentialBehavior: 'allow' | 'warn' | 'block';
                     accessAllTools: boolean;
@@ -51137,6 +51202,78 @@ export type ListGitCredentialNamespacesResponses = {
 };
 
 export type ListGitCredentialNamespacesResponse = ListGitCredentialNamespacesResponses[keyof ListGitCredentialNamespacesResponses];
+
+export type ExchangeGitHubActionsTokenData = {
+    body: {
+        token: string;
+        resource: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/github-actions/token';
+};
+
+export type ExchangeGitHubActionsTokenErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: 'invalid_request' | 'invalid_token' | 'not_trusted' | 'not_linked' | 'ambiguous_link' | 'forbidden' | 'rate_limited' | 'github_error';
+        message: string;
+        login?: string;
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: 'invalid_request' | 'invalid_token' | 'not_trusted' | 'not_linked' | 'ambiguous_link' | 'forbidden' | 'rate_limited' | 'github_error';
+        message: string;
+        login?: string;
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: 'invalid_request' | 'invalid_token' | 'not_trusted' | 'not_linked' | 'ambiguous_link' | 'forbidden' | 'rate_limited' | 'github_error';
+        message: string;
+        login?: string;
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: 'invalid_request' | 'invalid_token' | 'not_trusted' | 'not_linked' | 'ambiguous_link' | 'forbidden' | 'rate_limited' | 'github_error';
+        message: string;
+        login?: string;
+    };
+    /**
+     * Default Response
+     */
+    502: {
+        error: 'invalid_request' | 'invalid_token' | 'not_trusted' | 'not_linked' | 'ambiguous_link' | 'forbidden' | 'rate_limited' | 'github_error';
+        message: string;
+        login?: string;
+    };
+};
+
+export type ExchangeGitHubActionsTokenError = ExchangeGitHubActionsTokenErrors[keyof ExchangeGitHubActionsTokenErrors];
+
+export type ExchangeGitHubActionsTokenResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        access_token: string;
+        token_type: 'Bearer';
+        expires_in: number;
+        github_token: string;
+        github_token_expires_at: string;
+        github_login: string;
+        user_id: string;
+    };
+};
+
+export type ExchangeGitHubActionsTokenResponse = ExchangeGitHubActionsTokenResponses[keyof ExchangeGitHubActionsTokenResponses];
 
 export type ListGithubAppConfigsData = {
     body?: never;

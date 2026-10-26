@@ -193,7 +193,10 @@ export function buildOAuthIssuer(): string {
   return config.frontendBaseUrl;
 }
 
-function extractProfileIdFromMcpResource(resource: string): string | null {
+/** The gateway id in this deployment's MCP gateway URL, or null for any other URL. */
+export function extractProfileIdFromMcpResource(
+  resource: string,
+): string | null {
   try {
     const resourceUrl = new URL(resource);
     const issuerUrl = new URL(buildOAuthIssuer());

@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { ArchestraInternalErrorCode } from "@archestra/shared";
+import {
+  ArchestraInternalErrorCode,
+  type ModelInputModality,
+  type ModelOutputModality,
+} from "@archestra/shared";
 import { z } from "zod";
 import config from "@/config";
 import { decodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
@@ -9,6 +13,7 @@ import { joinBaseUrl } from "@/utils/base-url";
 import { fetchLiteLlmPricing } from "./litellm";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
 import {
+  type FetchedModelCapabilities,
   type ModelFetchOptions,
   type ModelInfo,
   modelFetchError,
@@ -54,8 +59,9 @@ export function mapOpenAiModelToModelInfo(
 }
 
 // babbage/davinci are OpenAI's legacy completions-only base models: they 404 on
-// /chat/completions ("not a chat model"). They, and the other non-chat families,
-// are dropped so they never enter the selectable chat catalog.
+// /chat/completions ("not a chat model"). They, and the other non-chat families
+// that no governed endpoint serves, are dropped from sync. Image, speech and
+// transcription models are kept as media models (openAiMediaCapabilities).
 const NON_CHAT_MODEL_ID_PATTERNS = [
   "instruct",
   "tts",
@@ -68,7 +74,7 @@ const NON_CHAT_MODEL_ID_PATTERNS = [
   "davinci",
 ];
 
-/** @public — exported for unit tests; the chat-catalog filter fetchOpenAiModels applies. */
+/** The chat-catalog name filter; the OpenAI proxy `/models` listing applies it too. */
 export function isChatModelId(id: string): boolean {
   const lower = id.toLowerCase();
   return !NON_CHAT_MODEL_ID_PATTERNS.some((pattern) => lower.includes(pattern));
@@ -128,12 +134,47 @@ export async function fetchOpenAiModels(
   });
 
   const pricing = await fetchLiteLlmPricing({ baseUrl, apiKey, extraHeaders });
-  return data.data
-    .filter((model) => isChatModelId(model.id))
-    .map((model) => ({
-      ...mapOpenAiModelToModelInfo(model),
-      ...(pricing.has(model.id)
-        ? { providerPricing: pricing.get(model.id) }
-        : {}),
-    }));
+  return data.data.flatMap((model) => {
+    // Media classification wins: transcription ids pass the chat-name filter.
+    const media = openAiMediaCapabilities(model.id);
+    if (!media && !isChatModelId(model.id)) {
+      return [];
+    }
+    return [
+      {
+        ...mapOpenAiModelToModelInfo(model),
+        ...(media ? { capabilities: media } : {}),
+        ...(pricing.has(model.id)
+          ? { providerPricing: pricing.get(model.id) }
+          : {}),
+      },
+    ];
+  });
+}
+
+/**
+ * Media models the governed image and audio endpoints serve. Sync keeps them
+ * with their real modalities so the Model Router can resolve them, while a
+ * non-text output (or audio-only input) keeps them out of chat pickers
+ * (`ModelModel.supportsTextChat`).
+ */
+function openAiMediaCapabilities(id: string): FetchedModelCapabilities | null {
+  const lower = id.toLowerCase();
+  if (/^(gpt-image-|chatgpt-image-|dall-e-)/.test(lower)) {
+    return mediaCapabilities(["text"], ["image"]);
+  }
+  if (/^(tts-|gpt-[\w.-]+-tts(?:-|$))/.test(lower)) {
+    return mediaCapabilities(["text"], ["audio"]);
+  }
+  if (/^(whisper-|gpt-[\w.-]+-transcribe(?:-|$))/.test(lower)) {
+    return mediaCapabilities(["audio"], ["text"]);
+  }
+  return null;
+}
+
+function mediaCapabilities(
+  inputModalities: ModelInputModality[],
+  outputModalities: ModelOutputModality[],
+): FetchedModelCapabilities {
+  return { inputModalities, outputModalities, supportsToolCalling: false };
 }

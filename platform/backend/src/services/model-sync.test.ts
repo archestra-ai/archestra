@@ -10,6 +10,7 @@ import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 import { modelFetchers } from "@/routes/chat/model-fetchers";
+import { resolveModelRoute } from "@/routes/proxy/model-router-resolver";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import {
@@ -22,7 +23,7 @@ import {
 // Keep the real client and stub HTTP so imports through the runtime launch
 // path cannot capture a different singleton from a partial module mock.
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper, not a React hook
-useMswServer(
+const server = useMswServer(
   http.get("https://models.dev/api.json", () => HttpResponse.json({})),
 );
 beforeEach(() => modelsDevClient.clearFetchCache());
@@ -262,6 +263,75 @@ describe("ModelSyncService", () => {
       await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([apiKey.id]);
     expect(linkedModels).toHaveLength(3);
     expect(linkedModels.every((m) => m.model.provider === "openai")).toBe(true);
+  });
+
+  test("keeps OpenAI image and audio models as media models the Model Router can resolve", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+    server.use(
+      http.get("https://api.openai.com/v1/models", () =>
+        HttpResponse.json({
+          object: "list",
+          data: [
+            "gpt-4o",
+            "gpt-image-1",
+            "tts-1",
+            "gpt-4o-mini-tts",
+            "whisper-1",
+            "gpt-4o-transcribe",
+            "davinci-002",
+          ].map((id) => ({
+            id,
+            object: "model",
+            owned_by: "openai",
+            created: 1,
+          })),
+        }),
+      ),
+    );
+
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "openai",
+      apiKeyValue: "test-key",
+      baseUrl: "https://api.openai.com/v1",
+    });
+
+    const rows = await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([
+      apiKey.id,
+    ]);
+    const byId = new Map(rows.map(({ model }) => [model.modelId, model]));
+    expect([...byId.keys()].sort()).toEqual([
+      "gpt-4o",
+      "gpt-4o-mini-tts",
+      "gpt-4o-transcribe",
+      "gpt-image-1",
+      "tts-1",
+      "whisper-1",
+    ]);
+    expect(byId.get("gpt-image-1")?.outputModalities).toEqual(["image"]);
+    expect(byId.get("gpt-4o-mini-tts")?.outputModalities).toEqual(["audio"]);
+    // Transcription ids pass the chat-name filter, so they used to sync as chat.
+    expect(byId.get("gpt-4o-transcribe")?.inputModalities).toEqual(["audio"]);
+    const chatModels = rows
+      .filter(({ model }) => ModelModel.supportsTextChat(model))
+      .map(({ model }) => model.modelId);
+    expect(chatModels).toEqual(["gpt-4o"]);
+
+    await expect(
+      resolveModelRoute({
+        requestedModel: "openai:gpt-image-1",
+        capability: "media",
+        allowedApiKeyIds: [apiKey.id],
+      }),
+    ).resolves.toMatchObject({ provider: "openai", modelId: "gpt-image-1" });
   });
 
   test("reclassifies a proxy-discovered model once the provider's catalog returns it", async ({

@@ -5,7 +5,10 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
-import { fetchOpenAiModels } from "@/routes/chat/model-fetchers/openai";
+import {
+  fetchOpenAiModels,
+  isChatModelId,
+} from "@/routes/chat/model-fetchers/openai";
 import {
   ApiError,
   Azure,
@@ -432,7 +435,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       token: extractBearerToken(request.headers.authorization),
     });
     logger.debug({ agentId }, "[UnifiedProxy] Listing OpenAI models");
-    const models = await fetchOpenAiModels(apiKey, baseUrl, extraHeaders);
+    // Clients fill their model pickers from this list, so it keeps the chat
+    // filter. The fetcher also returns image and audio models for sync.
+    const models = (
+      await fetchOpenAiModels(apiKey, baseUrl, extraHeaders)
+    ).filter((model) => isChatModelId(model.id));
     const list = toOpenAiModelsList(models, "openai");
     return isCodex
       ? {

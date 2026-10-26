@@ -37,12 +37,12 @@ export function createTerminalReplayer(terminal: Terminal): TerminalReplayer {
   /** The scroll region the client set, in rows from 1; null for the screen. */
   let region: ScrollRegion | null = null;
   terminal.parser.registerCsiHandler({ prefix: "?", final: "h" }, (params) => {
-    if (!alternateScreenMode(params.filter(isNumber))) return false;
+    if (!alternateScreenMode(params.filter(isPlainParam))) return false;
     alternate = true;
     return true;
   });
   terminal.parser.registerCsiHandler({ prefix: "?", final: "l" }, (params) => {
-    if (!alternateScreenMode(params.filter(isNumber))) return false;
+    if (!alternateScreenMode(params.filter(isPlainParam))) return false;
     alternate = false;
     return true;
   });
@@ -110,7 +110,10 @@ export function createTerminalReplayer(terminal: Terminal): TerminalReplayer {
 }
 
 export interface TerminalReplayer {
-  /** Write the next bytes of the recording; resolves once xterm parsed them. */
+  /**
+   * Write the next bytes of the recording; resolves once xterm parsed them.
+   * One write at a time: the caller starts the next after this one resolves.
+   */
   write(content: string): Promise<void>;
   /**
    * Forget stream state after `terminal.reset()`. A stopped replayer stays
@@ -181,7 +184,8 @@ function alternateScreenMode(modes: number[]): boolean {
   return modes.some((mode) => ALTERNATE_SCREEN_MODES.has(mode));
 }
 
-function isNumber(value: number | number[]): value is number {
+/** xterm passes a parameter's sub-parameters as an array. */
+function isPlainParam(value: number | number[]): value is number {
   return typeof value === "number";
 }
 
@@ -298,6 +302,12 @@ async function scrollScreenIntoDocument({
   );
 }
 
+interface CursorMoves {
+  before: string;
+  to: (y: number, x: number) => string;
+  after: (y: number, x: number) => string;
+}
+
 /**
  * The replayer's own cursor moves are absolute: `before` turns origin mode
  * off and opens the scroll region, `to` addresses a row and column of the
@@ -310,11 +320,7 @@ function plainCursorMoves({
 }: {
   terminal: Terminal;
   region: ScrollRegion | null;
-}): {
-  before: string;
-  to: (y: number, x: number) => string;
-  after: (y: number, x: number) => string;
-} {
+}): CursorMoves {
   const origin = terminal.modes.originMode;
   const to = (y: number, x: number) =>
     `\x1b[${Math.max(0, y) + 1};${Math.max(0, x) + 1}H`;

@@ -27,6 +27,7 @@ import type {
   StreamAccumulatorState,
   UsageView,
 } from "@/types";
+import { streamChatCompletionChunks } from "./chat-completions-stream";
 import {
   OpenAIRequestAdapter,
   OpenAIResponseAdapter,
@@ -393,16 +394,9 @@ export const openrouterAdapterFactory: LLMProvider<
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
 
-    const stream =
-      await openrouterClient.chat.completions.create(openrouterRequest);
-
-    return {
-      [Symbol.asyncIterator]: async function* () {
-        for await (const chunk of stream) {
-          yield chunk as OpenrouterStreamChunk;
-        }
-      },
-    };
+    return streamChatCompletionChunks<OpenrouterStreamChunk>(
+      openrouterClient.chat.completions.create(openrouterRequest),
+    );
   },
 
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {

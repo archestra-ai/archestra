@@ -16,6 +16,7 @@ import {
 type UsageSession = Pick<
   LogSession,
   | "requestCount"
+  | "failedOverCount"
   | "totalInputTokens"
   | "totalOutputTokens"
   | "totalCacheReadTokens"
@@ -72,6 +73,14 @@ export function UsageCell({ session }: { session: UsageSession }) {
           <dd className="text-right">
             {session.requestCount.toLocaleString()}
           </dd>
+          {session.failedOverCount > 0 ? (
+            <>
+              <dt className="text-muted-foreground">Failed over</dt>
+              <dd className="text-right">
+                {session.failedOverCount.toLocaleString()}
+              </dd>
+            </>
+          ) : null}
           <dt className="text-muted-foreground">Input / output</dt>
           <dd className="text-right">
             {session.totalInputTokens.toLocaleString()} /{" "}

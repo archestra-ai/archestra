@@ -391,3 +391,118 @@ it("deduplicates overview and model chart requests without eagerly fetching user
   expect(result.current.kpis.people.value).toBe(5);
   expect(requests).toBe(1);
 });
+
+it("groups proxy usage by provider key and pool and shows failed-over attempts", async () => {
+  const usage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    subscriptionCost: 0,
+  };
+  const queries: URLSearchParams[] = [];
+  server.use(
+    http.get(`${origin}/api/statistics/llm-proxy`, ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      queries.push(query);
+      const totals = {
+        ...usage,
+        requests: 4,
+        billedCost: 7,
+        failedOverAttempts: 1,
+      };
+      return HttpResponse.json({
+        totals,
+        timeSeries: [],
+        methods: [],
+        credentials: [],
+        pagination: { limit: 50, offset: 0, total: 0 },
+        providerKeys: query.has("includeProviderKeys")
+          ? [
+              {
+                ...usage,
+                providerApiKeyId: "11111111-1111-4111-8111-111111111111",
+                providerApiKeyName: "Dedicated",
+                provider: "openai",
+                requests: 3,
+                billedCost: 5,
+                failedOverAttempts: 1,
+              },
+              {
+                ...usage,
+                providerApiKeyId: null,
+                providerApiKeyName: null,
+                provider: null,
+                requests: 1,
+                billedCost: 2,
+                failedOverAttempts: 0,
+              },
+            ]
+          : undefined,
+        modelPools: query.has("includeModelPools")
+          ? [
+              {
+                ...usage,
+                modelPoolId: "22222222-2222-4222-8222-222222222222",
+                modelPoolName: "gpt-pool",
+                requests: 3,
+                billedCost: 3,
+                failedOverAttempts: 1,
+              },
+            ]
+          : undefined,
+      });
+    }),
+  );
+  const byKey = renderHook(
+    () =>
+      usePivotCube(
+        {
+          metric: "requests",
+          group: "providerKey",
+          split: "none",
+          chart: "table",
+        },
+        "30d",
+        true,
+      ),
+    { wrapper },
+  );
+  await waitFor(() => expect(byKey.result.current.total).toBe(4));
+  expect(
+    byKey.result.current.rows.map((row) => [
+      row.label,
+      row.total,
+      row.extras.failedOver,
+    ]),
+  ).toEqual([
+    ["Dedicated", 3, 1],
+    ["No provider key", 1, 0],
+  ]);
+  expect(byKey.result.current.extraCols.map((col) => col.label)).toEqual([
+    "Failed over",
+  ]);
+  // The keyed row is trended through its own filter; the null row can't be.
+  await waitFor(() =>
+    expect(
+      queries.some(
+        (query) =>
+          query.get("providerApiKeyId") ===
+          "11111111-1111-4111-8111-111111111111",
+      ),
+    ).toBe(true),
+  );
+
+  const byPool = renderHook(
+    () =>
+      usePivotCube(
+        { metric: "billed", group: "pool", split: "none", chart: "table" },
+        "30d",
+        true,
+      ),
+    { wrapper },
+  );
+  await waitFor(() => expect(byPool.result.current.total).toBe(3));
+  expect(byPool.result.current.rows[0].label).toBe("gpt-pool");
+  // The failed-over column is a request count, so Spend leaves it out.
+  expect(byPool.result.current.extraCols).toEqual([]);
+});

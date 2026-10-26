@@ -36,19 +36,11 @@ export async function resolveInstallationCredential(
   credentials: GithubAppCredentials,
   fetchImpl: typeof fetch = globalThis.fetch,
 ): Promise<{ token: string; expiresAt: number }> {
-  const { githubUrl, appId, installationId } = credentials;
-  if (!appId || !installationId || !credentials.privateKey) {
-    throw new Error(
-      "GitHub App authentication requires app ID, installation ID, and private key",
-    );
-  }
-  const { privateKey } = parseGitHubAppSecrets(credentials.privateKey);
-  const signingKey = parseSigningKey(privateKey);
-
+  const signingKey = readAppSigningKey(credentials);
   const cacheKey = buildInstallationTokenCacheKey({
-    githubUrl,
-    appId,
-    installationId,
+    githubUrl: credentials.githubUrl,
+    appId: credentials.appId,
+    installationId: credentials.installationId,
     signingKey,
   });
   const cachedToken = installationTokenCache.get(cacheKey);
@@ -60,62 +52,22 @@ export async function resolveInstallationCredential(
     return cachedToken;
   }
 
-  const jwt = await signAppJwt({ appId, signingKey });
-  const response = await fetchImpl(
-    `${githubUrl.replace(/\/+$/, "")}/app/installations/${installationId}/access_tokens`,
-    {
-      method: "POST",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${jwt}`,
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-      signal: AbortSignal.timeout(INSTALLATION_TOKEN_REQUEST_TIMEOUT_MS),
-    },
-  );
-
-  if (!response.ok) {
-    const responseMessage = await readGithubErrorResponse(response);
-    if (response.status === 404) {
-      throw new ApiError(
-        400,
-        "GitHub App or installation was not found. Check the app ID, installation ID, and private key in Settings → Credentials.",
-      );
-    }
-    // GitHub's own failure, relayed as such so a caller can tell an outage
-    // from a fault of ours.
-    throw new ApiError(
-      502,
-      [
-        `Failed to create GitHub App installation token: ${response.status} ${response.statusText}`,
-        responseMessage,
-      ]
-        .filter(Boolean)
-        .join(": "),
-    );
-  }
-
-  const body = (await response.json()) as {
-    token?: string;
-    expires_at?: string;
-  };
-  if (!body.token) {
-    throw new Error(
-      "GitHub App installation token response did not include a token",
-    );
-  }
-
-  const expiresAt = body.expires_at ? Date.parse(body.expires_at) : NaN;
-  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now())
-    throw new Error(
-      "GitHub App installation token has an invalid or expired lifetime",
-    );
+  const minted = await mintInstallationToken({
+    githubUrl: credentials.githubUrl,
+    appId: credentials.appId,
+    installationId: credentials.installationId,
+    signingKey,
+    fetchImpl,
+  });
   installationTokenCache.set(
     cacheKey,
-    { token: body.token, expiresAt },
-    Math.min(GITHUB_APP_INSTALLATION_TOKEN_TTL_MS, expiresAt - Date.now()),
+    minted,
+    Math.min(
+      GITHUB_APP_INSTALLATION_TOKEN_TTL_MS,
+      minted.expiresAt - Date.now(),
+    ),
   );
-  return { token: body.token, expiresAt };
+  return minted;
 }
 
 /**
@@ -132,57 +84,17 @@ export async function createRepositoryInstallationToken(
   },
   fetchImpl: typeof fetch = globalThis.fetch,
 ): Promise<{ token: string; expiresAt: number }> {
-  const { githubUrl, appId, installationId } = credentials;
-  if (!appId || !installationId || !credentials.privateKey) {
-    throw new Error(
-      "GitHub App authentication requires app ID, installation ID, and private key",
-    );
-  }
-  const { privateKey } = parseGitHubAppSecrets(credentials.privateKey);
-  const jwt = await signAppJwt({
-    appId,
-    signingKey: parseSigningKey(privateKey),
-  });
-  const response = await fetchImpl(
-    `${githubUrl.replace(/\/+$/, "")}/app/installations/${encodeURIComponent(installationId)}/access_tokens`,
-    {
-      method: "POST",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${jwt}`,
-        "Content-Type": "application/json",
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-      body: JSON.stringify({
-        repositories: [credentials.repository],
-        permissions: credentials.permissions,
-      }),
-      redirect: "error",
-      signal: AbortSignal.timeout(INSTALLATION_TOKEN_REQUEST_TIMEOUT_MS),
+  return mintInstallationToken({
+    githubUrl: credentials.githubUrl,
+    appId: credentials.appId,
+    installationId: credentials.installationId,
+    signingKey: readAppSigningKey(credentials),
+    restrictTo: {
+      repositories: [credentials.repository],
+      permissions: credentials.permissions,
     },
-  );
-  if (!response.ok) {
-    throw new ApiError(
-      502,
-      [
-        `Failed to create a GitHub App installation token for ${credentials.repository}: ${response.status} ${response.statusText}`,
-        await readGithubErrorResponse(response),
-      ]
-        .filter(Boolean)
-        .join(": "),
-    );
-  }
-  const body = (await response.json()) as {
-    token?: string;
-    expires_at?: string;
-  };
-  const expiresAt = body.expires_at ? Date.parse(body.expires_at) : NaN;
-  if (!body.token || !Number.isFinite(expiresAt) || expiresAt <= Date.now())
-    throw new ApiError(
-      502,
-      "GitHub returned an installation token without a valid token or lifetime",
-    );
-  return { token: body.token, expiresAt };
+    fetchImpl,
+  });
 }
 
 export const GITHUB_APP_NOT_FOUND = "github_app_not_found";
@@ -247,6 +159,97 @@ const installationTokenCache = new LRUCacheManager<{
   maxSize: 500,
   defaultTtl: GITHUB_APP_INSTALLATION_TOKEN_TTL_MS,
 });
+
+function readAppSigningKey(credentials: {
+  appId: string;
+  installationId: string;
+  privateKey: string;
+}): KeyObject {
+  if (
+    !credentials.appId ||
+    !credentials.installationId ||
+    !credentials.privateKey
+  ) {
+    throw new Error(
+      "GitHub App authentication requires app ID, installation ID, and private key",
+    );
+  }
+  return parseSigningKey(
+    parseGitHubAppSecrets(credentials.privateKey).privateKey,
+  );
+}
+
+/** POST `/access_tokens` as the App, optionally narrowed, and check the answer. */
+async function mintInstallationToken(params: {
+  githubUrl: string;
+  appId: string;
+  installationId: string;
+  signingKey: KeyObject;
+  restrictTo?: {
+    repositories: string[];
+    permissions: Record<string, "read" | "write">;
+  };
+  fetchImpl: typeof fetch;
+}): Promise<{ token: string; expiresAt: number }> {
+  const jwt = await signAppJwt({
+    appId: params.appId,
+    signingKey: params.signingKey,
+  });
+  const response = await params.fetchImpl(
+    `${params.githubUrl.replace(/\/+$/, "")}/app/installations/${encodeURIComponent(params.installationId)}/access_tokens`,
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${jwt}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+        ...(params.restrictTo && { "Content-Type": "application/json" }),
+      },
+      ...(params.restrictTo && { body: JSON.stringify(params.restrictTo) }),
+      redirect: "error",
+      signal: AbortSignal.timeout(INSTALLATION_TOKEN_REQUEST_TIMEOUT_MS),
+    },
+  );
+
+  if (!response.ok) {
+    const responseMessage = await readGithubErrorResponse(response);
+    if (response.status === 404) {
+      throw new ApiError(
+        400,
+        "GitHub App or installation was not found. Check the app ID, installation ID, and private key in Settings → Credentials.",
+      );
+    }
+    // GitHub's own failure, relayed as such so a caller can tell an outage
+    // from a fault of ours.
+    throw new ApiError(
+      502,
+      [
+        `Failed to create GitHub App installation token: ${response.status} ${response.statusText}`,
+        responseMessage,
+      ]
+        .filter(Boolean)
+        .join(": "),
+    );
+  }
+
+  const body = (await response.json()) as {
+    token?: string;
+    expires_at?: string;
+  };
+  if (!body.token) {
+    throw new ApiError(
+      502,
+      "GitHub App installation token response did not include a token",
+    );
+  }
+  const expiresAt = body.expires_at ? Date.parse(body.expires_at) : NaN;
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now())
+    throw new ApiError(
+      502,
+      "GitHub App installation token has an invalid or expired lifetime",
+    );
+  return { token: body.token, expiresAt };
+}
 
 async function signAppJwt(params: {
   appId: string;

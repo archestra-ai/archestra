@@ -44,8 +44,9 @@ on:
 
 permissions: {}
 
-# The caller's job carries the group for the pull request. This one only
-# stops two copies of the same event from running at once.
+# The caller's group for the pull request cancels superseded runs. This group
+# is unique for each call (it holds the run ID); it is here because the
+# organization's workflow audit requires one.
 concurrency:
   group: archestra-runtime-review-job-${{ github.ref }}-${{ github.run_id }}
   cancel-in-progress: false
@@ -100,6 +101,7 @@ jobs:
         with:
           archestra-gateway-url: ${{ inputs.gateway-url }}
           archestra-auth: ${{ inputs.archestra-auth }}
+          # Read only with archestra-auth "token"; the GitHub Actions sign-in needs no secret.
           archestra-token: ${{ secrets.ARCHESTRA_TOKEN }}
           review-event: ${{ inputs.review-event }}
           agents: ${{ inputs.agents }}

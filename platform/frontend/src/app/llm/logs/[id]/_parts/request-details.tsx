@@ -240,7 +240,7 @@ function RequestOverview({
   const segments = [
     {
       key: "fresh",
-      label: "Fresh input",
+      label: row.inputTokensEstimated ? "Fresh input (est.)" : "Fresh input",
       value: fresh,
       tone: TOKEN_TONES.fresh,
     },
@@ -419,6 +419,12 @@ function RequestOverview({
           {cacheShare > 0 ? (
             <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
               {Math.round(cacheShare * 100)}% of input from the prompt cache
+            </p>
+          ) : null}
+          {row.inputTokensEstimated ? (
+            <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+              Input is estimated from the request: the provider reported no
+              usage.
             </p>
           ) : null}
         </OverviewSection>

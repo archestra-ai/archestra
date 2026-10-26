@@ -165,7 +165,10 @@ function ConnectExample({ poolName }: { poolName: string }) {
           Any OpenAI-compatible client works: point it at this URL and ask for
           the model <span className="font-mono">{poolName}</span>. Clients on a
           provider route, such as Claude Code on the Anthropic route, can ask
-          for the same name.
+          for the same name. Claude Code doesn't know a non-Claude name and
+          assumes a 200k context window: set{" "}
+          <span className="font-mono">CLAUDE_CODE_MAX_CONTEXT_TOKENS</span> to
+          the smallest window among the pool's members.
         </p>
       </div>
       {example ? (

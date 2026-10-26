@@ -230895,6 +230895,9 @@
                             "minimum": -2147483648,
                             "maximum": 2147483647
                           },
+                          "inputTokensEstimated": {
+                            "type": "boolean"
+                          },
                           "outputTokens": {
                             "nullable": true,
                             "type": "integer",
@@ -231078,6 +231081,7 @@
                           "baselineModel",
                           "billingMode",
                           "inputTokens",
+                          "inputTokensEstimated",
                           "outputTokens",
                           "cacheReadTokens",
                           "cacheWriteTokens",

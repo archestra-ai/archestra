@@ -37,14 +37,14 @@ export function TimeCell({
           </time>
           <span className="block text-xs leading-4 whitespace-nowrap text-muted-foreground">
             <span>{requestCount.toLocaleString()} req</span>
-            {failedOverCount > 0 ? (
-              <span className="text-red-700 dark:text-red-400">
-                {" "}
-                ({failedOverCount.toLocaleString()} failed over)
-              </span>
-            ) : null}
             {span ? <span> · {span}</span> : null}
           </span>
+          {/* Its own line: beside the count and span it overflows the column. */}
+          {failedOverCount > 0 ? (
+            <span className="block text-xs leading-4 whitespace-nowrap text-red-700 dark:text-red-400">
+              {failedOverCount.toLocaleString()} failed over
+            </span>
+          ) : null}
         </UnstyledButton>
       </TooltipTrigger>
       <TooltipContent className="px-2 py-1.5">

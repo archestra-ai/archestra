@@ -983,6 +983,7 @@ class InteractionModel {
           baselineModel: schema.interactionsTable.baselineModel,
           billingMode: schema.interactionsTable.billingMode,
           inputTokens: schema.interactionsTable.inputTokens,
+          inputTokensEstimated: schema.interactionsTable.inputTokensEstimated,
           outputTokens: schema.interactionsTable.outputTokens,
           cacheReadTokens: schema.interactionsTable.cacheReadTokens,
           cacheWriteTokens: schema.interactionsTable.cacheWriteTokens,

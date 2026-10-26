@@ -226,6 +226,7 @@ function row(overrides: Partial<InteractionSummary> = {}): InteractionSummary {
     baselineModel: null,
     billingMode: "metered",
     inputTokens: 10,
+    inputTokensEstimated: false,
     outputTokens: 5,
     cacheReadTokens: 0,
     cacheWriteTokens: 0,

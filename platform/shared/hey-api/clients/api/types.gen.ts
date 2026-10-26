@@ -61561,6 +61561,7 @@ export type GetInteractionSummariesResponses = {
             baselineModel: string | null;
             billingMode: 'metered' | 'subscription';
             inputTokens: number | null;
+            inputTokensEstimated: boolean;
             outputTokens: number | null;
             cacheReadTokens: number | null;
             cacheWriteTokens: number | null;

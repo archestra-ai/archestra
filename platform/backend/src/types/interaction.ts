@@ -374,6 +374,7 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
   baselineModel: true,
   billingMode: true,
   inputTokens: true,
+  inputTokensEstimated: true,
   outputTokens: true,
   cacheReadTokens: true,
   cacheWriteTokens: true,

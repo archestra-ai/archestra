@@ -10,6 +10,7 @@ import {
   type BillingAttribution,
   componentCacheCosts,
   type PricedBillingUsage,
+  type PricedComponent,
   priceTokens,
   type QuotedPrices,
   sumMoney,
@@ -478,7 +479,6 @@ export async function calculateInteractionCosts(params: {
   const smartCost = params.autoRouting
     ? await smartBaselineCost({
         smart: params.autoRouting.smartModel,
-        actualModel: params.actualModel,
         usage: params.usage,
         billingUsage:
           billingUsage?.mode === "enforce" ? billingUsage : undefined,
@@ -520,16 +520,16 @@ export async function calculateInteractionCosts(params: {
 
 /**
  * What a routed request would have cost on the smart tier, on the same usage.
- * In enforce mode only components served by the routed model are repriced.
+ * In enforce mode only the executor's components are repriced, whatever model
+ * id the provider reported for them; advisor components keep their own prices.
  * Null when the smart tier has no configured or synced price for that usage.
  */
 async function smartBaselineCost(params: {
   smart: AutoRoutingRequestContext["smartModel"];
-  actualModel: string;
   usage: UsageView;
   billingUsage?: PricedBillingUsage;
 }): Promise<string | null> {
-  const { smart, actualModel, usage, billingUsage } = params;
+  const { smart, usage, billingUsage } = params;
   if (!billingUsage) {
     const quote = await resolvePricingQuote({
       model: smart.modelId,
@@ -551,7 +551,7 @@ async function smartBaselineCost(params: {
       : null;
   }
   const routed = billingUsage.components
-    .filter((item) => item.model === actualModel)
+    .filter(servedByExecutor)
     .map((item) => ({
       id: item.id,
       kind: item.kind,
@@ -579,10 +579,9 @@ async function smartBaselineCost(params: {
   });
   const costs: string[] = [];
   for (const component of billingUsage.components) {
-    const quoted =
-      component.model === actualModel
-        ? quote.components.get(component.id)
-        : undefined;
+    const quoted = servedByExecutor(component)
+      ? quote.components.get(component.id)
+      : undefined;
     if (!quoted) {
       costs.push(component.cost);
       continue;
@@ -591,6 +590,11 @@ async function smartBaselineCost(params: {
     costs.push(priceTokens(component, quoted.prices));
   }
   return sumMoney(costs);
+}
+
+/** The routed tier ran it: everything but an advisor's turns. */
+function servedByExecutor(component: Pick<PricedComponent, "kind">): boolean {
+  return component.kind !== "advisor_message";
 }
 
 function smartPriceKnown(

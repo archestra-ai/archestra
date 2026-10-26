@@ -1,5 +1,6 @@
-import { and, eq, lt } from "drizzle-orm";
-import db, { schema, withDbTransaction } from "@/database";
+import { and, eq, sql } from "drizzle-orm";
+import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
+import db, { schema } from "@/database";
 import { hashMessage } from "@/models/interaction-delta-manager";
 import {
   type InsertRoutingDecision,
@@ -82,27 +83,61 @@ class RoutingDecisionModel {
 
   /**
    * Deletes decisions and usage older than the retention window, each by its
-   * own age. Usage whose decision is gone is an orphan the fit already ignores.
+   * own age, `batchSize` rows per statement. Usage whose decision is gone is an
+   * orphan the fit already ignores.
    */
   static async purgeExpired(
     now: Date = new Date(),
+    batchSize = PURGE_BATCH_SIZE,
   ): Promise<{ decisions: number; usage: number }> {
     const cutoff = new Date(now.getTime() - RETENTION_MS);
-    return withDbTransaction(async (tx) => {
-      const purgedDecisions = await tx
-        .delete(decisions)
-        .where(lt(decisions.createdAt, cutoff))
-        .returning({ id: decisions.id });
-      const purgedUsage = await tx
-        .delete(usage)
-        .where(lt(usage.createdAt, cutoff))
-        .returning({ id: usage.interactionId });
-      return {
-        decisions: purgedDecisions.length,
-        usage: purgedUsage.length,
-      };
-    });
+    return {
+      decisions: await deleteBefore(
+        decisions,
+        decisions.id,
+        decisions.createdAt,
+        cutoff,
+        batchSize,
+      ),
+      usage: await deleteBefore(
+        usage,
+        usage.interactionId,
+        usage.createdAt,
+        cutoff,
+        batchSize,
+      ),
+    };
   }
 }
 
 export default RoutingDecisionModel;
+
+const PURGE_BATCH_SIZE = 5000;
+
+/** Deletes `table` rows created before `cutoff` in batches, counting them without returning them. */
+async function deleteBefore(
+  table: PgTable,
+  key: AnyPgColumn,
+  createdAt: AnyPgColumn,
+  cutoff: Date,
+  batchSize: number,
+): Promise<number> {
+  let total = 0;
+  for (;;) {
+    const result = await db.execute<{ deleted: number }>(sql`
+      with batch as (
+        select ${key} as key from ${table}
+        where ${createdAt} < ${cutoff.toISOString()}::timestamptz
+        limit ${batchSize}
+      ),
+      removed as (
+        delete from ${table} where ${key} in (select key from batch)
+        returning 1
+      )
+      select count(*)::int as deleted from removed
+    `);
+    const deleted = Number(result.rows[0]?.deleted ?? 0);
+    total += deleted;
+    if (deleted < batchSize) return total;
+  }
+}

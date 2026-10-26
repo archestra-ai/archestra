@@ -37,6 +37,33 @@ describe("auto routing dispatcher", () => {
     expect(await queuedFits(organizationId)).toBe(1);
   });
 
+  test("enqueues a fit when a fit for a superseded scorer version lost at the current generation", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = await configuredOrganization(makeOrganization);
+    const superseded = await makeScorerVersion();
+    // The fit ran for `superseded` but read the generation another worker's activation produced.
+    await AutoRoutingSettingsModel.activateScorerVersion(
+      organizationId,
+      (await makeScorerVersion()).id,
+    );
+    const settings = await AutoRoutingSettingsModel.find(organizationId);
+    if (!settings) throw new Error("organization has no LLM Proxy");
+    const published = await RoutingPlanModel.publish(
+      activeFit({
+        organizationId,
+        scorerVersionId: superseded.id,
+        generation: settings.generation,
+        inputWatermark: new Date(),
+      }),
+    );
+    expect(published).toMatchObject({ reason: "stale_scorer_version" });
+
+    await autoRoutingDispatcher.dispatch();
+
+    expect(await queuedFits(organizationId)).toBe(1);
+  });
+
   test("enqueues a fit for an organization never fitted or last fitted over a day ago", async ({
     makeOrganization,
   }) => {

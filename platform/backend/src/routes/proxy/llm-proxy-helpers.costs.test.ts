@@ -376,6 +376,46 @@ describe("smart-tier baseline", () => {
     }
   });
 
+  test("in enforce mode reprices executor components reported under a dated model id and keeps advisor prices", async () => {
+    const cheap = {
+      customPricePerMillionInput: "1",
+      customPricePerMillionOutput: "2",
+    };
+    await makeModel("cheap", cheap);
+    await makeModel("cheap-20260101", cheap);
+    await makeModel("advisor", { ...BASE_PRICES, ...LONG_PRICES });
+    await makeModel("smart", {
+      customPricePerMillionInput: "15",
+      customPricePerMillionOutput: "75",
+    });
+    const usage = normalizeAnthropicUsage(
+      {
+        input_tokens: 500,
+        output_tokens: 10,
+        iterations: [
+          { type: "message", input_tokens: 500, output_tokens: 10 },
+          {
+            type: "advisor_message",
+            model: "advisor",
+            input_tokens: 2000,
+            output_tokens: 10,
+          },
+        ],
+      },
+      "cheap-20260101",
+    );
+
+    const result = await costs(usage, "cheap", {
+      usageAccountingMode: "enforce",
+      autoRouting: autoRouting("smart"),
+    });
+
+    // Executor on smart: 500*15 + 10*75; advisor at its long-context price: 2000*6 + 10*22.5.
+    expect(Number(result.baseline?.cost)).toBeCloseTo(0.020475, 10);
+    // Executor on cheap: 500*1 + 10*2; advisor unchanged.
+    expect(result.actualCost).toBeCloseTo(0.012745, 10);
+  });
+
   test("falls back to the actual model when the smart model has no price", async () => {
     await makeModel("cheap", BASE_PRICES);
     for (const usageAccountingMode of [undefined, "enforce"] as const) {

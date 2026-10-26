@@ -1,4 +1,5 @@
 import config from "@/config";
+import type { Transaction } from "@/database";
 import { AgentModel, ModelModel } from "@/models";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import RoutingPlanModel from "@/models/routing-plan";
@@ -16,7 +17,7 @@ import type {
   AutoRoutingSettingsResponse,
   UpdateAutoRoutingSettingsBody,
 } from "@/types/auto-routing-api";
-import { fitNow } from "./fit";
+import { type FitSessions, fitNow } from "./fit";
 import { activeSourceVersion } from "./signals";
 import { sharedLongContextThreshold, TIER_NAMES } from "./tiers";
 
@@ -35,47 +36,29 @@ export async function getAutoRoutingSettings(
   );
 }
 
-/** Validates the resulting state, writes it with a generation bump, then fits a plan on it. */
+/** Writes `body` with a generation bump if the merged settings are valid, then fits a plan on them. */
 export async function updateAutoRoutingSettings(
   organizationId: string,
   body: UpdateAutoRoutingSettingsBody,
 ): Promise<AutoRoutingSettingsChangeResponse> {
-  const current = await loadAutoRoutingSettings(organizationId);
-  const next = { ...current, ...body };
+  await AgentModel.getOrgLlmProxy(organizationId);
   await assertTierModels(
     TIER_NAMES.flatMap((tier) => {
       const id = body[TIER_FIELDS[tier]];
       return id === undefined ? [] : [{ tier, id }];
     }),
   );
-  await assertSharedLongContextThreshold(
-    TIER_NAMES.flatMap((tier) => {
-      const id = next[TIER_FIELDS[tier]];
-      return id === null ? [] : [id];
-    }),
+  const updated = await AutoRoutingSettingsModel.update(
+    organizationId,
+    {
+      enabled: body.enabled,
+      budgetUsdPerDay: body.budgetUsdPerDay?.toFixed(2),
+      fastModelId: body.fastModelId,
+      normalModelId: body.normalModelId,
+      smartModelId: body.smartModelId,
+    },
+    assertValidSettings,
   );
-  if (next.enabled) {
-    const missing = TIER_NAMES.find((tier) => next[TIER_FIELDS[tier]] === null);
-    if (missing) {
-      throw new ApiError(
-        400,
-        `Configure the ${missing} tier model before enabling auto routing.`,
-      );
-    }
-    if (next.budgetUsdPerDay === null) {
-      throw new ApiError(
-        400,
-        "Set a daily budget before enabling auto routing.",
-      );
-    }
-  }
-  const updated = await AutoRoutingSettingsModel.update(organizationId, {
-    enabled: body.enabled,
-    budgetUsdPerDay: body.budgetUsdPerDay?.toFixed(2),
-    fastModelId: body.fastModelId,
-    normalModelId: body.normalModelId,
-    smartModelId: body.smartModelId,
-  });
   if (!updated) throw new ApiError(404, "LLM Proxy not found");
   return fitAndDescribe(organizationId, "settings");
 }
@@ -138,10 +121,12 @@ async function fitAndDescribe(
 ): Promise<AutoRoutingSettingsChangeResponse> {
   // prepareFit activates the scorer version, which must not bump a disabled organization.
   const { enabled } = await loadAutoRoutingSettings(organizationId);
-  const fit = enabled ? await fitNow(organizationId, trigger) : null;
+  const inline = enabled ? await fitNow(organizationId, trigger) : null;
+  const fit = inline?.fit ?? null;
   const described = await describe(
     organizationId,
     await loadAutoRoutingSettings(organizationId),
+    inline?.sessions ?? null,
   );
   // An unexpected fit error records no plan, so only `fit` carries it.
   const lastFitError =
@@ -178,19 +163,42 @@ async function assertTierModels(
   }
 }
 
-async function assertSharedLongContextThreshold(ids: string[]) {
-  const shared = sharedLongContextThreshold(await ModelModel.findByIds(ids));
+/** Settings that can be stored: tiers share a long-context threshold, and enabling needs every tier and a budget. */
+async function assertValidSettings(
+  next: AutoRoutingSettings,
+  tx: Transaction,
+): Promise<void> {
+  const ids = TIER_NAMES.flatMap((tier) => {
+    const id = next[TIER_FIELDS[tier]];
+    return id === null ? [] : [id];
+  });
+  const shared = sharedLongContextThreshold(
+    await ModelModel.findByIds(ids, tx),
+  );
   if (shared.kind === "mismatched") {
     throw new ApiError(
       400,
       `The tier models have different long-context thresholds (${shared.thresholds.join(", ")}). Auto routing needs every tier with long-context prices to use the same threshold.`,
     );
   }
+  if (!next.enabled) return;
+  const missing = TIER_NAMES.find((tier) => next[TIER_FIELDS[tier]] === null);
+  if (missing) {
+    throw new ApiError(
+      400,
+      `Configure the ${missing} tier model before enabling auto routing.`,
+    );
+  }
+  if (next.budgetUsdPerDay === null) {
+    throw new ApiError(400, "Set a daily budget before enabling auto routing.");
+  }
 }
 
+/** `fitted` is the cold-start progress a fit just read, reused when it is for the running scorer version. */
 async function describe(
   organizationId: string,
   settings: AutoRoutingSettings,
+  fitted: FitSessions | null = null,
 ): Promise<AutoRoutingSettingsResponse> {
   const tierIds = TIER_NAMES.map((tier) => settings[TIER_FIELDS[tier]]);
   const [models, active, latest, scorerVersion] = await Promise.all([
@@ -222,11 +230,14 @@ async function describe(
         : null,
       coldStart: {
         scorerVersionId: scorerVersion.id,
-        sessions: await RoutingUsageModel.countFitSessions({
-          organizationId,
-          scorerVersionId: scorerVersion.id,
-          inputWatermark: new Date(),
-        }),
+        sessions:
+          fitted?.scorerVersionId === scorerVersion.id
+            ? fitted.sessions
+            : await RoutingUsageModel.countFitSessions({
+                organizationId,
+                scorerVersionId: scorerVersion.id,
+                inputWatermark: new Date(),
+              }),
         required: config.autoRouting.minSessions,
       },
       lastFitError: latest?.status === "failed" ? latest.error : null,

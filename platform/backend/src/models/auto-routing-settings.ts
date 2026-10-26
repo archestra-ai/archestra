@@ -23,14 +23,25 @@ class AutoRoutingSettingsModel {
   /**
    * Applies `update` and bumps the generation, so a fit that read the earlier
    * settings can no longer publish. An empty update only requests a re-plan.
+   * `validate` sees the merged settings under the lock and throws to abort, so
+   * concurrent partial updates cannot jointly persist an invalid configuration.
    * Null when the organization has no LLM Proxy.
    */
   static async update(
     organizationId: string,
     update: UpdateAutoRoutingSettings,
+    validate?: (next: AutoRoutingSettings, tx: Transaction) => Promise<void>,
   ): Promise<AutoRoutingSettings | null> {
     return withDbTransaction(async (tx) => {
       await lockRoutingPlan(tx, organizationId);
+      if (validate) {
+        const [current] = await tx
+          .select(settingsColumns)
+          .from(agents)
+          .where(organizationLlmProxy(organizationId));
+        if (!current) return null;
+        await validate(mergeSettings(current, update), tx);
+      }
       const [row] = await tx
         .update(agents)
         .set({
@@ -100,6 +111,32 @@ export function organizationLlmProxy(organizationId: string) {
     eq(agents.isDefault, true),
     notDeleted(agents),
   );
+}
+
+function mergeSettings(
+  current: AutoRoutingSettings,
+  update: UpdateAutoRoutingSettings,
+): AutoRoutingSettings {
+  return {
+    ...current,
+    enabled: update.enabled ?? current.enabled,
+    budgetUsdPerDay:
+      update.budgetUsdPerDay === undefined
+        ? current.budgetUsdPerDay
+        : update.budgetUsdPerDay,
+    fastModelId:
+      update.fastModelId === undefined
+        ? current.fastModelId
+        : update.fastModelId,
+    normalModelId:
+      update.normalModelId === undefined
+        ? current.normalModelId
+        : update.normalModelId,
+    smartModelId:
+      update.smartModelId === undefined
+        ? current.smartModelId
+        : update.smartModelId,
+  };
 }
 
 const settingsColumns = {

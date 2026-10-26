@@ -1,6 +1,7 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -88,6 +89,37 @@ describe("AutoRoutingPlansPage", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText("jev · jev-1.13.0 · abcdef01")).toHaveLength(3);
     expect(screen.getByText("420")).toBeInTheDocument();
+  });
+
+  it("offers a retry when plan history fails to load", async () => {
+    let fail = true;
+    server.use(
+      http.get(`${API_ORIGIN}/api/auto-routing/plans`, () =>
+        fail
+          ? HttpResponse.json(
+              { error: { message: "Unavailable" } },
+              { status: 500 },
+            )
+          : HttpResponse.json([base]),
+      ),
+    );
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <AutoRoutingPlansPage />
+      </QueryClientProvider>,
+    );
+    const retry = await screen.findByRole("button", { name: "Retry" });
+    expect(screen.queryByText("No plans yet")).not.toBeInTheDocument();
+
+    fail = false;
+    await user.click(retry);
+
+    expect(await screen.findByText("420")).toBeInTheDocument();
   });
 
   it("shows a fit rejected at publication with its reason, not as an error", async () => {

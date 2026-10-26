@@ -203,6 +203,78 @@ describe("AutoRoutingOverviewPage", () => {
     );
   });
 
+  it("keeps an unsaved budget edit across a settings refresh, then shows the saved value", async () => {
+    server.use(
+      http.post(`${API_ORIGIN}/api/auto-routing/replan`, () =>
+        HttpResponse.json({
+          ...makeSettings({
+            status: {
+              ...makeSettings().status,
+              coldStart: { ...makeSettings().status.coldStart, sessions: 13 },
+            },
+          }),
+          fit: null,
+        } satisfies AutoRoutingSettingsChange),
+      ),
+      http.put(
+        `${API_ORIGIN}/api/auto-routing/settings`,
+        async ({ request }) => {
+          const body = (await request.json()) as AutoRoutingSettingsUpdate;
+          updates.push(body);
+          return HttpResponse.json({
+            ...makeSettings({ budgetUsdPerDay: body.budgetUsdPerDay }),
+            fit: null,
+          } satisfies AutoRoutingSettingsChange);
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    const budget = await screen.findByLabelText("Daily budget (USD)");
+    await user.clear(budget);
+    await user.type(budget, "55.5");
+    await user.click(screen.getByRole("button", { name: "Re-plan now" }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("auto-routing-status")).toHaveTextContent(
+        "13 of 100",
+      ),
+    );
+    expect(budget).toHaveValue(55.5);
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(updates).toEqual([{ budgetUsdPerDay: 55.5 }]));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Save" })).toBeDisabled(),
+    );
+    expect(budget).toHaveValue(55.5);
+  });
+
+  it("offers a retry when the settings fail to load", async () => {
+    let fail = true;
+    server.use(
+      http.get(`${API_ORIGIN}/api/auto-routing/settings`, () =>
+        fail
+          ? HttpResponse.json(
+              { error: { message: "Unavailable" } },
+              { status: 500 },
+            )
+          : HttpResponse.json(settings),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    const retry = await screen.findByRole("button", { name: "Retry" });
+    expect(
+      screen.queryByLabelText("Daily budget (USD)"),
+    ).not.toBeInTheDocument();
+
+    fail = false;
+    await user.click(retry);
+
+    expect(await screen.findByLabelText("Daily budget (USD)")).toHaveValue(20);
+  });
+
   it("requires a budget to enable routing", async () => {
     settings = makeSettings({ enabled: false, budgetUsdPerDay: null });
     const user = userEvent.setup();

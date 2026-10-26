@@ -49,6 +49,7 @@ type FitTiers =
  * organization's (a change bumps the generation). Nothing else is locked:
  * publication rejects the fit when settings moved on meanwhile. Null when
  * auto routing is not (or no longer) fully configured for the organization.
+ * @public — `runFit` runs it; exported so tests can interleave fits
  */
 export async function prepareFit(
   organizationId: string,
@@ -94,7 +95,10 @@ export async function prepareFit(
   };
 }
 
-/** Fits a plan on `inputs` (or a cold start below the session minimum) and offers it to the publisher. */
+/**
+ * Fits a plan on `inputs` (or a cold start below the session minimum) and offers it to the publisher.
+ * @public — `runFit` runs it; exported so tests can interleave fits
+ */
 export async function completeFit(
   inputs: FitInputs,
 ): Promise<RoutingPublishResult> {
@@ -114,6 +118,40 @@ export async function completeFit(
   });
 }
 
+/** A finished fit: the inputs it read and what publication made of them. */
+type FitRun = { inputs: FitInputs; published: RoutingPublishResult };
+
+/** How many sessions a fit read for a scorer version: the cold-start progress. */
+export type FitSessions = { scorerVersionId: string; sessions: number };
+
+/**
+ * Prepares, fits and publishes; one fit at a time per organization in this
+ * process. A caller arriving while a fit runs waits for it and takes its run
+ * when it read the caller's generation or a newer one; otherwise it runs the
+ * next fit, which every caller still waiting shares. Null when auto routing
+ * is not fully configured.
+ */
+export async function runFit(
+  organizationId: string,
+  trigger?: RoutingPlanTrigger,
+): Promise<FitRun | null> {
+  let generation: number | undefined;
+  for (;;) {
+    const running = fitsInFlight.get(organizationId);
+    if (!running) {
+      const flight = prepareAndComplete(organizationId, trigger).finally(() =>
+        fitsInFlight.delete(organizationId),
+      );
+      fitsInFlight.set(organizationId, flight);
+      return flight;
+    }
+    generation ??=
+      (await AutoRoutingSettingsModel.find(organizationId))?.generation ?? 0;
+    const done = await running.catch(() => null);
+    if (done && done.inputs.generation >= generation) return done;
+  }
+}
+
 /**
  * Fits and publishes in the caller's request, after its generation bump
  * committed. A fit rejected for newer settings refits on them; one rejected
@@ -125,31 +163,62 @@ export async function completeFit(
 export async function fitNow(
   organizationId: string,
   trigger: RoutingPlanTrigger,
-): Promise<AutoRoutingFitResult | null> {
+): Promise<{
+  fit: AutoRoutingFitResult;
+  sessions: FitSessions | null;
+} | null> {
+  let sessions: FitSessions | null = null;
   try {
     for (let attempt = 0; attempt < INLINE_FIT_ATTEMPTS; attempt++) {
-      const inputs = await prepareFit(organizationId, trigger);
-      if (!inputs) return null;
-      const published = await completeFit(inputs);
-      if (published.kind === "recorded") return fitResult(published.plan);
-      if (published.reason === "stale_watermark") break;
+      const run = await runFit(organizationId, trigger);
+      if (!run) return null;
+      sessions = fitSessions(run.inputs);
+      if (run.published.kind === "recorded")
+        return { fit: fitResult(run.published.plan), sessions };
+      if (run.published.reason === "stale_watermark") break;
     }
     const latest = await RoutingPlanModel.findLatestOutcome(organizationId);
-    return latest ? fitResult(latest) : { status: "cold_start", planId: null };
+    return {
+      fit: latest ? fitResult(latest) : { status: "cold_start", planId: null },
+      sessions,
+    };
   } catch (error) {
     logger.error(
       { err: error, organizationId },
       "[AutoRouting] Plan fit threw",
     );
     return {
-      status: "failed",
-      planId: null,
-      error: "The plan fit failed unexpectedly; it will be retried shortly.",
+      fit: {
+        status: "failed",
+        planId: null,
+        error: "The plan fit failed unexpectedly; it will be retried shortly.",
+      },
+      sessions,
     };
   }
 }
 
 // === Internal ===
+
+const fitsInFlight = new Map<string, Promise<FitRun | null>>();
+
+async function prepareAndComplete(
+  organizationId: string,
+  trigger?: RoutingPlanTrigger,
+): Promise<FitRun | null> {
+  const inputs = await prepareFit(organizationId, trigger);
+  return inputs && { inputs, published: await completeFit(inputs) };
+}
+
+/** Unknown when the tiers could not be priced: no history was read. */
+function fitSessions(inputs: FitInputs): FitSessions | null {
+  return inputs.tiers.kind === "ok"
+    ? {
+        scorerVersionId: inputs.scorerVersionId,
+        sessions: inputs.history.length,
+      }
+    : null;
+}
 
 function fitResult(plan: RoutingPlan): AutoRoutingFitResult {
   switch (plan.status) {

@@ -203,41 +203,49 @@ impl LongShareModel {
     }
 }
 
-/// Token-weighted least squares of long share on [1, log E[size], is_subagent]; zero-variance
-/// regressors are dropped (coefficient 0).
+/// Token-weighted least squares of long share on [1, log E[size], is_subagent]. Columns are taken
+/// greedily in that order and one that is (numerically) a linear combination of those already kept
+/// — zero variance, or e.g. log size affine in is_subagent — is dropped (coefficient 0).
 pub(crate) fn fit_long_share(
     rows: &[HistoryRow],
     sizes: &[f64],
 ) -> Result<LongShareModel, RouterError> {
-    let observations: Vec<(f64, f64, [f64; 3])> = rows
-        .iter()
-        .zip(sizes)
-        .filter_map(|(r, &size)| {
-            let total = r.total_tokens();
-            (total > 0.0).then(|| {
-                let x = [1.0, size.ln(), r.features.kind.indicator()];
-                (total, r.long.total() / total, x)
-            })
-        })
-        .collect();
-    let Some((_, _, first)) = observations.first() else {
-        return Err(RouterError::SingularLongShare);
-    };
-    let columns: Vec<usize> = std::iter::once(0)
-        .chain((1..3).filter(|&c| observations.iter().any(|(_, _, x)| x[c] != first[c])))
-        .collect();
-    let m = columns.len();
-    let mut normal = vec![0.0; m * m];
-    let mut rhs = vec![0.0; m];
-    for (w, share, x) in &observations {
-        for (i, &ci) in columns.iter().enumerate() {
-            rhs[i] += w * x[ci] * share;
-            for (j, &cj) in columns.iter().enumerate() {
-                normal[i * m + j] += w * x[ci] * x[cj];
+    let mut normal = [[0.0; 3]; 3];
+    let mut rhs = [0.0; 3];
+    for (r, &size) in rows.iter().zip(sizes) {
+        let w = r.total_tokens();
+        if w <= 0.0 {
+            continue;
+        }
+        let share = r.long.total() / w;
+        let x = [1.0, size.ln(), r.features.kind.indicator()];
+        for i in 0..3 {
+            rhs[i] += w * x[i] * share;
+            for j in 0..3 {
+                normal[i][j] += w * x[i] * x[j];
             }
         }
     }
-    let solution = solve_spd(normal, &rhs).ok_or(RouterError::SingularLongShare)?;
+    let solve_on = |columns: &[usize]| {
+        let m: Vec<f64> = columns
+            .iter()
+            .flat_map(|&i| columns.iter().map(move |&j| normal[i][j]))
+            .collect();
+        let b: Vec<f64> = columns.iter().map(|&i| rhs[i]).collect();
+        solve_spd(m, &b)
+    };
+    let mut columns: Vec<usize> = Vec::with_capacity(3);
+    let mut solution = None;
+    for c in 0..3 {
+        columns.push(c);
+        match solve_on(&columns) {
+            Some(s) => solution = Some(s),
+            None => {
+                columns.pop();
+            }
+        }
+    }
+    let solution = solution.ok_or(RouterError::SingularLongShare)?;
     let mut coef = [0.0; 3];
     for (&c, v) in columns.iter().zip(solution) {
         coef[c] = v;
@@ -346,13 +354,24 @@ mod tests {
     }
 
     #[test]
-    fn collinear_long_share_regressors_are_singular() {
+    fn collinear_long_share_regressors_drop_the_dependent_column() {
+        // log size is affine in is_subagent: each population has one size and one share
         let rows = [
             row("a", SessionKind::Main, 0.0, 300, 100),
+            row("a", SessionKind::Main, 0.0, 600, 200),
             row("b", SessionKind::Subagent, 0.0, 100, 100),
+            row("b", SessionKind::Subagent, 0.0, 200, 200),
         ];
+        let sizes = [1e5, 1e5, 2e5, 2e5];
+        let model = fit_long_share(&rows, &sizes).unwrap();
+        assert_eq!(model.is_subagent, 0.0);
+        for (r, &size) in rows.iter().zip(&sizes) {
+            let observed = r.long.total() / r.total_tokens();
+            assert!((model.predict(size, r.features.kind) - observed).abs() < 1e-12);
+        }
+
         assert_eq!(
-            fit_long_share(&rows, &[1e5, 2e5]),
+            fit_long_share(&[], &[]),
             Err(RouterError::SingularLongShare)
         );
     }

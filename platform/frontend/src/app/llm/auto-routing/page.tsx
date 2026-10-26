@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
+import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -20,11 +21,21 @@ import type { TierName } from "./_parts/tiers";
 import { TryPrompt } from "./_parts/try-prompt";
 
 export default function AutoRoutingOverviewPage() {
-  const { data: settings, isPending } = useAutoRoutingSettings();
+  const settingsQuery = useAutoRoutingSettings();
   const { data: canUpdate = false } = useHasPermissions({
     llmProxy: ["update"],
   });
-  if (isPending || !settings) return null;
+  if (settingsQuery.isLoadingError) {
+    return (
+      <QueryLoadError
+        title="Couldn't load auto routing settings"
+        error={settingsQuery.error}
+        onRetry={() => settingsQuery.refetch()}
+      />
+    );
+  }
+  const settings = settingsQuery.data;
+  if (!settings) return null;
 
   return (
     <div className="space-y-6">

@@ -15,7 +15,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { sanitizeOutputLimit } from "@/clients/models-dev-client";
-import db, { schema, withDbTransaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
 import logger from "@/logging";
 import { resolveBedrockAwsPrices } from "@/services/bedrock-aws-pricing";
@@ -264,11 +264,11 @@ class ModelModel {
    * the other bulk loaders there is no tenancy fence to apply here — the route
    * gate (`llmModel:update`) is the whole permission story.
    */
-  static async findByIds(ids: string[]): Promise<Model[]> {
+  static async findByIds(ids: string[], tx?: Transaction): Promise<Model[]> {
     if (ids.length === 0) {
       return [];
     }
-    return await db
+    return await (tx ?? db)
       .select()
       .from(schema.modelsTable)
       .where(inArray(schema.modelsTable.id, ids));

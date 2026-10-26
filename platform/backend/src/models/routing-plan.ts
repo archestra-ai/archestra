@@ -79,8 +79,9 @@ class RoutingPlanModel {
    * recorded as rejected — when settings changed since it read them, it was
    * fitted for another scorer version than the organization's, or a fit over
    * newer usage was already accepted. An `active` outcome supersedes the serving
-   * plan and a `cold_start` retires it; a failure or rejection leaves it serving. Every
-   * outcome marks its generation planned, so a failing fit does not hot-loop.
+   * plan and a `cold_start` retires it; a failure or rejection leaves it serving. A
+   * recorded outcome, failures included, marks its generation planned so a failing
+   * fit does not hot-loop; a rejection leaves it for the dispatcher to refit.
    */
   static async publish(fit: RoutingFit): Promise<RoutingPublishResult> {
     return withDbTransaction(async (tx) => {
@@ -154,17 +155,15 @@ class RoutingPlanModel {
           error: columns.error,
         })
         .returning();
+      const plan = SelectRoutingPlanSchema.parse(row);
+      if (rejection) return { kind: "rejected", reason: rejection, plan };
       await tx
         .update(agents)
         .set({
           autoRoutingPlannedGeneration: sql`greatest(${agents.autoRoutingPlannedGeneration}, ${fit.generation})`,
         })
         .where(organizationLlmProxy(fit.organizationId));
-
-      const plan = SelectRoutingPlanSchema.parse(row);
-      return rejection
-        ? { kind: "rejected", reason: rejection, plan }
-        : { kind: "recorded", plan };
+      return { kind: "recorded", plan };
     });
   }
 }

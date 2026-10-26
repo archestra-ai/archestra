@@ -5,6 +5,7 @@ import RoutingPlanModel from "@/models/routing-plan";
 import { beforeEach, describe, expect, test } from "@/test";
 import { configureAutoRouting } from "@/test/auto-routing";
 import { seedFitHistory } from "@/test/auto-routing-fit";
+import { recordQueries } from "@/test/query-counter";
 import { useRouteTestApp } from "@/test/route-test-app";
 import autoRoutingRoutes from "./auto-routing.routes";
 
@@ -61,6 +62,28 @@ describe("POST /api/auto-routing/replan", () => {
       fit: { status: "cold_start" },
       status: { activePlan: null, coldStart: { sessions: 0, required: 30 } },
     });
+  });
+
+  test("reports the cold-start progress the fit read without aggregating the history again", async () => {
+    const trio = await configureAutoRouting(ctx.organizationId);
+    await seedFitHistory({
+      organizationId: ctx.organizationId,
+      modelId: trio[2].id,
+      scorerVersionId: (await activeSourceVersion()).id,
+      sessions: 29,
+    });
+
+    const { result: response, statements } = await recordQueries(replan);
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      fit: { status: "cold_start" },
+      status: { coldStart: { sessions: 29, required: 30 } },
+    });
+    const historyScans = statements.filter((statement) =>
+      /having max\("routing_usage"\."created_at"\)/i.test(statement),
+    );
+    expect(historyScans).toHaveLength(1);
   });
 
   test("does not fit while auto routing is disabled", async () => {

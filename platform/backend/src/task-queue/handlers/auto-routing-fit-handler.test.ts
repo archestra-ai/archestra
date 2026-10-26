@@ -189,7 +189,7 @@ describe("auto routing plan fit", () => {
     const dispatched = await prepareFit(org.organizationId);
     if (!dispatched) throw new Error("organization is not configured");
 
-    const inline = await fitNow(org.organizationId, "settings");
+    const inline = (await fitNow(org.organizationId, "settings"))?.fit;
     const late = await completeFit(dispatched);
 
     expect(late).toMatchObject({
@@ -221,12 +221,57 @@ describe("auto routing plan fit", () => {
       handleAutoRoutingFit(task.payload),
     ]);
 
-    expect(inline?.status).toBe("active");
+    expect(inline?.fit.status).toBe("active");
     const active = (await plans(org.organizationId)).filter(
       (plan) => plan.status === "active",
     );
     expect(active).toHaveLength(1);
     expect(active[0].budgetUsdPerDay).toBe("30.00");
+    expect(await isDirty(org.organizationId)).toBe(false);
+  });
+
+  test("concurrent inline fits at one generation share a single fit", async ({
+    makeOrganization,
+  }) => {
+    const org = await configuredOrganization(makeOrganization);
+    await seedHistory(org, 40);
+
+    const results = await Promise.all(
+      Array.from({ length: 3 }, () => fitNow(org.organizationId, "settings")),
+    );
+
+    const recorded = await plans(org.organizationId);
+    expect(recorded).toHaveLength(1);
+    for (const result of results) {
+      expect(result?.fit).toEqual({ status: "active", planId: recorded[0].id });
+    }
+  });
+
+  test("callers at a newer generation than the running fit share one follow-up fit on it", async ({
+    makeOrganization,
+  }) => {
+    const org = await configuredOrganization(makeOrganization);
+    await seedHistory(org, 40);
+
+    const first = fitNow(org.organizationId, "settings");
+    await AutoRoutingSettingsModel.update(org.organizationId, {
+      budgetUsdPerDay: "30.00",
+    });
+    const results = await Promise.all([
+      first,
+      fitNow(org.organizationId, "settings"),
+      fitNow(org.organizationId, "settings"),
+    ]);
+
+    const active = await RoutingPlanModel.findActive(org.organizationId);
+    expect(active?.budgetUsdPerDay).toBe("30.00");
+    for (const result of results) {
+      expect(result?.fit).toEqual({ status: "active", planId: active?.id });
+    }
+    const accepted = (await plans(org.organizationId)).filter(
+      (plan) => plan.status !== "rejected",
+    );
+    expect(accepted).toHaveLength(1);
     expect(await isDirty(org.organizationId)).toBe(false);
   });
 });

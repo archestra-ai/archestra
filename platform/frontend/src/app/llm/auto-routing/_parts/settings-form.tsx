@@ -43,8 +43,9 @@ export function AutoRoutingSettingsForm({
 }) {
   const update = useUpdateAutoRoutingSettings();
   const form = useForm<FormValues>({ defaultValues: toFormValues(settings) });
+  // A refresh (refetch, re-plan) must not discard unsaved edits.
   useEffect(() => {
-    form.reset(toFormValues(settings));
+    if (!form.formState.isDirty) form.reset(toFormValues(settings));
   }, [settings, form]);
 
   const modelOptions = useTierModelOptions(settings);
@@ -53,7 +54,9 @@ export function AutoRoutingSettingsForm({
   const disabled = !canUpdate || update.isPending;
 
   const onSubmit = (values: FormValues) =>
-    update.mutate(changedFields(values, form.formState.dirtyFields));
+    update.mutate(changedFields(values, form.formState.dirtyFields), {
+      onSuccess: (saved) => saved && form.reset(toFormValues(saved)),
+    });
 
   return (
     <Form {...form}>

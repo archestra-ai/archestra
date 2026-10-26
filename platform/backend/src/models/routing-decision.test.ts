@@ -279,6 +279,50 @@ describe("RoutingDecisionModel", () => {
     ).toBeNull();
     expect(await db.select().from(schema.routingUsageTable)).toHaveLength(2);
   });
+
+  test("purge deletes in batches until nothing expired is left", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const model = await makeRoutingModel();
+    const scorer = await makeScorerVersion();
+    const now = new Date("2026-06-01T00:00:00Z");
+    const expired = new Date(now.getTime() - 91 * 24 * 60 * 60 * 1000);
+    const inserted = await db
+      .insert(schema.routingDecisionsTable)
+      .values(
+        Array.from({ length: 5 }, (_, i) => ({
+          ...plannedDecision({
+            organizationId: organization.id,
+            sessionKey: sessionKeyFor(`batch-${i}`),
+            modelId: model.id,
+            scorerVersionId: scorer.id,
+          }),
+          createdAt: expired,
+        })),
+      )
+      .returning({ id: schema.routingDecisionsTable.id });
+    await db.insert(schema.routingUsageTable).values(
+      inserted.map(({ id }) => ({
+        interactionId: randomUUID(),
+        decisionId: id,
+        createdAt: expired,
+        input: 1,
+        cacheRead: 0,
+        cacheWrite: 0,
+        cacheWrite1h: 0,
+        output: 1,
+        estimated: false,
+      })),
+    );
+
+    expect(await RoutingDecisionModel.purgeExpired(now, 2)).toEqual({
+      decisions: 5,
+      usage: 5,
+    });
+    expect(await db.select().from(schema.routingDecisionsTable)).toEqual([]);
+    expect(await db.select().from(schema.routingUsageTable)).toEqual([]);
+  });
 });
 
 function sessionKeyFor(sessionId: string): RoutingSessionKey {

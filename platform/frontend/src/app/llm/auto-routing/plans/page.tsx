@@ -1,6 +1,7 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
+import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import {
@@ -12,14 +13,23 @@ import { formatCurrency } from "@/lib/utils/format-currency";
 import { rejectionReason } from "../_parts/plan-document";
 
 export default function AutoRoutingPlansPage() {
-  const { data: plans = [], isPending } = useAutoRoutingPlans();
+  const query = useAutoRoutingPlans();
+  if (query.isLoadingError) {
+    return (
+      <QueryLoadError
+        title="Couldn't load plan history"
+        error={query.error}
+        onRetry={() => query.refetch()}
+      />
+    );
+  }
 
   return (
     <DataTable
       columns={COLUMNS}
-      data={plans}
+      data={query.data ?? []}
       getRowId={(plan) => plan.id}
-      isLoading={isPending}
+      isLoading={query.isPending}
       emptyMessage="No plans yet"
     />
   );

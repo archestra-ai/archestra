@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { completeFit, prepareFit } from "@/auto-routing/fit";
+import { runFit } from "@/auto-routing/fit";
 import config from "@/config";
 import logger from "@/logging";
 
@@ -8,15 +8,15 @@ export async function handleAutoRoutingFit(
 ): Promise<void> {
   const { organizationId } = FitPayloadSchema.parse(payload);
   if (!config.autoRouting.enabled) return;
-  const inputs = await prepareFit(organizationId);
-  if (!inputs) {
+  const run = await runFit(organizationId);
+  if (!run) {
     logger.info(
       { organizationId },
       "[AutoRouting] Auto routing is not configured; skipping the plan fit",
     );
     return;
   }
-  const result = await completeFit(inputs);
+  const { inputs, published: result } = run;
   logger.info(
     {
       organizationId,

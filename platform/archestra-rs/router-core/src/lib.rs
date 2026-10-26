@@ -383,6 +383,20 @@ mod tests {
     }
 
     #[test]
+    fn plan_fits_when_source_and_kind_coincide() {
+        let mut input = input(4.0);
+        for row in input.history.iter_mut().skip(20) {
+            row.features.kind = SessionKind::Subagent;
+            row.features.source = Source("sub".into());
+            row.short.cache_read *= 10;
+            row.long.input = 5_000;
+        }
+        let plan = plan(input).unwrap();
+        assert_eq!(plan.long_share.is_subagent, 0.0);
+        assert!(plan.long_share.coefficients().iter().all(|c| c.is_finite()));
+    }
+
+    #[test]
     fn single_window_history_skips_holdout() {
         let mut input = input(4.0);
         for row in &mut input.history {

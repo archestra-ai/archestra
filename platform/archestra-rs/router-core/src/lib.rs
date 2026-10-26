@@ -21,6 +21,9 @@ use crate::fit::{MAX_NEWTON_ITERATIONS, fit_long_share, fit_mixes, fit_size};
 use crate::plan::{Scorer, holdout, summarize};
 use crate::solver::{BlockPrices, WeightedSession, solve};
 
+/// This crate's version, recorded on every plan and decision.
+pub const CORE_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]
 pub enum RouterError {
     #[error("price must be finite and non-negative, got {0}")]
@@ -119,7 +122,7 @@ pub fn plan(input: PlanInput) -> Result<Plan, RouterError> {
     Ok(Plan {
         versions: Versions {
             plan_format_version: PLAN_FORMAT_VERSION,
-            core_version: env!("CARGO_PKG_VERSION").to_owned(),
+            core_version: CORE_VERSION.to_owned(),
         },
         tiers_fingerprint: tiers,
         size_model,

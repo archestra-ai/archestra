@@ -3460,6 +3460,11 @@ const config = {
       process.env.ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS,
       2000,
     ),
+    /** Idle sessions a fit needs before it publishes a plan; fewer keep the organization in cold start. */
+    minSessions: parsePositiveInt(
+      process.env.ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS,
+      100,
+    ),
   },
   kb: {
     crawlerChromiumPath:

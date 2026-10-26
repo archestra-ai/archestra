@@ -48,6 +48,14 @@ const planInput = {
   const planJson = await routerRs.plan(JSON.stringify(planInput));
   assert.equal(typeof planJson, "string");
   assert.equal(typeof JSON.parse(planJson).policy.q, "number");
+  assert.equal(
+    JSON.parse(planJson).versions.core_version,
+    routerRs.coreVersion(),
+  );
+  assert.equal(
+    JSON.parse(planJson).versions.plan_format_version,
+    routerRs.planFormatVersion(),
+  );
 
   for (const u of [0.1, 0.9]) {
     const decision = JSON.parse(

@@ -120,6 +120,18 @@ pub fn decide(plan_json: String, features_json: String, u: f64) -> napi::Result<
     guarded(|| decide_json(&plan_json, &features_json, u))
 }
 
+/// The `router_core` version that `plan` stamps on plans.
+#[napi]
+pub fn core_version() -> String {
+    router_core::CORE_VERSION.to_owned()
+}
+
+/// The plan format `plan` produces and `decide` accepts.
+#[napi]
+pub fn plan_format_version() -> u32 {
+    router_core::PLAN_FORMAT_VERSION
+}
+
 fn guarded(f: impl FnOnce() -> Result<String, BoundaryError>) -> napi::Result<String> {
     match catch_unwind(AssertUnwindSafe(f)) {
         Ok(result) => result.map_err(napi::Error::from),

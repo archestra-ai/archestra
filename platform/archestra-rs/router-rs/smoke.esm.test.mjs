@@ -4,10 +4,12 @@
 // exports must be exposed to ESM (via cjs-module-lexer) and callable.
 import assert from "node:assert/strict";
 
-const { plan, decide } = await import("./index.cjs");
+const { plan, decide, coreVersion, planFormatVersion } = await import("./index.cjs");
 
 assert.equal(typeof plan, "function");
 assert.equal(typeof decide, "function");
+assert.match(coreVersion(), /^\d+\.\d+\.\d+/);
+assert.ok(Number.isInteger(planFormatVersion()));
 
 // Both bindings are reachable via ESM interop and surface the coded error body.
 await assert.rejects(plan("{}"), { code: "ARCHESTRA_ROUTER_INVALID_INPUT" });

@@ -9,6 +9,8 @@ import { runAutomaticOpenAppaPolicyTests } from "@/services/openappa-policy-test
 import type { TaskQueueService } from "../task-queue";
 import { handleAgentRunAttentionNotice } from "./agent-run-attention-notice-handler";
 import { handleAuditLogCleanup } from "./audit-log-cleanup-handler";
+import { autoRoutingDispatcher } from "./auto-routing-dispatch-handler";
+import { handleAutoRoutingFit } from "./auto-routing-fit-handler";
 import { handleBatchEmbedding } from "./batch-embedding-handler";
 import { handleCheckDueConnectors } from "./check-due-connectors-handler";
 import { handleCheckDuePermissionSyncs } from "./check-due-permission-syncs-handler";
@@ -120,4 +122,8 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
     handleMcpToolDescriptionBackfill,
   );
   taskQueueService.registerHandler("llm_model_sync", handleLlmModelSync);
+  taskQueueService.registerHandler("auto_routing_dispatch", () =>
+    autoRoutingDispatcher.dispatch(),
+  );
+  taskQueueService.registerHandler("auto_routing_fit", handleAutoRoutingFit);
 }

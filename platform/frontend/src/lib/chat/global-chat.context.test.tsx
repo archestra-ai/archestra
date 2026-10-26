@@ -1828,6 +1828,57 @@ describe("stopping with queued messages", () => {
     expect(chatMessageQueue.get(conversationId)).toHaveLength(0);
   });
 
+  it.each([
+    "ready",
+    "approval-requested",
+    "input-available",
+    "approval-responded",
+  ])("does not interrupt when the current session is %s", async (state) => {
+    let session: ChatSessionSnapshot;
+    if (state === "ready") status = "ready";
+    else
+      messages = [
+        {
+          id: "assistant",
+          role: "assistant",
+          parts: [
+            {
+              type: "dynamic-tool",
+              toolName: "write",
+              toolCallId: "call",
+              state,
+              input: {},
+            },
+          ],
+        },
+      ] as UIMessage[];
+    render(
+      <ChatProvider>
+        <RegisterChatSession conversationId={conversationId} />
+        <CaptureChatSession
+          conversationId={conversationId}
+          onSession={(value) => {
+            session = value;
+          }}
+        />
+      </ChatProvider>,
+    );
+    await waitFor(() => expect(session).toBeDefined());
+    const stopServer = vi.fn().mockResolvedValue(undefined);
+    act(() => {
+      chatMessageQueue.enqueue(conversationId, { text: "correction" });
+      session?.stop({
+        preserveQueuedMessages: true,
+        interruptQueued: true,
+        stopServer,
+      });
+    });
+    expect(stopServer).not.toHaveBeenCalled();
+    expect(mocks.stop).not.toHaveBeenCalled();
+    if (state !== "ready")
+      expect(chatMessageQueue.get(conversationId)).toHaveLength(1);
+  });
+
   it("sends the oldest queued message immediately after a steering interrupt", async () => {
     const latestSessionRef: { current: ChatSessionSnapshot } = {
       current: undefined,

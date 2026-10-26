@@ -54,6 +54,7 @@ import {
   resolveCanonicalMessageId,
 } from "@/lib/chat/chat-utils";
 import { encryptedChatRequestHeaders } from "@/lib/chat/encrypted-chat";
+import { getQueueInterruptBlockedReason } from "@/lib/chat/queue-interrupt";
 import { ResumableChatTransport } from "@/lib/chat/resumable-chat-transport";
 import { useStreamStall } from "@/lib/chat/stream-stall.hook";
 import { readThinkingEffort } from "@/lib/chat/thinking-effort-cache";
@@ -1277,9 +1278,22 @@ export default function ChatSessionHook({
   const stopSession = useCallback(
     (options?: {
       preserveQueuedMessages?: boolean;
+      interruptQueued?: boolean;
       stopServer?: () => Promise<unknown>;
     }) => {
       if (stopInFlightRef.current) return;
+      // Recheck against the live session when a click races stream updates.
+      if (
+        options?.interruptQueued &&
+        (!["submitted", "streaming"].includes(latestStatusRef.current) ||
+          chatMessageQueue.get(conversationId).length === 0 ||
+          getQueueInterruptBlockedReason({
+            messages: latestMessagesRef.current,
+            hasPendingQuestion: pendingMcpElicitationsRef.current.length > 0,
+            isCompacting: contextCompaction.isCompacting,
+          }))
+      )
+        return;
       const activeUserMessageId = latestMessagesRef.current.findLast(
         (message) => message.role === "user",
       )?.id;
@@ -1318,7 +1332,7 @@ export default function ChatSessionHook({
         setIsStopping(false);
       });
     },
-    [stop, transport],
+    [stop, transport, conversationId, contextCompaction.isCompacting],
   );
   const sendOrQueueText = useCallback(
     (text: string) => {

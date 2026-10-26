@@ -172,6 +172,10 @@ export interface ArchestraPromptInputProps
    * onSubmit queues rather than sends.
    */
   onStop?: () => void;
+  /** Stop the current turn, then send the oldest queued message. */
+  onInterruptQueue?: () => void;
+  interruptQueueDisabledReason?: string;
+  isInterruptingQueue?: boolean;
   status: ChatStatus;
   // Tools integration props
   /**
@@ -261,6 +265,9 @@ const COMPACT_COMMAND: SlashCommand = {
 const PromptInputContent = ({
   onSubmit,
   onStop,
+  onInterruptQueue,
+  interruptQueueDisabledReason,
+  isInterruptingQueue = false,
   status,
   selectedModel,
   onModelChange,
@@ -1254,6 +1261,40 @@ const PromptInputContent = ({
           className="mb-2 flex max-h-40 flex-col gap-1 overflow-y-auto"
           data-testid={E2eTestId.ChatMessageQueue}
         >
+          {onInterruptQueue && (isResponseInFlight || isInterruptingQueue) && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-muted-foreground">
+                Queued messages · {queuedMessages.length}
+              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={interruptQueueDisabledReason ? 0 : undefined}>
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      type="button"
+                      disabled={
+                        !!interruptQueueDisabledReason ||
+                        isInterruptingQueue ||
+                        isContextCompacting
+                      }
+                      onClick={onInterruptQueue}
+                    >
+                      <span>
+                        {isInterruptingQueue
+                          ? "Interrupting…"
+                          : "Interrupt & send"}
+                      </span>
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-60" align="end">
+                  {interruptQueueDisabledReason ??
+                    "Stop this response and send the next message."}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          )}
           {queuedMessages.map((queued) => (
             <div
               key={queued.id}
@@ -1373,6 +1414,9 @@ const PromptInputContent = ({
 const ArchestraPromptInput = ({
   onSubmit,
   onStop,
+  onInterruptQueue,
+  interruptQueueDisabledReason,
+  isInterruptingQueue,
   status,
   selectedModel,
   onModelChange,
@@ -1495,6 +1539,9 @@ const ArchestraPromptInput = ({
         <PromptInputContent
           onSubmit={onSubmit}
           onStop={onStop}
+          onInterruptQueue={onInterruptQueue}
+          interruptQueueDisabledReason={interruptQueueDisabledReason}
+          isInterruptingQueue={isInterruptingQueue}
           status={status}
           selectedModel={selectedModel}
           onModelChange={onModelChange}

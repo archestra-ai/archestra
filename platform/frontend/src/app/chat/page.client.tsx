@@ -161,6 +161,7 @@ import {
   clearPendingActions,
   getPendingActions,
 } from "@/lib/chat/pending-tool-state";
+import { getQueueInterruptBlockedReason } from "@/lib/chat/queue-interrupt";
 import { useStreamStall } from "@/lib/chat/stream-stall.hook";
 import {
   foldConfirmedThinkingEffort,
@@ -2233,6 +2234,15 @@ export function ChatPageContent({
     }
   });
 
+  const handleInterruptQueue = useStableCallback(() => {
+    if (!conversationId) return;
+    stop?.({
+      preserveQueuedMessages: true,
+      interruptQueued: true,
+      stopServer: () => stopChatStreamMutation.mutateAsync(conversationId),
+    });
+  });
+
   const handleSubmit = useStableCallback<
     Parameters<ArchestraPromptInputProps["onSubmit"]>,
     ReturnType<ArchestraPromptInputProps["onSubmit"]>
@@ -3533,6 +3543,19 @@ export function ChatPageContent({
                                 conversationNotRecommended
                               }
                               onStop={handleStopStreaming}
+                              onInterruptQueue={handleInterruptQueue}
+                              isInterruptingQueue={
+                                stopChatStreamMutation.isPending
+                              }
+                              interruptQueueDisabledReason={getQueueInterruptBlockedReason(
+                                {
+                                  messages,
+                                  hasPendingQuestion:
+                                    !!chatSession?.pendingMcpElicitations
+                                      .length,
+                                  isCompacting: isContextCompacting,
+                                },
+                              )}
                               status={status}
                               selectedModel={conversationModelId ?? ""}
                               onModelChange={handleModelChange}

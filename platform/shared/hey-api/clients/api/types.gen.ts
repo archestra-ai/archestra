@@ -85416,6 +85416,15 @@ export type GetModelCostBackfillResponse = GetModelCostBackfillResponses[keyof G
 export type StartModelCostBackfillData = {
     body: {
         since: unknown;
+        /**
+         * The custom prices you saved and expect the recompute to use. When the model's prices no longer match, nothing starts (409).
+         */
+        prices?: {
+            input: string | null;
+            output: string | null;
+            cacheRead: string | null;
+            cacheWrite: string | null;
+        };
     };
     path: {
         id: string;

@@ -64,12 +64,10 @@ export function ModelCostBackfillSection({
   );
   const [presetId, setPresetId] = useState<string | null>(DEFAULT_PRESET_ID);
 
-  // Debounced by value (the caller rebuilds the object every render). While a
+  // Keyed by value (the caller rebuilds the object every render). While a
   // price is invalid the query pauses and the last answer stays on screen.
-  const debouncedPricesKey = useDebouncedValue(
-    prices ? JSON.stringify(prices) : null,
-    PRICE_DEBOUNCE_MS,
-  );
+  const pricesKey = prices ? JSON.stringify(prices) : null;
+  const debouncedPricesKey = useDebouncedValue(pricesKey, PRICE_DEBOUNCE_MS);
   const queryPrices = useMemo<ModelCostBackfillPrices | null>(
     () => (debouncedPricesKey ? JSON.parse(debouncedPricesKey) : null),
     [debouncedPricesKey],
@@ -124,11 +122,20 @@ export function ModelCostBackfillSection({
       const started = await start.mutateAsync({
         modelId,
         since: effectiveMode === "since" ? sinceDate : null,
+        // Refused when another edit changed the prices after this save.
+        prices: pricesKey ? JSON.parse(pricesKey) : undefined,
       });
       return started !== null;
     });
     return () => registerStart(null);
-  }, [effectiveMode, modelId, registerStart, sinceDate, start.mutateAsync]);
+  }, [
+    effectiveMode,
+    modelId,
+    pricesKey,
+    registerStart,
+    sinceDate,
+    start.mutateAsync,
+  ]);
 
   const pickSince = (date: Date, preset: string | null = null) => {
     setPresetId(preset);

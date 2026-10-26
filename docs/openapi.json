@@ -330029,6 +330029,38 @@
                 "properties": {
                   "since": {
                     "nullable": true
+                  },
+                  "prices": {
+                    "description": "The custom prices you saved and expect the recompute to use. When the model's prices no longer match, nothing starts (409).",
+                    "type": "object",
+                    "properties": {
+                      "input": {
+                        "nullable": true,
+                        "type": "string",
+                        "pattern": "^\\d+(\\.\\d+)?$"
+                      },
+                      "output": {
+                        "nullable": true,
+                        "type": "string",
+                        "pattern": "^\\d+(\\.\\d+)?$"
+                      },
+                      "cacheRead": {
+                        "nullable": true,
+                        "type": "string",
+                        "pattern": "^\\d+(\\.\\d+)?$"
+                      },
+                      "cacheWrite": {
+                        "nullable": true,
+                        "type": "string",
+                        "pattern": "^\\d+(\\.\\d+)?$"
+                      }
+                    },
+                    "required": [
+                      "input",
+                      "output",
+                      "cacheRead",
+                      "cacheWrite"
+                    ]
                   }
                 },
                 "required": [

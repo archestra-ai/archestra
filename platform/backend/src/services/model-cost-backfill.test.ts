@@ -296,6 +296,56 @@ describe("recomputing past costs", () => {
       statusCode: 409,
     });
   });
+
+  test("nothing starts when the prices changed after the caller saved them", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const saved = await makeAnthropicModel({ input: "1", output: "1" });
+    const base = {
+      since: null,
+      organizationId: org.id,
+      userId: user.id,
+    };
+
+    // The caller saved 2/2, but another edit stored 1/1 after it.
+    await expect(
+      modelCostBackfillService.start({
+        ...base,
+        model: saved,
+        expectedPrices: {
+          input: "2",
+          output: "2",
+          cacheRead: null,
+          cacheWrite: null,
+        },
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    // Read before another edit landed: the snapshot would be stale.
+    await ModelModel.update(saved.id, { customPricePerMillionInput: "3" });
+    await expect(
+      modelCostBackfillService.start({ ...base, model: saved }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(await modelCostBackfillService.getLatest(saved.id)).toBeNull();
+
+    // Same prices, written differently, start.
+    const current = (await ModelModel.findById(saved.id)) as Model;
+    await expect(
+      modelCostBackfillService.start({
+        ...base,
+        model: current,
+        expectedPrices: {
+          input: "3.000",
+          output: "1",
+          cacheRead: null,
+          cacheWrite: null,
+        },
+      }),
+    ).resolves.toMatchObject({ status: "pending" });
+  });
 });
 
 describe("previewing a recompute", () => {

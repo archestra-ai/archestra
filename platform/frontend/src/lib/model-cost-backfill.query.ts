@@ -80,10 +80,17 @@ export function useModelCostBackfill(params: {
 export function useStartModelCostBackfill() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { modelId: string; since: Date | null }) => {
+    mutationFn: async (params: {
+      modelId: string;
+      since: Date | null;
+      prices?: ModelCostBackfillPrices;
+    }) => {
       const { data, error } = await startModelCostBackfill({
         path: { id: params.modelId },
-        body: { since: params.since?.toISOString() ?? null },
+        body: {
+          since: params.since?.toISOString() ?? null,
+          prices: params.prices,
+        },
       });
       // Null rather than a throw, like useUpdateModel: the edit dialog awaits
       // this inside its submit and keeps itself open when the start failed.

@@ -654,7 +654,12 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Recompute the recorded cost of a model's past requests from `since` (all of them when null) at its current prices. Runs in the background; poll the GET endpoint for progress. Requests settled under an enforced cost limit keep their cost.",
         tags: ["LLM Models"],
         params: z.object({ id: UuidIdSchema }),
-        body: z.object({ since: z.coerce.date().nullable() }),
+        body: z.object({
+          since: z.coerce.date().nullable(),
+          prices: CostBackfillPricesSchema.optional().describe(
+            "The custom prices you saved and expect the recompute to use. When the model's prices no longer match, nothing starts (409).",
+          ),
+        }),
         response: constructResponseSchema(ModelCostBackfillResponseSchema),
       },
     },
@@ -667,6 +672,7 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const backfill = await modelCostBackfillService.start({
         model,
         since: body.since,
+        expectedPrices: body.prices,
         organizationId,
         userId: user.id,
       });

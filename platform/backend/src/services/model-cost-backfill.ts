@@ -125,10 +125,21 @@ class ModelCostBackfillService {
   async start(params: {
     model: Model;
     since: Date | null;
+    /**
+     * The custom prices the caller saved and expects the recompute to use.
+     * When another edit changed them in between, nothing starts.
+     */
+    expectedPrices?: CostBackfillPrices;
     organizationId: string;
     userId: string;
   }): Promise<ModelCostBackfill> {
     const { model } = params;
+    if (
+      params.expectedPrices &&
+      !hasCustomPrices(model, params.expectedPrices)
+    ) {
+      throw new ApiError(409, PRICES_CHANGED_MESSAGE);
+    }
     const { pricing, instancePriced } = await this.resolvePricing(model);
     const blocked = await this.getBlocker(model, pricing, instancePriced);
     if (blocked) {
@@ -151,14 +162,25 @@ class ModelCostBackfillService {
     if (missesCachePrice({ pricing, instancePriced, tokens: totals.tokens })) {
       throw new ApiError(400, UNAVAILABLE_MESSAGES.needs_custom_price);
     }
-    const backfill = await ModelCostBackfillModel.create({
-      organizationId: params.organizationId,
-      modelId: model.id,
-      since,
-      cutoff,
-      pricing: { provider: model.provider, ...pricing },
-      rowsEstimated: totals.requests,
-      createdByUserId: params.userId,
+    // The snapshot is taken from the prices read above. Holding the model row
+    // while the backfill is created means no price edit lands in between.
+    const backfill = await withDbTransaction(async (tx) => {
+      const current = await ModelModel.findByIdForUpdate(model.id, tx);
+      if (!current || !hasCustomPrices(current, customPricesOf(model))) {
+        throw new ApiError(409, PRICES_CHANGED_MESSAGE);
+      }
+      return ModelCostBackfillModel.create(
+        {
+          organizationId: params.organizationId,
+          modelId: model.id,
+          since,
+          cutoff,
+          pricing: { provider: model.provider, ...pricing },
+          rowsEstimated: totals.requests,
+          createdByUserId: params.userId,
+        },
+        tx,
+      );
     });
     if (!backfill) {
       throw new ApiError(
@@ -420,6 +442,9 @@ const THROTTLE_RATIO = 9;
  */
 const SWEEP_WINDOW_MS = 15 * TimeInMs.Minute;
 
+const PRICES_CHANGED_MESSAGE =
+  "This model's prices changed since you saved them. Review the new prices and try again.";
+
 const UNAVAILABLE_MESSAGES: Record<
   Exclude<CostBackfillAvailability, "available">,
   string
@@ -441,6 +466,29 @@ function toScope(model: Model): BackfillScope {
  * stores. Decimal half-up on the digits themselves: binary `toFixed` rounds
  * "1.005" down where Postgres rounds it up.
  */
+/** Whether the model's stored custom prices are `prices`, as stored. */
+function hasCustomPrices(model: Model, prices: CostBackfillPrices): boolean {
+  const stored = customPricesOf(model);
+  return (Object.keys(prices) as Array<keyof CostBackfillPrices>).every(
+    (key) => {
+      const expected = toStoredPrice(prices[key]);
+      const actual = stored[key];
+      return expected === null || actual === null
+        ? expected === actual
+        : Number(expected) === Number(actual);
+    },
+  );
+}
+
+function customPricesOf(model: Model): CostBackfillPrices {
+  return {
+    input: model.customPricePerMillionInput,
+    output: model.customPricePerMillionOutput,
+    cacheRead: model.customPricePerMillionCacheRead,
+    cacheWrite: model.customPricePerMillionCacheWrite,
+  };
+}
+
 function toStoredPrice(price: string | null): string | null {
   if (price === null) return null;
   const [whole, fraction = ""] = price.split(".");

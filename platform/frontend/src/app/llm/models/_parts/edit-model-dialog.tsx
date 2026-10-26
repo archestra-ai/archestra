@@ -285,6 +285,8 @@ export function EditModelDialog({
   }, [open, model, form]);
 
   const handleSubmit = async (values: EditModelFormValues) => {
+    // Taken now: the range can still change while the update is in flight.
+    const startBackfill = backfillStart.current;
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     await permissionsSave.current?.();
     const inputPrice = values.customPricePerMillionInput.trim() || null;
@@ -339,7 +341,7 @@ export function EditModelDialog({
         : {}),
     });
     if (!result) return;
-    if ((await backfillStart.current?.()) === false) return;
+    if ((await startBackfill?.()) === false) return;
     onOpenChange(false);
   };
 

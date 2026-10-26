@@ -637,6 +637,27 @@ describe("LimitsPage", () => {
     );
   });
 
+  it("saves a pending label after Advanced is collapsed", () => {
+    render(<LimitsPage />);
+
+    const key = screen.getByLabelText("Label key");
+    expect(key).not.toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /^Advanced$/ }));
+    fireEvent.change(key, { target: { value: "stage" } });
+    fireEvent.change(screen.getByLabelText("Label value"), {
+      target: { value: "preview" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Advanced$/ }));
+    expect(key).not.toBeVisible();
+    fireEvent.change(screen.getByLabelText("Limit value"), {
+      target: { value: "100" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create limit" }));
+    expect(mockCreateLimit).toHaveBeenCalledWith(
+      expect.objectContaining({ labels: [{ key: "stage", value: "preview" }] }),
+    );
+  });
+
   it("omits the proxy scope from the applied-to filter", () => {
     render(<LimitsPage />);
     fireEvent.click(screen.getByRole("combobox", { name: "All applied to" }));
@@ -891,12 +912,10 @@ describe("LimitsPage", () => {
     );
   });
 
-  it("shows a settings notice when a default user limit is configured", () => {
+  it("shows the configured default user limit notice without expanding it", () => {
     render(<LimitsPage />);
 
-    expect(
-      screen.getByText(/default user spend limit applies/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/default user spend limit applies/i)).toBeVisible();
     expect(
       screen.getByText(/custom per-user spend limits override it/i),
     ).toBeInTheDocument();

@@ -832,10 +832,7 @@ export default function LimitsPage() {
         permissions={{ llmLimit: ["read"] }}
         noPermissionHandle="hide"
       >
-        <details className="mb-3 text-xs text-muted-foreground">
-          <summary className="mb-2 cursor-pointer">
-            Default user spend limits
-          </summary>
+        <div className="mb-3">
           <InlineNotice variant="info">
             <Info />
             <InlineNoticeText>
@@ -851,7 +848,7 @@ export default function LimitsPage() {
               .
             </InlineNoticeText>
           </InlineNotice>
-        </details>
+        </div>
       </WithPermissions>
 
       <BulkActionsScope>
@@ -1064,7 +1061,7 @@ export default function LimitsPage() {
         open={isCreateDialogOpen || !!editingLimit}
         onOpenChange={(open) => !open && closeDialog()}
         title={editingLimit ? "Edit limit" : "Create limit"}
-        description="Choose an amount, limit kind and interval for each limit."
+        description="Set a spend, token or request limit for the selected scope and interval."
         size="medium"
       >
         <DialogForm
@@ -1078,8 +1075,9 @@ export default function LimitsPage() {
             <InlineNotice variant="neutral">
               <Info aria-hidden="true" />
               <InlineNoticeText>
-                Every matching limit must allow the request. A key's allowance
-                does not override its team or organization cap.
+                Requests are blocked when any applicable limit is reached. For
+                example, a virtual key with remaining allowance is still blocked
+                if its team or organization has reached a limit.
               </InlineNoticeText>
             </InlineNotice>
 
@@ -1448,6 +1446,7 @@ export default function LimitsPage() {
             </section>
 
             <AdvancedLabelsSection
+              collapsible
               ref={labelsRef}
               labels={formState.labels}
               onLabelsChange={(labels) =>

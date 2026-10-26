@@ -549,12 +549,16 @@ describe("ProjectsPageClient", () => {
     fireEvent.change(screen.getByLabelText("Name *"), {
       target: { value: "Labelled project" },
     });
+    expect(screen.getByLabelText("Label key")).not.toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /^Advanced$/ }));
     fireEvent.change(screen.getByLabelText("Label key"), {
       target: { value: "stage" },
     });
     fireEvent.change(screen.getByLabelText("Label value"), {
       target: { value: "draft" },
     });
+    fireEvent.click(screen.getByRole("button", { name: /^Advanced$/ }));
+    expect(screen.getByLabelText("Label key")).not.toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() =>
@@ -573,12 +577,16 @@ describe("ProjectsPageClient", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Edit details Owner project" }),
     );
+    expect(screen.getByLabelText("Label key")).not.toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /^Advanced$/ }));
     fireEvent.change(screen.getByLabelText("Label key"), {
       target: { value: "stage" },
     });
     fireEvent.change(screen.getByLabelText("Label value"), {
       target: { value: "ready" },
     });
+    fireEvent.click(screen.getByRole("button", { name: /^Advanced$/ }));
+    expect(screen.getByLabelText("Label key")).not.toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>

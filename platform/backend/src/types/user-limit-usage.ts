@@ -76,8 +76,15 @@ export const UserLimitUsageSchema = z.object({
   resetsAt: z.string().nullable(),
   /** Spend at window end at the current pace, for calendar intervals. */
   projectedSpend: z.number().nullable(),
-  /** When an admin last reset this user's usage. */
+  /**
+   * For source `custom`: spend this window under the organization default,
+   * which applies again if the custom limit is removed. Custom limits count
+   * from when they were set, so this can differ from `spent`.
+   */
+  fallbackSpent: z.number().nullable(),
+  /** When an admin last reset this user's usage, and who. */
   lastResetAt: z.string().nullable(),
+  lastResetByName: z.string().nullable(),
 });
 export type UserLimitUsage = z.infer<typeof UserLimitUsageSchema>;
 
@@ -87,8 +94,26 @@ export const UserLimitUsageSummarySchema = z.object({
   near: z.number().int(),
   custom: z.number().int(),
   none: z.number().int(),
+  organizationDefault: z.number().int(),
+  environmentDefault: z.number().int(),
+  /** Users at or near a custom limit (a subset of `at` + `near`). */
+  flaggedCustom: z.number().int(),
   /** Dollars spent by everyone counted in `total`. */
   spent: z.number(),
+  /** Next reset of the organization default, for calendar intervals. */
+  resetsAt: z.string().nullable(),
+  /**
+   * Per environment: users who spent there this window, and (for an
+   * environment with an override) how many of them are at or near it.
+   */
+  environments: z.array(
+    z.object({
+      environmentId: z.string(),
+      users: z.number().int(),
+      at: z.number().int(),
+      near: z.number().int(),
+    }),
+  ),
 });
 export type UserLimitUsageSummary = z.infer<typeof UserLimitUsageSummarySchema>;
 

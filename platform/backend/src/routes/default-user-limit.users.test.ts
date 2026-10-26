@@ -100,6 +100,9 @@ describe("user limit usage routes", () => {
       limitValue: 100,
       customLimitId: customLimit.id,
       customReason: "Runs the nightly eval suite",
+      spent: 0,
+      // What counts against the default if the custom limit is removed.
+      fallbackSpent: 50,
     });
     expect(body.summary).toMatchObject({
       total: 4,
@@ -107,6 +110,8 @@ describe("user limit usage routes", () => {
       near: 1,
       custom: 1,
       none: 0,
+      organizationDefault: 3,
+      flaggedCustom: 0,
     });
   });
 
@@ -149,6 +154,10 @@ describe("user limit usage routes", () => {
       spent: 4,
       status: "near",
     });
+
+    expect(all.summary.environments).toEqual([
+      { environmentId: production.id, users: 1, at: 0, near: 1 },
+    ]);
 
     // Filtered to the environment: only people who spent there.
     const inProduction = await list(`?environmentId=${production.id}`);
@@ -232,6 +241,7 @@ describe("user limit usage routes", () => {
     const [row] = (await list("?search=bea")).data;
     expect(row).toMatchObject({ spent: 0, status: "ok" });
     expect(row.lastResetAt).not.toBeNull();
+    expect(row.lastResetByName).toBe("Admin");
 
     const audit = await AuditLogModel.findPaginated({
       organizationId,

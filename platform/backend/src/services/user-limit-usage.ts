@@ -105,8 +105,15 @@ export async function listUserLimitUsage(params: {
             "calendar_month",
         })
       : Promise.resolve(null),
-    UserLimitUsageResetModel.findResetTimes({ organizationId }),
+    UserLimitUsageResetModel.findResets({ organizationId }),
   ]);
+  const environmentUsers = query.environmentId
+    ? new Map<string, number>()
+    : await LimitModel.countUsersWithSpendByEnvironment({
+        organizationId,
+        cleanupInterval: organizationScope.cleanupInterval,
+      });
+  const memberIds = new Set(users.map((user) => user.userId));
 
   const rows: UserLimitUsage[] = [];
   for (const user of users) {
@@ -116,14 +123,17 @@ export async function listUserLimitUsage(params: {
       name: user.name,
       email: user.email,
       image: user.image,
-      lastResetAt: resets.get(user.userId)?.toISOString() ?? null,
+      lastResetAt: resets.get(user.userId)?.resetAt.toISOString() ?? null,
+      lastResetByName: resets.get(user.userId)?.resetByName ?? null,
     };
 
     const custom = customByUser.get(user.userId);
     if (custom?.length) {
+      const fallback = organizationSpend.get(user.userId)?.cost ?? 0;
       rows.push({
         ...base,
         ...closestCustomLimit({ limits: custom, totals: customTotals, now }),
+        fallbackSpent: roundCents(Number.isFinite(fallback) ? fallback : 0),
       });
       continue;
     }
@@ -174,7 +184,11 @@ export async function listUserLimitUsage(params: {
 
     const closest = candidates.sort(byPercentDesc)[0];
     if (closest) {
-      rows.push({ ...base, ...describeLimit({ ...closest, now }) });
+      rows.push({
+        ...base,
+        ...describeLimit({ ...closest, now }),
+        fallbackSpent: null,
+      });
       continue;
     }
 
@@ -195,6 +209,7 @@ export async function listUserLimitUsage(params: {
       customReason: null,
       resetsAt: null,
       projectedSpend: null,
+      fallbackSpent: null,
     });
   }
 
@@ -204,7 +219,49 @@ export async function listUserLimitUsage(params: {
     near: rows.filter((row) => row.status === "near").length,
     custom: rows.filter((row) => row.source === "custom").length,
     none: rows.filter((row) => row.source === "none").length,
+    organizationDefault: rows.filter(
+      (row) => row.source === "organization_default",
+    ).length,
+    environmentDefault: rows.filter(
+      (row) => row.source === "environment_default",
+    ).length,
+    flaggedCustom: rows.filter(
+      (row) => row.source === "custom" && row.status !== "ok",
+    ).length,
     spent: roundCents(rows.reduce((sum, row) => sum + row.spent, 0)),
+    resetsAt: globalDefault
+      ? (calendarWindow(
+          globalDefault.cleanupInterval,
+          now,
+        )?.end.toISOString() ?? null)
+      : null,
+    environments: environments.map((environment) => {
+      const users = environmentUsers.get(environment.id) ?? 0;
+      const override = overrideSpend.find(
+        (entry) => entry.override.environmentId === environment.id,
+      );
+      if (!override) {
+        return { environmentId: environment.id, users, at: 0, near: 0 };
+      }
+      // Members the override governs: they spent there with no custom limit.
+      const statuses = [...override.spend]
+        .filter(
+          ([userId]) => !customByUser.has(userId) && memberIds.has(userId),
+        )
+        .map(([, usage]) =>
+          statusFor(
+            usage.incomplete
+              ? 100
+              : (usage.cost / override.override.limitValue) * 100,
+          ),
+        );
+      return {
+        environmentId: environment.id,
+        users,
+        at: statuses.filter((status) => status === "at").length,
+        near: statuses.filter((status) => status === "near").length,
+      };
+    }),
   };
 
   const filtered = rows

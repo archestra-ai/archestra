@@ -173132,7 +173132,15 @@
                             "nullable": true,
                             "type": "number"
                           },
+                          "fallbackSpent": {
+                            "nullable": true,
+                            "type": "number"
+                          },
                           "lastResetAt": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "lastResetByName": {
                             "nullable": true,
                             "type": "string"
                           }
@@ -173155,7 +173163,9 @@
                           "customReason",
                           "resetsAt",
                           "projectedSpend",
-                          "lastResetAt"
+                          "fallbackSpent",
+                          "lastResetAt",
+                          "lastResetByName"
                         ],
                         "additionalProperties": false
                       }
@@ -173228,8 +173238,60 @@
                           "minimum": -9007199254740991,
                           "maximum": 9007199254740991
                         },
+                        "organizationDefault": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "environmentDefault": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "flaggedCustom": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "spent": {
                           "type": "number"
+                        },
+                        "resetsAt": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "environments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "environmentId": {
+                                "type": "string"
+                              },
+                              "users": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "at": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "near": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "environmentId",
+                              "users",
+                              "at",
+                              "near"
+                            ],
+                            "additionalProperties": false
+                          }
                         }
                       },
                       "required": [
@@ -173238,7 +173300,12 @@
                         "near",
                         "custom",
                         "none",
-                        "spent"
+                        "organizationDefault",
+                        "environmentDefault",
+                        "flaggedCustom",
+                        "spent",
+                        "resetsAt",
+                        "environments"
                       ],
                       "additionalProperties": false
                     }

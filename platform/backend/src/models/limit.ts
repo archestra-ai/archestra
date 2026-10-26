@@ -332,6 +332,38 @@ class LimitModel {
   }
 
   /**
+   * How many users spent in each environment inside the window, keyed by
+   * environment id. Same counting rules as `getDefaultUserLimitUsageByUser`.
+   */
+  static async countUsersWithSpendByEnvironment(params: {
+    organizationId: string;
+    cleanupInterval: LimitCleanupInterval;
+  }): Promise<Map<string, number>> {
+    const interactions = schema.interactionsTable;
+    const rows = await db
+      .select({
+        environmentId: sql<string>`${interactions.environmentId}`,
+        users: sql<number>`count(distinct ${interactions.userId})::integer`,
+      })
+      .from(interactions)
+      .innerJoin(
+        schema.environmentsTable,
+        eq(interactions.environmentId, schema.environmentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.environmentsTable.organizationId, params.organizationId),
+          isNotNull(interactions.userId),
+          eq(interactions.billingMode, "metered"),
+          isNull(interactions.billingTeamId),
+          buildUsagePeriodStartCondition(params.cleanupInterval),
+        ),
+      )
+      .groupBy(interactions.environmentId);
+    return new Map(rows.map((row) => [row.environmentId, row.users]));
+  }
+
+  /**
    * Spend counted toward a default user limit, for every user at once, keyed
    * by user id. Same rules as the per-request check (metered, not team-billed,
    * inside the window, after the user's last reset, within `models`), but

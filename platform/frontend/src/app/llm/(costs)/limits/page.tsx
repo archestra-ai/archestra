@@ -14,6 +14,7 @@ import {
   Key,
   KeyRound,
   type LucideIcon,
+  MessageSquareText,
   Plus,
   Trash2,
   User,
@@ -48,7 +49,6 @@ import {
 import { LlmModelPicker } from "@/components/llm-model-picker";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RemoteUserSelect } from "@/components/remote-user-select";
-import { WithPermissions } from "@/components/roles/with-permissions";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
@@ -245,6 +245,7 @@ import {
   type LimitFilterModel,
   LimitModelFilter,
 } from "./_parts/limit-model-filter";
+import { UserLimitsOverview } from "./_parts/user-limits-overview";
 
 export default function LimitsPage() {
   const setActionButton = useSetCostsAction();
@@ -636,6 +637,19 @@ export default function LimitsPage() {
                     {getEntityScopeLabel(limit)}
                   </div>
                 )}
+                {limit.reason ? (
+                  <div
+                    title={limit.reason}
+                    className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
+                  >
+                    <MessageSquareText
+                      aria-hidden
+                      className="size-3 shrink-0"
+                    />
+                    <span className="sr-only">Reason: </span>
+                    <span className="truncate">{limit.reason}</span>
+                  </div>
+                ) : null}
               </div>
             </div>
           );
@@ -830,227 +844,222 @@ export default function LimitsPage() {
 
   return (
     <div className="-mt-3">
-      <WithPermissions
-        permissions={{ llmLimit: ["read"] }}
-        noPermissionHandle="hide"
-      >
-        <div className="mb-3">
-          <InlineNotice variant="info">
-            <Info />
-            <InlineNoticeText>
-              {defaultUserLimits.length > 0
-                ? "A default user spend limit applies to every user. Custom per-user spend limits override it."
-                : "No default user spend limit is set."}
-            </InlineNoticeText>
-          </InlineNotice>
-        </div>
-      </WithPermissions>
+      <UserLimitsOverview
+        limitsTable={
+          <BulkActionsScope>
+            <CollectionFilters>
+              <FilterBar
+                onClearFilters={hasActiveFilters ? clearFilters : undefined}
+              >
+                <FilterSelect
+                  value={statusFilter}
+                  onValueChange={(value) =>
+                    updateQueryParams({
+                      status: value === "all" ? null : value,
+                      page: null,
+                    })
+                  }
+                  placeholder="All statuses"
+                  showSearch={false}
+                  items={[
+                    { value: "all", label: "All statuses" },
+                    ...USAGE_STATUSES.map((status) => ({
+                      value: status,
+                      label: USAGE_STATUS_META[status].label,
+                      content: (
+                        <FilterOptionLabel
+                          icon={<UsageStatusDot status={status} />}
+                          label={USAGE_STATUS_META[status].label}
+                          hint={USAGE_STATUS_META[status].hint}
+                          count={statusCounts[status]}
+                        />
+                      ),
+                      selectedContent: (
+                        <span className="flex items-center gap-2">
+                          <UsageStatusDot status={status} />
+                          {USAGE_STATUS_META[status].label}
+                        </span>
+                      ),
+                    })),
+                  ]}
+                />
+                <FilterSelect
+                  value={appliedToFilter}
+                  onValueChange={(value) =>
+                    updateQueryParams({
+                      appliedTo: value === "all" ? null : value,
+                      entityId: null,
+                      page: null,
+                    })
+                  }
+                  placeholder="All applied to"
+                  showSearch={false}
+                  items={[
+                    { value: "all", label: "All applied to" },
+                    ...APPLIED_TO_OPTIONS.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                      content: (
+                        <FilterOptionLabel
+                          icon={
+                            <option.icon className="size-4 text-muted-foreground" />
+                          }
+                          label={option.label}
+                          count={appliedToCounts[option.value] ?? 0}
+                        />
+                      ),
+                      selectedContent: (
+                        <span className="flex items-center gap-2">
+                          <option.icon className="size-4" />
+                          {option.label}
+                        </span>
+                      ),
+                    })),
+                  ]}
+                />
+                {entityIdFilter && (
+                  <FilterSelect
+                    value={entityIdFilter}
+                    onValueChange={(value) =>
+                      updateQueryParams({
+                        entityId: value === "all" ? null : value,
+                        page: null,
+                      })
+                    }
+                    placeholder="All entities"
+                    ariaLabel="Filter by entity"
+                    items={[
+                      { value: "all", label: "All entities" },
+                      ...Array.from(
+                        new Map([
+                          ...llmLimits
+                            .filter(
+                              (limit) => limit.entityType === appliedToFilter,
+                            )
+                            .map(
+                              (limit) =>
+                                [
+                                  limit.entityId,
+                                  getEntityLabel(limit),
+                                ] as const,
+                            ),
+                          [
+                            entityIdFilter,
+                            getEntityLabel({
+                              entityType:
+                                appliedToFilter as LimitData["entityType"],
+                              entityId: entityIdFilter,
+                            }),
+                          ] as const,
+                        ]),
+                        ([value, label]) => ({ value, label }),
+                      ),
+                    ]}
+                  />
+                )}
+                <LimitModelFilter
+                  value={modelFilter}
+                  onValueChange={(value) =>
+                    updateQueryParams({
+                      model: value === "all" ? null : value,
+                      page: null,
+                    })
+                  }
+                  models={filterModels}
+                  limitCountByModel={limitCountByModel}
+                />
+                <EntityLabelFilter
+                  useLabelKeys={useLimitLabelKeys}
+                  useLabelValues={useLimitLabelValues}
+                  className={filterControlClass({
+                    active: Boolean(selectedLabels),
+                  })}
+                />
+                <FilterSelect
+                  value={unitsFilter}
+                  onValueChange={(value) =>
+                    updateQueryParams({
+                      units: value === "all" ? null : value,
+                      page: null,
+                    })
+                  }
+                  placeholder="All kinds"
+                  ariaLabel="Filter by limit kind"
+                  showSearch={false}
+                  items={[
+                    { value: "all", label: "All kinds" },
+                    {
+                      value: "token_cost",
+                      label: "Spend",
+                      content: <LimitKindLabel limitType="token_cost" />,
+                      selectedContent: (
+                        <LimitKindLabel limitType="token_cost" />
+                      ),
+                    },
+                    {
+                      value: "tokens",
+                      label: "Tokens",
+                      content: <LimitKindLabel limitType="tokens" />,
+                      selectedContent: <LimitKindLabel limitType="tokens" />,
+                    },
+                    {
+                      value: "requests",
+                      label: "Requests",
+                      content: <LimitKindLabel limitType="requests" />,
+                      selectedContent: <LimitKindLabel limitType="requests" />,
+                    },
+                  ]}
+                />
+              </FilterBar>
+            </CollectionFilters>
 
-      <BulkActionsScope>
-        <CollectionFilters>
-          <FilterBar
-            onClearFilters={hasActiveFilters ? clearFilters : undefined}
-          >
-            <FilterSelect
-              value={statusFilter}
-              onValueChange={(value) =>
-                updateQueryParams({
-                  status: value === "all" ? null : value,
-                  page: null,
-                })
-              }
-              placeholder="All statuses"
-              showSearch={false}
-              items={[
-                { value: "all", label: "All statuses" },
-                ...USAGE_STATUSES.map((status) => ({
-                  value: status,
-                  label: USAGE_STATUS_META[status].label,
-                  content: (
-                    <FilterOptionLabel
-                      icon={<UsageStatusDot status={status} />}
-                      label={USAGE_STATUS_META[status].label}
-                      hint={USAGE_STATUS_META[status].hint}
-                      count={statusCounts[status]}
-                    />
-                  ),
-                  selectedContent: (
-                    <span className="flex items-center gap-2">
-                      <UsageStatusDot status={status} />
-                      {USAGE_STATUS_META[status].label}
-                    </span>
-                  ),
-                })),
-              ]}
-            />
-            <FilterSelect
-              value={appliedToFilter}
-              onValueChange={(value) =>
-                updateQueryParams({
-                  appliedTo: value === "all" ? null : value,
-                  entityId: null,
-                  page: null,
-                })
-              }
-              placeholder="All applied to"
-              showSearch={false}
-              items={[
-                { value: "all", label: "All applied to" },
-                ...APPLIED_TO_OPTIONS.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  content: (
-                    <FilterOptionLabel
-                      icon={
-                        <option.icon className="size-4 text-muted-foreground" />
-                      }
-                      label={option.label}
-                      count={appliedToCounts[option.value] ?? 0}
-                    />
-                  ),
-                  selectedContent: (
-                    <span className="flex items-center gap-2">
-                      <option.icon className="size-4" />
-                      {option.label}
-                    </span>
-                  ),
-                })),
-              ]}
-            />
-            {entityIdFilter && (
-              <FilterSelect
-                value={entityIdFilter}
-                onValueChange={(value) =>
-                  updateQueryParams({
-                    entityId: value === "all" ? null : value,
-                    page: null,
-                  })
-                }
-                placeholder="All entities"
-                ariaLabel="Filter by entity"
-                items={[
-                  { value: "all", label: "All entities" },
-                  ...Array.from(
-                    new Map([
-                      ...llmLimits
-                        .filter((limit) => limit.entityType === appliedToFilter)
-                        .map(
-                          (limit) =>
-                            [limit.entityId, getEntityLabel(limit)] as const,
-                        ),
-                      [
-                        entityIdFilter,
-                        getEntityLabel({
-                          entityType:
-                            appliedToFilter as LimitData["entityType"],
-                          entityId: entityIdFilter,
-                        }),
-                      ] as const,
-                    ]),
-                    ([value, label]) => ({ value, label }),
-                  ),
-                ]}
-              />
-            )}
-            <LimitModelFilter
-              value={modelFilter}
-              onValueChange={(value) =>
-                updateQueryParams({
-                  model: value === "all" ? null : value,
-                  page: null,
-                })
-              }
-              models={filterModels}
-              limitCountByModel={limitCountByModel}
-            />
-            <EntityLabelFilter
-              useLabelKeys={useLimitLabelKeys}
-              useLabelValues={useLimitLabelValues}
-              className={filterControlClass({
-                active: Boolean(selectedLabels),
-              })}
-            />
-            <FilterSelect
-              value={unitsFilter}
-              onValueChange={(value) =>
-                updateQueryParams({
-                  units: value === "all" ? null : value,
-                  page: null,
-                })
-              }
-              placeholder="All kinds"
-              ariaLabel="Filter by limit kind"
-              showSearch={false}
-              items={[
-                { value: "all", label: "All kinds" },
-                {
-                  value: "token_cost",
-                  label: "Spend",
-                  content: <LimitKindLabel limitType="token_cost" />,
-                  selectedContent: <LimitKindLabel limitType="token_cost" />,
-                },
-                {
-                  value: "tokens",
-                  label: "Tokens",
-                  content: <LimitKindLabel limitType="tokens" />,
-                  selectedContent: <LimitKindLabel limitType="tokens" />,
-                },
-                {
-                  value: "requests",
-                  label: "Requests",
-                  content: <LimitKindLabel limitType="requests" />,
-                  selectedContent: <LimitKindLabel limitType="requests" />,
-                },
-              ]}
-            />
-          </FilterBar>
-        </CollectionFilters>
-
-        {/* The table reports its own first load, rather than a centred loader
+            {/* The table reports its own first load, rather than a centred loader
             standing in for it: swapping a full-height indicator out for the
             table put the toolbar, headers and pagination on screen a beat
             after the wait had already visibly ended, so one navigation read as
             loader, then chrome, then rows. The table keeps its shape from the
             first frame and fills in. */}
-        <BulkActions
-          count={selectedLimits.length}
-          noun="limit"
-          onClear={clearSelection}
-          busy={bulkDeleteLimits.isPending}
-          selectAllMatching={selectAllMatching}
-        >
-          <PermissionButton
-            permissions={{ llmLimit: ["delete"] }}
-            variant="destructive"
-            size="sm"
-            onClick={() => setIsBulkDeleteDialogOpen(true)}
-          >
-            <Trash2 className="h-4 w-4" />
-            <span>Delete</span>
-          </PermissionButton>
-        </BulkActions>
-        <DataTable
-          columns={columns}
-          data={filteredLimits}
-          pagination={{
-            pageIndex: Number.isFinite(pageIndex) ? pageIndex : 0,
-            pageSize: Number.isFinite(pageSize) ? pageSize : 10,
-            total: filteredLimits.length,
-          }}
-          onPaginationChange={setPagination}
-          getRowId={(limit) => limit.id}
-          rowSelection={rowSelection}
-          onRowSelectionChange={setRowSelection}
-          onPageRowIdsChange={onPageRowIdsChange}
-          hideSelectedCount
-          emptyIcon={CircleDollarSign}
-          emptyMessage="No limits configured"
-          hasActiveFilters={hasActiveFilters}
-          filteredEmptyMessage="No limits match your filters"
-          onClearFilters={clearFilters}
-          isLoading={(isPending || isFetching) && limits.length === 0}
-        />
-      </BulkActionsScope>
+            <BulkActions
+              count={selectedLimits.length}
+              noun="limit"
+              onClear={clearSelection}
+              busy={bulkDeleteLimits.isPending}
+              selectAllMatching={selectAllMatching}
+            >
+              <PermissionButton
+                permissions={{ llmLimit: ["delete"] }}
+                variant="destructive"
+                size="sm"
+                onClick={() => setIsBulkDeleteDialogOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>Delete</span>
+              </PermissionButton>
+            </BulkActions>
+            <DataTable
+              columns={columns}
+              data={filteredLimits}
+              pagination={{
+                pageIndex: Number.isFinite(pageIndex) ? pageIndex : 0,
+                pageSize: Number.isFinite(pageSize) ? pageSize : 10,
+                total: filteredLimits.length,
+              }}
+              onPaginationChange={setPagination}
+              getRowId={(limit) => limit.id}
+              rowSelection={rowSelection}
+              onRowSelectionChange={setRowSelection}
+              onPageRowIdsChange={onPageRowIdsChange}
+              hideSelectedCount
+              emptyIcon={CircleDollarSign}
+              emptyMessage="No limits configured"
+              hasActiveFilters={hasActiveFilters}
+              filteredEmptyMessage="No limits match your filters"
+              onClearFilters={clearFilters}
+              isLoading={(isPending || isFetching) && limits.length === 0}
+            />
+          </BulkActionsScope>
+        }
+      />
 
       <FormDialog
         open={isCreateDialogOpen || !!editingLimit}

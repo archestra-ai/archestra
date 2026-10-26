@@ -8,18 +8,26 @@ import db, { schema } from "@/database";
  * a record of when it happened.
  */
 class UserLimitUsageResetModel {
-  /** Reset times for the given users, keyed by user id. */
-  static async findResetTimes(params: {
+  /** Last reset of each given user (all users when omitted), keyed by user id. */
+  static async findResets(params: {
     organizationId: string;
     userIds?: string[];
-  }): Promise<Map<string, Date>> {
+  }): Promise<Map<string, { resetAt: Date; resetByName: string | null }>> {
     if (params.userIds?.length === 0) return new Map();
     const rows = await db
       .select({
         userId: schema.userLimitUsageResetsTable.userId,
         resetAt: schema.userLimitUsageResetsTable.resetAt,
+        resetByName: schema.usersTable.name,
       })
       .from(schema.userLimitUsageResetsTable)
+      .leftJoin(
+        schema.usersTable,
+        eq(
+          schema.userLimitUsageResetsTable.resetByUserId,
+          schema.usersTable.id,
+        ),
+      )
       .where(
         and(
           eq(
@@ -31,7 +39,12 @@ class UserLimitUsageResetModel {
             : undefined,
         ),
       );
-    return new Map(rows.map((row) => [row.userId, row.resetAt]));
+    return new Map(
+      rows.map((row) => [
+        row.userId,
+        { resetAt: row.resetAt, resetByName: row.resetByName },
+      ]),
+    );
   }
 
   /** Record a reset now, replacing the user's previous marker. */

@@ -47710,7 +47710,9 @@ export type ListUserLimitUsageResponses = {
             customReason: string | null;
             resetsAt: string | null;
             projectedSpend: number | null;
+            fallbackSpent: number | null;
             lastResetAt: string | null;
+            lastResetByName: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -47726,7 +47728,17 @@ export type ListUserLimitUsageResponses = {
             near: number;
             custom: number;
             none: number;
+            organizationDefault: number;
+            environmentDefault: number;
+            flaggedCustom: number;
             spent: number;
+            resetsAt: string | null;
+            environments: Array<{
+                environmentId: string;
+                users: number;
+                at: number;
+                near: number;
+            }>;
         };
     };
 };

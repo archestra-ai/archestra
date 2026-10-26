@@ -224,6 +224,34 @@ def stop_retained_client(tmux, env):
 
 
 class StartupTest(unittest.TestCase):
+    if CLIENT == "hermes":
+        def test_agent_build_starts_discovery(self):
+            # Exercise the real agent builder before any background thread exists.
+            server = Gateway()
+            server.release.set()
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            try:
+                with tempfile.TemporaryDirectory() as directory:
+                    origin = f"http://127.0.0.1:{server.server_port}"
+                    Path(directory, "config.yaml").write_text(json.dumps({
+                        "model": {"default": "gpt-4.1", "provider": "openai", "base_url": origin + "/v1"},
+                        "mcp_servers": {"archestra": {"url": origin + "/mcp"}},
+                        "mcp_discovery_timeout": 10,
+                    }))
+                    result = subprocess.run(
+                        ["/opt/hermes/.venv/bin/python", "-c",
+                         "from tui_gateway.server import _make_agent; "
+                         "_make_agent('startup-test', 'test-key', model_override='gpt-4.1', provider_override='openai')"],
+                        env={**os.environ, "HERMES_HOME": directory, "OPENAI_API_KEY": "test-key", "OPENAI_BASE_URL": origin + "/v1"},
+                        capture_output=True, text=True, timeout=30,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertTrue(server.catalog_sent)
+                    self.assertFalse(server.inference())
+            finally:
+                server.shutdown()
+                server.server_close()
+
     def test_missing_runtime_binding_is_fail_closed(self):
         self.run_client("one_shot", missing_binding=True)
 

@@ -29,6 +29,11 @@ PATCH = '''    # Archestra image patch: see docker_images/agent/patches/hermes-t
         subprocess.run(["archestra-mcp-startup-failure"], check=False)
         raise RuntimeError(message)
 
+    # An agent can be built before the deferred discovery thread starts.
+    # Joining an absent thread reports success without discovering any tools.
+    _archestra_mcp.start_background_mcp_discovery(
+        logger=logger, thread_name="archestra-mcp-discovery"
+    )
     if not _archestra_mcp.join_mcp_discovery(
         timeout=_archestra_mcp._resolve_discovery_timeout(None)
     ):
@@ -50,6 +55,7 @@ if (
     server_source.count(ANCHOR) != 1
     or "\nimport subprocess\n" not in server_source
     or "def join_mcp_discovery(" not in mcp_startup.read_text()
+    or "def start_background_mcp_discovery(" not in mcp_startup.read_text()
     or "def _resolve_discovery_timeout(" not in mcp_startup.read_text()
     or "def get_mcp_status(" not in discovery.read_text()
 ):

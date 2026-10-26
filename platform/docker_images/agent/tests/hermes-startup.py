@@ -21,6 +21,20 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 class HermesStartupTest(unittest.TestCase):
+    def test_installed_release_matches_install_stamp(self):
+        stamp = json.loads(Path("/opt/hermes/install-stamp.json").read_text())
+        result = subprocess.run(
+            [
+                "/opt/hermes/.venv/bin/python",
+                "-c",
+                "import importlib.metadata; print(importlib.metadata.version('hermes-agent'))",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.stdout.strip(), stamp["baseVersion"])
+
     def test_task_completes_without_package_downloads(self):
         for mode in ("one_shot", "interactive"):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:

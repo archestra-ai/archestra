@@ -200,10 +200,11 @@ USER root
 # Hermes ships only from source (PyPI stopped at 0.19.0): build the release
 # commit the way upstream's own image does. Python, uv, and every Python
 # package come from the hash-locked versions in the checkout. Pillow, PyJWT,
-# and certifi are raised past the lock's vulnerable versions; the startup
+# certifi, and urllib3 are raised past the lock's vulnerable versions; the startup
 # tests below exercise the resulting runtime, including gateway discovery.
 COPY --from=uv-hermes /uv /usr/local/bin/uv-hermes
-RUN hermes_version=0.22.2 \
+RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
+    hermes_version=0.22.2 \
  && hermes_commit=d923a5eb487a17c0a68801bba9ef0f56c81040a8 \
  && git clone --quiet --depth 1 --branch "v${hermes_version}" https://github.com/NousResearch/hermes-agent /opt/hermes \
  && test "$(git -C /opt/hermes rev-parse HEAD)" = "${hermes_commit}" \
@@ -216,10 +217,12 @@ RUN hermes_version=0.22.2 \
  && rm /tmp/hermes-python.tgz \
  && /opt/hermes-python/bin/python3 -c 'import sqlite3, sys; assert sys.version_info[:2] == (3, 14); assert sqlite3.sqlite_version_info >= (3, 51, 3), sqlite3.sqlite_version' \
  && cd /opt/hermes \
+ # Upstream's source package uses 0.0.0; stamp the verified release into its metadata.
+ && python3 /tmp/agent-image-patches/hermes-release-version.py /opt/hermes "${hermes_version}" \
  && UV_NO_CONFIG=1 UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy uv-hermes sync --quiet --frozen --no-default-groups --extra mcp \
       --python /opt/hermes-python/bin/python3 --compile-bytecode \
  && UV_NO_CONFIG=1 uv-hermes pip install --quiet --python /opt/hermes/.venv/bin/python \
-      Pillow==13.0.0 PyJWT==2.14.0 certifi==2026.10.19 \
+      Pillow==13.0.0 PyJWT==2.14.0 certifi==2026.10.19 urllib3==2.8.0 \
  && LEFTHOOK=0 npm_config_install_links=false node scripts/build/node-deps.mjs --source /opt/hermes --workspace ui-tui \
  && node scripts/build/tui.mjs --source /opt/hermes --out /opt/hermes-tui \
  && rm -rf node_modules ui-tui/node_modules /root/.npm /root/.cache \
@@ -228,7 +231,12 @@ RUN hermes_version=0.22.2 \
       --commit "${hermes_commit}" --base-version "${hermes_version}" --distance 0 \
       --source docker --distribution docker --update-mechanism external \
  && printf '%s\n' docker > .install_method \
- && rm -rf .git \
+ # Discard superseded wheels and build-only installers, including pip's vendored packages.
+ && rm -rf .git /home/node/.cache/uv /usr/local/bin/uv-hermes \
+      /opt/hermes-python/lib/python3.14/site-packages/pip \
+      /opt/hermes-python/lib/python3.14/site-packages/pip-*.dist-info \
+      /opt/hermes-python/lib/python3.14/ensurepip \
+      /opt/hermes-python/bin/pip* \
  && ln -s /opt/hermes/.venv/bin/hermes /usr/local/bin/hermes \
  && hermes --version \
  && chown -R 1000:1000 /home/node

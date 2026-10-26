@@ -3452,6 +3452,13 @@ const config = {
       DEFAULT_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS,
     ),
   },
+  autoRouting: {
+    /** Budget (ms) for one session-scoring call before the router falls back. */
+    scorerTimeoutMs: parsePositiveInt(
+      process.env.ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS,
+      2000,
+    ),
+  },
   kb: {
     crawlerChromiumPath:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CRAWLER_CHROMIUM_PATH?.trim() ||

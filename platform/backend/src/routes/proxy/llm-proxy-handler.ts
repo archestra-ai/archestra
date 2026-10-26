@@ -23,7 +23,6 @@ import {
   InteractionSourceSchema,
   isCodexOriginator,
   isProviderApiKeyOptional,
-  OPENCODE_AGENT_HEADER,
   openCodeFamilySource,
   PROVIDER_BASE_URL_HEADER,
   providerDisplayNames,
@@ -35,7 +34,6 @@ import {
   ARCHESTRA_CODEX_CONNECTION_ORIGINATOR,
   CLAUDE_DESKTOP_CLIENT_ID,
 } from "@archestra/shared/interactions/client";
-import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import {
   type Context,
   context as otelContext,
@@ -415,23 +413,6 @@ function isBoundedHeaderValue(
 }
 
 /**
- * The subset of a proxied request body we read for session-id and client-app
- * extraction. Each consumer only touches its own fields (`detectClaudeClientId`
- * → `system`/`metadata`; `detectCodexClientId` → `client_metadata`;
- * `detectOpenCodeClientId` → client identity headers;
- * `extractSessionInfo` → `metadata`/`user`/`client_metadata`), so one shared
- * view keeps the cast in a single place.
- */
-type RequestBodyForExtraction =
-  | {
-      system?: unknown;
-      metadata?: { user_id?: string | null };
-      user?: string | null;
-      client_metadata?: unknown;
-    }
-  | undefined;
-
-/**
  * Generic LLM proxy handler that works with any provider through adapters
  */
 export async function handleLLMProxy<
@@ -474,25 +455,12 @@ export async function handleLLMProxy<
     string,
     string | string[] | undefined
   >;
-  const bodyForExtraction = body as RequestBodyForExtraction;
-  // Client-app attribution: the caller-supplied X-Archestra-Agent-Id header (or
-  // X-Archestra-Meta segment 0) wins; otherwise auto-discover a known client
-  // app from the request and record it (Claude clients → "anthropic_claude"
-  // from the request body; Codex clients → "openai_codex" from the
-  // client_metadata body shape or the originator/User-Agent headers the Codex
-  // CLI stamps on every request; OpenCode → "opencode" from its equivalent
-  // identity headers; Kilo Code → "kilo" and Cursor → "cursor" from their
-  // User-Agents).
-  const externalAgentId =
-    utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
-    utils.headers.clientApp.detectClaudeClientId(bodyForExtraction) ??
-    utils.headers.clientApp.detectCodexClientId(
-      headersForExtraction,
-      bodyForExtraction,
-    ) ??
-    utils.headers.clientApp.detectOpenCodeClientId(headersForExtraction) ??
-    utils.headers.clientApp.detectKiloClientId(headersForExtraction) ??
-    utils.headers.clientApp.detectCursorClientId(headersForExtraction);
+  const bodyForExtraction =
+    body as utils.headers.sessionMetadata.RequestBodyForExtraction;
+  const externalAgentId = utils.headers.sessionMetadata.detectClientApp(
+    headersForExtraction,
+    bodyForExtraction,
+  );
   const runId = utils.headers.runId.getRunId(headersForExtraction);
   const authOverride = (
     request as FastifyRequest & { llmProxyAuthOverride?: LLMProxyAuthOverride }
@@ -530,29 +498,15 @@ export async function handleLLMProxy<
     SOURCE_HEADER,
   );
   const parsedSource = InteractionSourceSchema.safeParse(rawSource).data;
-  const openCodeAgent = utils.headers.metaHeader.getHeaderValue(
-    headersForExtraction,
-    OPENCODE_AGENT_HEADER,
-  );
-  const openCodeParentSession = utils.headers.metaHeader.getHeaderValue(
-    headersForExtraction,
-    "x-parent-session-id",
-  );
   // OpenCode and Kilo Code frame their turns the same way; each gets its own
   // source prefix (opencode:main, kilo:main, ...).
-  const openCodeSource: InteractionSource | undefined =
-    externalAgentId && isOpenCodeFamilyClient(externalAgentId)
-      ? openCodeFamilySource(
-          externalAgentId,
-          openCodeParentSession
-            ? "subagent"
-            : openCodeAgent === "title"
-              ? "title"
-              : openCodeAgent === "compaction"
-                ? "compaction"
-                : "main",
-        )
-      : undefined;
+  const openCodeTurn = utils.headers.sessionMetadata.detectOpenCodeFamilyTurn(
+    headersForExtraction,
+    externalAgentId,
+  );
+  const openCodeSource: InteractionSource | undefined = openCodeTurn
+    ? openCodeFamilySource(openCodeTurn.clientId, openCodeTurn.kind)
+    : undefined;
   const untrustedAppaChatSource =
     isAppaChatSource(parsedSource) && !internalCall;
   // `model_router` is assigned by the route auth override, not accepted from

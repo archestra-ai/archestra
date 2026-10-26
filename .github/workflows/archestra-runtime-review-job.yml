@@ -1,16 +1,17 @@
 # Reviews a pull request of this repository on an Archestra Agent Runtime.
 #
-# archestra-runtime-review.yml is to call this file by commit SHA, once the
-# Workload Identity trust in archestra-ai/infra
-# (gcp/workload_identity/runtime-review.tf) accepts that commit; until then it
-# calls the shared workflow in archestra-ai/.github. The trust accepts only
-# pinned revisions, so a pull request that edits this file cannot open the
-# private staging tunnel. To change it: merge the change, add the new merge
-# commit to the infra trust, then repin the caller.
+# archestra-runtime-review.yml calls this file by commit SHA. The Workload
+# Identity trust in archestra-ai/infra (gcp/workload_identity/runtime-review.tf)
+# accepts only pinned revisions of it, so a pull request that edits this file
+# cannot open the private staging tunnel. To change it: merge the change, add
+# the new merge commit to the infra trust, then repin the caller.
 #
-# The run acts as the person who caused the event, with their Archestra
-# platform token: their credentials, their costs. This job never checks out
-# pull request code.
+# With archestra-auth "token", the run acts as the person who caused the
+# event, with their Archestra platform token. With "github-actions", the job
+# signs in with its GitHub Actions identity, Archestra runs the review as the
+# pull request author (who must have connected GitHub there) and returns its
+# review App's token, so the review posts as the App. Either way: their
+# credentials, their costs. This job never checks out pull request code.
 name: Archestra Runtime Review Job
 
 on:
@@ -28,15 +29,24 @@ on:
         description: The time limit for the job.
         type: number
         default: 90
+      archestra-auth:
+        description: token (the ARCHESTRA_TOKEN secret), or github-actions (the job identity; no secret needed).
+        type: string
+        default: token
+      review-event:
+        description: comment, or request-changes for a change request when a finding blocks the merge.
+        type: string
+        default: comment
     secrets:
       ARCHESTRA_TOKEN:
-        description: The actor's Archestra platform token. Empty skips the event with a notice.
+        description: The actor's Archestra platform token, for archestra-auth "token". Empty skips the event with a notice.
         required: false
 
 permissions: {}
 
-# The caller's job carries the group for the pull request. This one only
-# stops two copies of the same event from running at once.
+# The caller's group for the pull request cancels superseded runs. This group
+# is unique for each call (it holds the run ID); it is here because the
+# organization's workflow audit requires one.
 concurrency:
   group: archestra-runtime-review-job-${{ github.ref }}-${{ github.run_id }}
   cancel-in-progress: false
@@ -51,18 +61,22 @@ jobs:
       contents: read # Read the repository.
       pull-requests: write # Post the review comment, the review and inline comments.
       checks: read # Count the failing checks of the reviewed commit.
-      id-token: write # Short-lived Google identity for the private staging tunnel.
+      id-token: write # Short-lived identity for the private staging tunnel and the Archestra sign-in.
     steps:
-      # No token for this actor, or no gateway or agents: skip with a notice.
+      # No token for this actor (token sign-in), or no gateway or agents: skip with a notice.
       - name: Check the actor's Archestra token
         id: token
         env:
           ARCHESTRA_TOKEN: ${{ secrets.ARCHESTRA_TOKEN }}
+          ARCHESTRA_AUTH: ${{ inputs.archestra-auth }}
           GATEWAY_URL: ${{ inputs.gateway-url }}
           AGENTS: ${{ inputs.agents }}
         shell: bash
         run: |
-          if [[ -z "$ARCHESTRA_TOKEN" ]]; then
+          if [[ "$ARCHESTRA_AUTH" != "token" && "$ARCHESTRA_AUTH" != "github-actions" ]]; then
+            echo "::error::archestra-auth must be token or github-actions."
+            exit 1
+          elif [[ "$ARCHESTRA_AUTH" == "token" && -z "$ARCHESTRA_TOKEN" ]]; then
             echo "::notice::No Archestra token for this actor. Store their platform token as the secret ARCHESTRA_TOKEN_<LOGIN> to get reviews."
           elif [[ -z "$GATEWAY_URL" ]]; then
             echo "::notice::The ARCHESTRA_REVIEW_GATEWAY_URL variable is not set, so no review runs."
@@ -83,10 +97,13 @@ jobs:
       # while the tunnel is still up, and records itself in the review comment.
       - name: Review on the Archestra runtime
         if: steps.token.outputs.available == 'true'
-        uses: archestra-ai/code-review-action@9d02c5ca289ad1be68f483726be280f6159d77cc # v0.4.0
+        uses: archestra-ai/code-review-action@6feebecdc3db710d189d940628a3ffe5bc3d3fa6 # v0.5.0
         with:
           archestra-gateway-url: ${{ inputs.gateway-url }}
+          archestra-auth: ${{ inputs.archestra-auth }}
+          # Read only with archestra-auth "token"; the GitHub Actions sign-in needs no secret.
           archestra-token: ${{ secrets.ARCHESTRA_TOKEN }}
+          review-event: ${{ inputs.review-event }}
           agents: ${{ inputs.agents }}
           strategy: rotate
           retries: 1

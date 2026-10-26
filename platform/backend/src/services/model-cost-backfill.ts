@@ -1,4 +1,5 @@
 import { hostname } from "node:os";
+import { setTimeout as sleep } from "node:timers/promises";
 import { type SupportedProvider, TimeInMs } from "@archestra/shared";
 import { LRUCacheManager } from "@/cache-manager";
 import { withDbTransaction } from "@/database";
@@ -264,6 +265,7 @@ class ModelCostBackfillService {
       }
 
       const last = rows[rows.length - 1];
+      const batchStarted = Date.now();
       const owned = await withDbTransaction(async (tx) => {
         if (!(await ModelCostBackfillModel.lockOwned(lease, tx))) return false;
         const updated = await InteractionCostBackfillModel.applyBatch(
@@ -284,6 +286,14 @@ class ModelCostBackfillService {
       });
       if (!owned) return; // another worker reclaimed it
       cursor = { createdAt: last.createdAt, id: last.id };
+
+      // Each rewritten row is a new version in every index of a wide, hot
+      // table. Resting in proportion to how long the batch took keeps the
+      // write rate (and WAL) a fraction of what the database can absorb, and
+      // backs off on its own when the proxy's inserts slow the batches down.
+      const pause = (Date.now() - batchStarted) * THROTTLE_RATIO;
+      if (Date.now() + pause >= deadline) break;
+      await sleep(pause);
     } while (Date.now() < deadline);
 
     await ModelCostBackfillModel.release(lease);
@@ -400,6 +410,8 @@ const RUN_TIME_BUDGET_MS = 45_000;
 /** Renewed every batch; a dead worker's backfill is reclaimable after this. */
 const LEASE_TTL_SECONDS = 120;
 const MAX_CONSECUTIVE_FAILURES = 10;
+/** Rest this many times a batch's duration after it: writes ≤ 1/3 of the time. */
+const THROTTLE_RATIO = 9;
 /**
  * Requests in flight when a backfill starts can commit after the main pass has
  * passed their timestamp; the sweep revisits this much time before the cutoff.

@@ -25,7 +25,7 @@ class InteractionCostBackfillModel {
       const result = await tx.execute<CostHistoryDayRow>(sql`
         select ${day} as day,
           count(*)::integer as requests,
-          ${TOKEN_SUMS},
+          ${tokenSums()},
           coalesce(sum(i.cost), 0)::text as recorded_cost
         from interactions i
         where ${eligible(params.scope)}
@@ -51,27 +51,23 @@ class InteractionCostBackfillModel {
     until: Date;
   }): Promise<CostWindowTotals> {
     return withStatementTimeout(PREVIEW_STATEMENT_TIMEOUT_MS, async (tx) => {
-      const window = (alias: SQL) =>
-        sql`${alias}.created_at >= ${toUtcTimestamp(params.since)}::timestamp
-          and ${alias}.created_at < ${toUtcTimestamp(params.until)}::timestamp`;
+      // One pass over the model's window: each row probes its own receipt,
+      // instead of a second query reading every receipt of every model.
+      const open = sql`b.interaction_id is null`;
       const result = await tx.execute<CostWindowRow>(sql`
         select
-          count(*)::integer as requests,
-          count(*) filter (where i.billing_mode = 'subscription')::integer as subscription_requests,
-          count(distinct i.user_id)::integer as users,
-          ${TOKEN_SUMS},
-          coalesce(sum(i.cost), 0)::text as recorded_cost,
-          (
-            select count(*)::integer
-            from interactions s
-            join interaction_billing b
-              on b.interaction_id = s.id and b.usage->>'mode' = 'enforce'
-            where s.model = ${params.scope.modelId}
-              and split_part(s.type, ':', 1) = ${params.scope.provider}
-              and ${window(sql`s`)}
-          ) as settled_requests
+          count(*) filter (where ${open})::integer as requests,
+          count(*) filter (where ${open} and i.billing_mode = 'subscription')::integer as subscription_requests,
+          count(distinct i.user_id) filter (where ${open})::integer as users,
+          ${tokenSums(open)},
+          coalesce(sum(i.cost) filter (where ${open}), 0)::text as recorded_cost,
+          count(*) filter (where not ${open})::integer as settled_requests
         from interactions i
-        where ${eligible(params.scope)} and ${window(sql`i`)}`);
+        left join interaction_billing b
+          on b.interaction_id = i.id and ${ENFORCE_RECEIPT}
+        where ${matches(params.scope)}
+          and i.created_at >= ${toUtcTimestamp(params.since)}::timestamp
+          and i.created_at < ${toUtcTimestamp(params.until)}::timestamp`);
       const row = result.rows[0];
       return {
         requests: row.requests,
@@ -232,16 +228,24 @@ export interface RecomputedCost {
 
 // ===
 
-const PREVIEW_STATEMENT_TIMEOUT_MS = 15_000;
+// A read that never blocks writers; ~1 µs per row, so 30 s covers a model
+// with tens of millions of requests even with a cold cache.
+const PREVIEW_STATEMENT_TIMEOUT_MS = 30_000;
 const BATCH_LOCK_TIMEOUT = "2s";
 const BATCH_STATEMENT_TIMEOUT = "15s";
 
-const TOKEN_SUMS = sql`
-  coalesce(sum(i.input_tokens), 0)::bigint::text as input_tokens,
-  coalesce(sum(i.output_tokens), 0)::bigint::text as output_tokens,
-  coalesce(sum(i.cache_read_tokens), 0)::bigint::text as cache_read_tokens,
-  coalesce(sum(i.cache_write_tokens), 0)::bigint::text as cache_write_tokens,
-  coalesce(sum(least(greatest(coalesce(i.cache_write_1h_tokens, 0), 0), coalesce(i.cache_write_tokens, 0))), 0)::bigint::text as cache_write_1h_tokens`;
+const ENFORCE_RECEIPT = sql`b.usage->>'mode' = 'enforce'`;
+
+/** Token sums, with the 1h cache writes clamped per row as pricing does. */
+function tokenSums(filter?: SQL): SQL {
+  const only = filter ? sql` filter (where ${filter})` : sql``;
+  return sql`
+    coalesce(sum(i.input_tokens)${only}, 0)::bigint::text as input_tokens,
+    coalesce(sum(i.output_tokens)${only}, 0)::bigint::text as output_tokens,
+    coalesce(sum(i.cache_read_tokens)${only}, 0)::bigint::text as cache_read_tokens,
+    coalesce(sum(i.cache_write_tokens)${only}, 0)::bigint::text as cache_write_tokens,
+    coalesce(sum(least(greatest(coalesce(i.cache_write_1h_tokens, 0), 0), coalesce(i.cache_write_tokens, 0)))${only}, 0)::bigint::text as cache_write_1h_tokens`;
+}
 
 /**
  * The requests a backfill recomputes:
@@ -252,16 +256,21 @@ const TOKEN_SUMS = sql`
  *   charge, and limit balances and statistics read it instead of the row.
  */
 function eligible(scope: BackfillScope): SQL {
+  return sql`${matches(scope)}
+    and not exists (
+      select 1 from interaction_billing b
+      where b.interaction_id = i.id and ${ENFORCE_RECEIPT}
+    )`;
+}
+
+/** {@link eligible} without the settled-receipt check. */
+function matches(scope: BackfillScope): SQL {
   return sql`i.model = ${scope.modelId}
     and split_part(i.type, ':', 1) = ${scope.provider}
     and i.type not like '%:audio'
     and i.type <> 'azure:images'
     and (coalesce(i.input_tokens, 0) > 0 or coalesce(i.output_tokens, 0) > 0
-      or coalesce(i.cache_read_tokens, 0) > 0 or coalesce(i.cache_write_tokens, 0) > 0)
-    and not exists (
-      select 1 from interaction_billing b
-      where b.interaction_id = i.id and b.usage->>'mode' = 'enforce'
-    )`;
+      or coalesce(i.cache_read_tokens, 0) > 0 or coalesce(i.cache_write_tokens, 0) > 0)`;
 }
 
 /**

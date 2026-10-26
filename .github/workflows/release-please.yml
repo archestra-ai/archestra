@@ -221,14 +221,6 @@ jobs:
           selection: ${{ runner.temp }}/release-candidate-selection.json
           token: ${{ steps.generate-token.outputs.token }}
 
-      - name: Relay scanned playwright-mcp archives
-        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
-        uses: $/.github/actions/relay-release-candidate
-        with:
-          image_name: playwright-mcp
-          selection: ${{ runner.temp }}/release-candidate-selection.json
-          token: ${{ steps.generate-token.outputs.token }}
-
       - name: Relay scanned sandbox-base archives
         if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
         uses: $/.github/actions/relay-release-candidate
@@ -425,26 +417,6 @@ jobs:
       GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
-  build-and-push-playwright-mcp-docker-image:
-    name: Build and push Playwright MCP Docker image
-    # Ship the browser image before publishing a platform that references it.
-    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: $/.github/workflows/build-playwright-mcp-docker-image.yml
-    needs:
-      - release-please
-    permissions:
-      contents: read # Required to invoke the reusable image build workflow.
-      id-token: write # Required for Workload Identity Federation.
-    with:
-      push_to_gcr: true
-      version: ${{ needs.release-please.outputs.platform_version }}
-      checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
-    secrets:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      GCP_SERVICE_ACCOUNT_NAME: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-
   build-and-push-sandbox-base-docker-image:
     name: Build and push Sandbox Base Docker image
     # The sandbox base ships with every platform release: the engine pulls it as
@@ -529,7 +501,6 @@ jobs:
       - build-and-push-mcp-server-docker-image
       - build-and-push-agent-catalog-images
       - build-and-push-p4-shim-docker-image
-      - build-and-push-playwright-mcp-docker-image
       - build-and-push-sandbox-base-docker-image
       - build-and-push-platform-docker-image-to-dockerhub
       - publish-platform-helm-chart
@@ -695,7 +666,6 @@ jobs:
       - build-and-push-mcp-server-docker-image
       - build-and-push-agent-catalog-images
       - build-and-push-p4-shim-docker-image
-      - build-and-push-playwright-mcp-docker-image
       - build-and-push-sandbox-base-docker-image
       - build-and-push-platform-docker-image-to-dockerhub
       - publish-platform-helm-chart
@@ -713,7 +683,6 @@ jobs:
           MCP_RESULT: ${{ needs.build-and-push-mcp-server-docker-image.result }}
           AGENT_CATALOG_RESULT: ${{ needs.build-and-push-agent-catalog-images.result }}
           P4_SHIM_RESULT: ${{ needs.build-and-push-p4-shim-docker-image.result }}
-          PLAYWRIGHT_RESULT: ${{ needs.build-and-push-playwright-mcp-docker-image.result }}
           SANDBOX_RESULT: ${{ needs.build-and-push-sandbox-base-docker-image.result }}
           PLATFORM_RESULT: ${{ needs.build-and-push-platform-docker-image-to-dockerhub.result }}
           HELM_RESULT: ${{ needs.publish-platform-helm-chart.result }}
@@ -730,7 +699,6 @@ jobs:
           • MCP server image: \`${MCP_RESULT}\`
           • agent catalog images: \`${AGENT_CATALOG_RESULT}\`
           • p4 shim image: \`${P4_SHIM_RESULT}\`
-          • browser MCP image: \`${PLAYWRIGHT_RESULT}\`
           • sandbox base image: \`${SANDBOX_RESULT}\`
           • Helm chart: \`${HELM_RESULT}\`
           • publish GitHub release: \`${PUBLISH_RESULT}\`

@@ -6,7 +6,7 @@ name: Update Client Versions
 # - agent-runtime: the agent CLIs installed in the agent catalog images. Daily,
 #   held back by a cooldown, and left for review because the image validation
 #   builds are not required checks.
-# - playwright-mcp: browser MCP image + patched Node digests. Daily, review required.
+# - playwright-mcp: upstream browser MCP image. Daily, review required.
 on:
   schedule:
     - cron: "23 * * * *"
@@ -442,7 +442,7 @@ jobs:
           exit 1
 
   playwright-mcp:
-    name: Propose Playwright MCP image updates
+    name: Propose upstream Playwright MCP updates
     if: github.repository == 'archestra-ai/archestra' && github.event.schedule != '23 * * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -455,7 +455,7 @@ jobs:
         working-directory: ./platform
     env:
       BRANCH: automation/playwright-mcp
-      IMAGE_DIR: platform/docker_images/playwright_mcp
+      IMAGE_FILE: platform/backend/src/playwright-mcp-image.json
     steps:
       - name: Checkout trusted main branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -500,15 +500,15 @@ jobs:
 
       # Execute only the updater from trusted main, writing immutable image inputs
       # into the automation worktree after validating both architectures.
-      - name: Update Playwright MCP image inputs
+      - name: Update upstream Playwright MCP
         id: update
         env:
           TARGET: ${{ steps.branch.outputs.path }}
         run: |
           set -euo pipefail
           pnpm --silent --dir backend update:playwright-mcp \
-            --image-dir "$TARGET/$IMAGE_DIR" | tee "$RUNNER_TEMP/playwright-mcp.log"
-          if git -C "$TARGET" diff --quiet -- "$IMAGE_DIR"; then
+            --file "$TARGET/$IMAGE_FILE" | tee "$RUNNER_TEMP/playwright-mcp.log"
+          if git -C "$TARGET" diff --quiet -- "$IMAGE_FILE"; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -525,13 +525,13 @@ jobs:
           SUMMARY: ${{ steps.update.outputs.summary }}
         run: |
           set -euo pipefail
-          git -C "$TARGET" add -- "$IMAGE_DIR/Dockerfile" "$IMAGE_DIR/versions.json"
-          git -C "$TARGET" -c core.hooksPath=/dev/null commit -m "chore: update Playwright MCP image inputs ($SUMMARY)"
+          git -C "$TARGET" add -- "$IMAGE_FILE"
+          git -C "$TARGET" -c core.hooksPath=/dev/null commit -m "chore: update upstream Playwright MCP ($SUMMARY)"
           git -C "$TARGET" push origin "HEAD:refs/heads/$BRANCH"
           echo "pushed=true" >> "$GITHUB_OUTPUT"
 
       # Also recovers a branch pushed by an earlier run whose PR creation failed.
-      # No auto-merge: browser compatibility and image scans require review.
+      # No auto-merge: upstream image changes require compatibility/security review.
       - name: Open or update pull request
         id: pr
         env:
@@ -540,8 +540,8 @@ jobs:
           TARGET: ${{ steps.branch.outputs.path }}
         run: |
           set -euo pipefail
-          if git -C "$TARGET" diff --quiet origin/main HEAD -- "$IMAGE_DIR"; then
-            echo "Playwright MCP image inputs already match main."
+          if git -C "$TARGET" diff --quiet origin/main HEAD -- "$IMAGE_FILE"; then
+            echo "Upstream Playwright MCP already matches main."
             exit 0
           else
             status=$?
@@ -550,10 +550,10 @@ jobs:
             fi
           fi
 
-          pr_title="chore: update Playwright MCP image inputs"
-          pr_body="Update the built-in browser MCP and its patched Node replacement using immutable multi-architecture image digests. MCP stable releases wait at least seven days; Node security rebuilds and exact Debian security-library pins must meet their fixed-version floors and cannot downgrade. Both architectures must supply matching runtime metadata and signed APT candidates. Unused global package managers are removed from the runtime.
+          pr_title="chore: update upstream Playwright MCP"
+          pr_body="Update the built-in browser to the newest stable upstream Playwright MCP release that has been public for at least seven days. Pin its immutable multi-architecture image digest and record the actual upstream Node/Playwright versions for review.
 
-          Review and merge only after both **Validate Playwright MCP** checks pass, including startup, MCP calls, browser navigation and screenshots. The upstream source image may still ship older Node; the wrapper replaces its executable with the separately pinned patched binary."
+          This uses Microsoft’s published image unchanged. Review upstream release notes, runtime vulnerabilities and browser compatibility before merging; a version update does not guarantee that upstream has patched every known CVE."
           owner="${GH_REPO%%/*}"
           existing_pr="$(gh api "repos/$GH_REPO/pulls?state=open&head=$owner:$BRANCH&base=main&per_page=1" --jq '.[0].number // empty')"
           if [[ -z "$existing_pr" ]]; then
@@ -629,7 +629,7 @@ jobs:
             report "Agent runtime CLI" "$RUNTIME_RESULT" "$RUNTIME_PUSHED" \
               "$RUNTIME_SUMMARY" "$RUNTIME_PULL_REQUEST_URL" " — merge once the Validate agent-* checks pass."
             report "Playwright MCP image" "$PLAYWRIGHT_RESULT" "$PLAYWRIGHT_PUSHED" \
-              "$PLAYWRIGHT_SUMMARY" "$PLAYWRIGHT_PULL_REQUEST_URL" " — review both Validate Playwright MCP checks before merging."
+              "$PLAYWRIGHT_SUMMARY" "$PLAYWRIGHT_PULL_REQUEST_URL" " — review upstream runtime vulnerabilities and browser compatibility before merging."
           )"
           if [[ -z "$message" ]]; then
             exit 0

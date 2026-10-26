@@ -49,6 +49,7 @@ import {
 } from "@/models";
 import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import playwrightMcpImage from "@/playwright-mcp-image.json";
 import { secretManager } from "@/secrets-manager";
 import { verifySecretsEncryptionKey } from "@/secrets-manager/encryption-key-guard";
 import { createAppBacking } from "@/services/apps/app-mcp-backing";
@@ -577,9 +578,9 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
 async function seedPlaywrightCatalog(): Promise<void> {
   const LEGACY_PLAYWRIGHT_MCP_SERVER_NAME = "playwright-browser";
   const playwrightLocalConfig = {
-    // The release-owned wrapper replaces upstream's Node runtime with a patched
-    // build while retaining Microsoft's pinned Playwright/Chromium dependencies.
-    dockerImage: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/playwright-mcp:${config.api.version}`,
+    // Track the upstream MCP image by immutable digest. Its runtime/package
+    // versions are recorded together for the daily client-version updater.
+    dockerImage: playwrightMcpImage.image,
     transportType: "streamable-http" as const,
     // Use an absolute path: upstream images have changed their working directory.
     command: "node",

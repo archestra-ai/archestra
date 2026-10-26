@@ -78,3 +78,7 @@ existing container names. No persistent infrastructure or credentials are create
 
 Verify extracted evidence with `python3 benchmarks/cross-proxy/verify.py PATH_TO_EXTRACTED/cross-proxy`.
 Preserve or move previous result directories before rerunning locally.
+
+## Database pressure sensitivity mode
+
+`gh workflow run llm-proxy-benchmark.yml --ref YOUR_BRANCH -f compare_litellm=true -f compare_litellm_sensitivity=true` runs a bounded two-repeat matrix with 5,000 JSON / 1,000 SSE measurements per repeat, the same warmup/client/proxy settings, an 8 GiB PostgreSQL limit and a fresh database per profile/run. The driver is capped at 15 minutes. No primary samples are replaced or pooled with this check. Before/after cgroup snapshots include memory events/pressure/peak/swap and CPU throttling/pressure counters. The verifier retains the original strict primary counts and checks separate known sensitivity counts; it writes `verification-recomputed.json`, preserving archived evidence bytes.

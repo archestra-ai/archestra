@@ -53,6 +53,10 @@ Streaming first content (TTFT) means the first decoded nonempty content SSE even
 - Peak sampled container CPU was 135.69% for Archestra, 125.35% for LiteLLM content, 127.95% for LiteLLM default and 103.75% for PostgreSQL (100% = one logical CPU). Proxy quotas were 400% and the database quota 200%; this gives no evidence of sustained CPU-quota saturation. Exact cgroup throttling-event and swap counters were not captured, so zero throttling cannot be asserted. PostgreSQL's high sampled memory usage is retained as a limit on interpretation.
 - One worker can bottleneck on its event loop/interpreter/native dependencies despite four allocated CPUs. This experiment matches the existing headline's one-process configuration; it does not compare each product's best tuned four-worker capacity. No supported accounting defaults were disabled to improve performance, and the spend-queue warnings remain in the evidence.
 
+## Database lifecycle sensitivity (pending)
+
+The original shared PostgreSQL instance persisted separate profile databases across all repeats, accumulating tmpfs data and reaching about 95% of its 2 GiB memory limit. This is a plausible pressure/cache confound; sampled Docker memory alone cannot distinguish the two. A separate bounded matrix with fresh per-profile/run databases, an equal 8 GiB database limit and direct cgroup pressure/throttle counters is running at [40407997195](https://github.com/archestra-ai/archestra/actions/runs/40407997195). Until it is reviewed, the primary table describes the original process-count-matched configuration and is not a fully isolated causal estimate of gateway implementation overhead.
+
 ## Repeat spread
 
 Each row reports one complete measured block; JSON n=10,000, SSE n=3,000.

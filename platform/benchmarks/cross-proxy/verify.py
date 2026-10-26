@@ -8,7 +8,7 @@ sensitivity=settings['mode']=='sensitivity'
 repeats=2 if sensitivity else 4
 requests=5000 if sensitivity else 10000
 stream_requests=1000 if sensitivity else 3000
-rows=1+400+requests+stream_requests
+rows_per_run=1+400+requests+stream_requests
 memory_gib=8 if sensitivity else 2
 if (root/'profile.json').exists():
     assert settings['repeats']==repeats and settings['requests']==requests and settings['streamRequests']==stream_requests
@@ -36,7 +36,7 @@ for role in roles:
         limits=info['HostConfig']
         assert limits['CpusetCpus']=='2-5' and limits['NanoCpus']==4_000_000_000 and limits['Memory']==8*1024**3
         assert limits['NetworkMode']=='host' and not info['State']['OOMKilled']
-        expected=rows if sensitivity else repeat*rows
+        expected=rows_per_run if sensitivity else repeat*rows_per_run
         content=0 if role=='litellm-default' else expected
         assert (root/f'{role}-{repeat}-accounting.txt').read_text().strip()==f'{expected}|{expected}|{content}'
         if role!='archestra':
@@ -55,7 +55,7 @@ for line in (root/'resources.jsonl').read_text().splitlines():
     agg['maxMemoryBytes']=max(agg['maxMemoryBytes'],float(value)*units[unit])
 for role in roles: assert resources[f'archestra-cross-proxy-{role}']['samples']>0
 upstream=json.loads((root/'upstream-all.json').read_text())
-assert len(upstream)==rows*repeats*len(roles)*2 and len({s['id'] for s in upstream})==len(upstream)
+assert len(upstream)==rows_per_run*repeats*len(roles)*2 and len({s['id'] for s in upstream})==len(upstream)
 assert all(s['user']=='benchmark-user' for s in upstream)
 direct=[]
 for f in root.glob('direct-*.json'):
@@ -66,5 +66,5 @@ assert len(direct)==2*repeats*len(roles)
 summary=json.loads((root/'summary.json').read_text())
 assert len(summary)==6 and sum(s['samples'] for s in summary)==(requests+stream_requests)*repeats*len(roles) and all(s['errors']==0 for s in summary)
 verification={'mode':settings['mode'],'measuredRequests':(requests+stream_requests)*repeats*len(roles),'upstreamRequestsIncludingWarmupProbesAndControls':len(upstream),'responseBytes':{str(k):list(v) for k,v in response_bytes.items()},'allConstantUser':True,'allCorrelationsUnique':True,'allAccountingChecksPassed':True,'allProxyLimitsMatched':True,'noProxyOOM':True,'resourcesWholeProcessLifetime':dict(resources),'directControlBlocks':direct,'profiles':observed}
-(root/'verification.json').write_text(json.dumps(verification,indent=2))
+(root/'verification-recomputed.json').write_text(json.dumps(verification,indent=2))
 print(json.dumps({k:v for k,v in verification.items() if k not in ['directControlBlocks','profiles']},indent=2))

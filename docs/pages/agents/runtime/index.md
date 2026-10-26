@@ -52,7 +52,7 @@ Each run gets a temporary virtual key. Provider keys stay in Archestra.
 - **Claude Code:** your Claude Pro or Max subscription, or an API key for Anthropic, Amazon Bedrock, or Anthropic on Vertex AI.
 - **Codex:** your ChatGPT subscription, connected under **Model Providers**. An OpenAI API key does not replace it.
 - **Grok Build:** your SuperGrok subscription, connected under **Model Providers**, or an xAI API key. Pick an xAI model, such as `grok-4.7`.
-- **Kimi Code:** a Kimi for Coding membership key or a Moonshot platform key, added as a Moonshot (Kimi) key under **Model Providers**. Pick a Kimi model, such as `k3.1-pro`. Models of other providers work too if they use Chat Completions.
+- **Kimi Code:** a Kimi for Coding membership key or a Kimi API Platform key, added as a Moonshot (Kimi) key under **Model Providers**. Pick a Kimi model, such as `k3.1-pro`. Models of other providers work too if they use Chat Completions.
 - **Other agents:** any [model provider](/docs/llm-proxy/providers) configured in Archestra.
 
 What to know:

@@ -125,9 +125,9 @@ export function getAgentCatalogTemplates(
       id: "kimi",
       name: AGENT_CATALOG_TEMPLATE_NAMES.kimi,
       summary:
-        "Moonshot AI's coding agent. Runs on each person's Kimi for Coding membership or a Moonshot platform key.",
+        "Kimi's coding agent. Runs on each person's Kimi for Coding membership or a Kimi API Platform key.",
       icon: CATALOG_AGENT_ICONS.kimi,
-      description: `Moonshot AI's coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
+      description: `Kimi's coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
       platformName: appName,
       image: images.kimi,
     }),

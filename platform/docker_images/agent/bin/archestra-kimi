@@ -98,7 +98,7 @@ def positive(name):
 def kimi_capabilities(model_id):
     # Kimi Code matches thinking support by model name only for its own
     # catalog; a custom provider sends `thinking: disabled`, which K3.1 Pro
-    # refuses. Moonshot's coding models think; K3.1 Pro only thinks.
+    # refuses. Kimi's coding models think; K3.1 Pro only thinks.
     name = model_id.lower()
     capabilities = ["tool_use"]
     if re.match(r"^(kimi-)?(k3|for-coding)", name) or "thinking" in name:

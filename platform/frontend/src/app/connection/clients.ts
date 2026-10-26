@@ -299,7 +299,7 @@ const POPULAR_GENERIC_CLIENTS: (Pick<
   {
     id: "kimi-code",
     label: "Kimi Code",
-    sub: "Moonshot AI coding agent",
+    sub: "Kimi coding agent",
     ...markFields(KIMI_MARK),
   },
   {

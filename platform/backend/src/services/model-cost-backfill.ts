@@ -163,6 +163,19 @@ class ModelCostBackfillService {
     if (missesCachePrice({ pricing, instancePriced, tokens: totals.tokens })) {
       throw new ApiError(400, UNAVAILABLE_MESSAGES.needs_custom_price);
     }
+    // Checked up front: one overflowing row would fail its batch every retry
+    // and leave the history half rewritten.
+    const largestCost = priceSums({
+      pricing,
+      provider: model.provider,
+      tokens: totals.largestRequestBound,
+    });
+    if (largestCost > MAX_STORED_COST) {
+      throw new ApiError(
+        400,
+        "At these prices one past request would cost more than $999.99, more than a request's cost can hold. Check the prices.",
+      );
+    }
     // The snapshot is taken from the prices read above. Holding the model row
     // while the backfill is created means no edit or catalog sync lands in
     // between; one that landed during the totals query refuses the start.
@@ -412,6 +425,9 @@ const THROTTLE_RATIO = 9;
  * passed their timestamp; the sweep revisits this much time before the cutoff.
  */
 const SWEEP_WINDOW_MS = 15 * TimeInMs.Minute;
+
+/** `interactions.cost` is `numeric(13,10)`. */
+const MAX_STORED_COST = 999.9999999999;
 
 const PRICES_CHANGED_MESSAGE =
   "This model's prices changed since you saved them. Review the new prices and try again.";

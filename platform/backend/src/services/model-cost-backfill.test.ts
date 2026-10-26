@@ -297,6 +297,37 @@ describe("recomputing past costs", () => {
     });
   });
 
+  test("nothing starts when one request would cost more than its column holds", async ({
+    makeAgent,
+    makeInteraction,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent();
+    // $7,500 per million tokens (a typo for $75) on a 200k-token request.
+    const model = await makeAnthropicModel({ input: "7500", output: "1" });
+    await makeInteraction(agent.id, {
+      type: "anthropic:messages",
+      model: model.modelId,
+      inputTokens: 200_000,
+      outputTokens: 10,
+      cost: "3.0000000000",
+      createdAt: new Date(Date.now() - DAY_MS),
+    });
+
+    await expect(
+      modelCostBackfillService.start({
+        model,
+        since: null,
+        organizationId: org.id,
+        userId: user.id,
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(await modelCostBackfillService.getLatest(model.id)).toBeNull();
+  });
+
   test("nothing starts when the prices changed after the caller saved them", async ({
     makeOrganization,
     makeUser,

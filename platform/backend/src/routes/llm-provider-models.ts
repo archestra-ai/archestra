@@ -1098,7 +1098,22 @@ async function requireEditableModel(params: {
   return model;
 }
 
-const TIME_ZONES = new Set(["UTC", ...Intl.supportedValuesOf("timeZone")]);
+// A named IANA zone the runtime knows. `Intl.supportedValuesOf` lists only
+// canonical names and misses current ones browsers report (Asia/Kolkata,
+// Europe/Kyiv); offsets are refused because Postgres reads their sign inverted.
 const TimeZoneSchema = z
   .string()
-  .refine((value) => TIME_ZONES.has(value), "Unknown time zone");
+  .max(64)
+  .refine(isNamedTimeZone, "Unknown time zone");
+
+function isNamedTimeZone(value: string): boolean {
+  if (!/^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+)*$/.test(value)) {
+    return false;
+  }
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}

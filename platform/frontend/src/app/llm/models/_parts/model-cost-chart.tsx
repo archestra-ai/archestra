@@ -116,9 +116,13 @@ export function CostChart({
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (n === 0) return;
+    // From an exact time inside a day, the first step back is that day's start.
+    const atBarStart = bars[sinceIdx]?.start.getTime() === sinceMs;
     const next =
       event.key === "ArrowLeft"
-        ? sinceIdx - 1
+        ? atBarStart
+          ? sinceIdx - 1
+          : sinceIdx
         : event.key === "ArrowRight"
           ? sinceIdx + 1
           : event.key === "Home"
@@ -214,7 +218,7 @@ export function CostChart({
         aria-valuemin={0}
         aria-valuemax={Math.max(0, n - 1)}
         aria-valuenow={sinceIdx}
-        aria-valuetext={format(since, "MMM d, yyyy, h:mm a")}
+        aria-valuetext={sliderValueText(since, bars[sinceIdx])}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
@@ -533,4 +537,11 @@ function ZeroCostLine({
       )}
     </div>
   );
+}
+
+/** What the start slider announces: the start, and its day's cost both ways. */
+function sliderValueText(since: Date, bar: Bar | undefined): string {
+  const start = format(since, "MMM d, yyyy, h:mm a");
+  if (!bar) return start;
+  return `${start}. ${barLabel(bar)}: ${formatCurrency(bar.recordedCost)} recorded, ${formatCurrency(bar.recomputedCost)} at the new prices`;
 }

@@ -67,10 +67,20 @@ export function ModelCostBackfillSection({
   // Keyed by value (the caller rebuilds the object every render). While a
   // price is invalid the query pauses and the last answer stays on screen.
   const pricesKey = prices ? JSON.stringify(prices) : null;
-  const debouncedPricesKey = useDebouncedValue(pricesKey, PRICE_DEBOUNCE_MS);
+  const debouncedPricesKey = useDebouncedValue(pricesKey, INPUT_DEBOUNCE_MS);
   const queryPrices = useMemo<ModelCostBackfillPrices | null>(
     () => (debouncedPricesKey ? JSON.parse(debouncedPricesKey) : null),
     [debouncedPricesKey],
+  );
+
+  // Dragging the start crosses a bar per pointer move; query where it settles.
+  const debouncedSinceMs = useDebouncedValue(
+    sinceDate.getTime(),
+    INPUT_DEBOUNCE_MS,
+  );
+  const querySince = useMemo(
+    () => new Date(debouncedSinceMs),
+    [debouncedSinceMs],
   );
 
   const latest = useModelCostBackfill({ modelId, enabled: visible });
@@ -78,7 +88,7 @@ export function ModelCostBackfillSection({
   const preview = useModelCostBackfillPreview({
     modelId,
     prices: queryPrices ?? EMPTY_PRICES,
-    since: sinceDate,
+    since: querySince,
     enabled: visible && queryPrices !== null,
   });
   const allPreview = useModelCostBackfillPreview({
@@ -253,7 +263,7 @@ type Availability = ModelCostBackfillPreview["availability"];
 
 const DEFAULT_PRESET_ID = "30d";
 const DEFAULT_PRESET_MS = 30 * 24 * 3600_000;
-const PRICE_DEBOUNCE_MS = 300;
+const INPUT_DEBOUNCE_MS = 300;
 /** Earlier than any recorded request: "everything". Stable for query keys. */
 const ALL_HISTORY = new Date(0);
 const EMPTY_PRICES: ModelCostBackfillPrices = {
@@ -360,10 +370,7 @@ function CountFigure({
   selected: boolean;
 }) {
   return (
-    <span
-      className={cn("block transition-opacity", loading && "opacity-50")}
-      aria-live="polite"
-    >
+    <span className={cn("block transition-opacity", loading && "opacity-50")}>
       <span
         className={cn(
           "block text-sm leading-tight tabular-nums",

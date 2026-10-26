@@ -85,11 +85,10 @@ describe("model cost backfill routes", () => {
 
     const audit = await AuditLogModel.findPaginated({
       organizationId: ctx.organizationId,
-      resourceId: model.id,
       limit: 10,
       offset: 0,
     });
-    // The refused second start is recorded too, as a failure.
+    // The refused second start is recorded too, as a failure; previews aren't.
     expect(audit.data).toHaveLength(2);
     expect(audit.data).toEqual(
       expect.arrayContaining([
@@ -112,7 +111,9 @@ describe("model cost backfill routes", () => {
     );
   });
 
-  test("rejects an unknown time zone", async ({ makeMember }) => {
+  test("accepts named time zones and rejects anything else", async ({
+    makeMember,
+  }) => {
     await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
     const model = await createModel();
     const response = await ctx.app.inject({
@@ -121,6 +122,22 @@ describe("model cost backfill routes", () => {
       payload: { timeZone: "Mars/Olympus_Mons" },
     });
     expect(response.statusCode).toBe(400);
+
+    // Current names browsers report, missing from the canonical list.
+    for (const timeZone of ["Asia/Kolkata", "Europe/Kyiv", "Etc/UTC"]) {
+      const named = await ctx.app.inject({
+        method: "POST",
+        url: `/api/llm-models/${model.id}/cost-backfill/preview`,
+        payload: { timeZone },
+      });
+      expect(named.statusCode, `${timeZone}: ${named.body}`).toBe(200);
+    }
+    const offset = await ctx.app.inject({
+      method: "POST",
+      url: `/api/llm-models/${model.id}/cost-backfill/preview`,
+      payload: { timeZone: "+05:30" },
+    });
+    expect(offset.statusCode).toBe(400);
   });
 
   test("a member who cannot edit the model can neither preview nor start", async ({

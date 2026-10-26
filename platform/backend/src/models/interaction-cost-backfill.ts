@@ -61,7 +61,11 @@ class InteractionCostBackfillModel {
           count(distinct i.user_id) filter (where ${open})::integer as users,
           ${tokenSums(open)},
           coalesce(sum(i.cost) filter (where ${open}), 0)::text as recorded_cost,
-          count(*) filter (where not ${open})::integer as settled_requests
+          count(*) filter (where not ${open})::integer as settled_requests,
+          coalesce(max(i.input_tokens) filter (where ${open}), 0)::text as max_input_tokens,
+          coalesce(max(i.output_tokens) filter (where ${open}), 0)::text as max_output_tokens,
+          coalesce(max(i.cache_read_tokens) filter (where ${open}), 0)::text as max_cache_read_tokens,
+          coalesce(max(i.cache_write_tokens) filter (where ${open}), 0)::text as max_cache_write_tokens
         from interactions i
         left join interaction_billing b
           on b.interaction_id = i.id and ${ENFORCE_RECEIPT}
@@ -76,6 +80,16 @@ class InteractionCostBackfillModel {
         recordedCost: Number(row.recorded_cost),
         tokens: toTokenSums(row),
         settledRequests: row.settled_requests,
+        // Each count's largest value, from whichever request: pricing them
+        // together bounds what any one request can cost. Cache writes count
+        // as 1h writes, the dearer kind.
+        largestRequestBound: {
+          inputTokens: Number(row.max_input_tokens),
+          outputTokens: Number(row.max_output_tokens),
+          cacheReadTokens: Number(row.max_cache_read_tokens),
+          cacheWriteTokens: Number(row.max_cache_write_tokens),
+          cacheWrite1hTokens: Number(row.max_cache_write_tokens),
+        },
       };
     });
   }
@@ -202,6 +216,8 @@ export interface CostWindowTotals {
   recordedCost: number;
   tokens: TokenSums;
   settledRequests: number;
+  /** Token counts no single request in the window exceeds. */
+  largestRequestBound: TokenSums;
 }
 
 interface BatchCursor {
@@ -324,6 +340,10 @@ interface CostWindowRow extends TokenSumColumns {
   users: number;
   recorded_cost: string;
   settled_requests: number;
+  max_input_tokens: string;
+  max_output_tokens: string;
+  max_cache_read_tokens: string;
+  max_cache_write_tokens: string;
 }
 
 interface CostBackfillDbRow extends Record<string, unknown> {

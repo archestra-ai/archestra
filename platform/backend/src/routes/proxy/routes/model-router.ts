@@ -1,9 +1,11 @@
 import {
   credentialRequiresPerUserScope,
   hasArchestraTokenPrefix,
+  isChatCompletionsOnlyRouterProvider,
   LLM_PROXY_OAUTH_SCOPE,
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
   perUserCredentialLabel,
+  providerDisplayNames,
   providerHasEndpointLocalModels,
   type ResourceVisibilityScope,
   RouteId,
@@ -56,6 +58,7 @@ import {
   githubCopilotAdapterFactory,
   githubCopilotResponsesAdapterFactory,
   groqAdapterFactory,
+  kimiAdapterFactory,
   makeOpenAiCompatibleEmbeddingsAdapterFactory,
   minimaxAdapterFactory,
   mistralAdapterFactory,
@@ -240,6 +243,7 @@ const openAiWireProviders = {
   deepseek: deepseekAdapterFactory,
   "github-copilot": githubCopilotAdapterFactory,
   groq: groqAdapterFactory,
+  kimi: kimiAdapterFactory,
   minimax: minimaxAdapterFactory,
   mistral: mistralAdapterFactory,
   ollama: ollamaAdapterFactory,
@@ -560,6 +564,15 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
       request,
       reply,
       nativeResponsesAdapter,
+    );
+  }
+
+  // The shared list keeps this refusal, the model picker and the runtime
+  // launch preflight in agreement: see CHAT_COMPLETIONS_ONLY_ROUTER_PROVIDERS.
+  if (isChatCompletionsOnlyRouterProvider(resolution.provider)) {
+    throw new ApiError(
+      501,
+      `${providerDisplayNames[resolution.provider]} models are available through the model router's Chat Completions endpoint only: the Responses translation cannot carry the reasoning their thinking models need on tool-call turns.`,
     );
   }
 

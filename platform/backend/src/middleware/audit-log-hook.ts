@@ -383,6 +383,8 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "route", value: "/api/projects/:id/pin" },
   { kind: "route", value: "/api/projects/:id/instructions" },
   { kind: "route", value: "/api/apps/:appId/diagnostics" },
+  // Read-only: prices a recompute without changing anything.
+  { kind: "route", value: "/api/llm-models/:id/cost-backfill/preview" },
   { kind: "route", value: "/api/apps/:appId/screenshot" },
   { kind: "route", value: "/api/apps/:appId/open-in-chat" },
   { kind: "route", value: "/api/apps/external/:mcpServerId/open-in-chat" },

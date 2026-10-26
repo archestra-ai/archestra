@@ -15,7 +15,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { sanitizeOutputLimit } from "@/clients/models-dev-client";
-import db, { schema, withDbTransaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
 import logger from "@/logging";
 import { resolveBedrockAwsPrices } from "@/services/bedrock-aws-pricing";
@@ -254,6 +254,20 @@ class ModelModel {
       .select()
       .from(schema.modelsTable)
       .where(eq(schema.modelsTable.id, id));
+
+    return result || null;
+  }
+
+  /** The model row, locked against concurrent edits until `tx` ends. */
+  static async findByIdForUpdate(
+    id: string,
+    tx: Transaction,
+  ): Promise<Model | null> {
+    const [result] = await tx
+      .select()
+      .from(schema.modelsTable)
+      .where(eq(schema.modelsTable.id, id))
+      .for("update");
 
     return result || null;
   }

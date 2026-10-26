@@ -25,6 +25,7 @@ import { handleInteractionUserActivityRebuild } from "./interaction-user-activit
 import { handleKbBm25StatsRefresh } from "./kb-bm25-stats-refresh-handler";
 import { handleLlmModelSync } from "./llm-model-sync-handler";
 import { handleMcpToolDescriptionBackfill } from "./mcp-tool-description-backfill-handler";
+import { handleModelCostBackfill } from "./model-cost-backfill-handler";
 import { handleP4ShimReconcile } from "./p4-shim-reconcile-handler";
 import { handlePermissionSync } from "./permission-sync-handler";
 import { handlePluginGithubSync } from "./plugin-github-sync-handler";
@@ -114,6 +115,17 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler(
     "interaction_session_preview_backfill",
     handleInteractionSessionPreviewBackfill,
+  );
+  // Two types for one handler: the periodic check resumes unfinished
+  // backfills, the one-off starts a new one immediately. They can't share a
+  // type: a queued one-off would make boot skip seeding the periodic task.
+  taskQueueService.registerHandler(
+    "check_due_model_cost_backfills",
+    handleModelCostBackfill,
+  );
+  taskQueueService.registerHandler(
+    "model_cost_backfill",
+    handleModelCostBackfill,
   );
   taskQueueService.registerHandler(
     "mcp_tool_description_backfill",

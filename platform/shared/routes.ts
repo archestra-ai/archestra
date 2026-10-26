@@ -641,6 +641,9 @@ export const RouteId = {
   GetLlmModelIdsByKey: "getLlmModelIdsByKey",
   GetLlmModelOptions: "getLlmModelOptions",
   UpdateModel: "updateModel",
+  PreviewModelCostBackfill: "previewModelCostBackfill",
+  StartModelCostBackfill: "startModelCostBackfill",
+  GetModelCostBackfill: "getModelCostBackfill",
   BulkUpdateModels: "bulkUpdateModels",
 
   // Limits Routes

@@ -898,6 +898,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "connector run execution log",
   },
+  modelCostBackfillsTable: {
+    audited: false,
+    reason:
+      "background job state; starting a backfill is audited at its route, and the worker's progress writes are not admin actions",
+  },
   scheduleTriggerRunsTable: {
     audited: false,
     reason: "schedule trigger run execution log",

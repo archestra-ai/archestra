@@ -2,7 +2,7 @@
 title: MS Teams
 description: Connect Archestra agents to Microsoft Teams channels
 order: 4
-lastUpdated: 2026-10-21
+lastUpdated: 2026-10-26
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -120,7 +120,7 @@ Share a PDF in a group chat, and the agent reads it after you sign in with Micro
 1. In **Settings → Messaging Channels → MS Teams**, open the setup and go to **Read Files**, on the **Group chats** tab.
 2. In the [Microsoft Entra admin center](https://entra.microsoft.com/), open the bot's app under **App registrations**. On **Authentication**, add a **Web** platform with the redirect URI that the step shows.
 3. On **API permissions**, add **Microsoft Graph → Delegated permissions → Files.Read** and **offline_access**.
-4. Turn on **Ask people to sign in for group-chat files**, then click **Connect** on the last step.
+4. Turn on **Ask people to sign in for group-chat files**. It saves as soon as you flip it. To change it later, use the **Group-chat files** switch on the **Setup MS Teams** card.
 
 When it works, the first file a person shares with the bot brings a **Sign in with Microsoft** card. After they sign in, the agent answers that message. Their later files are answered right away.
 

@@ -27,6 +27,7 @@ import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
 import {
   useMsTeamsChatOpsConfig,
   useUpdateChatOpsConfigInQuickstart,
+  useUpdateMsTeamsGroupChatFileSignIn,
 } from "@/lib/chatops/chatops-config.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import { usePublicBaseUrl } from "@/lib/config/config.query";
@@ -54,6 +55,7 @@ export function MsTeamsSetupDialog({
   const msTeams = chatOpsProviders?.find((p) => p.id === "ms-teams");
   const creds = msTeams?.credentials;
   const { data: msTeamsConfig } = useMsTeamsChatOpsConfig(open);
+  const groupChatMutation = useUpdateMsTeamsGroupChatFileSignIn();
 
   const [saving, setSaving] = useState(false);
 
@@ -61,12 +63,10 @@ export function MsTeamsSetupDialog({
   const [sharedAppId, setSharedAppId] = useState("");
   const [sharedAppSecret, setSharedAppSecret] = useState("");
   const [sharedTenantId, setSharedTenantId] = useState("");
-  // null until the person flips it, so reopening shows the saved setting.
-  const [groupChatFileSignIn, setGroupChatFileSignIn] = useState<
-    boolean | null
-  >(null);
-  const groupChatFileSignInValue =
-    groupChatFileSignIn ?? msTeamsConfig?.groupChatFileSignIn ?? false;
+  // Saved the moment it flips; show the requested value while that runs.
+  const groupChatFileSignInValue = groupChatMutation.isPending
+    ? (groupChatMutation.variables ?? false)
+    : (msTeamsConfig?.groupChatFileSignIn ?? false);
 
   // The status endpoint exposes the real App ID (it's not a secret) — prefill
   // it on reconfigure so it also flows into the manifest step. Secret and
@@ -88,7 +88,6 @@ export function MsTeamsSetupDialog({
       setSharedAppId("");
       setSharedAppSecret("");
       setSharedTenantId("");
-      setGroupChatFileSignIn(null);
     }
   };
 
@@ -121,7 +120,8 @@ export function MsTeamsSetupDialog({
             appName={configuredAppName}
             redirectUri={msTeamsConfig?.signInRedirectUri ?? ""}
             groupChatEnabled={groupChatFileSignInValue}
-            onGroupChatEnabledChange={setGroupChatFileSignIn}
+            groupChatSaving={groupChatMutation.isPending}
+            onGroupChatEnabledChange={groupChatMutation.mutate}
           />
         );
       }
@@ -163,6 +163,8 @@ export function MsTeamsSetupDialog({
     savedAppId,
     msTeamsConfig?.signInRedirectUri,
     groupChatFileSignInValue,
+    groupChatMutation.isPending,
+    groupChatMutation.mutate,
   ]);
 
   const lastStepAction = {
@@ -178,8 +180,6 @@ export function MsTeamsSetupDialog({
         if (sharedAppId) body.appId = sharedAppId;
         if (sharedAppSecret) body.appSecret = sharedAppSecret;
         if (sharedTenantId) body.tenantId = sharedTenantId;
-        if (groupChatFileSignIn !== null)
-          body.groupChatFileSignIn = groupChatFileSignIn;
         const updateResult = await mutation.mutateAsync(body);
         if (updateResult?.success) {
           handleOpenChange(false);
@@ -704,6 +704,7 @@ function StepReadFiles({
   appName,
   redirectUri,
   groupChatEnabled,
+  groupChatSaving,
   onGroupChatEnabledChange,
 }: {
   stepNumber: number;
@@ -711,6 +712,7 @@ function StepReadFiles({
   appName: string;
   redirectUri: string;
   groupChatEnabled: boolean;
+  groupChatSaving: boolean;
   onGroupChatEnabledChange: (enabled: boolean) => void;
 }) {
   const [tab, setTab] = useState<ReadFilesTab>("channels");
@@ -838,6 +840,7 @@ function StepReadFiles({
                 <Switch
                   id="ms-teams-group-chat-file-sign-in"
                   checked={groupChatEnabled}
+                  disabled={groupChatSaving}
                   onCheckedChange={onGroupChatEnabledChange}
                 />
                 <Label htmlFor="ms-teams-group-chat-file-sign-in">

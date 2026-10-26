@@ -25,9 +25,9 @@ import {
  *
  * The replayer's own cursor moves are absolute: they turn origin mode off
  * and open the scroll region, and restore both afterwards. A resize or a
- * reset the client sends (RIS, DECSTR) leaves the region open, as it does
- * in tmux and xterm; entering the alternate screen keeps the region the
- * client set.
+ * full reset the client sends (RIS) leaves the region open, as it does in
+ * tmux and xterm; a soft reset (DECSTR) is ignored, as tmux ignores it;
+ * entering the alternate screen keeps the region the client set.
  */
 export function createTerminalReplayer(terminal: Terminal): TerminalReplayer {
   let alternate = false;
@@ -57,16 +57,17 @@ export function createTerminalReplayer(terminal: Terminal): TerminalReplayer {
       region = top === 1 && bottom === terminal.rows ? null : { top, bottom };
     return false;
   });
-  // A full reset (RIS) and a soft reset (DECSTR) open the region, in tmux
-  // as in xterm.
+  // A full reset (RIS) opens the region, in tmux as in xterm.
   terminal.parser.registerEscHandler({ final: "c" }, () => {
     region = null;
     return false;
   });
-  terminal.parser.registerCsiHandler({ intermediates: "!", final: "p" }, () => {
-    region = null;
-    return false;
-  });
+  // tmux does not implement a soft reset (DECSTR), so xterm must not
+  // perform its own: the region, origin mode and attributes stay.
+  terminal.parser.registerCsiHandler(
+    { intermediates: "!", final: "p" },
+    () => true,
+  );
   return {
     async write(content) {
       const { frames, rest } = splitTerminalRecording(unfinished + content);

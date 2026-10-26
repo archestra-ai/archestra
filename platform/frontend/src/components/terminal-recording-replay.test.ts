@@ -270,14 +270,17 @@ test("a reset the client sends opens its scroll region", async () => {
   }
 });
 
-test("a soft reset the client sends opens its scroll region", async () => {
-  // DECSTR resets the margins and keeps the screen.
+test("a soft reset the client sends changes nothing, as in tmux", async () => {
+  // tmux has no DECSTR, so the region and origin mode stay and `ALT` lands
+  // on the second row, as without the reset.
   const terminal = new Terminal({ cols: 20, rows: 5, scrollback: 10_000 });
   try {
     await createTerminalReplayer(terminal).write(
       `${size(20, 5)}before\r\n\x1b[2;4r\x1b[!p\x1b[?6h\x1b[?1049h\x1b[2J\x1b[1;1HALT`,
     );
-    expect(rows(terminal).slice(0, 2)).toEqual(["before", "ALT"]);
+    expect(terminal.buffer.active.baseY).toBe(1);
+    expect(rows(terminal).slice(0, 3)).toEqual(["before", "", "ALT"]);
+    expect(terminal.modes.originMode).toBe(true);
   } finally {
     terminal.dispose();
   }

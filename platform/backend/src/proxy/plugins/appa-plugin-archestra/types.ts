@@ -148,6 +148,13 @@ export type AppaClientAdapter = {
    */
   readonly pendingServersTool?: string;
   /**
+   * On the Anthropic Messages wire, the client answers a call to a tool it
+   * never declared with an error result and goes on with its turn. A denial
+   * then reaches the model through an undeclared notice call, which the next
+   * request restores, while no notice tool is declared.
+   */
+  readonly answersUndeclaredCalls?: true;
+  /**
    * What the person does when this client sends a request without the
    * gateway's tools: where to see the gateway's state in the client, how to
    * sign in to it, and whether to resend or start a new session. Shown with a

@@ -31,7 +31,7 @@ import {
   recordHitlRuling,
   stageHitlReview,
 } from "@/openappa/hitl-review";
-import { buildNoticeArguments } from "@/openappa/notice";
+import { buildNoticeArguments, readNotice } from "@/openappa/notice";
 import { prepareAppaRequest } from "@/openappa/request";
 import { verifyRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as appaService from "@/openappa/service";
@@ -5276,11 +5276,13 @@ describe("withoutRemedySections", () => {
 });
 
 describe("rendering runtime text for this client", () => {
-  test("shows a ruling the session cannot act on without its plans, and where Claude Code shows the gateway", async () => {
+  test("carries a ruling the session cannot act on without its plans, and where Claude Code shows the gateway", async () => {
     // The gateway needs a sign-in, so Claude Code lists no gateway tool and
     // no wait tool: nothing is pending. The ruling still names a plan and a
     // subagent route, which the model would pass on as options; neither can
     // be taken here. The person is sent to /mcp, where the client says why.
+    // The ruling rides an undeclared notice call, which Claude Code answers
+    // with an error and the next request restores.
     const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
     const context = requestContext({ sessionId: "gateway-needs-sign-in" });
     context.headers = { "user-agent": "claude-cli/2.1.300 (external, cli)" };
@@ -5307,12 +5309,17 @@ describe("rendering runtime text for this client", () => {
       .mockResolvedValue(undefined);
     try {
       await plugin.onSessionInit(context);
-      const outcome = (await plugin.onToolCalls({
+      const outcome = await plugin.onToolCalls({
         ...context,
         toolCalls: [{ id: "bash", name: "Bash", arguments: { command: "ls" } }],
-      })) as { decision: string; refusal: { contentMessage: string } };
-      expect(outcome.decision).toBe("refuse");
-      const message = outcome.refusal.contentMessage;
+      });
+      expect(outcome).toMatchObject({ decision: "allow" });
+      const notice = carriedNotice(outcome, "bash");
+      expect(notice).toMatchObject({
+        tool: "Bash",
+        original: { kind: "function", arguments: { command: "ls" } },
+      });
+      const message = notice.result;
       expect(
         message.startsWith("[appa] Blocked: Bash cannot run yet.\n\nWhy:\n"),
       ).toBe(true);
@@ -5414,7 +5421,7 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
-  test("cuts the subagent advice from a ruling with no plan when the session has no gateway tools", async () => {
+  test("cuts the subagent advice from a carried ruling with no plan when the session has no gateway tools", async () => {
     // The runtime advises a subagent route whether or not it offers a plan.
     // A subagent of this client has no gateway tools either, so the advice
     // would contradict the stop instruction the proxy adds.
@@ -5452,12 +5459,12 @@ describe("rendering runtime text for this client", () => {
       .mockResolvedValue(undefined);
     try {
       await plugin.onSessionInit(context);
-      const outcome = (await plugin.onToolCalls({
+      const outcome = await plugin.onToolCalls({
         ...context,
         toolCalls: [{ id: "bash", name: "Bash", arguments: { command: "ls" } }],
-      })) as { decision: string; refusal: { contentMessage: string } };
-      expect(outcome.decision).toBe("refuse");
-      const message = outcome.refusal.contentMessage;
+      });
+      expect(outcome).toMatchObject({ decision: "allow" });
+      const message = carriedNotice(outcome, "bash").result;
       expect(message).toContain("trust is suspicious");
       expect(message).not.toContain("Alternative:");
       expect(message).not.toContain("subagent tool is available");
@@ -5679,13 +5686,14 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
-  test("has Claude Code wait for its MCP servers once in place of a denial it cannot deliver yet", async ({
+  test("has Claude Code wait for its MCP servers once in place of a denial, then carries the next one as a notice", async ({
     makeOrganization,
   }) => {
     // Claude Code declares WaitForMcpServers in the requests it sends before
     // the gateway is connected. The denied call becomes that wait, so the turn
     // goes on and the next request can declare the remedy tools. A session
-    // waits once: after that, a request without the tools is refused as before.
+    // waits once: after that, a denial in a request without the tools rides
+    // an undeclared notice call, and the admitted sibling still runs.
     config.openappa.enabled = true;
     config.openappa.yellEnabled = true;
     const organizationId = (await makeOrganization()).id;
@@ -5741,16 +5749,17 @@ describe("rendering runtime text for this client", () => {
       });
       expect(cancelCalls).not.toHaveBeenCalled();
 
-      const second = (await send()) as {
-        decision: string;
-        refusal: { contentMessage: string };
-      };
-      expect(second.decision).toBe("refuse");
+      const second = await send();
+      expect(second).toMatchObject({
+        decision: "allow",
+        toolCalls: [admitted, { id: "denied" }],
+        blocked: [{ id: "denied", name: "Read" }],
+      });
       // Claude Code's own view of its servers is where the person sees why.
-      expect(second.refusal.contentMessage).toContain(
+      expect(carriedNotice(second, "denied").result).toContain(
         "Run /mcp in Claude Code.",
       );
-      expect(cancelCalls.mock.calls[0][1]).toEqual(["admitted"]);
+      expect(cancelCalls).not.toHaveBeenCalled();
       expect((await yells()).data).toHaveLength(0);
     } finally {
       cancelCalls.mockRestore();
@@ -5758,7 +5767,7 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
-  test("does not answer a denied wait call with another wait call", async () => {
+  test("carries a denied wait call as a notice, not as another wait call", async () => {
     // The wait tool carries a denial only for other tools. A policy that
     // denies the wait tool itself must not see it released anyway.
     const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
@@ -5786,26 +5795,27 @@ describe("rendering runtime text for this client", () => {
       .mockResolvedValue(undefined);
     try {
       await plugin.onSessionInit(context);
-      expect(
-        await plugin.onToolCalls({
-          ...context,
-          toolCalls: [{ id: "wait", name: "WaitForMcpServers", arguments: {} }],
-        }),
-      ).toMatchObject({
-        decision: "refuse",
-        refusal: { reason: "openappa_no_notice_tool", blockedToolId: "wait" },
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [{ id: "wait", name: "WaitForMcpServers", arguments: {} }],
       });
+      expect(outcome).toMatchObject({
+        decision: "allow",
+        toolCalls: [{ id: "wait" }],
+        blocked: [{ id: "wait", name: "WaitForMcpServers" }],
+      });
+      expect(carriedNotice(outcome, "wait").tool).toBe("WaitForMcpServers");
     } finally {
       cancelCalls.mockRestore();
       evaluateToolCalls.mockRestore();
     }
   });
 
-  test("refuses a denial the runtime did not record instead of sending the wait call", async () => {
+  test("carries a denial the runtime did not record instead of sending the wait call", async () => {
     // The runtime answers a wait call's result with the ruling it recorded for
     // that id. A denial made before dispatch, such as malformed arguments, has
-    // no such record, so only the refusal text can deliver its ruling. The
-    // session keeps its one wait for a later denial.
+    // no such record, so only a notice that carries the ruling can deliver it.
+    // The session keeps its one wait for a later denial.
     const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
     const context = requestContext({ sessionId: "unrecorded-denial" });
     context.headers = { "user-agent": "claude-cli/2.1.289 (external, cli)" };
@@ -5835,12 +5845,9 @@ describe("rendering runtime text for this client", () => {
       });
     try {
       await plugin.onSessionInit(context);
-      const first = (await send()) as {
-        decision: string;
-        refusal: { contentMessage: string };
-      };
-      expect(first.decision).toBe("refuse");
-      expect(first.refusal.contentMessage).toContain(
+      const first = await send();
+      expect(first).toMatchObject({ decision: "allow" });
+      expect(carriedNotice(first, "denied").result).toContain(
         "The tool call arguments are not valid JSON.",
       );
       expect(await send()).toMatchObject({
@@ -5853,9 +5860,314 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
-  test("withdraws evaluated calls by id when a child handback shares a refused batch", async ({
-    makeOrganization,
-  }) => {
+  describe("a denial with no declared notice tool", () => {
+    const claudeCodeAgent = "claude-cli/2.1.310 (external, cli)";
+    const ruling = "[appa] Refused: no plan.";
+    const admitted = { id: "admitted", name: "Read", arguments: '{"a":1}' };
+    const denied = {
+      id: "denied",
+      name: "Bash",
+      arguments: '{"command":"ls"}',
+    };
+    const rule = async (params: {
+      sessionId: string;
+      adapter: AppaClaudeCodeAdapter | AppaOpenCodeAdapter;
+      userAgent: string;
+      interactionType: string;
+      declaredTools: { name: string }[];
+    }) => {
+      const plugin = new AppaPluginArchestra([params.adapter]);
+      const context = requestContext({ sessionId: params.sessionId });
+      context.headers = { "user-agent": params.userAgent };
+      context.interactionType = params.interactionType;
+      const trusted = context.resources.get(
+        APPA_PLUGIN_TRUSTED_CONTEXT,
+      ) as Record<string, unknown>;
+      trusted.request = {
+        tools: undefined,
+        customTools: new Set(),
+        declaredTools: params.declaredTools,
+      };
+      await plugin.onSessionInit(context);
+      return plugin.onToolCalls({ ...context, toolCalls: [admitted, denied] });
+    };
+    let cancelCalls: MockInstance<typeof appaService.cancelCalls>;
+    let evaluateToolCalls: MockInstance<typeof appaService.evaluateToolCalls>;
+    beforeEach(() => {
+      cancelCalls = vi
+        .spyOn(appaService, "cancelCalls")
+        .mockResolvedValue(undefined);
+      evaluateToolCalls = vi
+        .spyOn(appaService, "evaluateToolCalls")
+        .mockImplementation(async () => [
+          { kind: "allow" as const },
+          {
+            kind: "deny" as const,
+            feedback: ruling,
+            recorded: true as const,
+            offers: [],
+          },
+        ]);
+    });
+    afterEach(() => {
+      cancelCalls.mockRestore();
+      evaluateToolCalls.mockRestore();
+    });
+
+    test("rides an undeclared notice call on Claude Code's Messages wire, carrying the ruling a refusal would", async () => {
+      const declaredTools = [{ name: "Read" }, { name: "Bash" }];
+      const refused = (await rule({
+        sessionId: "refused-twin",
+        adapter: new AppaClaudeCodeAdapter(),
+        userAgent: claudeCodeAgent,
+        interactionType: "openai:chatCompletions",
+        declaredTools,
+      })) as { decision: string; refusal: { contentMessage: string } };
+      expect(refused.decision).toBe("refuse");
+      cancelCalls.mockClear();
+
+      const outcome = await rule({
+        sessionId: "carried",
+        adapter: new AppaClaudeCodeAdapter(),
+        userAgent: claudeCodeAgent,
+        interactionType: "anthropic:messages",
+        declaredTools,
+      });
+      expect(outcome).toMatchObject({
+        decision: "allow",
+        toolCalls: [admitted, { id: "denied" }],
+        blocked: [{ id: "denied", name: "Bash", reason: ruling }],
+      });
+      expect(carriedNotice(outcome, "denied")).toEqual({
+        id: "denied",
+        tool: "Bash",
+        original: {
+          kind: "function",
+          arguments: { command: "ls" },
+          rawArguments: '{"command":"ls"}',
+        },
+        result: refused.refusal.contentMessage,
+      });
+      expect(cancelCalls).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      {
+        case: "on another wire",
+        adapter: () => new AppaClaudeCodeAdapter(),
+        userAgent: claudeCodeAgent,
+        interactionType: "openai:chatCompletions",
+        declaredTools: [{ name: "Read" }, { name: "Bash" }],
+      },
+      {
+        case: "for a client that may not answer an undeclared call",
+        adapter: () => new AppaOpenCodeAdapter(),
+        userAgent: "opencode/1.17.0",
+        interactionType: "anthropic:messages",
+        declaredTools: [{ name: "Read" }, { name: "Bash" }],
+      },
+      {
+        // The client would run its own tool of that name with the ruling.
+        case: "when the client declares a tool under the notice name",
+        adapter: () => new AppaClaudeCodeAdapter(),
+        userAgent: claudeCodeAgent,
+        interactionType: "anthropic:messages",
+        declaredTools: [
+          { name: "Read" },
+          { name: "Bash" },
+          { name: "archestra__get_remedy_plans" },
+        ],
+      },
+    ])("refuses and withdraws the admitted call $case", async ({
+      case: _case,
+      adapter,
+      ...params
+    }) => {
+      const outcome = await rule({
+        sessionId: "refused",
+        adapter: adapter(),
+        ...params,
+      });
+      expect(outcome).toMatchObject({
+        decision: "refuse",
+        refusal: { reason: "openappa_no_notice_tool", blockedToolId: "denied" },
+      });
+      expect(cancelCalls.mock.calls[0][1]).toEqual(["admitted"]);
+    });
+
+    test("refuses and withdraws the admitted call when the carried ruling cannot be kept", async () => {
+      const set = cacheManager.set.bind(cacheManager);
+      const cacheSet = vi
+        .spyOn(cacheManager, "set")
+        .mockImplementation((key, ...rest) =>
+          key.startsWith(CacheKey.OpenAppaCarriedRuling)
+            ? Promise.reject(new Error("cache unavailable"))
+            : set(key, ...rest),
+        );
+      try {
+        const outcome = await rule({
+          sessionId: "carrier-cache-down",
+          adapter: new AppaClaudeCodeAdapter(),
+          userAgent: claudeCodeAgent,
+          interactionType: "anthropic:messages",
+          declaredTools: [{ name: "Read" }, { name: "Bash" }],
+        });
+        expect(outcome).toMatchObject({
+          decision: "refuse",
+          refusal: {
+            reason: "openappa_no_notice_tool",
+            blockedToolId: "denied",
+          },
+        });
+        expect(cancelCalls.mock.calls[0][1]).toEqual(["admitted"]);
+      } finally {
+        cacheSet.mockRestore();
+      }
+    });
+
+    test("withdraws the admitted call when the refusal fails before it is sent", async () => {
+      const set = cacheManager.set.bind(cacheManager);
+      const cacheSet = vi
+        .spyOn(cacheManager, "set")
+        .mockImplementation((key, ...rest) =>
+          key.startsWith(CacheKey.OpenAppaRemedyToolsMissing)
+            ? Promise.reject(new Error("cache unavailable"))
+            : set(key, ...rest),
+        );
+      try {
+        await expect(
+          rule({
+            sessionId: "refusal-cache-down",
+            adapter: new AppaOpenCodeAdapter(),
+            userAgent: "opencode/1.17.0",
+            interactionType: "anthropic:messages",
+            declaredTools: [{ name: "Read" }, { name: "Bash" }],
+          }),
+        ).rejects.toThrow("cache unavailable");
+        expect(cancelCalls.mock.calls[0][1]).toEqual(["admitted"]);
+      } finally {
+        cacheSet.mockRestore();
+      }
+    });
+
+    test("answers the carried call with the carried ruling and asks for no remedy plan, though the journal offers one", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const sessionId = "carried-offered";
+      const call = () => {
+        const context = requestContext({ sessionId, organizationId: org.id });
+        context.headers = { "user-agent": claudeCodeAgent };
+        trustedOf(context).request = {
+          tools: undefined,
+          customTools: new Set(),
+          declaredTools: [{ name: "Read" }, { name: "Bash" }],
+          session: {},
+        };
+        return context;
+      };
+      const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+      const first = call();
+      await plugin.onSessionInit(first);
+      const carried = carriedNotice(
+        await plugin.onToolCalls({ ...first, toolCalls: [admitted, denied] }),
+        denied.id,
+      ).result;
+      await plugin.onCleanup(first);
+
+      await db.insert(schema.openappaSessionsTable).values({
+        organizationId: org.id,
+        callerId: "user:user",
+        sessionId,
+        actor: openappaActor(sessionId),
+        root: openappaActor(sessionId),
+        startDecision: { decision: "ack" },
+      });
+      await db.insert(schema.openappaOperationsTable).values({
+        organizationId: org.id,
+        callerId: "user:user",
+        sessionId,
+        root: openappaActor(sessionId),
+        operationId: `call:${denied.id}`,
+        status: "complete",
+        input: { semantic: { event: "tool_call" } },
+        decision: {
+          decision: "deny_call",
+          feedback: `${ruling} Call execute_remedy_plan(offer_id: "offer-1").`,
+          offers: [{ offer_id: "offer-1" }],
+        },
+      });
+      const processResults = vi
+        .spyOn(appaService, "processProxyResults")
+        .mockResolvedValue({
+          toolResultUpdates: {
+            [denied.id]: {
+              content: `${ruling} Call execute_remedy_plan(offer_id: "offer-1").`,
+              outputSource: "runtime",
+              denied: true,
+            },
+          },
+        });
+      const next = call();
+      const request = { system: "Base", messages: [] };
+      try {
+        await plugin.onSessionInit(next);
+        const results = await plugin.onToolResults({
+          ...next,
+          toolResults: [
+            {
+              id: denied.id,
+              name: "Bash",
+              content:
+                "<tool_use_error>Error: No such tool available: archestra__get_remedy_plans</tool_use_error>",
+              isError: true,
+            },
+          ],
+        });
+        await plugin.onBeforeModel({ ...next, request });
+
+        expect(results?.toolResultUpdates?.[denied.id]).toBe(carried);
+        expect(request).toEqual({ system: "Base", messages: [] });
+      } finally {
+        processResults.mockRestore();
+        await plugin.onCleanup(next);
+      }
+    });
+
+    test("still swaps in the wait tool first while Claude Code's servers are pending", async () => {
+      const outcome = await rule({
+        sessionId: "pending",
+        adapter: new AppaClaudeCodeAdapter(),
+        userAgent: claudeCodeAgent,
+        interactionType: "anthropic:messages",
+        declaredTools: [
+          { name: "Read" },
+          { name: "Bash" },
+          { name: "WaitForMcpServers" },
+        ],
+      });
+      expect(outcome).toEqual({
+        decision: "allow",
+        toolCalls: [
+          admitted,
+          { id: "denied", name: "WaitForMcpServers", arguments: "{}" },
+        ],
+        blocked: [{ id: "denied", name: "Bash", reason: ruling }],
+      });
+      expect(cancelCalls).not.toHaveBeenCalled();
+    });
+  });
+
+  test.for([
+    { wire: "openai:chatCompletions", carried: false },
+    { wire: "anthropic:messages", carried: true },
+  ] as const)("handles a denied call by id when a child handback shares its batch (wire $wire, carried $carried)", async ({
+    wire,
+    carried,
+  }, { makeOrganization }) => {
+    // A wire the client cannot be handed an undeclared notice on refuses the
+    // batch and withdraws the admitted call by id, not by batch position. On
+    // the Messages wire the denial rides the notice and its siblings run.
     const priorSecret = config.openappa.offerSigningSecret;
     config.openappa.offerSigningSecret = DELEGATION_SECRET;
     const organization = await makeOrganization();
@@ -5864,6 +6176,7 @@ describe("rendering runtime text for this client", () => {
       sessionId: "user:user|s1",
       organizationId: organization.id,
     });
+    context.interactionType = wire;
     context.headers = {
       "user-agent": "claude-code/1",
       "x-claude-code-session-id": "s1",
@@ -5924,15 +6237,28 @@ describe("rendering runtime text for this client", () => {
         ],
       });
 
-      expect(outcome).toMatchObject({
-        decision: "refuse",
-        refusal: { blockedToolId: "denied" },
-      });
-      expect(cancelCalls).toHaveBeenCalledWith(
-        expect.anything(),
-        ["admitted"],
-        expect.any(Function),
-      );
+      if (carried) {
+        expect(outcome).toMatchObject({
+          decision: "allow",
+          blocked: [{ id: "denied", name: "Bash" }],
+        });
+        if (outcome?.decision !== "allow") throw new Error("expected allow");
+        expect(outcome.toolCalls.map((call) => call.id)).toEqual(
+          expect.arrayContaining(["admitted", "denied"]),
+        );
+        expect(carriedNotice(outcome, "denied").tool).toBe("Bash");
+        expect(cancelCalls).not.toHaveBeenCalled();
+      } else {
+        expect(outcome).toMatchObject({
+          decision: "refuse",
+          refusal: { blockedToolId: "denied" },
+        });
+        expect(cancelCalls).toHaveBeenCalledWith(
+          expect.anything(),
+          ["admitted"],
+          expect.any(Function),
+        );
+      }
     } finally {
       cancelCalls.mockRestore();
       evaluateToolCalls.mockRestore();
@@ -8308,6 +8634,22 @@ const APPROVAL_RULING = [
   "  If a child-session or subagent tool is available, handle the work there if isolation is useful.",
   "  A child inherits the same session label, so delegation does not clear these requirements.",
 ].join("\n");
+
+/**
+ * The notice a denial rides when the client declares no notice tool: the
+ * released call with the denied call's id, under the gateway notice name.
+ */
+function carriedNotice(outcome: unknown, callId: string) {
+  const call = (
+    outcome as {
+      toolCalls?: { id: string; name: string; arguments: unknown }[];
+    }
+  ).toolCalls?.find((each) => each.id === callId);
+  expect(call?.name).toBe("archestra__get_remedy_plans");
+  const notice = readNotice({ callId, arguments: call?.arguments });
+  if (!notice) throw new Error(`no notice carried for ${callId}`);
+  return notice;
+}
 
 function requestContext(params: {
   sessionId: string;

@@ -190,7 +190,11 @@ const selectExtendedFields = {
   missingCredentialBehavior: MissingCredentialBehaviorSchema,
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable(),
   passthroughHeaders: z.array(z.string()).nullable(),
-  githubActionsAccess: GitHubActionsAccessSchema.nullable(),
+  /**
+   * MCP gateways' GitHub Actions token exchange setting. Optional, like
+   * `lastUsedAt`, so agent objects built in code without it still fit.
+   */
+  githubActionsAccess: GitHubActionsAccessSchema.nullable().optional(),
   runtime: AgentRuntimeSchema.nullable(),
   activationSkillMode: AgentActivationSkillModeSchema,
   /**

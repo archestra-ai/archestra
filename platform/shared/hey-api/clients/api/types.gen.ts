@@ -14614,7 +14614,7 @@ export type GetAgentCatalogResponses = {
                 } | null;
                 runtimeSecretId: string | null;
                 passthroughHeaders: Array<string> | null;
-                githubActionsAccess: {
+                githubActionsAccess?: {
                     githubAppCredentialKey: string;
                     repositories: Array<string>;
                     workflows: Array<string>;
@@ -15000,7 +15000,7 @@ export type GetAgentsResponses = {
             } | null;
             runtimeSecretId: string | null;
             passthroughHeaders: Array<string> | null;
-            githubActionsAccess: {
+            githubActionsAccess?: {
                 githubAppCredentialKey: string;
                 repositories: Array<string>;
                 workflows: Array<string>;
@@ -15420,7 +15420,7 @@ export type CreateAgentResponses = {
         } | null;
         runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
-        githubActionsAccess: {
+        githubActionsAccess?: {
             githubAppCredentialKey: string;
             repositories: Array<string>;
             workflows: Array<string>;
@@ -16689,7 +16689,7 @@ export type GetDefaultMcpGatewayResponses = {
         } | null;
         runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
-        githubActionsAccess: {
+        githubActionsAccess?: {
             githubAppCredentialKey: string;
             repositories: Array<string>;
             workflows: Array<string>;
@@ -16994,7 +16994,7 @@ export type ImportAgentResponses = {
             } | null;
             runtimeSecretId: string | null;
             passthroughHeaders: Array<string> | null;
-            githubActionsAccess: {
+            githubActionsAccess?: {
                 githubAppCredentialKey: string;
                 repositories: Array<string>;
                 workflows: Array<string>;
@@ -17308,7 +17308,7 @@ export type GetAgentResponses = {
         } | null;
         runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
-        githubActionsAccess: {
+        githubActionsAccess?: {
             githubAppCredentialKey: string;
             repositories: Array<string>;
             workflows: Array<string>;
@@ -17617,7 +17617,7 @@ export type UpdateAgentResponses = {
         } | null;
         runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
-        githubActionsAccess: {
+        githubActionsAccess?: {
             githubAppCredentialKey: string;
             repositories: Array<string>;
             workflows: Array<string>;
@@ -18205,7 +18205,7 @@ export type RestoreAgentVersionResponses = {
         } | null;
         runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
-        githubActionsAccess: {
+        githubActionsAccess?: {
             githubAppCredentialKey: string;
             repositories: Array<string>;
             workflows: Array<string>;
@@ -18448,7 +18448,7 @@ export type CloneAgentResponses = {
         } | null;
         runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
-        githubActionsAccess: {
+        githubActionsAccess?: {
             githubAppCredentialKey: string;
             repositories: Array<string>;
             workflows: Array<string>;
@@ -20930,7 +20930,7 @@ export type RestoreAgentResponses = {
         } | null;
         runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
-        githubActionsAccess: {
+        githubActionsAccess?: {
             githubAppCredentialKey: string;
             repositories: Array<string>;
             workflows: Array<string>;
@@ -37477,7 +37477,7 @@ export type GetNewChatBootstrapResponses = {
                 } | null;
                 runtimeSecretId: string | null;
                 passthroughHeaders: Array<string> | null;
-                githubActionsAccess: {
+                githubActionsAccess?: {
                     githubAppCredentialKey: string;
                     repositories: Array<string>;
                     workflows: Array<string>;
@@ -38033,7 +38033,7 @@ export type GetConversationBootstrapResponses = {
                     } | null;
                     runtimeSecretId: string | null;
                     passthroughHeaders: Array<string> | null;
-                    githubActionsAccess: {
+                    githubActionsAccess?: {
                         githubAppCredentialKey: string;
                         repositories: Array<string>;
                         workflows: Array<string>;

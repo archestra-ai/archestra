@@ -226,7 +226,14 @@ test("an enable waits for another replica's disable cleanup to finish", async ({
   const pendingCleanup = new Promise<void>((resolve) => {
     releaseCleanup = resolve;
   });
-  removeMcpServer.mockImplementationOnce(() => pendingCleanup);
+  let signalCleanupStarted = () => {};
+  const cleanupStarted = new Promise<void>((resolve) => {
+    signalCleanupStarted = resolve;
+  });
+  removeMcpServer.mockImplementationOnce(() => {
+    signalCleanupStarted();
+    return pendingCleanup;
+  });
   getOrLoadDeployment.mockResolvedValue({ waitForDeploymentReady });
   waitForDeploymentReady.mockResolvedValue(undefined);
   reloadToolsForServer.mockResolvedValue({
@@ -239,20 +246,25 @@ test("an enable waits for another replica's disable cleanup to finish", async ({
     organizationId: organization.id,
     settings: { playwrightMcpEnabled: false },
   });
-  await vi.waitFor(() =>
+  let enabling:
+    | ReturnType<typeof reconcileManagedPlaywrightSetting>
+    | undefined;
+  try {
+    // Synchronize on cleanup itself, rather than a scheduling deadline.
+    await Promise.race([cleanupStarted, disabling]);
     expect(removeMcpServer).toHaveBeenCalledWith(server.id, {
       strictCleanup: true,
       requirePlaywrightDisabled: true,
-    }),
-  );
-  const enabling = reconcileManagedPlaywrightSetting({
-    organizationId: organization.id,
-    settings: { playwrightMcpEnabled: true },
-  });
-  expect(await PlaywrightRuntimeModel.isEnabled()).toBe(false);
-  releaseCleanup();
-  await disabling;
-  await enabling;
+    });
+    enabling = reconcileManagedPlaywrightSetting({
+      organizationId: organization.id,
+      settings: { playwrightMcpEnabled: true },
+    });
+    expect(await PlaywrightRuntimeModel.isEnabled()).toBe(false);
+  } finally {
+    releaseCleanup();
+    await Promise.all([disabling, enabling]);
+  }
   expect(await PlaywrightRuntimeModel.findForEnvironment(null)).toMatchObject({
     id: server.id,
   });

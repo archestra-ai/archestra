@@ -1,5 +1,5 @@
 {
-  "id": "246a5459-beb9-47dc-bf2e-658dc5a718ec",
+  "id": "73eccd32-0e69-4224-bccc-d8750047ed77",
   "prevId": "1f87dae5-4cad-4a9c-8634-81786899e140",
   "version": "7",
   "dialect": "postgresql",
@@ -22997,6 +22997,18 @@
         "plan_format_version": {
           "name": "plan_format_version",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lambda": {
+          "name": "lambda",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expected_cost_usd": {
+          "name": "expected_cost_usd",
+          "type": "numeric(16, 10)",
           "primaryKey": false,
           "notNull": false
         },

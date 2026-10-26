@@ -4,10 +4,11 @@
 export declare function coreVersion(): string
 
 /**
- * Route one session (`SessionFeatures` JSON) with a `Plan` JSON. `u` must be uniform
- * on [0, 1), drawn once per session. Returns `{ tier_index, propensity }` JSON.
+ * Route one session (`SessionFeatures` JSON) with a `Plan` JSON and a `{ lam_star, q }`
+ * policy JSON — the plan's own `policy` or a paced one. `u` must be uniform on [0, 1),
+ * drawn once per session. Returns `{ tier_index, propensity, lambda, expected_cost_usd }` JSON.
  */
-export declare function decide(planJson: string, featuresJson: string, u: number): string
+export declare function decide(planJson: string, policyJson: string, featuresJson: string, u: number): string
 
 /**
  * Fit the session-size and long-share models on a `PlanInput` JSON and solve the

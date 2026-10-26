@@ -13,6 +13,6 @@ assert.ok(Number.isInteger(planFormatVersion()));
 
 // Both bindings are reachable via ESM interop and surface the coded error body.
 await assert.rejects(plan("{}"), { code: "ARCHESTRA_ROUTER_INVALID_INPUT" });
-assert.throws(() => decide("{}", "{}", 0.5), { code: "ARCHESTRA_ROUTER_INVALID_PLAN" });
+assert.throws(() => decide("{}", "{}", "{}", 0.5), { code: "ARCHESTRA_ROUTER_INVALID_PLAN" });
 
 console.log("router-rs esm smoke ok");

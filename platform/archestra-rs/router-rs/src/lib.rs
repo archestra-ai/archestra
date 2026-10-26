@@ -8,7 +8,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use napi::bindgen_prelude::AsyncTask;
 use napi::{Env, Task};
 use napi_derive::napi;
-use router_core::{Decision, Plan, PlanInput, RouterError, SessionFeatures};
+use router_core::{Decision, Plan, PlanInput, Policy, RouterError, SessionFeatures};
 
 struct BoundaryError {
     code: &'static str,
@@ -52,6 +52,7 @@ impl From<RouterError> for BoundaryError {
             RouterError::UnsupportedPlanFormat { .. } => "ARCHESTRA_ROUTER_UNSUPPORTED_PLAN_FORMAT",
             RouterError::NonFinitePlan(_) => "ARCHESTRA_ROUTER_INVALID_PLAN",
             RouterError::InvalidUniform(_) => "ARCHESTRA_ROUTER_INVALID_UNIFORM",
+            RouterError::InvalidPolicy { .. } => "ARCHESTRA_ROUTER_INVALID_POLICY",
         };
         Self {
             code,
@@ -74,17 +75,32 @@ fn plan_json(input_json: &str) -> Result<String, BoundaryError> {
     serde_json::to_string(&plan).map_err(|e| BoundaryError::internal(e.to_string()))
 }
 
-fn decide_json(plan_json: &str, features_json: &str, u: f64) -> Result<String, BoundaryError> {
+fn decide_json(
+    plan_json: &str,
+    policy_json: &str,
+    features_json: &str,
+    u: f64,
+) -> Result<String, BoundaryError> {
     let plan: Plan = serde_json::from_str(plan_json)
         .map_err(|e| BoundaryError::parse("ARCHESTRA_ROUTER_INVALID_PLAN", "plan", e))?;
+    let policy: Policy = serde_json::from_str(policy_json)
+        .map_err(|e| BoundaryError::parse("ARCHESTRA_ROUTER_INVALID_POLICY", "policy", e))?;
     let features: SessionFeatures = serde_json::from_str(features_json).map_err(|e| {
         BoundaryError::parse("ARCHESTRA_ROUTER_INVALID_INPUT", "session features", e)
     })?;
     let Decision {
         tier_index,
         propensity,
-    } = router_core::decide(&plan, &features, u)?;
-    Ok(serde_json::json!({ "tier_index": tier_index, "propensity": propensity }).to_string())
+        lambda,
+        expected_cost_usd,
+    } = router_core::decide(&plan, &policy, &features, u)?;
+    Ok(serde_json::json!({
+        "tier_index": tier_index,
+        "propensity": propensity,
+        "lambda": lambda,
+        "expected_cost_usd": expected_cost_usd,
+    })
+    .to_string())
 }
 
 /// Fits and solves one plan on the libuv threadpool; the input string is owned, so
@@ -113,11 +129,17 @@ pub fn plan(input_json: String) -> AsyncTask<PlanTask> {
     AsyncTask::new(PlanTask { input_json })
 }
 
-/// Route one session (`SessionFeatures` JSON) with a `Plan` JSON. `u` must be uniform
-/// on [0, 1), drawn once per session. Returns `{ tier_index, propensity }` JSON.
+/// Route one session (`SessionFeatures` JSON) with a `Plan` JSON and a `{ lam_star, q }`
+/// policy JSON — the plan's own `policy` or a paced one. `u` must be uniform on [0, 1),
+/// drawn once per session. Returns `{ tier_index, propensity, lambda, expected_cost_usd }` JSON.
 #[napi]
-pub fn decide(plan_json: String, features_json: String, u: f64) -> napi::Result<String> {
-    guarded(|| decide_json(&plan_json, &features_json, u))
+pub fn decide(
+    plan_json: String,
+    policy_json: String,
+    features_json: String,
+    u: f64,
+) -> napi::Result<String> {
+    guarded(|| decide_json(&plan_json, &policy_json, &features_json, u))
 }
 
 /// The `router_core` version that `plan` stamps on plans.

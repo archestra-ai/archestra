@@ -409,6 +409,7 @@ describe("AutoRoutingOverviewPage", () => {
             planId: PLAN_ID,
             chosen: { tier: "smart", model: tier("claude-opus", 3) },
             propensity: 0.6,
+            expectedCostUsd: 0.42,
             scorerCostUsd: 0.000123,
           } satisfies AutoRoutingPreview);
         },

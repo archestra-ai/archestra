@@ -30725,6 +30725,7 @@ export type PreviewAutoRoutingResponses = {
             };
         };
         propensity: number;
+        expectedCostUsd: number | null;
         scorerCostUsd: number | null;
     };
 };

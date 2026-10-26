@@ -9,11 +9,24 @@ use crate::RouterError;
 use crate::domain::TIER_COUNT;
 
 /// Dual-price policy: take every upgrade whose breakpoint is above `lam_star`; the tied
-/// upgrade exactly at `lam_star` is taken with probability `q`.
+/// upgrade exactly at `lam_star` is taken with probability `q`. A plan's own policy is the
+/// LP optimum λ*; callers may route with another λ (e.g. a pacing controller's λ_t).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Policy {
     pub lam_star: f64,
     pub q: f64,
+}
+
+impl Policy {
+    pub(crate) fn validate(&self) -> Result<(), RouterError> {
+        match self.lam_star.is_finite() && self.lam_star >= 0.0 && (0.0..=1.0).contains(&self.q) {
+            true => Ok(()),
+            false => Err(RouterError::InvalidPolicy {
+                lam_star: self.lam_star,
+                q: self.q,
+            }),
+        }
+    }
 }
 
 /// Upper-left convex hull of a session's (price, adequacy) points, ascending in price.
@@ -83,21 +96,33 @@ pub struct Decision {
     pub tier_index: usize,
     /// Probability the policy picks this tier for this session: 1, q, or 1 − q.
     pub propensity: f64,
+    /// The λ this session was routed with.
+    pub lambda: f64,
+    /// Predicted session tokens × the chosen tier's blended USD per token: the session's cost
+    /// as the solver counts it.
+    pub expected_cost_usd: f64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Draw {
+    pub(crate) tier_index: usize,
+    /// Probability the policy picks this tier for this session: 1, q, or 1 − q.
+    pub(crate) propensity: f64,
 }
 
 impl Route {
     /// `u` must be uniform on [0, 1).
-    pub(crate) fn draw(&self, q: f64, u: f64) -> Decision {
+    pub(crate) fn draw(&self, q: f64, u: f64) -> Draw {
         match self.tie {
-            Some(tie) if u < q => Decision {
+            Some(tie) if u < q => Draw {
                 tier_index: tie,
                 propensity: q,
             },
-            Some(_) => Decision {
+            Some(_) => Draw {
                 tier_index: self.base,
                 propensity: 1.0 - q,
             },
-            None => Decision {
+            None => Draw {
                 tier_index: self.base,
                 propensity: 1.0,
             },

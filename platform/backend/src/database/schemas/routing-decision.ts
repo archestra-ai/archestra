@@ -48,6 +48,10 @@ const routingDecisionsTable = pgTable(
     featuresSchemaVersion: integer("features_schema_version").notNull(),
     coreVersion: text("core_version").notNull(),
     planFormatVersion: integer("plan_format_version"),
+    /** The λ the session was routed with; null unless planned. */
+    lambda: doublePrecision("lambda"),
+    /** The chosen tier's predicted session cost in USD, as the solver counts it; null unless planned. */
+    expectedCostUsd: numeric("expected_cost_usd", { precision: 16, scale: 10 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

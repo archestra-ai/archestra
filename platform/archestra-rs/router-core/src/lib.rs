@@ -1,7 +1,7 @@
 //! Pure, Node-free per-session tier routing under an average daily budget. `plan` fits the
 //! session-size and long-prompt-share models on history and solves the budget LP exactly for a
-//! dual-price policy; `decide` routes one session with that policy and a caller-supplied uniform.
-
+//! dual-price policy; `decide` routes one session with a caller-supplied policy (the plan's own,
+//! or a paced one) and a caller-supplied uniform.
 //!
 //! Pipeline: pre-run session features → `estimate` (per-tier value and cost) → `allocate`
 //! (hull breakpoints, λ*/q under the budget, route with propensity).
@@ -21,7 +21,7 @@ pub use domain::{
 pub use estimate::{LongShareModel, SizeModel, SourceEffect, TokenMixes};
 pub use plan::{Diagnostics, Holdout, PLAN_FORMAT_VERSION, Plan, Summary, Versions};
 
-use crate::allocate::{Hull, WeightedSession, solve};
+use crate::allocate::{Draw, Hull, WeightedSession, solve};
 use crate::estimate::{
     BlockPrices, Estimator, MAX_NEWTON_ITERATIONS, fit_long_share, fit_mixes, fit_size,
 };
@@ -66,6 +66,8 @@ pub enum RouterError {
     NonFinitePlan(&'static str),
     #[error("u must be in [0, 1), got {0}")]
     InvalidUniform(f64),
+    #[error("policy needs a finite λ ≥ 0 and q in [0, 1], got λ = {lam_star}, q = {q}")]
+    InvalidPolicy { lam_star: f64, q: f64 },
 }
 
 pub fn plan(input: PlanInput) -> Result<Plan, RouterError> {
@@ -148,9 +150,16 @@ pub fn plan(input: PlanInput) -> Result<Plan, RouterError> {
     })
 }
 
-/// `u` must be uniform on [0, 1) and drawn by the caller once per session.
-pub fn decide(plan: &Plan, features: &SessionFeatures, u: f64) -> Result<Decision, RouterError> {
+/// Routes with `policy`, which need not be `plan.policy`. `u` must be uniform on [0, 1) and
+/// drawn by the caller once per session.
+pub fn decide(
+    plan: &Plan,
+    policy: &Policy,
+    features: &SessionFeatures,
+    u: f64,
+) -> Result<Decision, RouterError> {
     plan.validate()?;
+    policy.validate()?;
     if !(0.0..1.0).contains(&u) {
         return Err(RouterError::InvalidUniform(u));
     }
@@ -160,9 +169,18 @@ pub fn decide(plan: &Plan, features: &SessionFeatures, u: f64) -> Result<Decisio
         prices: BlockPrices::new(&plan.tiers_fingerprint, &plan.token_mix),
     };
     let estimate = estimator.estimate(features);
-    Ok(Hull::new(estimate.price, estimate.adequacy)
-        .route(&plan.policy)
-        .draw(plan.policy.q, u))
+    let Draw {
+        tier_index,
+        propensity,
+    } = Hull::new(estimate.price, estimate.adequacy)
+        .route(policy)
+        .draw(policy.q, u);
+    Ok(Decision {
+        tier_index,
+        propensity,
+        lambda: policy.lam_star,
+        expected_cost_usd: estimate.size * estimate.price[tier_index],
+    })
 }
 
 #[cfg(test)]
@@ -245,11 +263,64 @@ mod tests {
         let Policy { lam_star, q } = plan.policy;
         assert!(lam_star > 0.0 && q > 0.0 && q < 1.0, "{:?}", plan.policy);
         assert!((plan.summary.expected_spend - 4.0).abs() < 1e-12);
-        let below = decide(&plan, &features("main"), q * 0.999).unwrap();
-        let above = decide(&plan, &features("main"), q + (1.0 - q) * 0.001).unwrap();
+        let below = decide(&plan, &plan.policy, &features("main"), q * 0.999).unwrap();
+        let above = decide(
+            &plan,
+            &plan.policy,
+            &features("main"),
+            q + (1.0 - q) * 0.001,
+        )
+        .unwrap();
         assert_eq!(below.propensity, q);
         assert_eq!(above.propensity, 1.0 - q);
         assert!(below.tier_index > above.tier_index);
+    }
+
+    #[test]
+    fn caller_policy_overrides_the_plan_anchor() {
+        let plan = plan(input(4.0)).unwrap();
+        let f = features("main");
+        let route =
+            |lam_star: f64, q: f64, u: f64| decide(&plan, &Policy { lam_star, q }, &f, u).unwrap();
+        let lam = plan.policy.lam_star;
+        let anchored_up = route(lam, plan.policy.q, 0.0);
+        let anchored_down = route(lam, plan.policy.q, 0.999_999);
+        // λ above the tie: the tied upgrade is never taken, whatever u is
+        let tighter = route(lam * 1.5, plan.policy.q, 0.0);
+        assert_eq!(tighter.tier_index, anchored_down.tier_index);
+        assert_eq!((tighter.propensity, tighter.lambda), (1.0, lam * 1.5));
+        // λ below the tie: the tied upgrade is always taken
+        let looser = route(lam * 0.999, plan.policy.q, 0.999_999);
+        assert_eq!(looser.tier_index, anchored_up.tier_index);
+        assert_eq!(looser.propensity, 1.0);
+        assert!(anchored_up.tier_index > anchored_down.tier_index);
+        // λ = 0 buys every upgrade on the hull
+        assert_eq!(route(0.0, 0.0, 0.5).tier_index, 2);
+
+        for (lam_star, q) in [(-1.0, 0.5), (f64::NAN, 0.5), (lam, 1.5)] {
+            assert!(matches!(
+                decide(&plan, &Policy { lam_star, q }, &f, 0.5),
+                Err(RouterError::InvalidPolicy { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn expected_cost_reconciles_with_the_solved_spend() {
+        // identical sessions: expected_spend = tokens_per_day × E_u[USD per token]
+        let plan = plan(input(4.0)).unwrap();
+        let f = features("main");
+        let Policy { q, .. } = plan.policy;
+        let tie = decide(&plan, &plan.policy, &f, 0.0).unwrap();
+        let base = decide(&plan, &plan.policy, &f, 0.999_999).unwrap();
+        assert!(tie.expected_cost_usd > base.expected_cost_usd);
+        let size = plan.size_model.predict(&f);
+        let per_token = (q * tie.expected_cost_usd + (1.0 - q) * base.expected_cost_usd) / size;
+        let spend = plan.summary.tokens_per_day * per_token;
+        assert!(
+            (spend - plan.summary.expected_spend).abs() < 1e-9,
+            "{spend}"
+        );
     }
 
     #[test]
@@ -262,14 +333,9 @@ mod tests {
                 q: 0.0
             }
         );
-        let decision = decide(&plan, &features("main"), 0.0).unwrap();
-        assert_eq!(
-            decision,
-            Decision {
-                tier_index: 2,
-                propensity: 1.0
-            }
-        );
+        let decision = decide(&plan, &plan.policy, &features("main"), 0.0).unwrap();
+        assert_eq!((decision.tier_index, decision.propensity), (2, 1.0));
+        assert_eq!(decision.lambda, 0.0);
         let [fast, normal, smart] = plan.summary.tier_session_share;
         assert_eq!((fast, normal), (0.0, 0.0));
         assert!((smart - 1.0).abs() < 1e-12);
@@ -289,8 +355,8 @@ mod tests {
         let plan = plan(input(4.0)).unwrap();
         let u = plan.policy.q * 0.5;
         assert_eq!(
-            decide(&plan, &features("never-seen"), u),
-            decide(&plan, &features("main"), u)
+            decide(&plan, &plan.policy, &features("never-seen"), u),
+            decide(&plan, &plan.policy, &features("main"), u)
         );
     }
 
@@ -310,8 +376,8 @@ mod tests {
         let q = plan.policy.q;
         for u in [q * 0.5, (1.0 + q) / 2.0] {
             assert_eq!(
-                decide(&plan, &features(&dropped), u),
-                decide(&plan, &features("main"), u)
+                decide(&plan, &plan.policy, &features(&dropped), u),
+                decide(&plan, &plan.policy, &features("main"), u)
             );
         }
     }
@@ -337,15 +403,15 @@ mod tests {
         let q = plan.policy.q;
         for u in [q * 0.5, q, (1.0 + q) / 2.0] {
             assert_eq!(
-                decide(&restored, &features("main"), u),
-                decide(&plan, &features("main"), u)
+                decide(&restored, &restored.policy, &features("main"), u),
+                decide(&plan, &plan.policy, &features("main"), u)
             );
         }
 
         let mut newer = restored;
         newer.versions.plan_format_version = PLAN_FORMAT_VERSION + 1;
         assert_eq!(
-            decide(&newer, &features("main"), 0.5),
+            decide(&newer, &newer.policy, &features("main"), 0.5),
             Err(RouterError::UnsupportedPlanFormat {
                 found: PLAN_FORMAT_VERSION + 1,
                 expected: PLAN_FORMAT_VERSION
@@ -373,13 +439,13 @@ mod tests {
 
         let mut plan = plan(input(4.0)).unwrap();
         assert!(matches!(
-            decide(&plan, &features("main"), f64::NAN),
+            decide(&plan, &plan.policy, &features("main"), f64::NAN),
             Err(RouterError::InvalidUniform(v)) if v.is_nan()
         ));
-        assert!(decide(&plan, &features("main"), 1.0).is_err());
+        assert!(decide(&plan, &plan.policy, &features("main"), 1.0).is_err());
         plan.long_share.log_size = f64::NAN;
         assert_eq!(
-            decide(&plan, &features("main"), 0.5),
+            decide(&plan, &plan.policy, &features("main"), 0.5),
             Err(RouterError::NonFinitePlan("long_share"))
         );
     }

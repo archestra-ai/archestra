@@ -61,13 +61,14 @@ export async function previewAutoRouting(params: {
       model: { id: model.id, provider: model.provider, modelId: model.modelId },
     },
     propensity: outcome.propensity,
+    expectedCostUsd: outcome.expectedCostUsd,
     scorerCostUsd: scored.costUsd,
   };
 }
 
 type Outcome = Pick<
   AutoRoutingPreviewResponse,
-  "reason" | "planId" | "propensity"
+  "reason" | "planId" | "propensity" | "expectedCostUsd"
 > & { tier: TierIndex };
 
 const STALE: Outcome = {
@@ -75,6 +76,7 @@ const STALE: Outcome = {
   planId: null,
   tier: NORMAL_TIER,
   propensity: 1,
+  expectedCostUsd: null,
 };
 
 /** The router's flow without its side effects: a stale plan falls back but requests no re-plan. */
@@ -94,6 +96,7 @@ function decideAgainstActivePlan(
     planId: plan.id,
     tier: decision.tier_index,
     propensity: decision.propensity,
+    expectedCostUsd: decision.expected_cost_usd,
   };
 }
 

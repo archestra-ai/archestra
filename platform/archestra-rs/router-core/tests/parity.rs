@@ -87,7 +87,8 @@ fn matches_reference_fit_and_policy() {
 
     assert!(!expected.routes.is_empty());
     for route in &expected.routes {
-        let decision = decide(&plan, &history[route.session].features, 0.5).expect("decides");
+        let decision =
+            decide(&plan, &plan.policy, &history[route.session].features, 0.5).expect("decides");
         assert_eq!(
             decision.tier_index, route.tier_index,
             "session {}",

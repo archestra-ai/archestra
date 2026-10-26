@@ -17,6 +17,8 @@ CREATE TABLE "routing_decisions" (
 	"features_schema_version" integer NOT NULL,
 	"core_version" text NOT NULL,
 	"plan_format_version" integer,
+	"lambda" double precision,
+	"expected_cost_usd" numeric(16, 10),
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "routing_decisions_reason_check" CHECK ("routing_decisions"."reason" IN ('planned', 'cold_start', 'scorer_error', 'plan_stale')),
 	CONSTRAINT "routing_decisions_plan_id_check" CHECK (("routing_decisions"."plan_id" IS NULL) = ("routing_decisions"."reason" IN ('cold_start', 'plan_stale'))),

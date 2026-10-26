@@ -137,6 +137,8 @@ export const AutoRoutingPreviewResponseSchema = z.object({
     model: AutoRoutingTierModelSchema,
   }),
   propensity: z.number(),
+  /** The chosen tier's predicted session cost in USD; null unless planned. */
+  expectedCostUsd: z.number().nullable(),
   scorerCostUsd: z.number().nullable(),
 });
 export type AutoRoutingPreviewResponse = z.infer<

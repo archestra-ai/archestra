@@ -76,6 +76,7 @@ describe("POST /api/auto-routing/preview", () => {
         model: { id: trio[2].id, provider: "openai", modelId: trio[2].modelId },
       },
       propensity: 1,
+      expectedCostUsd: expect.any(Number),
       scorerCostUsd: 0.0001,
     });
     expect(jevPrompts).toEqual(["Refactor the billing module"]);
@@ -115,6 +116,7 @@ describe("POST /api/auto-routing/preview", () => {
       planId: null,
       chosen: { tier: "normal", model: { id: trio[1].id } },
       propensity: 1,
+      expectedCostUsd: null,
     });
   });
 

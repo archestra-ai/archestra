@@ -117,7 +117,10 @@ describe("Model Router auto model", () => {
           tierIndex: 2,
           modelId: org.trio[2].id,
           propensity: 1,
+          // the budget affords everyone's best tier, so the plan's λ* is 0
+          lambda: 0,
         });
+        expect(Number(decision.expectedCostUsd)).toBeGreaterThan(0);
         const version = (await activeSourceVersion()).id;
         expect(decision).toMatchObject({
           scorerVersionId: version,
@@ -212,6 +215,8 @@ describe("Model Router auto model", () => {
             tierIndex: 1,
             planId: null,
             features: expect.objectContaining({ kind: "main" }),
+            lambda: null,
+            expectedCostUsd: null,
           }),
         ]);
       });

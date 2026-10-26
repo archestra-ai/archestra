@@ -108653,6 +108653,10 @@
                     "propensity": {
                       "type": "number"
                     },
+                    "expectedCostUsd": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "scorerCostUsd": {
                       "nullable": true,
                       "type": "number"
@@ -108665,6 +108669,7 @@
                     "planId",
                     "chosen",
                     "propensity",
+                    "expectedCostUsd",
                     "scorerCostUsd"
                   ],
                   "additionalProperties": false

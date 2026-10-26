@@ -13,8 +13,10 @@
  *   `propensity` and `u` make those outcomes usable for off-policy estimates.
  *
  * router-core connects them: estimators turn features into per-tier value and
- * expected cost, and the allocator solves λ* and q under the budget and routes
- * one session with its propensity (`decide`).
+ * expected cost, and the allocator solves λ* and q under the budget. `decide`
+ * routes one session with a caller-supplied policy — today the plan's own
+ * (`anchorPolicy`), later a pacing controller's λ_t — and records the λ used
+ * and the chosen tier's expected cost.
  */
 import { randomInt } from "node:crypto";
 import { coreVersion, decide } from "@archestra/router-rs";
@@ -76,7 +78,13 @@ export const AUTO_MODEL = "auto";
 const DecisionSchema = z.object({
   tier_index: z.union([z.literal(0), z.literal(1), z.literal(2)]),
   propensity: z.number(),
+  lambda: z.number(),
+  expected_cost_usd: z.number(),
 });
+type PlannedDecision = z.infer<typeof DecisionSchema>;
+
+const RouterPolicySchema = z.object({ lam_star: z.number(), q: z.number() });
+type RouterPolicy = z.infer<typeof RouterPolicySchema>;
 
 function isAutoModel(model: string): boolean {
   return model.trim() === AUTO_MODEL;
@@ -206,17 +214,21 @@ export function assertNotAutoOnNativeRoute(model: string): void {
   }
 }
 
-/** `decide` against `plan`; null when the plan cannot route these features. */
+/**
+ * `decide` against `plan` with the plan's own policy; null when the plan
+ * cannot route these features.
+ */
 export function decidePlanned(
   plan: RoutingPlan,
   features: RoutingDecisionFeatures,
   u: number,
-): z.infer<typeof DecisionSchema> | null {
+): PlannedDecision | null {
   try {
     return DecisionSchema.parse(
       JSON.parse(
         decide(
           JSON.stringify(plan.plan),
+          JSON.stringify(anchorPolicy(plan)),
           JSON.stringify(routerFeatures(features)),
           u,
         ),
@@ -238,6 +250,11 @@ export function uniform(): number {
 }
 
 // === Internal ===
+
+/** The plan's LP optimum (λ*, q): the policy sessions route with until online pacing supplies λ_t. */
+function anchorPolicy(plan: RoutingPlan): RouterPolicy {
+  return RouterPolicySchema.parse(plan.plan?.policy);
+}
 
 async function loadEnabledTrio(
   organizationId: string,
@@ -412,6 +429,7 @@ async function decideSession(
     tierIndex: TierIndex,
     propensity: number,
     planRow: RoutingPlan | null,
+    planned: PlannedDecision | null = null,
   ): InsertRoutingDecision => ({
     organizationId,
     sessionKey: params.sessionKey,
@@ -430,6 +448,8 @@ async function decideSession(
     featuresSchemaVersion: FEATURES_SCHEMA_VERSION,
     coreVersion: planRow?.coreVersion ?? coreVersion(),
     planFormatVersion: planRow?.planFormatVersion ?? null,
+    lambda: planned?.lambda ?? null,
+    expectedCostUsd: planned?.expected_cost_usd.toFixed(10) ?? null,
   });
 
   if (plan === null) return routed("cold_start", NORMAL_TIER, 1, null);
@@ -439,7 +459,13 @@ async function decideSession(
   if (!usable) return routed("plan_stale", NORMAL_TIER, 1, null);
   const decision = decidePlanned(plan, scored.features, u);
   if (decision)
-    return routed("planned", decision.tier_index, decision.propensity, plan);
+    return routed(
+      "planned",
+      decision.tier_index,
+      decision.propensity,
+      plan,
+      decision,
+    );
   await requestReplan(params.settings, organizationId);
   return routed("plan_stale", NORMAL_TIER, 1, null);
 }

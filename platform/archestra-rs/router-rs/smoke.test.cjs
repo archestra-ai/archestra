@@ -57,12 +57,15 @@ const planInput = {
     routerRs.planFormatVersion(),
   );
 
+  const policyJson = JSON.stringify(JSON.parse(planJson).policy);
   for (const u of [0.1, 0.9]) {
     const decision = JSON.parse(
-      routerRs.decide(planJson, JSON.stringify(features), u),
+      routerRs.decide(planJson, policyJson, JSON.stringify(features), u),
     );
     assert.ok([0, 1, 2].includes(decision.tier_index));
     assert.ok(decision.propensity > 0 && decision.propensity <= 1);
+    assert.equal(decision.lambda, JSON.parse(policyJson).lam_star);
+    assert.ok(decision.expected_cost_usd > 0);
   }
 
   await assert.rejects(
@@ -72,12 +75,24 @@ const planInput = {
   await assert.rejects(routerRs.plan(JSON.stringify({ ...planInput, budget: 0.01 })), {
     code: "ARCHESTRA_ROUTER_INFEASIBLE",
   });
-  assert.throws(() => routerRs.decide(planJson, JSON.stringify(features), 1), {
-    code: "ARCHESTRA_ROUTER_INVALID_UNIFORM",
-  });
-  assert.throws(() => routerRs.decide("not json", JSON.stringify(features), 0.5), {
-    code: "ARCHESTRA_ROUTER_INVALID_PLAN",
-  });
+  assert.throws(
+    () => routerRs.decide(planJson, policyJson, JSON.stringify(features), 1),
+    { code: "ARCHESTRA_ROUTER_INVALID_UNIFORM" },
+  );
+  assert.throws(
+    () => routerRs.decide("not json", policyJson, JSON.stringify(features), 0.5),
+    { code: "ARCHESTRA_ROUTER_INVALID_PLAN" },
+  );
+  assert.throws(
+    () =>
+      routerRs.decide(
+        planJson,
+        JSON.stringify({ lam_star: -1, q: 0 }),
+        JSON.stringify(features),
+        0.5,
+      ),
+    { code: "ARCHESTRA_ROUTER_INVALID_POLICY" },
+  );
 
   console.log("router-rs smoke ok");
 })().catch((error) => {

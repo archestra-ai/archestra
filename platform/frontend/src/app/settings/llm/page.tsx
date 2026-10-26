@@ -7,8 +7,8 @@ import { SettingsSectionStack } from "@/components/settings/settings-block";
 export default function LlmSettingsPage() {
   return (
     <SettingsSectionStack>
-      <ModelProvidersSection />
       <UnauthenticatedLlmProxySection />
+      <ModelProvidersSection />
     </SettingsSectionStack>
   );
 }

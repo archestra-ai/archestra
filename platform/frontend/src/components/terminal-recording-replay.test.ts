@@ -190,3 +190,49 @@ test("leaves out the fenced answer a captured screen follows", () => {
     prepareTerminalRecording(`output${fence("The answer.")}`).content,
   ).toBe(`output${fence("The answer.")}`);
 });
+
+test("takes lines back under origin mode and a scroll region, as tmux does", async () => {
+  const terminal = new Terminal({ cols: 20, rows: 5, scrollback: 10_000 });
+  try {
+    const output = ["one", "two", "three", "four", "five", "six"];
+    await createTerminalReplayer(terminal).write(
+      `${size(20, 5)}${output.join("\r\n")}\r\n\x1b[2;4r\x1b[?6h\x1b[1;1H${size(20, 8)}NEXT`,
+    );
+    const buffer = terminal.buffer.active;
+    expect(buffer.baseY).toBe(0);
+    expect(rows(terminal).slice(0, 6)).toEqual([
+      "one",
+      "two",
+      "three",
+      "NEXT",
+      "five",
+      "six",
+    ]);
+    expect(terminal.modes.originMode).toBe(true);
+  } finally {
+    terminal.dispose();
+  }
+});
+
+test("cuts the alternate screen's top rows under origin mode and a scroll region", async () => {
+  const terminal = new Terminal({ cols: 20, rows: 8, scrollback: 10_000 });
+  try {
+    const screen = Array.from(
+      { length: 8 },
+      (_, row) => `\x1b[${row + 1};1Halt row ${row + 1}`,
+    ).join("");
+    await createTerminalReplayer(terminal).write(
+      `${size(20, 8)}\x1b[?1049h${screen}\x1b[2;7r\x1b[?6h\x1b[6;1H${size(20, 5)}X`,
+    );
+    expect(rows(terminal).map((line) => line.trimEnd())).toEqual([
+      "alt row 3",
+      "alt row 4",
+      "alt row 5",
+      "alt row 6",
+      "Xlt row 7",
+    ]);
+    expect(terminal.buffer.active.baseY).toBe(0);
+  } finally {
+    terminal.dispose();
+  }
+});

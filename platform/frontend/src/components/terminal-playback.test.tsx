@@ -282,3 +282,30 @@ test("shows one screen after a full-screen client redrew for the browser's size"
   expect(screen.queryByText(/^(Before|Narrow) /)).toBeNull();
   expect(screen.queryByText(/FINAL-ANSWER|The answer/)).toBeNull();
 });
+
+test("replays from the start after a failed write", async () => {
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  // The player's own first resize sets the recording's size; the replayer's
+  // resize for the second size event is the one that fails.
+  const original = Terminal.prototype.resize;
+  const resize = vi
+    .spyOn(Terminal.prototype, "resize")
+    .mockImplementation(function (this: Terminal, cols: number, rows: number) {
+      if (resize.mock.calls.length === 2) throw new Error("resize failed");
+      return original.call(this, cols, rows);
+    });
+  render(
+    <TerminalPlayback
+      content={
+        "\x1b]777;archestra-terminal-size=40x6\x07first\r\n\x1b]777;archestra-terminal-size=60x8\x07second\r\n"
+      }
+    />,
+  );
+  await waitFor(() => expect(screen.getByText("second")).toBeVisible());
+  expect(screen.getAllByText("first")).toHaveLength(1);
+  expect(error).toHaveBeenCalledWith(
+    "Terminal recording replay failed",
+    expect.any(Error),
+  );
+  expect(resize.mock.calls.length).toBeGreaterThan(1);
+});

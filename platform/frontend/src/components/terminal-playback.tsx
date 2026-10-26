@@ -172,10 +172,12 @@ export function TerminalPlayback({
             }
           },
           (error: unknown) => {
-            // A failed write leaves the buffer unknown: the next render
-            // replays from the start instead of appending.
+            // A failed write leaves the buffer unknown: it is reset, and
+            // the next render replays from the start instead of appending.
             console.error("Terminal recording replay failed", error);
             if (disposed) return;
+            terminal.reset();
+            replayer.reset();
             writing = false;
             rendered = null;
             const latest = queued ?? next;

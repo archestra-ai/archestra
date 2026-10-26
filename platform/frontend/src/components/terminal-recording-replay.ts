@@ -63,7 +63,7 @@ export function createTerminalReplayer(terminal: Terminal): TerminalReplayer {
         }
         if (stopped) return;
         if (resizes && frame.size) {
-          await resizeLikeTmux(terminal, frame.size, alternate);
+          await resizeLikeTmux({ terminal, size: frame.size, alternate });
         }
         if (frame.enterAlternate && !alternate) {
           await scrollScreenIntoDocument(terminal);
@@ -171,11 +171,15 @@ function unfinishedSequence(bytes: string): number {
     : bytes.length;
 }
 
-async function resizeLikeTmux(
-  terminal: Terminal,
-  { cols, rows }: TerminalDimensions,
-  alternate: boolean,
-): Promise<void> {
+async function resizeLikeTmux({
+  terminal,
+  size: { cols, rows },
+  alternate,
+}: {
+  terminal: Terminal;
+  size: TerminalDimensions;
+  alternate: boolean;
+}): Promise<void> {
   if (alternate) {
     // tmux neither reflows the alternate screen nor keeps its history: a
     // smaller pane cuts rows (below the cursor first, then at the top) and a
@@ -187,10 +191,11 @@ async function resizeLikeTmux(
       0,
       terminal.rows - rows - (terminal.rows - 1 - cursorY),
     );
-    if (cut > 0) {
+    const moves = cut > 0 ? plainCursorMoves(terminal) : null;
+    if (moves) {
       await write(
         terminal,
-        `\x1b[H\x1b[${cut}M\x1b[${cursorY - cut + 1};${cursorX + 1}H`,
+        `${moves.before}\x1b[H\x1b[${cut}M${moves.to(cursorY - cut, cursorX)}`,
       );
     }
     terminal.options.windowsPty = { backend: "winpty", buildNumber: 1 };
@@ -199,6 +204,7 @@ async function resizeLikeTmux(
     } finally {
       terminal.options.windowsPty = {};
     }
+    if (moves) await write(terminal, moves.after(cursorY - cut, cursorX));
     return;
   }
   // The width first: xterm reflows the buffer and keeps the cursor on its
@@ -213,12 +219,32 @@ async function resizeLikeTmux(
   // Lines come back from scrollback with the cursor on the last row. The
   // cursor then moves down by as many rows, as tmux moves it.
   const { cursorX, cursorY } = buffer;
-  await write(terminal, `\x1b[${terminal.rows};1H`);
+  const moves = plainCursorMoves(terminal);
+  await write(terminal, `${moves.before}\x1b[${terminal.rows};1H`);
   terminal.resize(cols, rows);
-  await write(
-    terminal,
-    `\x1b[${Math.min(cursorY + pulled, rows - 1) + 1};${cursorX + 1}H`,
-  );
+  const y = Math.min(cursorY + pulled, rows - 1);
+  await write(terminal, `${moves.to(y, cursorX)}${moves.after(y, cursorX)}`);
+}
+
+/**
+ * Cursor moves of the replayer's own are absolute: origin mode goes off and
+ * the scroll region opens for them, as a resize resets the region in tmux
+ * and in xterm alike, and origin mode comes back afterwards, homing the
+ * cursor, so the move is made once more.
+ */
+function plainCursorMoves(terminal: Terminal): {
+  before: string;
+  to: (y: number, x: number) => string;
+  after: (y: number, x: number) => string;
+} {
+  const origin = terminal.modes.originMode;
+  const to = (y: number, x: number) =>
+    `\x1b[${Math.max(0, y) + 1};${Math.max(0, x) + 1}H`;
+  return {
+    before: "\x1b[?6l\x1b[r",
+    to,
+    after: (y, x) => (origin ? `\x1b[?6h${to(y, x)}` : ""),
+  };
 }
 
 /** On entering the alternate screen, the rows written so far join the
@@ -230,9 +256,10 @@ async function scrollScreenIntoDocument(terminal: Terminal): Promise<void> {
     cursorX > 0 ||
     (buffer.getLine(buffer.baseY + cursorY)?.translateToString(true).length ??
       0) > 0;
+  const moves = plainCursorMoves(terminal);
   await write(
     terminal,
-    `\x1b[${terminal.rows};1H${"\n".repeat(cursorY + (written ? 1 : 0))}\x1b[${cursorY + 1};${cursorX + 1}H`,
+    `${moves.before}\x1b[${terminal.rows};1H${"\n".repeat(cursorY + (written ? 1 : 0))}${moves.to(cursorY, cursorX)}${moves.after(cursorY, cursorX)}`,
   );
 }
 

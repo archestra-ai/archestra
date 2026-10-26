@@ -65,7 +65,15 @@ for (const width of [1440, 390]) {
       await expect(dialog.getByLabel("Label key", { exact: true })).toHaveValue(
         "stage",
       );
-      await dialog.getByLabel("Limit value", { exact: true }).fill("250");
+      const amount = dialog.getByLabel("Limit value", { exact: true });
+      await expect(amount).not.toHaveAttribute("aria-describedby");
+      await amount.fill("1.5");
+      await expect(amount).toHaveAccessibleDescription(/Enter a whole number/);
+      await expect(
+        dialog.getByRole("button", { name: "Create limit", exact: true }),
+      ).toBeDisabled();
+      await amount.fill("250");
+      await expect(amount).not.toHaveAttribute("aria-describedby");
       await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
       await expect(dialog).not.toBeVisible();
       await expect(settings).toBeVisible();
@@ -79,6 +87,24 @@ for (const width of [1440, 390]) {
     await expect(edit.getByLabel("Limit value", { exact: true })).toHaveValue(
       "100",
     );
+    await expect(edit.getByLabel("Limit value", { exact: true })).toBeFocused();
+    await expect(
+      edit.getByRole("combobox", { name: "Limit scope", exact: true }),
+    ).toBeDisabled();
+    await expect(
+      edit.getByRole("combobox", { name: "Limit kind", exact: true }),
+    ).toBeDisabled();
+    await edit
+      .getByRole("button", { name: "Limit kind help", exact: true })
+      .focus();
+    await expect(
+      page.getByRole("tooltip", {
+        name: /Create a new limit to change between/,
+      }),
+    ).toContainText(
+      "Create a new limit to change between spend, tokens and requests.",
+    );
+    await edit.getByLabel("Limit value", { exact: true }).focus();
     await expect(
       edit.getByLabel("Label key", { exact: true }),
     ).not.toBeVisible();

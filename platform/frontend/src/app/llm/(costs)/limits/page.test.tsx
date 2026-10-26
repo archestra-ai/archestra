@@ -673,13 +673,16 @@ describe("LimitsPage", () => {
   it("does not reinterpret decimal, negative or excessive amounts when pasted", () => {
     render(<LimitsPage />);
     const amount = screen.getByLabelText("Limit value");
+    expect(amount).not.toHaveAttribute("aria-describedby");
     for (const value of ["1.50", "1,50", "1,2", "-1", "2147483648"]) {
       fireEvent.change(amount, { target: { value } });
       expect(amount).toHaveValue(value);
       expect(
         screen.getByRole("button", { name: "Create limit" }),
       ).toBeDisabled();
-      expect(screen.getByText(/Enter a whole number from 1 to/)).toBeVisible();
+      expect(amount).toHaveAccessibleDescription(
+        /Enter a whole number from 1 to/,
+      );
     }
     fireEvent.keyDown(screen.getByRole("combobox", { name: "Limit kind" }), {
       key: "Enter",
@@ -691,6 +694,10 @@ describe("LimitsPage", () => {
     fireEvent.submit(amount.closest("form") as HTMLFormElement);
     expect(mockCreateLimit).not.toHaveBeenCalled();
     fireEvent.change(amount, { target: { value: "1,000" } });
+    expect(amount).not.toHaveAttribute("aria-describedby");
+    expect(
+      screen.queryByText(/Enter a whole number from 1 to/),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create limit" })).toBeEnabled();
   });
 

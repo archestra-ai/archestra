@@ -653,7 +653,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         outputSource: "runtime",
         denied: true,
       };
-    for (const answer of toolResults) {
+    const carriedKeys = toolResults.map((answer) =>
+      carriedRulingKey({
+        session: this.governedSession(binding),
+        callId: answer.id,
+      }),
+    );
+    const carriedRulings = binding.adapter?.answersUndeclaredCalls
+      ? await cacheManager.getMany<string>(carriedKeys)
+      : new Map<AllowedCacheKey, string>();
+    for (const [index, answer] of toolResults.entries()) {
       // Read, not consumed: the client sends this result on every later
       // request, and the model must read the same text each time.
       const ruling = await cacheManager.get<string>(
@@ -683,12 +692,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         }
       }
       // Already complete, and with no plan this client could act on.
-      const carried = await cacheManager.get<string>(
-        carriedRulingKey({
-          session: this.governedSession(binding),
-          callId: answer.id,
-        }),
-      );
+      const carried = carriedRulings.get(carriedKeys[index]);
       if (typeof carried === "string")
         result.toolResultUpdates[answer.id] = {
           content: carried,
@@ -1675,18 +1679,28 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // request often leaves before the gateway's tool list arrives. One
         // resend normally carries the tools; only a repeat within the same
         // session is a client that cannot receive remedies.
-        const transient =
-          !binding.request.defersTools &&
-          binding.request.declaredTools.length > 0 &&
-          !(await this.remedyToolsMissingBefore(session));
-        // A client that defers tools has not failed to receive remedies: it
-        // has not loaded the tools yet.
-        if (!transient && !binding.request.defersTools) {
-          await recordOpenAppaClientFailure({
-            session,
-            toolCallId: call.id,
-            ruling: decision.feedback,
-          });
+        const admitted = rest.flatMap((each) =>
+          decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
+        );
+        let transient: boolean;
+        try {
+          transient =
+            !binding.request.defersTools &&
+            binding.request.declaredTools.length > 0 &&
+            !(await this.remedyToolsMissingBefore(session));
+          // A client that defers tools has not failed to receive remedies: it
+          // has not loaded the tools yet.
+          if (!transient && !binding.request.defersTools) {
+            await recordOpenAppaClientFailure({
+              session,
+              toolCallId: call.id,
+              ruling: decision.feedback,
+            });
+          }
+        } catch (error) {
+          // The batch never reaches the client, so its admitted calls never run.
+          await cancelCalls(session, admitted, policy);
+          throw error;
         }
         // A call that only needs loading gets that one instruction. A client
         // that defers tools can still load the remedy tools and act on the
@@ -1737,13 +1751,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           continue;
         }
         // Refuses the call and cancels admitted calls when the client declares no notice tool.
-        await cancelCalls(
-          session,
-          rest.flatMap((each) =>
-            decisionById.get(each.id)?.kind === "allow" ? [each.id] : [],
-          ),
-          policy,
-        );
+        await cancelCalls(session, admitted, policy);
         return {
           decision: "refuse",
           refusal: {

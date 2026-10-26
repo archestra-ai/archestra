@@ -6025,6 +6025,31 @@ describe("rendering runtime text for this client", () => {
       }
     });
 
+    test("withdraws the admitted call when the refusal fails before it is sent", async () => {
+      const set = cacheManager.set.bind(cacheManager);
+      const cacheSet = vi
+        .spyOn(cacheManager, "set")
+        .mockImplementation((key, ...rest) =>
+          key.startsWith(CacheKey.OpenAppaRemedyToolsMissing)
+            ? Promise.reject(new Error("cache unavailable"))
+            : set(key, ...rest),
+        );
+      try {
+        await expect(
+          rule({
+            sessionId: "refusal-cache-down",
+            adapter: new AppaOpenCodeAdapter(),
+            userAgent: "opencode/1.17.0",
+            interactionType: "anthropic:messages",
+            declaredTools: [{ name: "Read" }, { name: "Bash" }],
+          }),
+        ).rejects.toThrow("cache unavailable");
+        expect(cancelCalls.mock.calls[0][1]).toEqual(["admitted"]);
+      } finally {
+        cacheSet.mockRestore();
+      }
+    });
+
     test("answers the carried call with the carried ruling and asks for no remedy plan, though the journal offers one", async ({
       makeOrganization,
     }) => {

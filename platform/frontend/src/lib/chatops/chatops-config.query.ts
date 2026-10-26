@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError, throwOnApiError } from "@/lib/utils/api";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 export function useNgrokConfig(enabled = true) {
   return useQuery({
@@ -64,6 +64,44 @@ export function useUpdateChatOpsConfigInQuickstart() {
       // Keep a defensive fallback for unexpected runtime errors.
       console.error("ChatOps config update error:", error);
       toast.error("Failed to update MS Teams configuration");
+    },
+  });
+}
+
+/**
+ * Save the group-chat file sign-in switch on its own, the moment it flips,
+ * so it does not wait on the setup dialog's final Connect step.
+ */
+export function useUpdateMsTeamsGroupChatFileSignIn() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (groupChatFileSignIn: boolean) => {
+      const { data, error } =
+        await archestraApiSdk.updateChatOpsConfigInQuickstart({
+          body: { groupChatFileSignIn },
+        });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data ?? null;
+    },
+    onSuccess: (data, groupChatFileSignIn) => {
+      if (!data?.success) return;
+      queryClient.setQueryData<
+        archestraApiTypes.GetMsTeamsChatOpsConfigResponses["200"] | null
+      >(["chatops", "ms-teams-config"], (old) =>
+        old ? { ...old, groupChatFileSignIn } : old,
+      );
+      queryClient.invalidateQueries({
+        queryKey: ["chatops", "ms-teams-config"],
+      });
+      toast.success(
+        groupChatFileSignIn
+          ? "Group-chat file sign-in turned on"
+          : "Group-chat file sign-in turned off",
+      );
     },
   });
 }

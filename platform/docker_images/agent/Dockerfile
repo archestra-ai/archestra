@@ -15,10 +15,14 @@ RUN apt-get update -qq \
 FROM node:24-bookworm-slim AS agent-base
 ARG TARGETARCH
 
+# CVE-2026-84782: require the fixed OpenSSL packages and refresh cached apt layers.
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
       build-essential ca-certificates curl ffmpeg fonts-dejavu-core git jq less libssl3 openssh-client \
-      procps python3 python3-venv ripgrep tmux \
+      openssl procps python3 python3-venv ripgrep tmux \
+ && for package in openssl libssl3; do \
+      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '3.0.22-1~deb12u2' || exit 1; \
+    done \
  && rm -rf /var/lib/apt/lists/*
 
 # Keep the real CLI at /usr/bin/gh: /usr/local/bin/gh is the managed credential

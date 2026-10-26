@@ -97,11 +97,6 @@ export function useUpdateMsTeamsGroupChatFileSignIn() {
       queryClient.invalidateQueries({
         queryKey: ["chatops", "ms-teams-config"],
       });
-      toast.success(
-        groupChatFileSignIn
-          ? "Group-chat file sign-in turned on"
-          : "Group-chat file sign-in turned off",
-      );
     },
   });
 }

@@ -262,6 +262,18 @@ function validateIncomingEmailDomain(
   }
 }
 
+/** Written only by AutoRoutingSettingsModel, under the routing-plan lock. */
+const AUTO_ROUTING_COLUMNS = {
+  autoRoutingEnabled: true,
+  autoRoutingBudgetUsdPerDay: true,
+  autoRoutingFastModelId: true,
+  autoRoutingNormalModelId: true,
+  autoRoutingSmartModelId: true,
+  autoRoutingScorerVersionId: true,
+  autoRoutingGeneration: true,
+  autoRoutingPlannedGeneration: true,
+} as const;
+
 const AgentRowSchema = createSelectSchema(
   schema.agentsTable,
   selectExtendedFields,
@@ -510,6 +522,7 @@ export const InsertAgentSchemaBase = createInsertSchema(
     latestVersion: true,
     // Stamped by AgentUsageModel when the agent is used; never client-settable.
     lastUsedAt: true,
+    ...AUTO_ROUTING_COLUMNS,
   });
 
 // Full schema with validation refinement
@@ -576,6 +589,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     latestVersion: true,
     // Stamped by AgentUsageModel when the agent is used; never client-settable.
     lastUsedAt: true,
+    ...AUTO_ROUTING_COLUMNS,
   });
 
 // Full schema with validation refinement

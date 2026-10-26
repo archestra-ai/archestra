@@ -1136,6 +1136,22 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "transactional settled usage projection",
   },
+  routingDecisionsTable: {
+    audited: false,
+    reason: "auto-routing execution state written per proxied session",
+  },
+  routingUsageTable: {
+    audited: false,
+    reason: "auto-routing usage written with each interaction",
+  },
+  routingPlansTable: {
+    audited: false,
+    reason: "system-written auto-routing fit outcomes",
+  },
+  routingScorerVersionsTable: {
+    audited: false,
+    reason: "system-written immutable scorer specs",
+  },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 
 /**

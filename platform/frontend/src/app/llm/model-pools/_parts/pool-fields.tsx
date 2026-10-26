@@ -41,10 +41,9 @@ import {
   MAX_PRIORITY,
   MAX_WEIGHT,
   nextPriority,
+  orderShare,
   type PoolForm,
   type PoolOptions,
-  roleLabel,
-  roleShare,
 } from "./pool-form";
 
 type SavedMember = ModelPool["members"][number];
@@ -118,9 +117,9 @@ export function ModelNameField({
   );
 }
 
-// Key, model id, role, weight, traffic, status, on, remove.
+// Key, model id, order, weight, traffic, status, on, remove.
 const MEMBER_COLUMNS =
-  "@3xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_8rem_4.5rem_4.5rem_7.5rem_2.25rem_2rem]";
+  "@3xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_5rem_4.5rem_4.5rem_7.5rem_2.25rem_2rem]";
 
 /**
  * One row per member, primaries first, so the list reads in the order
@@ -150,9 +149,9 @@ export function MembersEditor({
     sharedKeys.find(
       (key) => !members.some((member) => member.providerApiKeyId === key.id),
     ) ?? sharedKeys[0];
-  const lastRole = Math.max(0, ...members.map((member) => member.priority));
-  const roles = Array.from(
-    { length: Math.min(lastRole + 1, MAX_PRIORITY) },
+  const lastOrder = Math.max(0, ...members.map((member) => member.priority));
+  const orders = Array.from(
+    { length: Math.min(lastOrder + 1, MAX_PRIORITY) },
     (_, index) => index + 1,
   );
   const order = fields
@@ -162,7 +161,7 @@ export function MembersEditor({
         (members[a]?.priority ?? 0) - (members[b]?.priority ?? 0) || a - b,
     );
 
-  // Keeps roles numbered 1, 2, 3 after a member moves or leaves.
+  // Keeps orders numbered 1, 2, 3 after a member moves or leaves.
   const renumber = () => {
     const current = form.getValues("members");
     compactPriorities(current).forEach((member, index) => {
@@ -182,7 +181,7 @@ export function MembersEditor({
         </p>
       ) : (
         <>
-          <RoleOrder members={members} />
+          <OrderChain members={members} />
           <div className="@container rounded-md border">
             <div
               className={cn(
@@ -193,16 +192,16 @@ export function MembersEditor({
               <span>Provider key</span>
               <span>Model ID</span>
               <span className="flex items-center gap-1">
-                Role
-                <HelpTip topic="Role">
-                  Primary members get every request. Fallbacks get one only when
-                  every primary fails or is benched.
+                Order
+                <HelpTip topic="Order">
+                  Lower orders are tried first. A request moves to the next
+                  order only when every member before it fails or is benched.
                 </HelpTip>
               </span>
               <span className="flex items-center gap-1">
                 Weight
                 <HelpTip topic="Weight">
-                  Splits traffic between members with the same role. 3 and 1
+                  Splits traffic between members with the same order. 3 and 1
                   means 75% and 25%.
                 </HelpTip>
               </span>
@@ -225,7 +224,7 @@ export function MembersEditor({
                 const provider = keysById.get(
                   member?.providerApiKeyId ?? "",
                 )?.provider;
-                const share = roleShare(members, index);
+                const share = orderShare(members, index);
                 const alone =
                   members.filter((other) => other.priority === member?.priority)
                     .length === 1;
@@ -302,25 +301,25 @@ export function MembersEditor({
                       <Controller
                         control={form.control}
                         name={`members.${index}.priority`}
-                        render={({ field: roleField }) => (
+                        render={({ field: orderField }) => (
                           <Select
-                            value={String(roleField.value)}
+                            value={String(orderField.value)}
                             onValueChange={(value) => {
-                              roleField.onChange(Number(value));
+                              orderField.onChange(Number(value));
                               renumber();
                             }}
                             disabled={disabled}
                           >
                             <SelectTrigger
-                              className="w-32 @3xl:w-full"
-                              aria-label="Role"
+                              className="w-20 @3xl:w-full"
+                              aria-label="Order"
                             >
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {roles.map((role) => (
-                                <SelectItem key={role} value={String(role)}>
-                                  {roleLabel(role)}
+                              {orders.map((order) => (
+                                <SelectItem key={order} value={String(order)}>
+                                  {order}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -348,7 +347,7 @@ export function MembersEditor({
                       </Label>
                       <TrafficShare
                         share={share}
-                        role={roleLabel(member?.priority ?? 1)}
+                        order={member?.priority ?? 1}
                       />
                       <MemberStatus
                         enabled={member?.enabled ?? true}
@@ -443,23 +442,23 @@ export function MembersEditor({
   );
 }
 
-/** "Primary · 2 → Fallback · 1": the roles in the order requests try them. */
-function RoleOrder({ members }: { members: { priority: number }[] }) {
+/** "Order 1 · 2 → Order 2 · 1": the orders requests try, with member counts. */
+function OrderChain({ members }: { members: { priority: number }[] }) {
   const counts = new Map<number, number>();
   for (const member of members) {
     counts.set(member.priority, (counts.get(member.priority) ?? 0) + 1);
   }
-  const roles = [...counts.keys()].sort((a, b) => a - b);
+  const orders = [...counts.keys()].sort((a, b) => a - b);
   return (
     <ol
       aria-label="Order requests try members in"
       className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"
     >
-      {roles.map((role, position) => (
-        <li key={role} className="flex items-center gap-1.5">
+      {orders.map((order, position) => (
+        <li key={order} className="flex items-center gap-1.5">
           {position > 0 ? <span aria-hidden="true">→</span> : null}
           <span className="rounded-full border bg-muted/50 px-2 py-0.5 text-foreground">
-            {roleLabel(role)} · {counts.get(role)}
+            Order {order} · {counts.get(order)}
           </span>
         </li>
       ))}
@@ -467,15 +466,21 @@ function RoleOrder({ members }: { members: { priority: number }[] }) {
   );
 }
 
-/** The member's percent of its role's traffic, with a bar; a dash when off. */
-function TrafficShare({ share, role }: { share: number | null; role: string }) {
+/** The member's percent of its order's traffic, with a bar; a dash when off. */
+function TrafficShare({
+  share,
+  order,
+}: {
+  share: number | null;
+  order: number;
+}) {
   if (share === null) {
     return <span className="text-xs text-muted-foreground">—</span>;
   }
   return (
     <span
       className="grid w-16 gap-1 text-xs tabular-nums @3xl:w-full"
-      title={`${share}% of ${role.toLowerCase()} traffic`}
+      title={`${share}% of order ${order} traffic`}
     >
       <span>{share}%</span>
       <span className="h-1 overflow-hidden rounded-full bg-muted">

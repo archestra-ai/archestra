@@ -170,8 +170,8 @@ export function hasRepeatedMember(members: PoolFormValues["members"]) {
 }
 
 /**
- * Priorities renumbered 1, 2, 3 in the same order, so each priority reads as
- * a role: Primary, Fallback, Fallback 2. Routing only compares them.
+ * Priorities renumbered 1, 2, 3 in the same order, shown as each member's
+ * order (LiteLLM's word for it). Routing only compares them.
  */
 export function compactPriorities(
   members: PoolFormValues["members"],
@@ -185,57 +185,50 @@ export function compactPriorities(
   }));
 }
 
-/** "Primary" for priority 1, "Fallback" for 2, then "Fallback 2" and on. */
-export function roleLabel(priority: number): string {
-  if (priority <= 1) return "Primary";
-  if (priority === 2) return "Fallback";
-  return `Fallback ${priority - 1}`;
-}
-
-/** The first member is primary; later ones start as fallbacks. */
+/** The first member gets order 1; later ones start at order 2. */
 export function nextPriority(members: PoolFormValues["members"]): number {
   return members.length === 0 ? 1 : 2;
 }
 
 /**
- * The member's percent of its role's traffic, among members that are on, or
+ * The member's percent of its order's traffic, among members that are on, or
  * null when it is off.
  */
-export function roleShare(
+export function orderShare(
   members: PoolFormValues["members"],
   index: number,
 ): number | null {
   const member = members[index];
   if (!member?.enabled) return null;
-  const role = members.filter(
+  const sameOrder = members.filter(
     (other) => other.enabled && other.priority === member.priority,
   );
-  const total = role.reduce((sum, other) => sum + (other.weight || 0), 0);
+  const total = sameOrder.reduce((sum, other) => sum + (other.weight || 0), 0);
   if (total <= 0) return null;
   return Math.round(((member.weight || 0) / total) * 100);
 }
 
-/** "2 primary, 1 fallback": how many members hold each role. */
-export function roleSummary(members: { priority: number }[]): string {
-  if (members.length === 0) return "No members";
+/** "3 members, 2 on order 1": how many there are and how many go first. */
+export function orderSummary(members: { priority: number }[]): string {
+  const count = `${members.length} member${members.length === 1 ? "" : "s"}`;
+  if (members.length === 0) return count;
   const first = Math.min(...members.map((member) => member.priority));
-  const primary = members.filter((member) => member.priority === first).length;
-  const fallback = members.length - primary;
-  return fallback === 0
-    ? `${primary} primary`
-    : `${primary} primary, ${fallback} fallback`;
+  const leading = members.filter((member) => member.priority === first).length;
+  return leading === members.length
+    ? count
+    : `${count}, ${leading} on order ${first}`;
 }
 
-/** "3 members, 2 primary": how many there are and how many lead. */
+/** The same summary for a saved pool, leading with the members that are on. */
 export function memberSummary(pool: ModelPool): string {
   const on = pool.members.filter((member) => member.enabled);
   const count = `${pool.members.length} member${pool.members.length === 1 ? "" : "s"}`;
   if (on.length === 0) return count;
   const first = Math.min(...on.map((member) => member.priority));
-  const primary = on.filter((member) => member.priority === first).length;
-  return primary === pool.members.length
+  const leading = on.filter((member) => member.priority === first).length;
+  return leading === pool.members.length
     ? count
-    : `${count}, ${primary} primary`;
+    : `${count}, ${leading} on order ${first}`;
 }
 
 export function accessSummary(count: number): string {

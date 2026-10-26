@@ -72,6 +72,26 @@ export function transformConfigArrayFields(
     delete result.repositoryPathFilters;
   }
 
+  if (Array.isArray(config.repositoryEntries)) {
+    const mode =
+      config.repositorySelectionMode ??
+      ((
+        Array.isArray(config.repos)
+          ? config.repos.length
+          : typeof config.repos === "string"
+            ? config.repos.trim().length
+            : 0
+      )
+        ? "selected"
+        : "all");
+    if (mode === "selected")
+      result.repos = config.repositoryEntries.map(
+        (entry: { repository: string }) => entry.repository.trim(),
+      );
+  }
+  delete result.repositoryEntries;
+  delete result.repositorySelectionMode;
+
   // String array fields: split by comma, trim, filter empty
   const stringArrayFields = [
     "repos",

@@ -3,6 +3,40 @@ import { describe, expect, it } from "vitest";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
 describe("transformConfigArrayFields", () => {
+  it("serializes explicit entry names without leaking UI association or mode fields", () => {
+    const result = transformConfigArrayFields({
+      type: "github",
+      repos: ["old"],
+      repositorySelectionMode: "selected",
+      repositoryEntries: [
+        {
+          repository: " repo-a ",
+          overrideIndex: 1,
+          ownsOverride: true,
+          sourceRepository: "old",
+        },
+      ],
+      repositoryOverrides: [
+        { repository: "repo-a", includeIssues: false, includePaths: [] },
+      ],
+    });
+    expect(result).toEqual({
+      type: "github",
+      repos: ["repo-a"],
+      repositoryOverrides: [
+        { repository: "repo-a", includeIssues: false, includePaths: [] },
+      ],
+    });
+    expect(
+      transformConfigArrayFields({
+        ...result,
+        repositorySelectionMode: "all",
+        repos: [],
+        repositoryEntries: [{ repository: "repo-a" }],
+      }).repos,
+    ).toEqual([]);
+  });
+
   it("serializes independent repository filters and preserves them after edit/reload", () => {
     const config = {
       type: "github",

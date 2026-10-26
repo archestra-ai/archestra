@@ -29,12 +29,12 @@ Let agents answer from your GitHub repositories: "Why did we drop Redis?" finds 
 
 Sync issues from one repository and selected documentation from another, using shared defaults for everything else.
 
-1. Open **Advanced**. Choose **Selected repositories** and enter comma-separated names or `owner/repo` entries. Each selected repository gets a settings row. Choose **All accessible repositories** to use automatic discovery instead.
+1. Open **Advanced** and choose **Selected repositories**. Click **Add repository**, enter a name or `owner/repo`, and configure its settings in the same entry. Choose **All accessible repositories** to use automatic discovery instead.
 2. Expand **Repository defaults**. Set issues, pull requests and skipped labels together. Under **Repository files**, choose whether to sync files, their types, and their include/exclude paths.
-3. Click **Customize** on a repository that needs different settings. Keep **Use default** selected for inherited values; change only the settings that differ. In discovery mode, **Add repository override** adds an exception without selecting an additional source repository.
+3. Click **Edit** on a repository, then **Customize** to change its settings. Keep **Use default** selected for inherited values; change only the settings that differ. In discovery mode, **Add repository override** adds an exception without selecting an additional source repository.
 4. Save the connector, reopen **Advanced**, and check each repository's summary. **Reset to defaults** removes its customization while keeping it selected.
 
-- Inherited settings follow the defaults, including for newly discovered repositories. Explicit **Off** disables a category. Clearing the selected-repository list does not enable discovery; choose **All accessible repositories** explicitly. A qualified `owner/repo` override takes precedence over a bare name under **Owner**.
+- Inherited settings follow the defaults, including for newly discovered repositories. Explicit **Off** disables a category. Removing the last selected repository does not enable discovery; add a repository or choose **All accessible repositories** explicitly. A qualified `owner/repo` override takes precedence over a bare name under **Owner**.
 - Custom blank **Include paths** means the whole repository; blank **Exclude paths** or **Labels to Skip** means none. Blank **File Types** uses `.md`, `.mdx`, `.yaml` and `.yml`; `*` includes every text file. Paths are repository-relative, not globs: `docs` includes `docs/guide.md`, not `docs-internal/guide.md`. Exclusions win and affect files only.
 - Existing connector settings remain the defaults until you change them. Changing selection or filters affects later syncs; it does not automatically remove previously indexed documents.
 

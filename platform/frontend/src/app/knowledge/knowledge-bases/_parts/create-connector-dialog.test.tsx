@@ -141,6 +141,19 @@ async function renderGithubConfigureStep() {
   return { ...result, user };
 }
 
+async function addGithubRepository(
+  user: ReturnType<typeof userEvent.setup>,
+  repository: string,
+) {
+  await user.click(screen.getByRole("button", { name: "Add repository" }));
+  const row = within(
+    screen.getByRole("group", { name: "Repository New repository" }),
+  );
+  await user.click(row.getByLabelText("Repository"));
+  await user.paste(repository);
+  await user.click(row.getByRole("button", { name: "Done" }));
+}
+
 describe("CreateConnectorDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -174,9 +187,7 @@ describe("CreateConnectorDialog", () => {
         name: "Selected repositories",
       }),
     );
-    fireEvent.change(screen.getByLabelText(/^Repositories$/), {
-      target: { value: "repo-a" },
-    });
+    await addGithubRepository(user, "repo-a");
     await user.click(
       screen.getByRole("button", {
         name: "Repository settings for Repository defaults",
@@ -192,6 +203,9 @@ describe("CreateConnectorDialog", () => {
       screen.getByRole("button", {
         name: "Repository settings for Repository defaults",
       }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Edit repository repo-a" }),
     );
     await user.click(screen.getByRole("button", { name: "Customize repo-a" }));
     const row = within(
@@ -211,6 +225,9 @@ describe("CreateConnectorDialog", () => {
       { repository: "repo-a", excludePaths: ["generated"] },
     ]);
     expect(config.repositoryOverrides[0]).not.toHaveProperty("includePaths");
+    expect(config.repos).toEqual(["repo-a"]);
+    expect(config).not.toHaveProperty("repositoryEntries");
+    expect(config).not.toHaveProperty("repositorySelectionMode");
   });
 
   it("creates GitHub connectors with independent repository settings", async () => {
@@ -232,8 +249,8 @@ describe("CreateConnectorDialog", () => {
         name: "Selected repositories",
       }),
     );
-    await user.click(screen.getByLabelText(/^Repositories$/));
-    await user.paste(" repo-a , example-org/repo-b ");
+    await addGithubRepository(user, " repo-a ");
+    await addGithubRepository(user, " example-org/repo-b ");
     await user.click(
       screen.getByRole("button", {
         name: "Repository settings for Repository defaults",
@@ -251,6 +268,9 @@ describe("CreateConnectorDialog", () => {
       ["repo-a", "docs, handbook", "docs/internal"],
       ["example-org/repo-b", "guides", "guides/drafts"],
     ]) {
+      await user.click(
+        screen.getByRole("button", { name: `Edit repository ${repository}` }),
+      );
       await user.click(
         screen.getByRole("button", { name: `Customize ${repository}` }),
       );
@@ -310,16 +330,14 @@ describe("CreateConnectorDialog", () => {
         name: "Selected repositories",
       }),
     );
-    fireEvent.change(screen.getByLabelText(/^Repositories$/), {
-      target: { value: "repo-a" },
-    });
-    fireEvent.change(screen.getByLabelText(/^Repositories$/), {
-      target: { value: "" },
-    });
+    await addGithubRepository(user, "repo-a");
+    await user.click(
+      screen.getByRole("button", { name: "Remove repository repo-a" }),
+    );
     await user.click(screen.getByRole("button", { name: "Create Connector" }));
     expect(
       await screen.findByText(
-        "Select at least one repository or choose All accessible repositories.",
+        "Add at least one repository or choose All accessible repositories.",
       ),
     ).toBeVisible();
     expect(

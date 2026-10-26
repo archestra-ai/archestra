@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, Info, Plus } from "lucide-react";
-import { type ReactNode, useEffect, useId, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import {
   type FieldValues,
   type UseFormReturn,
@@ -105,14 +105,7 @@ function repositories(value: unknown): string[] {
     : typeof value === "string"
       ? value.split(",")
       : [];
-  return [
-    ...new Map(
-      entries
-        .map((entry: string) => entry.trim())
-        .filter(Boolean)
-        .map((entry: string) => [entry.toLowerCase(), entry]),
-    ).values(),
-  ] as string[];
+  return entries.map((entry: string) => entry.trim()).filter(Boolean);
 }
 
 function findOverride(
@@ -202,6 +195,13 @@ function Disclosure({
   );
 }
 
+type RepositoryEntryDraft = {
+  repository: string;
+  overrideIndex: number;
+  ownsOverride: boolean;
+  sourceRepository: string;
+};
+
 export function GithubRepositorySettings({ form, prefix }: Props) {
   const selectionId = useId();
   const canonical = form.watch(`${prefix}.repositoryOverrides`) as
@@ -214,8 +214,14 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
     control: form.control,
     name: `${prefix}.repositoryOverrides`,
   });
+  const entryPath = `${prefix}.repositoryEntries`;
+  const entries = form.watch(entryPath) as RepositoryEntryDraft[] | undefined;
+  const {
+    fields: entryFields,
+    append: appendEntry,
+    remove: removeEntry,
+  } = useFieldArray({ control: form.control, name: entryPath });
   const overrides = canonical ?? legacy ?? [];
-  const selected = repositories(form.watch(`${prefix}.repos`));
   const owner = (form.watch(`${prefix}.owner`) as string | undefined) ?? "";
   const initialRepos = defaultValue(
     form.formState.defaultValues,
@@ -235,112 +241,371 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
         shouldDirty: false,
       });
   }, [canonical, form, legacy, prefix]);
+  useEffect(() => {
+    if (entries === undefined)
+      form.setValue(
+        entryPath,
+        repositories(form.getValues(`${prefix}.repos`)).map((repository) => ({
+          repository,
+          overrideIndex: findOverride(overrides, repository, owner),
+          ownsOverride: findOverride(overrides, repository, owner) >= 0,
+          sourceRepository: repository,
+        })),
+        { shouldDirty: false },
+      );
+  }, [entries, entryPath, form, overrides, owner, prefix]);
+  const previousOwner = useRef(owner);
+  useEffect(() => {
+    if (previousOwner.current === owner) return;
+    previousOwner.current = owner;
+    // Owner scopes bare names; changing it must not rename a qualified rule.
+    for (const [index, entry] of (entries ?? []).entries()) {
+      const overrideIndex = findOverride(overrides, entry.repository, owner);
+      form.setValue(`${entryPath}.${index}.overrideIndex`, overrideIndex);
+      form.setValue(`${entryPath}.${index}.ownsOverride`, overrideIndex >= 0);
+      form.setValue(`${entryPath}.${index}.sourceRepository`, entry.repository);
+    }
+  }, [entries, entryPath, form, overrides, owner]);
   const defaults = form.watch(prefix) as Record<string, unknown>;
-  const matched = new Set(
-    selected
-      .map((repository) => findOverride(overrides, repository, owner))
+  const activeIndices = new Set(
+    (entries ?? [])
+      .map((entry) => entry.overrideIndex)
       .filter((index) => index >= 0),
   );
   const otherOverrides = fields
     .map((field, index) => ({ field, index }))
-    .filter(({ index }) => mode === "all" || !matched.has(index));
+    .filter(({ index }) => mode === "all" || !activeIndices.has(index));
+  const identity = (repository: string) => {
+    const name = repository.trim().toLowerCase();
+    return name.includes("/") ? name : `${owner.toLowerCase()}/${name}`;
+  };
   const summary = (override?: RepositoryOverrideDraft) =>
     BOOLEAN_SETTINGS.map(
       ({ name, label, fallback }) =>
         `${label.replace("Include ", "")}: ${(override?.[name] ?? defaults[name] ?? fallback) ? "on" : "off"}`,
     ).join(" · ");
   const resetRepository = (index: number) => {
-    const repository = overrides[index].repository.trim().toLowerCase();
-    const identity = repository.includes("/")
-      ? repository
-      : `${owner.toLowerCase()}/${repository}`;
-    remove(
-      repository
-        ? overrides.flatMap((entry, entryIndex) => {
-            const candidate = entry.repository.trim().toLowerCase();
-            return (candidate.includes("/")
-              ? candidate
-              : `${owner.toLowerCase()}/${candidate}`) === identity
-              ? [entryIndex]
-              : [];
-          })
-        : index,
-    );
-    setOpenKey(null);
+    const repository = overrides[index].repository;
+    const indices = repository.trim()
+      ? overrides.flatMap((entry, entryIndex) =>
+          identity(entry.repository) === identity(repository)
+            ? [entryIndex]
+            : [],
+        )
+      : [index];
+    remove(indices);
+    for (const [entryIndex, entry] of (entries ?? []).entries()) {
+      const nextIndex = indices.includes(entry.overrideIndex)
+        ? -1
+        : entry.overrideIndex -
+          indices.filter((removed) => removed < entry.overrideIndex).length;
+      form.setValue(`${entryPath}.${entryIndex}.overrideIndex`, nextIndex, {
+        shouldDirty: true,
+      });
+      if (nextIndex < 0) {
+        form.setValue(`${entryPath}.${entryIndex}.ownsOverride`, false);
+        form.setValue(
+          `${entryPath}.${entryIndex}.sourceRepository`,
+          entry.repository,
+        );
+      }
+    }
   };
-  const row = (
-    repository: string,
-    index: number,
-    key: string,
-    editable: boolean,
-    inactive = false,
-  ) => {
-    const customized = index >= 0;
-    const error =
-      customized &&
-      Boolean(
-        defaultValue(
-          form.formState.errors,
-          `${prefix}.repositoryOverrides.${index}.repository`,
-        ),
+  const validateName = (value: string, entryIndex: number) => {
+    if (mode === "all") return true;
+    if (!value.trim()) return "Repository is required";
+    if (!/^[^/\\\s,]+(?:\/[^/\\\s,]+)?$/.test(value.trim()))
+      return "Use a repository name or owner/repo";
+    const current = form.getValues(entryPath) as RepositoryEntryDraft[];
+    if (
+      !current.every(
+        (entry, index) =>
+          index === entryIndex ||
+          identity(entry.repository) !== identity(value),
+      )
+    )
+      return "Each repository can be selected only once";
+    const entry = current[entryIndex];
+    if (
+      entry.ownsOverride &&
+      identity(value) !== identity(entry.sourceRepository) &&
+      overrides.some(
+        (override, index) =>
+          index !== entry.overrideIndex &&
+          identity(override.repository) === identity(value),
+      )
+    )
+      return "This repository already has saved overrides. Reset them before renaming this entry.";
+    return true;
+  };
+  const applyName = (value: string, entryIndex: number) => {
+    const entry = form.getValues(
+      `${entryPath}.${entryIndex}`,
+    ) as RepositoryEntryDraft;
+    if (validateName(value, entryIndex) !== true) {
+      if (!entry.ownsOverride)
+        form.setValue(`${entryPath}.${entryIndex}.overrideIndex`, -1);
+      return;
+    }
+    if (
+      entry.ownsOverride &&
+      entry.overrideIndex >= 0 &&
+      overrides[entry.overrideIndex]
+    ) {
+      const shared = (form.getValues(entryPath) as RepositoryEntryDraft[]).some(
+        (other, index) =>
+          index !== entryIndex && other.overrideIndex === entry.overrideIndex,
       );
+      if (shared && identity(value) !== identity(entry.sourceRepository)) {
+        const nextIndex = overrides.length;
+        append(
+          githubRepositoryOverrideDraft({
+            ...overrides[entry.overrideIndex],
+            repository: value,
+          }),
+        );
+        form.setValue(`${entryPath}.${entryIndex}.overrideIndex`, nextIndex, {
+          shouldDirty: true,
+        });
+      } else
+        form.setValue(
+          `${prefix}.repositoryOverrides.${entry.overrideIndex}.repository`,
+          value,
+          { shouldDirty: true },
+        );
+    } else
+      form.setValue(
+        `${entryPath}.${entryIndex}.overrideIndex`,
+        findOverride(overrides, value, owner),
+        { shouldDirty: true },
+      );
+  };
+  const claimEntry = (entryIndex: number) => {
+    const entry = form.getValues(
+      `${entryPath}.${entryIndex}`,
+    ) as RepositoryEntryDraft;
+    if (validateName(entry.repository, entryIndex) !== true) return;
+    applyName(entry.repository, entryIndex);
+    const linked = form.getValues(
+      `${entryPath}.${entryIndex}.overrideIndex`,
+    ) as number;
+    form.setValue(`${entryPath}.${entryIndex}.ownsOverride`, linked >= 0, {
+      shouldDirty: true,
+    });
+    form.setValue(
+      `${entryPath}.${entryIndex}.sourceRepository`,
+      entry.repository,
+      { shouldDirty: true },
+    );
+  };
+  const entryRow = (
+    entry: RepositoryEntryDraft,
+    entryIndex: number,
+    key: string,
+  ) => {
+    const customized =
+      entry.overrideIndex >= 0 && Boolean(overrides[entry.overrideIndex]);
+    const name = entry.repository.trim() || "New repository";
+    const path = `${entryPath}.${entryIndex}.repository`;
+    const error = Boolean(defaultValue(form.formState.errors, path));
+    const open =
+      openKey === key ||
+      error ||
+      (openKey === "new-entry" && entryIndex === (entries?.length ?? 0) - 1);
     return (
-      <fieldset
-        key={key}
-        aria-label={`Repository ${repository || "new override"}${inactive ? " (inactive)" : ""}`}
-      >
+      <fieldset key={key} aria-label={`Repository ${name}`}>
         <Disclosure
-          title={repository || "New repository override"}
-          summary={`${summary(customized ? overrides[index] : undefined)} · ${customized ? "Custom settings" : "Uses repository defaults"}${inactive ? " · Inactive" : ""}`}
-          open={
-            openKey === key ||
-            error ||
-            (openKey === "new" && index === overrides.length - 1 && editable)
-          }
-          onOpenChange={(open) => setOpenKey(open ? key : null)}
+          title={name}
+          summary={`${summary(customized ? overrides[entry.overrideIndex] : undefined)} · ${customized ? "Custom settings" : "Uses repository defaults"}`}
+          open={open}
+          onOpenChange={(next) => setOpenKey(next ? key : null)}
           actions={
-            customized ? (
+            <>
               <Button
                 type="button"
-                size="sm"
                 variant="ghost"
-                onClick={() => {
-                  resetRepository(index);
-                }}
-                aria-label={`Reset ${repository || "repository"} to defaults${inactive ? " (inactive)" : ""}`}
+                size="sm"
+                aria-label={`Edit repository ${name}`}
+                onClick={() => setOpenKey(key)}
               >
-                Reset to defaults
+                Edit
               </Button>
-            ) : (
               <Button
                 type="button"
+                variant="ghost"
                 size="sm"
-                variant="outline"
+                aria-label={`Remove repository ${name}`}
                 onClick={() => {
-                  append(githubRepositoryOverrideDraft({ repository }));
-                  setOpenKey(key);
+                  const shared = (
+                    form.getValues(entryPath) as RepositoryEntryDraft[]
+                  ).some(
+                    (other, index) =>
+                      index !== entryIndex &&
+                      other.overrideIndex === entry.overrideIndex,
+                  );
+                  if (customized && entry.ownsOverride && !shared)
+                    resetRepository(entry.overrideIndex);
+                  removeEntry(entryIndex);
+                  setOpenKey(null);
                 }}
-                aria-label={`Customize ${repository}`}
+              >
+                Remove
+              </Button>
+            </>
+          }
+        >
+          <FormField
+            control={form.control}
+            name={path}
+            rules={{
+              validate: (value: string) => validateName(value, entryIndex),
+            }}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Repository</FormLabel>
+                <FormDescription>
+                  A repository name or owner/repo. Renaming keeps this entry's
+                  custom settings.
+                </FormDescription>
+                <FormControl>
+                  <Input
+                    placeholder="owner/repo"
+                    {...field}
+                    onChange={(event) => {
+                      field.onChange(event.target.value);
+                      applyName(event.target.value, entryIndex);
+                    }}
+                    onBlur={() => {
+                      field.onBlur();
+                      claimEntry(entryIndex);
+                    }}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          {customized ? (
+            <>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Reset ${name} to defaults`}
+                  onClick={() => resetRepository(entry.overrideIndex)}
+                >
+                  Reset to defaults
+                </Button>
+              </div>
+              <OverrideFields
+                form={form}
+                prefix={prefix}
+                index={entry.overrideIndex}
+                defaults={defaults}
+                editableRepository={false}
+              />
+            </>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                All settings inherit the repository defaults.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={`Customize ${name}`}
+                disabled={!entry.repository.trim()}
+                onClick={() => {
+                  const index = overrides.length;
+                  append(
+                    githubRepositoryOverrideDraft({
+                      repository: entry.repository.trim(),
+                    }),
+                  );
+                  form.setValue(
+                    `${entryPath}.${entryIndex}.overrideIndex`,
+                    index,
+                    { shouldDirty: true },
+                  );
+                  form.setValue(
+                    `${entryPath}.${entryIndex}.ownsOverride`,
+                    true,
+                    { shouldDirty: true },
+                  );
+                  form.setValue(
+                    `${entryPath}.${entryIndex}.sourceRepository`,
+                    entry.repository,
+                    { shouldDirty: true },
+                  );
+                }}
               >
                 Customize
               </Button>
-            )
+            </div>
+          )}
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                if (await form.trigger(path)) {
+                  claimEntry(entryIndex);
+                  setOpenKey(null);
+                }
+              }}
+            >
+              Done
+            </Button>
+          </div>
+        </Disclosure>
+      </fieldset>
+    );
+  };
+  const overrideRow = (index: number, key: string) => {
+    const repository = overrides[index]?.repository ?? "";
+    const name = repository || "New repository override";
+    const error = Boolean(
+      defaultValue(
+        form.formState.errors,
+        `${prefix}.repositoryOverrides.${index}.repository`,
+      ),
+    );
+    return (
+      <fieldset
+        key={key}
+        aria-label={`Repository ${name}${mode === "selected" ? " (inactive)" : ""}`}
+      >
+        <Disclosure
+          title={name}
+          summary={`${summary(overrides[index])} · Custom settings${mode === "selected" ? " · Inactive" : ""}`}
+          open={
+            openKey === key ||
+            error ||
+            (openKey === "new-override" && index === overrides.length - 1)
+          }
+          onOpenChange={(next) => setOpenKey(next ? key : null)}
+          actions={
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              aria-label={`Reset ${name} to defaults${mode === "selected" ? " (inactive)" : ""}`}
+              onClick={() => resetRepository(index)}
+            >
+              Reset to defaults
+            </Button>
           }
         >
-          {customized ? (
-            <OverrideFields
-              form={form}
-              prefix={prefix}
-              index={index}
-              defaults={defaults}
-              editableRepository={editable}
-            />
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              All settings inherit the repository defaults. Customize only the
-              settings that differ.
-            </p>
-          )}
+          <OverrideFields
+            form={form}
+            prefix={prefix}
+            index={index}
+            defaults={defaults}
+            editableRepository
+          />
         </Disclosure>
       </fieldset>
     );
@@ -350,8 +615,8 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
       <div className="space-y-1">
         <h3 className="text-sm font-semibold">Repository settings</h3>
         <p className="text-sm text-muted-foreground">
-          Choose the repositories, then set defaults and customize individual
-          repositories.
+          Choose repositories and customize their settings. Other repositories
+          keep the defaults.
         </p>
       </div>
       <div className="space-y-2">
@@ -360,9 +625,40 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
           value={mode}
           onValueChange={(value: "all" | "selected") => {
             setMode(value);
+            form.setValue(`${prefix}.repositorySelectionMode`, value, {
+              shouldDirty: true,
+            });
             if (value === "all") {
-              form.setValue(`${prefix}.repos`, "", { shouldDirty: true });
-              form.clearErrors(`${prefix}.repos`);
+              form.setValue(`${prefix}.repos`, [], { shouldDirty: true });
+              form.clearErrors([`${prefix}.repos`, entryPath]);
+            } else {
+              // Rules can be renamed in discovery mode while selected rows are hidden.
+              const currentOverrides = form.getValues(
+                `${prefix}.repositoryOverrides`,
+              ) as RepositoryOverrideDraft[];
+              for (const [index, entry] of (
+                (form.getValues(entryPath) as
+                  | RepositoryEntryDraft[]
+                  | undefined) ?? []
+              ).entries()) {
+                const overrideIndex = findOverride(
+                  currentOverrides,
+                  entry.repository,
+                  owner,
+                );
+                form.setValue(
+                  `${entryPath}.${index}.overrideIndex`,
+                  overrideIndex,
+                );
+                form.setValue(
+                  `${entryPath}.${index}.ownsOverride`,
+                  overrideIndex >= 0,
+                );
+                form.setValue(
+                  `${entryPath}.${index}.sourceRepository`,
+                  entry.repository,
+                );
+              }
             }
           }}
         >
@@ -375,43 +671,22 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
           </SelectContent>
         </Select>
       </div>
-      <div hidden={mode === "all"}>
-        <FormField
-          control={form.control}
-          name={`${prefix}.repos`}
-          rules={{
-            validate: {
-              selected: (value) =>
-                mode === "all" ||
-                repositories(value).length > 0 ||
-                "Select at least one repository or choose All accessible repositories.",
-              format: (value) =>
-                mode === "all" ||
-                repositories(value).every((repository) =>
-                  /^[^/\\\s]+(?:\/[^/\\\s]+)?$/.test(repository),
-                ) ||
-                "Use repository names or owner/repo entries.",
-            },
-          }}
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Repositories</FormLabel>
-              <FormDescription>
-                Comma-separated names or owner/repo entries. Clearing this list
-                does not enable discovery.
-              </FormDescription>
-              <FormControl>
-                <Input
-                  placeholder="repo-a, owner/repo-b"
-                  {...field}
-                  value={joinIfArray(field.value)}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-      </div>
+      <FormField
+        control={form.control}
+        name={`${prefix}.repos`}
+        rules={{
+          validate: () =>
+            mode === "all" ||
+            ((form.getValues(entryPath) as RepositoryEntryDraft[] | undefined)
+              ?.length ?? 0) > 0 ||
+            "Add at least one repository or choose All accessible repositories.",
+        }}
+        render={() => (
+          <FormItem>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
       {mode === "all" && (
         <InlineNotice variant="neutral">
           <Info />
@@ -430,16 +705,27 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
       >
         <SettingsFields form={form} prefix={prefix} />
       </Disclosure>
-      <div className="space-y-2">
-        {mode === "selected" &&
-          selected.map((repository) =>
-            row(
-              repository,
-              findOverride(overrides, repository, owner),
-              `selected:${repository.toLowerCase()}`,
-              false,
-            ),
-          )}
+      <div hidden={mode === "all"} className="space-y-2">
+        {entryFields.map((field, index) =>
+          entries?.[index] ? entryRow(entries[index], index, field.id) : null,
+        )}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            appendEntry({
+              repository: "",
+              overrideIndex: -1,
+              ownsOverride: false,
+              sourceRepository: "",
+            });
+            setOpenKey("new-entry");
+          }}
+        >
+          <Plus />
+          <span>Add repository</span>
+        </Button>
       </div>
       {otherOverrides.length > 0 && (
         <div className="space-y-2">
@@ -454,13 +740,7 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
             </InlineNotice>
           )}
           {otherOverrides.map(({ field, index }) =>
-            row(
-              overrides[index]?.repository ?? "",
-              index,
-              field.id,
-              true,
-              mode === "selected",
-            ),
+            overrideRow(index, field.id),
           )}
         </div>
       )}
@@ -471,7 +751,7 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
           variant="outline"
           onClick={() => {
             append(githubRepositoryOverrideDraft({ repository: "" }));
-            setOpenKey("new");
+            setOpenKey("new-override");
           }}
         >
           <Plus />

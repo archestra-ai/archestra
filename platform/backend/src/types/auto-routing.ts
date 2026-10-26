@@ -161,3 +161,8 @@ export type RoutingPublishRejection = z.infer<
 export type RoutingPublishResult =
   | { kind: "recorded"; plan: RoutingPlan }
   | { kind: "rejected"; reason: RoutingPublishRejection; plan: RoutingPlan };
+
+export type AutoRoutingRequestContext = {
+  decisionId: string;
+  smartModel: { modelId: string; provider: string };
+};

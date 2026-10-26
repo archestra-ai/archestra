@@ -40,6 +40,7 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { assertNotAutoOnNativeRoute } from "@/auto-routing/router";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
@@ -133,6 +134,7 @@ import {
   type ToolCallBlock,
 } from "@/types";
 import type { AttributionLabels } from "@/types/attribution-label";
+import type { AutoRoutingRequestContext } from "@/types/auto-routing";
 import { asRecord } from "@/utils/as-record";
 import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
@@ -181,6 +183,7 @@ import {
   withFirstChunk,
 } from "./upstream-connection-retry";
 import * as utils from "./utils";
+import { autoRoutingContext } from "./utils/auto-routing-context";
 import { getAzureProxyIngress } from "./utils/azure-ingress";
 import { withClaudeDesktopSubscriptionPreamble } from "./utils/claude-desktop-subscription";
 import { resolveClientGatewayBindings } from "./utils/client-gateway-bindings";
@@ -208,6 +211,7 @@ export interface LLMProxyContext<TRequest> {
   throughput?: LlmThroughput;
   usageAccountingMode?: PricedBillingUsage["mode"];
   providerApiKeyId?: string;
+  autoRouting?: AutoRoutingRequestContext;
   billingAttribution?: BillingAttribution;
   connectionVerification?: boolean;
   appaReceipts?: OpenappaReceipts;
@@ -546,6 +550,8 @@ export async function handleLLMProxy<
   const gatewayToolDeclarations =
     utils.gatewayToolDeclarations.extractGatewayToolDeclarations(body);
   const requestAdapter = provider.createRequestAdapter(body);
+  assertNotAutoOnNativeRoute(requestAdapter.getModel());
+  const autoRouting = autoRoutingContext(request);
   const streamAdapter = provider.createStreamAdapter(body);
   const providerMessages = requestAdapter.getProviderMessages();
   const messagesCount = getProviderMessagesCount(providerMessages);
@@ -1753,6 +1759,7 @@ export async function handleLLMProxy<
     );
     const ctx: LLMProxyContext<TRequest> = {
       attributionLabels,
+      autoRouting,
       throughput: new LlmThroughput({
         entities: [...uniqueBillingEntities.values()],
         model: actualModel,
@@ -1919,6 +1926,8 @@ export async function handleLLMProxy<
         encryptedChat,
         streamTiming,
         attributionLabels,
+        // A failed request has no usage to attribute to its routing decision.
+        autoRouting: undefined,
       });
     } catch (interactionError) {
       logger.error(
@@ -2179,6 +2188,7 @@ async function handleStreaming<
         streamTiming,
         attributionLabels,
         throughput: ctx.throughput,
+        autoRouting: ctx.autoRouting,
       });
     } catch (interactionError) {
       logger.error(
@@ -2277,6 +2287,7 @@ async function handleStreaming<
       });
 
       const costs = await calculateInteractionCosts({
+        autoRouting: ctx.autoRouting,
         usageAccountingMode: ctx.usageAccountingMode,
         providerApiKeyId: ctx.providerApiKeyId,
         actualModel,
@@ -2353,6 +2364,7 @@ async function handleStreaming<
           streamTiming,
           attributionLabels,
           throughput: ctx.throughput,
+          autoRouting: ctx.autoRouting,
         });
       } catch (interactionError) {
         logger.error(
@@ -3177,6 +3189,7 @@ async function handleNonStreaming<
             );
           }
           const costs = await calculateInteractionCosts({
+            autoRouting: ctx.autoRouting,
             actualModel,
             usage: error.usage,
             providerName,
@@ -3214,6 +3227,7 @@ async function handleNonStreaming<
             streamTiming,
             attributionLabels,
             throughput: ctx.throughput,
+            autoRouting: ctx.autoRouting,
           });
           if (costs.billingUsage?.mode === "enforce")
             withSessionContext(sessionId, () =>
@@ -3513,6 +3527,7 @@ async function handleNonStreaming<
 
       // Record interaction with refusal (usage already corrected above)
       const costs = await calculateInteractionCosts({
+        autoRouting: ctx.autoRouting,
         usageAccountingMode: ctx.usageAccountingMode,
         providerApiKeyId: ctx.providerApiKeyId,
         actualModel,
@@ -3598,6 +3613,7 @@ async function handleNonStreaming<
         streamTiming,
         attributionLabels,
         throughput: ctx.throughput,
+        autoRouting: ctx.autoRouting,
       });
       if (tokenAccountingError) {
         if (tokenAccountingError instanceof ThroughputError)
@@ -3687,6 +3703,7 @@ async function handleNonStreaming<
   // Anthropic tokens are emitted here for JSON and internally streamed calls;
   // its HTTP wrapper records duration only. Other providers own HTTP tokens.
   const costs = await calculateInteractionCosts({
+    autoRouting: ctx.autoRouting,
     usageAccountingMode: ctx.usageAccountingMode,
     providerApiKeyId: ctx.providerApiKeyId,
     actualModel,
@@ -3783,6 +3800,7 @@ async function handleNonStreaming<
       streamTiming,
       attributionLabels,
       throughput: ctx.throughput,
+      autoRouting: ctx.autoRouting,
     });
     responsePersisted = true;
   } catch (interactionError) {
@@ -4171,17 +4189,20 @@ async function persistProxyInteraction({
   streamTiming,
   attributionLabels,
   throughput,
+  autoRouting,
 }: {
   record: InsertInteraction;
   encryptedChat: EncryptedChatAuditDisposition;
   streamTiming: StreamTiming;
   attributionLabels?: AttributionLabels;
   throughput?: LlmThroughput;
+  autoRouting: AutoRoutingRequestContext | undefined;
 }): Promise<void> {
   // Snapshot before database work; streaming calls reach here after consumption,
   // so this includes the full stream rather than just time to its first byte.
   record = {
     ...record,
+    autoRoutingDecisionId: autoRouting?.decisionId,
     attributionLabels,
     durationMs: Math.max(0, Date.now() - streamTiming.requestReceivedAt),
   };

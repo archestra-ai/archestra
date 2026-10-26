@@ -197,6 +197,8 @@ export const ConfigResponseSchema = z.strictObject({
     mcpGatewaySkillsEnabled: z.boolean(),
     /** Internal UI feedback overlay; on only where its Slack channel is set. */
     devFeedbackEnabled: z.boolean(),
+    /** ALPHA: the Model Router's "auto" model and its settings. */
+    autoRoutingEnabled: z.boolean(),
   }),
   providerBaseUrls: z.record(SupportedProvidersSchema, z.string().nullable()),
 });
@@ -283,6 +285,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
       },
       mcpGatewaySkillsEnabled: config.mcpGateway.skillsEnabled,
       devFeedbackEnabled: devFeedbackService.isAvailable,
+      autoRoutingEnabled: config.autoRouting.enabled,
     },
     providerBaseUrls: {
       openai: config.llm.openai.baseUrl || null,

@@ -3453,6 +3453,8 @@ const config = {
     ),
   },
   autoRouting: {
+    /** ALPHA gate for the Model Router's "auto" model; off by default, follows ARCHESTRA_BETA when blank. */
+    enabled: betaFeatureEnabled(process.env.ARCHESTRA_AUTO_ROUTING_ENABLED),
     /** Budget (ms) for one session-scoring call before the router falls back. */
     scorerTimeoutMs: parsePositiveInt(
       process.env.ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS,

@@ -1,23 +1,22 @@
 import {
-  credentialRequiresPerUserScope,
   hasArchestraTokenPrefix,
   isChatCompletionsOnlyRouterProvider,
   LLM_PROXY_OAUTH_SCOPE,
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
-  perUserCredentialLabel,
   providerDisplayNames,
   providerHasEndpointLocalModels,
-  type ResourceVisibilityScope,
   RouteId,
-  requiresOpenAiResponsesApi,
-  requiresResponsesApi,
   type SupportedProvider,
 } from "@archestra/shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
-import { isAzureOpenAiFirstPartyModelName } from "@/clients/azure-url";
+import {
+  AUTO_MODEL,
+  autoModelAvailable,
+  resolveAutoModel,
+} from "@/auto-routing/router";
 import { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
@@ -33,12 +32,10 @@ import AgentTeamModel from "@/models/agent-team";
 import { collectDelegationMarkers } from "@/openappa/delegation";
 import { scrubTranslatedClientWire } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import { setCollectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
-import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
-import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import type { GatewayAgent, LLMProvider } from "@/types";
 import {
@@ -48,7 +45,6 @@ import {
   OpenAi,
   UuidIdSchema,
 } from "@/types";
-import { selectMappedProviderKey } from "@/utils/provider-key-mappings";
 import {
   azureAdapterFactory,
   azureResponsesAdapterFactory,
@@ -99,6 +95,16 @@ import {
   type LLMProxyAuthOverride,
 } from "../llm-proxy-handler";
 import {
+  type ModelRouterAuth,
+  type ModelRouterMappedProviderKey,
+  type ModelRouterOAuthClientAuth,
+  type ModelRouterUserOAuthAuth,
+  modelRequiresResponses,
+  modelRouterAuthenticatedUserId,
+  nativeResponsesProvider,
+  selectModelRouterCredential,
+} from "../model-router-access";
+import {
   buildRoutableModelId,
   listRoutableModels,
   type ModelRouterResolution,
@@ -121,65 +127,9 @@ type EmbeddingsModelRouterProvider = LLMProvider<
   OpenAi.Types.ChatCompletionsHeaders
 >;
 
-type ModelRouterMappedProviderKey = {
-  provider: SupportedProvider;
-  providerApiKeyId: string;
-  providerApiKeyName: string;
-  secretId: string | null;
-  baseUrl: string | null;
-  scope: ResourceVisibilityScope;
-  userId: string | null;
-};
-
 type ModelRouterUserProviderKey = Awaited<
   ReturnType<typeof LlmProviderApiKeyModel.getAvailableKeysForUser>
 >[number];
-
-type ModelRouterVirtualKeyAuth = {
-  authMethod: "virtual_key";
-  serviceAccountId?: string;
-  organizationId: string;
-  virtualKeyId: string;
-  virtualKeyIsPersonal: boolean;
-  virtualKeyAuthorId: string | null;
-  billingTeamId: string | null;
-  /** In preference order; see `selectMappedProviderKey`. */
-  providerApiKeys: ModelRouterMappedProviderKey[];
-  oauthClient?: never;
-};
-
-type ModelRouterOAuthClientAuth = {
-  authMethod: "oauth_client_credentials";
-  serviceAccountId?: string;
-  organizationId: string;
-  billingTeamId: string | null;
-  /** In preference order; see `selectMappedProviderKey`. */
-  providerApiKeys: ModelRouterMappedProviderKey[];
-  oauthClient: {
-    id: string;
-    name: string;
-    clientId: string;
-  };
-};
-
-type ModelRouterUserOAuthAuth = {
-  authMethod: "oauth_user";
-  serviceAccountId?: never;
-  organizationId: string;
-  userId: string;
-  /** In preference order; see `selectMappedProviderKey`. */
-  providerApiKeys: ModelRouterMappedProviderKey[];
-  oauthClient: {
-    id: string;
-    name: string;
-    clientId: string;
-  } | null;
-};
-
-type ModelRouterAuth =
-  | ModelRouterVirtualKeyAuth
-  | ModelRouterOAuthClientAuth
-  | ModelRouterUserOAuthAuth;
 
 type OpenAiWireModelRouterProvider = {
   kind: "openai-wire";
@@ -496,7 +446,13 @@ async function routeChatCompletion(
     : await getDefaultModelRouterAgent();
   await ensureModelRouterAgentAccess({ agent, auth });
   const resolution = await resolveModelRoute({
-    requestedModel: body.model,
+    requestedModel: await resolveAutoModel({
+      request,
+      auth,
+      endpoint: "chat_completions",
+      requestedModel: body.model,
+      body,
+    }),
     allowedProviders: getMappedProviders(auth),
     allowedApiKeyIds: getMappedApiKeyIds(auth),
   });
@@ -544,7 +500,13 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     : await getDefaultModelRouterAgent();
   await ensureModelRouterAgentAccess({ agent, auth });
   const resolution = await resolveModelRoute({
-    requestedModel: body.model,
+    requestedModel: await resolveAutoModel({
+      request,
+      auth,
+      endpoint: "responses",
+      requestedModel: body.model,
+      body,
+    }),
     allowedProviders: getMappedProviders(auth),
     allowedApiKeyIds: getMappedApiKeyIds(auth),
   });
@@ -690,36 +652,20 @@ function getModelRouterEmbeddingsProvider(
 }
 
 /**
- * Prefer OpenAI's native Responses surface even when a model also supports
- * chat. Other providers retain their existing compatibility routing.
- *
- * Azure deployments of OpenAI models get Azure's native Responses surface too:
- * Azure Chat Completions rejects function tools combined with reasoning on
- * GPT reasoning deployments, so a chat round trip cannot serve those requests.
- * Azure's Responses API answers other deployments (most open models) with
- * "Model not supported", so they keep the chat translation.
- *
- * Keyed off the model's published surfaces where available. OpenAI does not
- * publish those surfaces, so its known Responses-only model families use the
- * same model-id discriminator as foreground Agent chat.
+ * Prefer a provider's native Responses surface whenever one serves the model;
+ * other providers keep the chat translation.
  */
 function getNativeResponsesAdapter(resolution: ModelRouterResolution) {
-  if (resolution.provider === "openai") {
-    return openAiResponsesAdapterFactory;
+  switch (nativeResponsesProvider(resolution)) {
+    case "openai":
+      return openAiResponsesAdapterFactory;
+    case "azure":
+      return azureResponsesAdapterFactory;
+    case "github-copilot":
+      return githubCopilotResponsesAdapterFactory;
+    case null:
+      return null;
   }
-  if (
-    resolution.provider === "azure" &&
-    isAzureOpenAiFirstPartyModelName(resolution.modelId)
-  ) {
-    return azureResponsesAdapterFactory;
-  }
-  if (!modelRequiresResponses(resolution)) {
-    return null;
-  }
-  if (resolution.provider === "github-copilot") {
-    return githubCopilotResponsesAdapterFactory;
-  }
-  return null;
 }
 
 /**
@@ -738,14 +684,6 @@ function assertModelServesChatCompletions(
     400,
     `Model "${resolution.requestedModel}" is only served over the Responses API. ` +
       `Send this request to the model router's ${RESPONSES_SUFFIX} endpoint instead of ${CHAT_COMPLETIONS_SUFFIX}.`,
-  );
-}
-
-function modelRequiresResponses(resolution: ModelRouterResolution): boolean {
-  return (
-    requiresResponsesApi(resolution.supportedEndpoints) ||
-    (resolution.provider === "openai" &&
-      requiresOpenAiResponsesApi(resolution.modelId))
   );
 }
 
@@ -924,14 +862,27 @@ async function listModels(params: { auth: ModelRouterAuth }) {
     includeEmbeddings: true,
   });
 
+  const autoModel = (await autoModelAvailable(params.auth))
+    ? [
+        {
+          id: AUTO_MODEL,
+          object: "model" as const,
+          created: 0,
+          owned_by: "archestra",
+        },
+      ]
+    : [];
   return {
     object: "list" as const,
-    data: chatModels.map((model) => ({
-      id: buildRoutableModelId(model),
-      object: "model" as const,
-      created: Math.floor(model.createdAt.getTime() / 1000),
-      owned_by: model.provider,
-    })),
+    data: [
+      ...autoModel,
+      ...chatModels.map((model) => ({
+        id: buildRoutableModelId(model),
+        object: "model" as const,
+        created: Math.floor(model.createdAt.getTime() / 1000),
+        owned_by: model.provider,
+      })),
+    ],
   };
 }
 
@@ -1095,48 +1046,9 @@ async function applyModelRouterAuthOverride(params: {
   auth: ModelRouterAuth;
   resolution: ModelRouterResolution;
 }): Promise<void> {
-  const { provider, modelId } = params.resolution;
-  const mappedApiKey = await selectMappedProviderKey({
-    mappings: params.auth.providerApiKeys,
-    provider,
-    modelId,
-  });
-  if (!mappedApiKey) {
-    throw new ApiError(
-      400,
-      `Model Router credential is not mapped to provider "${provider}".`,
-    );
-  }
-
-  const apiKey = mappedApiKey.secretId
-    ? await getSecretValueForLlmProviderApiKey(mappedApiKey.secretId)
-    : undefined;
-  assertSubscriptionCredentialForProvider({
-    apiKey,
-    provider: provider,
-  });
-
-  if (
-    credentialRequiresPerUserScope({
-      provider: provider,
-      apiKey,
-    })
-  ) {
-    const isOwnedPersonalCredential =
-      mappedApiKey.userId !== null &&
-      (params.auth.authMethod === "oauth_user"
-        ? mappedApiKey.userId === params.auth.userId
-        : params.auth.authMethod === "virtual_key" &&
-          params.auth.virtualKeyIsPersonal &&
-          params.auth.virtualKeyAuthorId !== null &&
-          mappedApiKey.userId === params.auth.virtualKeyAuthorId);
-    if (!isOwnedPersonalCredential) {
-      throw new ApiError(
-        403,
-        `${perUserCredentialLabel({ provider: provider, apiKey })} is per-user: it can only be used through the same user's own personal credential.`,
-      );
-    }
-  }
+  const credential = await selectModelRouterCredential(params);
+  if (credential.kind === "denied") throw credential.error;
+  const { mappedApiKey, apiKey } = credential;
   (
     params.request as FastifyRequest & {
       llmProxyAuthOverride?: LLMProxyAuthOverride;
@@ -1157,13 +1069,7 @@ async function applyModelRouterAuthOverride(params: {
       params.auth.authMethod === "oauth_user"
         ? (params.auth.oauthClient ?? undefined)
         : params.auth.oauthClient,
-    userId:
-      params.auth.authMethod === "oauth_user"
-        ? params.auth.userId
-        : params.auth.authMethod === "virtual_key" &&
-            params.auth.virtualKeyIsPersonal
-          ? (params.auth.virtualKeyAuthorId ?? undefined)
-          : undefined,
+    userId: modelRouterAuthenticatedUserId(params.auth),
     billingTeamId:
       params.auth.authMethod === "oauth_user"
         ? undefined

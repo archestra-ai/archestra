@@ -99,7 +99,9 @@ export function TerminalRecordingBlock({
       ref={root}
       data-recording-block={lines[0].row}
       style={
-        visible ? undefined : { height: measuredHeight ?? estimatedRows * 14.4 }
+        visible
+          ? undefined
+          : { height: measuredHeight ?? `${estimatedRows * 1.2}em` }
       }
     >
       {visible &&

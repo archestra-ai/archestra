@@ -249,6 +249,11 @@ type CardEntry = {
 type CardLayout = {
   /** The tool, only when the question could not hold its name. */
   title: string[];
+  /**
+   * A command's description, drawn above the values. It gives way before
+   * them, so the command is never the one shortened to keep it.
+   */
+  lead: CardEntry[];
   values: CardEntry[];
   /** An Edit's change as -/+ lines, after the other arguments. */
   change: CardEntry[];
@@ -293,12 +298,14 @@ function cardLayout(
 ): CardLayout {
   const args = cardArguments(review);
   const baseName = review.tool?.replace(/^(builtin:|host\/[^/]+\/)/, "");
+  let lead: CardEntry[] = [];
   let values: CardEntry[] = [];
   let change: CardEntry[] = [];
   if (typeof args === "string") {
     values = [valueEntry("arguments", args)];
   } else if (args) {
-    const { command, file_path, content, old_string, new_string } = args;
+    const { command, description, file_path, content, old_string, new_string } =
+      args;
     if (
       baseName === "Edit" &&
       typeof file_path === "string" &&
@@ -338,9 +345,11 @@ function cardLayout(
       isCommandExecutionTool(review.tool) &&
       typeof command === "string"
     ) {
+      if (description !== undefined)
+        lead = [valueEntry("description", description)];
       values = [
         valueEntry("command", command),
-        ...entries(without(args, ["command"])),
+        ...entries(without(args, ["command", "description"])),
       ];
     } else {
       values = entries(args);
@@ -350,6 +359,7 @@ function cardLayout(
   }
   return {
     title,
+    lead,
     values,
     change,
     ...(review.summary ? { summary: summaryEntry(review.summary) } : {}),
@@ -416,16 +426,19 @@ function summaryEntry(summary: string): CardEntry {
 
 /**
  * Gives values way to pointers until the Allow preview fits: the summary
- * first, then long values from the end, then any value a pointer shortens.
- * Returns false when even that leaves no room for the scope; values past the
- * room left are then counted instead of shown. It sets `use` on the layout's
- * own entries, so a layout is fitted once and then rendered.
+ * first, then long values (the lead, then from the end), then any value a
+ * pointer shortens. Returns false when even that leaves no room for the scope;
+ * values past the room left are then counted instead of shown. It sets `use`
+ * on the layout's own entries, so a layout is fitted once and then rendered.
  */
 function fitLayout(layout: CardLayout): boolean {
   const fits = (withScope: boolean) =>
     paneText(render(layout, withScope)).length <= PREVIEW_LIMIT;
   if (!fits(true) && layout.summary?.pointer) layout.summary.use = "pointer";
-  const values = [...layout.values, ...layout.change].reverse();
+  const values = [
+    ...layout.lead,
+    ...[...layout.values, ...layout.change].reverse(),
+  ];
   const give = (when: (entry: CardEntry) => boolean) => {
     for (const entry of values) {
       if (fits(true)) return;
@@ -445,7 +458,7 @@ function fitLayout(layout: CardLayout): boolean {
     if (!fits(true)) layout.summary.use = "pointer";
   }
   if (fits(true)) return true;
-  for (const entry of [...layout.values].reverse()) {
+  for (const entry of [...layout.lead, ...[...layout.values].reverse()]) {
     if (fits(false)) break;
     entry.use = "hidden";
   }
@@ -459,8 +472,9 @@ function render(layout: CardLayout, withScope: boolean): string {
       : entry.use === "pointer" && entry.pointer
         ? entry.pointer
         : entry.full;
-  const values = layout.values.flatMap(shown);
-  const hidden = layout.values.filter((entry) => entry.use === "hidden").length;
+  const drawn = [...layout.lead, ...layout.values];
+  const values = drawn.flatMap(shown);
+  const hidden = drawn.filter((entry) => entry.use === "hidden").length;
   if (hidden > 0)
     values.push(
       ...wrap(

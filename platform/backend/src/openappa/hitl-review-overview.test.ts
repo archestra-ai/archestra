@@ -374,6 +374,48 @@ describe("hitlReviewCard", () => {
     expect(preview).not.toContain("cmd:");
   });
 
+  test("shows a command's description above the command", () => {
+    const command = "git push origin HEAD";
+    const { card } = cardFor({
+      tool: "Bash",
+      arguments: JSON.stringify({
+        command,
+        description: "Push the branch",
+        timeout: 60000,
+        cmd: command,
+      }),
+      text: COVERAGE,
+    });
+    const values = [
+      "description: Push the branch",
+      "command: git push origin HEAD",
+      "timeout: 60000",
+    ].join("\n");
+    expect(card.callPreview).toBe(values);
+    expect(previewOf(card, "Allow")).toBe(
+      `${values}\n\nAlso accepts:\n  the readers must be the public\n    audience`,
+    );
+  });
+
+  test("shortens a long description before the command it describes", () => {
+    const description = `Push ${"the branch ".repeat(30)}now`;
+    const command = `echo ${"payload ".repeat(180)}end`;
+    const { card, approve } = cardFor({
+      tool: "Bash",
+      arguments: JSON.stringify({ command, description, cmd: command }),
+      text: COVERAGE,
+    });
+    expect(approve).toBe(true);
+    const preview = previewOf(card, "Allow");
+    expect(fitsThePane(preview)).toBe(true);
+    expect(
+      preview.startsWith(
+        `description: (${description.length} characters, see\n    Inspect)\ncommand: echo payload`,
+      ),
+    ).toBe(true);
+    expect(preview).not.toContain("command: (");
+  });
+
   test("keeps a value that looks like a markdown fence literal", () => {
     const { card } = cardFor({
       tool: "Write",

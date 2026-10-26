@@ -35,6 +35,27 @@ class HermesStartupTest(unittest.TestCase):
         )
         self.assertEqual(result.stdout.strip(), stamp["baseVersion"])
 
+    def test_discovery_thread_does_not_import_the_mcp_sdk(self):
+        # A first SDK import on the discovery thread races the main thread's
+        # imports and can leave the process without the SDK's HTTP transport.
+        script = (
+            "import logging\n"
+            "from hermes_cli import mcp_startup\n"
+            "from tools import mcp_tool\n"
+            "mcp_startup.start_background_mcp_discovery(logger=logging.getLogger('test'), thread_name='test-discovery')\n"
+            "assert mcp_tool.ClientSession is not None and mcp_tool._MCP_HTTP_AVAILABLE, 'the discovery thread imports the MCP SDK'\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "config.yaml").write_text(json.dumps({"mcp_servers": {"archestra": {"url": "http://127.0.0.1:9/mcp"}}}))
+            result = subprocess.run(
+                ["/opt/hermes/.venv/bin/python", "-c", script],
+                env={**os.environ, "HERMES_HOME": directory},
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_task_completes_without_package_downloads(self):
         for mode in ("one_shot", "interactive"):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
@@ -113,7 +134,7 @@ class HermesStartupTest(unittest.TestCase):
                 server.package_requests,
                 "Startup attempted an optional package download",
             )
-            self.assertGreater(server.tool_calls, 0, "The real MCP tool was not executed")
+            self.assertGreater(server.tool_calls, 0, "The real MCP tool was not executed" + hermes_errors(runtime))
             self.assertEqual(
                 server.onboarding_notes, 0,
                 "Hermes asked the model for a first-contact introduction",
@@ -300,6 +321,12 @@ def stop_runtime_processes(runtime, timeout=10):
                 pass
         time.sleep(0.1)
     raise AssertionError(f"Processes for {runtime} outlived SIGKILL")
+
+
+def hermes_errors(runtime):
+    # Hermes logs MCP discovery and SDK import failures here, not on screen.
+    log = runtime / "hermes" / "logs" / "errors.log"
+    return "\n--- Hermes errors.log ---\n" + log.read_text(errors="replace")[-4000:] if log.exists() else ""
 
 
 def count_answers(entries):

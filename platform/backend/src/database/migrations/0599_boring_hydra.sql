@@ -40,10 +40,10 @@ CREATE TABLE "routing_plans" (
 	"diagnostics" jsonb,
 	"status" text NOT NULL,
 	"error" text,
-	CONSTRAINT "routing_plans_status_check" CHECK ("routing_plans"."status" IN ('active', 'superseded', 'failed', 'cold_start')),
+	CONSTRAINT "routing_plans_status_check" CHECK ("routing_plans"."status" IN ('active', 'superseded', 'failed', 'cold_start', 'rejected')),
 	CONSTRAINT "routing_plans_trigger_check" CHECK ("routing_plans"."trigger" IN ('nightly', 'settings', 'manual', 'scorer_change')),
 	CONSTRAINT "routing_plans_plan_check" CHECK (("routing_plans"."plan" IS NOT NULL) = ("routing_plans"."status" IN ('active', 'superseded'))),
-	CONSTRAINT "routing_plans_error_check" CHECK ("routing_plans"."status" <> 'failed' OR "routing_plans"."error" IS NOT NULL)
+	CONSTRAINT "routing_plans_error_check" CHECK ("routing_plans"."status" NOT IN ('failed', 'rejected') OR "routing_plans"."error" IS NOT NULL)
 );
 --> statement-breakpoint
 CREATE TABLE "routing_scorer_versions" (

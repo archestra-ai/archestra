@@ -41,7 +41,7 @@ export type RoutingSessionFeatures = z.infer<
 >;
 
 /** Shape version of `RoutingDecisionFeatures`, recorded on every decision. */
-export const FEATURES_SCHEMA_VERSION = 2;
+export const FEATURES_SCHEMA_VERSION = 1;
 
 /** The Jev session signal; `version` is the scorer version that produced it. */
 export const JevSessionSignalSchema = z.object({

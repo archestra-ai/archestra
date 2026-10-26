@@ -121,7 +121,7 @@ describe("Model Router auto model", () => {
         const version = (await activeSourceVersion()).id;
         expect(decision).toMatchObject({
           scorerVersionId: version,
-          featuresSchemaVersion: 2,
+          featuresSchemaVersion: 1,
           features: {
             signals: {
               "jev-session": { version, tier_needed: [0, 0, 1], p_long: 0.1 },

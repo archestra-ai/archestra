@@ -111,7 +111,7 @@ describe("RoutingDecisionModel", () => {
       sessionKey: values.sessionKey,
     });
 
-    expect(stored?.featuresSchemaVersion).toBe(2);
+    expect(stored?.featuresSchemaVersion).toBe(1);
     expect(stored?.features).toEqual(values.features);
     expect(stored?.features && routerFeatures(stored.features)).toEqual({
       tier_needed: [0.2, 0.5, 0.3],
@@ -121,7 +121,7 @@ describe("RoutingDecisionModel", () => {
     });
   });
 
-  test("v2 features reject the v1 shape and malformed signals", () => {
+  test("features reject malformed signals", () => {
     const signal = {
       version: randomUUID(),
       tier_needed: [0.2, 0.5, 0.3],
@@ -136,14 +136,6 @@ describe("RoutingDecisionModel", () => {
       RoutingDecisionFeaturesSchema.safeParse(value).success;
 
     expect(parse(valid)).toBe(true);
-    expect(
-      parse({
-        tier_needed: [0.2, 0.5, 0.3],
-        p_long: 0.1,
-        kind: "main",
-        source: "claude-code",
-      }),
-    ).toBe(false);
     expect(parse({ ...valid, signals: {} })).toBe(false);
     expect(
       parse({

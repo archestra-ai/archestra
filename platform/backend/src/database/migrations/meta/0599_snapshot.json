@@ -1,5 +1,5 @@
 {
-  "id": "3d553034-2cc5-443b-908c-18e5f88c16ae",
+  "id": "246a5459-beb9-47dc-bf2e-658dc5a718ec",
   "prevId": "1f87dae5-4cad-4a9c-8634-81786899e140",
   "version": "7",
   "dialect": "postgresql",
@@ -23309,7 +23309,7 @@
       "checkConstraints": {
         "routing_plans_status_check": {
           "name": "routing_plans_status_check",
-          "value": "\"routing_plans\".\"status\" IN ('active', 'superseded', 'failed', 'cold_start')"
+          "value": "\"routing_plans\".\"status\" IN ('active', 'superseded', 'failed', 'cold_start', 'rejected')"
         },
         "routing_plans_trigger_check": {
           "name": "routing_plans_trigger_check",
@@ -23321,7 +23321,7 @@
         },
         "routing_plans_error_check": {
           "name": "routing_plans_error_check",
-          "value": "\"routing_plans\".\"status\" <> 'failed' OR \"routing_plans\".\"error\" IS NOT NULL"
+          "value": "\"routing_plans\".\"status\" NOT IN ('failed', 'rejected') OR \"routing_plans\".\"error\" IS NOT NULL"
         }
       },
       "isRLSEnabled": false

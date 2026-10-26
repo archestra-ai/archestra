@@ -507,8 +507,9 @@ export function AccessField({
       <span className="flex items-center gap-1.5">
         <Label>Who can use it</Label>
         <HelpTip topic="Who can use it">
-          Virtual keys listed here can call this pool. Agents and chats can when
-          their own provider key is a member.
+          Anyone whose key maps one of the members can already use this pool,
+          including people who connected through Connect. Add a virtual key here
+          when it maps none of them.
         </HelpTip>
       </span>
       <Controller

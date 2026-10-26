@@ -33,8 +33,10 @@ const poolTest = test.extend<{
     app: FastifyInstanceWithZod;
     agentId: string;
     token: string;
-    /** A virtual key in the same org without the pool. */
+    /** A virtual key in the same org that maps no member key and has no grant. */
     ungrantedToken: string;
+    /** A virtual key that maps a member's key, as a Connect key does. */
+    memberKeyToken: string;
     poolId: string;
     zaiKeyId: string;
     bedrockKeyId: string;
@@ -99,6 +101,12 @@ const poolTest = test.extend<{
       organizationId: org.id,
       name: "Router key without the pool",
       ...accessGrants("org"),
+      providerApiKeys: [{ provider: "openai", providerApiKeyId: openai.id }],
+    });
+    const memberKey = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "Connect key",
+      ...accessGrants("org"),
       providerApiKeys: [{ provider: "zhipuai", providerApiKeyId: zai.id }],
     });
     const app = createFastifyInstance();
@@ -109,6 +117,7 @@ const poolTest = test.extend<{
         agentId: agent.id,
         token: virtual.value,
         ungrantedToken: ungranted.value,
+        memberKeyToken: memberKey.value,
         poolId: pool.id,
         zaiKeyId: zai.id,
         bedrockKeyId: bedrock.id,
@@ -154,7 +163,7 @@ poolTest(
         .data.filter((m: { owned_by: string }) => m.owned_by === "model-pool"),
     ).toEqual([]);
 
-    // It maps the Z.ai key, but asking for the pool's name doesn't reach it.
+    // Asking for the pool's name doesn't reach it.
     const response = await router.app.inject({
       method: "POST",
       url: `/v1/model-router/${router.agentId}/chat/completions`,
@@ -167,6 +176,51 @@ poolTest(
     expect(response.headers["x-archestra-pool"]).toBeUndefined();
     expect(response.statusCode).toBeGreaterThanOrEqual(400);
     expect(zaiCalls).toBe(0);
+  },
+);
+
+poolTest(
+  "serves the pool to a virtual key that maps a member's key",
+  async ({ router }) => {
+    server.use(
+      http.post(`${zaiOrigin}/chat/completions`, () =>
+        HttpResponse.json({
+          id: "chatcmpl-1",
+          object: "chat.completion",
+          created: 1,
+          model: "glm-5",
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: "hi" },
+              finish_reason: "stop",
+            },
+          ],
+          usage: { prompt_tokens: 9, completion_tokens: 2, total_tokens: 11 },
+        }),
+      ),
+    );
+    const models = await router.app.inject({
+      method: "GET",
+      url: `/v1/model-router/${router.agentId}/models`,
+      headers: { authorization: `Bearer ${router.memberKeyToken}` },
+    });
+    expect(models.json().data[0]).toMatchObject({
+      id: "glm-5",
+      owned_by: "model-pool",
+    });
+
+    const response = await router.app.inject({
+      method: "POST",
+      url: `/v1/model-router/${router.agentId}/chat/completions`,
+      headers: { authorization: `Bearer ${router.memberKeyToken}` },
+      payload: {
+        model: "glm-5",
+        messages: [{ role: "user", content: "hello" }],
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.headers["x-archestra-pool"]).toBe("glm-5");
   },
 );
 

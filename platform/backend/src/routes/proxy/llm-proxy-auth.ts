@@ -46,6 +46,7 @@ import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-provid
 import { ApiError, type GatewayAgent } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { selectMappedProviderKey } from "@/utils/provider-key-mappings";
+import { type ModelPoolCaller, mayUseModelPool } from "./model-pool-failover";
 import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
 
 export function isJwtLike(token: string): boolean {
@@ -121,10 +122,10 @@ export interface VirtualKeyValidationResult {
   /** Team the key's spend is charged to, when it has one. */
   billingTeamId?: string;
   /**
-   * The key maps no key of this provider and passed only because the requested
-   * model is a pool granted to it. No provider key is resolved.
+   * The key maps no key of this provider and passed only because it may use
+   * the pool the requested model names. No provider key is resolved.
    */
-  modelPoolOnly?: boolean;
+  modelPoolId?: string;
 }
 
 export interface PassthroughVirtualKeyResult {
@@ -183,8 +184,8 @@ export async function validateVirtualApiKey(params: {
   requestedModel?: string | null;
   /**
    * Set by callers that can serve a model pool. A key that maps no key of
-   * this provider then still passes when the requested model is a pool
-   * granted to it.
+   * this provider then still passes when it may use the pool the requested
+   * model names.
    */
   allowModelPool?: boolean;
 }): Promise<VirtualKeyValidationResult> {
@@ -210,27 +211,33 @@ export async function validateVirtualApiKey(params: {
       "Passthrough virtual keys carry no provider credential — send them in the X-Archestra-Virtual-Key header, not Authorization.",
     );
   }
+  const mappings = await resolveVirtualKeyProviderMappings(
+    resolved.virtualKey.id,
+  );
   const mappedProviderKey = isSupportedProvider(expectedProvider)
     ? await selectMappedProviderKey({
-        mappings: await resolveVirtualKeyProviderMappings(
-          resolved.virtualKey.id,
-        ),
+        mappings,
         provider: expectedProvider,
         modelId: params.requestedModel,
       })
     : undefined;
-  if (
-    !mappedProviderKey &&
-    params.allowModelPool &&
-    (await isGrantedModelPool({
-      organizationId: resolved.virtualKey.organizationId,
-      virtualKeyId: resolved.virtualKey.id,
-      requestedModel: params.requestedModel,
-    }))
-  ) {
+  const modelPoolId =
+    !mappedProviderKey && params.allowModelPool
+      ? await usableModelPoolId({
+          organizationId: resolved.virtualKey.organizationId,
+          caller: {
+            virtualKeyId: resolved.virtualKey.id,
+            providerApiKeyIds: mappings.map(
+              (mapping) => mapping.providerApiKeyId,
+            ),
+          },
+          requestedModel: params.requestedModel,
+        })
+      : undefined;
+  if (modelPoolId) {
     return {
       ...(await virtualKeyIdentity(resolved.virtualKey)),
-      modelPoolOnly: true,
+      modelPoolId,
     };
   }
   if (!mappedProviderKey) {
@@ -310,18 +317,20 @@ export async function validateVirtualApiKey(params: {
   };
 }
 
-async function isGrantedModelPool(params: {
+async function usableModelPoolId(params: {
   organizationId: string;
-  virtualKeyId: string;
+  caller: ModelPoolCaller;
   requestedModel?: string | null;
-}): Promise<boolean> {
+}): Promise<string | undefined> {
   if (!config.llmProxy.modelPoolsEnabled || !params.requestedModel)
-    return false;
+    return undefined;
   const pool = await ModelPoolModel.findByName({
     organizationId: params.organizationId,
     name: stripClaudeContextVariantSuffix(params.requestedModel),
   });
-  return pool?.virtualApiKeyIds.includes(params.virtualKeyId) ?? false;
+  return pool && mayUseModelPool({ pool, caller: params.caller })
+    ? pool.id
+    : undefined;
 }
 
 async function virtualKeyIdentity(

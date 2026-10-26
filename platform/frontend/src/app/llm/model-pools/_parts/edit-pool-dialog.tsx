@@ -144,7 +144,7 @@ export function EditPoolDialog({
   );
 }
 
-/** A Model Router request for the pool's name, with a granted virtual key. */
+/** A Model Router request for the pool's name, with a virtual key that may use it. */
 function ConnectExample({ poolName }: { poolName: string }) {
   const connectionBaseUrl = useConnectionBaseUrl();
   const example = buildCurlExample({
@@ -175,7 +175,8 @@ function ConnectExample({ poolName }: { poolName: string }) {
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
             Set <span className="font-mono">ARCHESTRA_LLM_VIRTUAL_KEY</span> to
-            a virtual key listed under Who can use it, then run:
+            a virtual key that maps one of the members or is listed under Who
+            can use it, then run:
           </p>
           <CodeExample language="curl" code={example} />
         </div>

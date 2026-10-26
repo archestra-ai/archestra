@@ -96,19 +96,22 @@ export interface ModelPoolCaller {
 }
 
 /**
- * Whether a caller may spend a pool's member keys. A virtual key needs the
- * pool granted to it, as it needs a provider key mapped to it. Any other
- * caller (an agent, the chat, an app) must already use one of the pool's
- * member keys: the admin who put that key in the pool chose the other members
- * as its backups.
+ * Whether a caller may spend a pool's member keys: when it already uses one of
+ * them, since the admin who put that key in the pool chose the other members
+ * as its backups. That is what puts a user who connected through Connect on
+ * the pool without knowing it. A virtual key can also be granted the pool
+ * outright, for one that maps none of the members.
  */
 export function mayUseModelPool(params: {
   pool: Pick<ModelPool, "members" | "virtualApiKeyIds">;
   caller: ModelPoolCaller;
 }): boolean {
   const { pool, caller } = params;
-  if (caller.virtualKeyId) {
-    return pool.virtualApiKeyIds.includes(caller.virtualKeyId);
+  if (
+    caller.virtualKeyId &&
+    pool.virtualApiKeyIds.includes(caller.virtualKeyId)
+  ) {
+    return true;
   }
   return pool.members.some((member) =>
     caller.providerApiKeyIds.includes(member.providerApiKeyId),

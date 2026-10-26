@@ -240,8 +240,11 @@ describe("planModelPool", () => {
     const granted = await makeVirtualApiKey(org.id, {
       providerApiKeys: [{ provider: "openai", providerApiKeyId: openai.id }],
     });
-    const notGranted = await makeVirtualApiKey(org.id, {
+    const mapsMember = await makeVirtualApiKey(org.id, {
       providerApiKeys: [{ provider: "zhipuai", providerApiKeyId: zai.id }],
+    });
+    const neither = await makeVirtualApiKey(org.id, {
+      providerApiKeys: [{ provider: "openai", providerApiKeyId: openai.id }],
     });
     const pool = await ModelPoolModel.create({
       organizationId: org.id,
@@ -260,12 +263,16 @@ describe("planModelPool", () => {
         grantedPoolId,
       });
 
-    // A virtual key needs the pool granted, even when it maps a member's key.
+    // A virtual key gets in by a grant, or by mapping a member's key, as a
+    // Connect key does.
     expect(
       await plan({ virtualKeyId: granted.id, providerApiKeyIds: [openai.id] }),
     ).not.toBeNull();
     expect(
-      await plan({ virtualKeyId: notGranted.id, providerApiKeyIds: [zai.id] }),
+      await plan({ virtualKeyId: mapsMember.id, providerApiKeyIds: [zai.id] }),
+    ).not.toBeNull();
+    expect(
+      await plan({ virtualKeyId: neither.id, providerApiKeyIds: [openai.id] }),
     ).toBeNull();
     // Any other caller must already use a member's key.
     expect(await plan({ providerApiKeyIds: [zai.id] })).not.toBeNull();

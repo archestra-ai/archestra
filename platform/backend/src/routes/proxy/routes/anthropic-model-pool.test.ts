@@ -20,14 +20,19 @@ beforeEach(() => {
 
 // Claude Code asks for a pool's name on Anthropic's wire; the pool's only
 // member is Z.ai on the OpenAI wire. The virtual key maps no Anthropic key:
-// the pool grant alone lets it in. Only the HTTP upstream is mocked.
+// mapping the member's key (as a Connect key does) or a grant lets it in.
+// Only the HTTP upstream is mocked.
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
 const server = useMswServer();
 setupTestCacheManager();
 const zaiOrigin = "https://zai.example.test/api/paas/v4";
 
-for (const stream of [false, true]) {
-  test(`answers an Anthropic request from a Z.ai member (stream: ${stream})`, async ({
+for (const [stream, access] of [
+  [false, "member key"],
+  [true, "member key"],
+  [false, "grant"],
+] as const) {
+  test(`answers an Anthropic request from a Z.ai member (stream: ${stream}, via ${access})`, async ({
     makeOrganization,
     makeAgent,
     makeSecret,
@@ -40,10 +45,14 @@ for (const stream of [false, true]) {
       (await makeSecret({ secret: { apiKey: "zai-key" } })).id,
       { provider: "zhipuai", baseUrl: zaiOrigin },
     );
+    const openai = await makeLlmProviderApiKey(org.id, null);
     const { value, virtualKey } = await VirtualApiKeyModel.create({
       organizationId: org.id,
       name: "Claude Code",
-      providerApiKeys: [{ provider: "zhipuai", providerApiKeyId: zai.id }],
+      providerApiKeys:
+        access === "grant"
+          ? [{ provider: "openai", providerApiKeyId: openai.id }]
+          : [{ provider: "zhipuai", providerApiKeyId: zai.id }],
     });
     await ModelPoolModel.create({
       organizationId: org.id,
@@ -58,7 +67,7 @@ for (const stream of [false, true]) {
             enabled: true,
           },
         ],
-        virtualApiKeyIds: [virtualKey.id],
+        virtualApiKeyIds: access === "grant" ? [virtualKey.id] : [],
       },
     });
 
@@ -159,7 +168,7 @@ for (const stream of [false, true]) {
   });
 }
 
-test("keeps out a virtual key with no Anthropic key and no grant to the pool", async ({
+test("keeps out a virtual key that maps no member key and has no grant", async ({
   makeOrganization,
   makeAgent,
   makeSecret,
@@ -172,10 +181,11 @@ test("keeps out a virtual key with no Anthropic key and no grant to the pool", a
     (await makeSecret({ secret: { apiKey: "zai-key" } })).id,
     { provider: "zhipuai", baseUrl: zaiOrigin },
   );
+  const openai = await makeLlmProviderApiKey(org.id, null);
   const { value } = await VirtualApiKeyModel.create({
     organizationId: org.id,
     name: "Not granted",
-    providerApiKeys: [{ provider: "zhipuai", providerApiKeyId: zai.id }],
+    providerApiKeys: [{ provider: "openai", providerApiKeyId: openai.id }],
   });
   await ModelPoolModel.create({
     organizationId: org.id,

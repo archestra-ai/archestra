@@ -745,7 +745,8 @@ export async function handleLLMProxy<
   let perKeyChatApiKeyIdFromInternalHeader = false;
   let wasJwksAuthenticated = false;
   let wasVirtualKeyResolved = false;
-  let virtualKeyServesOnlyPool = false;
+  /** The pool a virtual key with no key of this provider was let in for. */
+  let virtualKeyOnlyPoolId: string | undefined;
   let wasOAuthAuthenticated = false;
   let authMethod = authOverride?.authMethod;
   let authenticatedApp = authOverride?.authenticatedApp;
@@ -920,7 +921,7 @@ export async function handleLLMProxy<
       virtualKeyId = virtualResult.virtualKeyId;
       serviceAccountId = virtualResult.serviceAccountId;
       billingTeamId ??= virtualResult.billingTeamId;
-      virtualKeyServesOnlyPool = virtualResult.modelPoolOnly === true;
+      virtualKeyOnlyPoolId = virtualResult.modelPoolId;
       // A personal standard virtual key identifies its owner; include it in the
       // cross-credential consistency check.
       if (virtualResult.virtualKeyIsPersonal) {
@@ -1295,13 +1296,13 @@ export async function handleLLMProxy<
             virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
             providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
           },
-          grantedPoolId: authOverride?.modelPoolId,
+          grantedPoolId: authOverride?.modelPoolId ?? virtualKeyOnlyPoolId,
           sessionId,
         })
       : null;
     // A virtual key let in only for its pool has no key for this provider, so
     // the request can't go anywhere but the pool.
-    if (virtualKeyServesOnlyPool && !modelPoolPlan) {
+    if (virtualKeyOnlyPoolId && !modelPoolPlan) {
       throw new ApiError(
         400,
         `Virtual API key is not mapped to provider "${providerName}".`,

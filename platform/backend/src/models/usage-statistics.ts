@@ -210,7 +210,6 @@ class UsageStatisticsModel {
         COALESCE(${interactions.cacheWriteTokens}, 0),
         (CASE WHEN NOT ${interactions.inputTokensEstimated} THEN COALESCE(${interactions.inputTokens}, 0) ELSE 0 END)
           + COALESCE(${interactions.outputTokens}, 0)
-          + COALESCE(${interactions.cacheReadTokens}, 0)
           + COALESCE(${interactions.cacheWriteTokens}, 0),
         CASE WHEN ${interactions.billingMode} = 'metered' THEN COALESCE(${interactions.cost}, 0) ELSE 0 END,
         CASE WHEN ${interactions.billingMode} = 'subscription' THEN COALESCE(${interactions.cost}, 0) ELSE 0 END

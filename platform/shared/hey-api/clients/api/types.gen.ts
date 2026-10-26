@@ -36867,6 +36867,7 @@ export type GetBootstrapResponses = {
             defaultPersonalAgentAccessAllTools: boolean;
             onlineSkillCatalogEnabled: boolean;
             skillMarketplaceAnonymousAccess: boolean;
+            playwrightMcpEnabled: boolean;
             allowChatFileUploads: boolean;
             allowUnauthenticatedLlmProxyRequests: boolean;
             allowToolAutoAssignment: boolean;
@@ -104027,6 +104028,7 @@ export type GetOrganizationResponses = {
         defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
+        playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
@@ -104367,6 +104369,7 @@ export type UpdateAppearanceSettingsResponses = {
         defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
+        playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
@@ -104485,6 +104488,7 @@ export type UpdateAppearanceSettingsResponse = UpdateAppearanceSettingsResponses
 
 export type UpdateSecuritySettingsData = {
     body: {
+        playwrightMcpEnabled?: boolean;
         allowChatFileUploads?: boolean;
         allowUnauthenticatedLlmProxyRequests?: boolean;
         newAppsDisabledByDefault?: boolean;
@@ -104585,6 +104589,7 @@ export type UpdateSecuritySettingsResponses = {
         defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
+        playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
@@ -104801,6 +104806,7 @@ export type UpdateMcpSettingsResponses = {
         defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
+        playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
@@ -105016,6 +105022,7 @@ export type UpdateSkillsSettingsResponses = {
         defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
+        playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
@@ -105234,6 +105241,7 @@ export type UpdateAgentSettingsResponses = {
         defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
+        playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
@@ -105472,6 +105480,7 @@ export type UpdateConnectionSettingsResponses = {
         defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
+        playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
@@ -105727,6 +105736,7 @@ export type UpdateIntegrationSettingsResponses = {
         defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
+        playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
@@ -105952,6 +105962,7 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
+        playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
@@ -106172,6 +106183,7 @@ export type UpdateAuthSettingsResponses = {
         defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
+        playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
@@ -106394,6 +106406,7 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
+        playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
@@ -106606,6 +106619,7 @@ export type DropEmbeddingConfigResponses = {
         defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
+        playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;
@@ -107180,6 +107194,7 @@ export type CompleteOnboardingResponses = {
         defaultPersonalAgentAccessAllTools: boolean;
         onlineSkillCatalogEnabled: boolean;
         skillMarketplaceAnonymousAccess: boolean;
+        playwrightMcpEnabled: boolean;
         allowChatFileUploads: boolean;
         allowUnauthenticatedLlmProxyRequests: boolean;
         allowToolAutoAssignment: boolean;

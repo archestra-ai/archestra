@@ -26,6 +26,7 @@ export function makeOrganization(
     skillToolsEnabled: false,
     newAppsDisabledByDefault: false,
     newAppsLockedByDefault: false,
+    playwrightMcpEnabled: true,
     allowChatFileUploads: false,
     allowUnauthenticatedLlmProxyRequests: false,
     allowToolAutoAssignment: true,

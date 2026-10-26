@@ -131895,6 +131895,9 @@
                         "skillMarketplaceAnonymousAccess": {
                           "type": "boolean"
                         },
+                        "playwrightMcpEnabled": {
+                          "type": "boolean"
+                        },
                         "allowChatFileUploads": {
                           "type": "boolean"
                         },
@@ -132479,6 +132482,7 @@
                         "defaultPersonalAgentAccessAllTools",
                         "onlineSkillCatalogEnabled",
                         "skillMarketplaceAnonymousAccess",
+                        "playwrightMcpEnabled",
                         "allowChatFileUploads",
                         "allowUnauthenticatedLlmProxyRequests",
                         "allowToolAutoAssignment",
@@ -396637,6 +396641,9 @@
                     "skillMarketplaceAnonymousAccess": {
                       "type": "boolean"
                     },
+                    "playwrightMcpEnabled": {
+                      "type": "boolean"
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -397221,6 +397228,7 @@
                     "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
+                    "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
@@ -397806,6 +397814,9 @@
                     "skillMarketplaceAnonymousAccess": {
                       "type": "boolean"
                     },
+                    "playwrightMcpEnabled": {
+                      "type": "boolean"
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -398390,6 +398401,7 @@
                     "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
+                    "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
@@ -399098,6 +399110,9 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "playwrightMcpEnabled": {
+                    "type": "boolean"
+                  },
                   "allowChatFileUploads": {
                     "type": "boolean"
                   },
@@ -399214,6 +399229,9 @@
                       "type": "boolean"
                     },
                     "skillMarketplaceAnonymousAccess": {
+                      "type": "boolean"
+                    },
+                    "playwrightMcpEnabled": {
                       "type": "boolean"
                     },
                     "allowChatFileUploads": {
@@ -399800,6 +399818,7 @@
                     "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
+                    "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
@@ -400240,6 +400259,9 @@
                     "skillMarketplaceAnonymousAccess": {
                       "type": "boolean"
                     },
+                    "playwrightMcpEnabled": {
+                      "type": "boolean"
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -400824,6 +400846,7 @@
                     "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
+                    "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
@@ -401261,6 +401284,9 @@
                     "skillMarketplaceAnonymousAccess": {
                       "type": "boolean"
                     },
+                    "playwrightMcpEnabled": {
+                      "type": "boolean"
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -401845,6 +401871,7 @@
                     "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
+                    "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
@@ -402306,6 +402333,9 @@
                     "skillMarketplaceAnonymousAccess": {
                       "type": "boolean"
                     },
+                    "playwrightMcpEnabled": {
+                      "type": "boolean"
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -402890,6 +402920,7 @@
                     "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
+                    "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
@@ -403458,6 +403489,9 @@
                     "skillMarketplaceAnonymousAccess": {
                       "type": "boolean"
                     },
+                    "playwrightMcpEnabled": {
+                      "type": "boolean"
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -404042,6 +404076,7 @@
                     "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
+                    "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
@@ -404608,6 +404643,9 @@
                     "skillMarketplaceAnonymousAccess": {
                       "type": "boolean"
                     },
+                    "playwrightMcpEnabled": {
+                      "type": "boolean"
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -405192,6 +405230,7 @@
                     "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
+                    "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
@@ -405699,6 +405738,9 @@
                     "skillMarketplaceAnonymousAccess": {
                       "type": "boolean"
                     },
+                    "playwrightMcpEnabled": {
+                      "type": "boolean"
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -406283,6 +406325,7 @@
                     "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
+                    "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
@@ -406734,6 +406777,9 @@
                     "skillMarketplaceAnonymousAccess": {
                       "type": "boolean"
                     },
+                    "playwrightMcpEnabled": {
+                      "type": "boolean"
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -407318,6 +407364,7 @@
                     "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
+                    "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
@@ -407800,6 +407847,9 @@
                     "skillMarketplaceAnonymousAccess": {
                       "type": "boolean"
                     },
+                    "playwrightMcpEnabled": {
+                      "type": "boolean"
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -408384,6 +408434,7 @@
                     "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
+                    "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
@@ -408803,6 +408854,9 @@
                     "skillMarketplaceAnonymousAccess": {
                       "type": "boolean"
                     },
+                    "playwrightMcpEnabled": {
+                      "type": "boolean"
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -409387,6 +409441,7 @@
                     "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
+                    "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",
@@ -411010,6 +411065,9 @@
                     "skillMarketplaceAnonymousAccess": {
                       "type": "boolean"
                     },
+                    "playwrightMcpEnabled": {
+                      "type": "boolean"
+                    },
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
@@ -411594,6 +411652,7 @@
                     "defaultPersonalAgentAccessAllTools",
                     "onlineSkillCatalogEnabled",
                     "skillMarketplaceAnonymousAccess",
+                    "playwrightMcpEnabled",
                     "allowChatFileUploads",
                     "allowUnauthenticatedLlmProxyRequests",
                     "allowToolAutoAssignment",

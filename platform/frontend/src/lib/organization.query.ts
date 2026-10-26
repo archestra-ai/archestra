@@ -335,7 +335,7 @@ export function useCreateInvitation(organizationId: string | undefined) {
  */
 export function useOrganization(
   enabled = true,
-  options: { fresh?: boolean } = {},
+  options: { fresh?: boolean; refetchInterval?: number } = {},
 ) {
   const session = useSession();
   // Read through the context, not useQueryClient(): that hook throws without
@@ -368,6 +368,7 @@ export function useOrganization(
           client && isDocumentSeedFresh(client, query) ? false : "always"
       : undefined,
     refetchOnWindowFocus: fresh || undefined,
+    refetchInterval: options.refetchInterval,
     // Restored on refresh: the shell reads the app name and theme from here,
     // so without it a reload repaints the branding a beat after the layout.
     meta: PERSISTED_QUERY_META,
@@ -469,8 +470,13 @@ export function useUpdateSecuritySettings(
         await archestraApiSdk.updateSecuritySettings({ body: data });
 
       if (error) {
-        toast.error(onErrorMessage);
-        return null;
+        toast.error(onErrorMessage, { description: toApiError(error).message });
+        // A disable can commit before runtime cleanup fails. Refresh the policy
+        // even on an error; keep the form dirty so Save retries cleanup.
+        await queryClient.invalidateQueries({
+          queryKey: organizationKeys.details(),
+        });
+        throw toApiError(error);
       }
 
       return updatedOrganization;

@@ -79,6 +79,11 @@ const organizationsTable = pgTable("organization", {
   skillMarketplaceAnonymousAccess: boolean("skill_marketplace_anonymous_access")
     .notNull()
     .default(false),
+  /** Controls only the managed built-in browser MCP runtime. */
+  playwrightMcpEnabled: boolean("playwright_mcp_enabled")
+    .notNull()
+    .default(true),
+
   /**
    * Whether file uploads are allowed in chat.
    * Defaults to true. Security policies currently only work on text-based content,

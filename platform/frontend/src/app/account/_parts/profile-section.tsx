@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { AccountRows } from "@/app/account/_components/account-rows";
+import { AccountRows } from "@/app/account/_parts/account-rows";
 import { SettingsSection } from "@/components/settings-section";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";

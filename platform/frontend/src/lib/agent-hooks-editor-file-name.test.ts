@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   generateHookFileName,
   languageFromFileName,
-} from "./agent-hooks-editor.file-name";
+} from "./agent-hooks-editor-file-name";
 
 describe("languageFromFileName", () => {
   test("maps .py to python and everything else to shell", () => {

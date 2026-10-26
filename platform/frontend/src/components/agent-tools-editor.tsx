@@ -46,7 +46,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { useBulkUpdateAgentTools } from "@/lib/agent-tools.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useFeature } from "@/lib/config/config.query";
@@ -61,6 +60,7 @@ import {
 import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
 import { useMcpRegistryRowsByIds } from "@/lib/mcp/use-mcp-registry-rows-by-ids";
 import { useOrganization } from "@/lib/organization.query";
+import { useInvalidateToolAssignmentQueries } from "@/lib/use-invalidate-tool-assignment-queries";
 import { cn } from "@/lib/utils/tailwind";
 import {
   buildBulkToolUpdate,

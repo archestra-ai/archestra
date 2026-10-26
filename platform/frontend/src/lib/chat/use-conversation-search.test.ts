@@ -4,7 +4,7 @@ import { act, renderHook } from "@testing-library/react";
 import { useRouter } from "next/navigation";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT } from "@/consts";
-import { useConversationSearch } from "@/lib/chat/conversation-search.hook";
+import { useConversationSearch } from "@/lib/chat/use-conversation-search";
 import { useFeature } from "@/lib/config/config.query";
 
 vi.mock("next/navigation");

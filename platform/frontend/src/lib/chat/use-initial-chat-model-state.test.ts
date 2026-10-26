@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { LlmModel } from "@/lib/llm-models.query";
 import type { SupportedProvider } from "@/lib/llm-provider-api-keys.query";
 import { CHAT_STORAGE_KEYS } from "./use-chat-preferences";
-import { useInitialChatModelState } from "./use-initial-chat-model-state.hook";
+import { useInitialChatModelState } from "./use-initial-chat-model-state";
 
 const model = (dbId: string, provider: string, isBest = false) =>
   ({ id: dbId, dbId, provider, isBest }) as unknown as LlmModel;

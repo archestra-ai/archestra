@@ -21,6 +21,10 @@ pnpm test
 pnpm knip   # flags unused exports; part of frontend check:ci
 ```
 
+## File and folder naming
+
+`platform/frontend/AGENTS.md`, "Conventions", holds the table: `_parts/` for route-private folders, `use-<thing>.ts` hooks beside their feature, kebab-case names, and the closed list of dot suffixes. Biome enforces it, so a misnamed file fails `pnpm lint`.
+
 ## Data fetching
 
 - Use TanStack Query for data fetching.

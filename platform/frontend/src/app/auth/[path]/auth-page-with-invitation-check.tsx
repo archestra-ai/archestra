@@ -2,8 +2,8 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
-import { AuthViewWithErrorHandling } from "@/app/auth/_components/auth-view-with-error-handling";
-import { BackendConnectivityStatus } from "@/app/auth/_components/backend-connectivity-status";
+import { AuthViewWithErrorHandling } from "@/app/auth/_parts/auth-view-with-error-handling";
+import { BackendConnectivityStatus } from "@/app/auth/_parts/backend-connectivity-status";
 import { AppLogo } from "@/components/app-logo";
 import { CommunityLinks } from "@/components/community-links";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";

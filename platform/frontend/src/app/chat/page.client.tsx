@@ -161,7 +161,6 @@ import {
   clearPendingActions,
   getPendingActions,
 } from "@/lib/chat/pending-tool-state";
-import { useStreamStall } from "@/lib/chat/stream-stall.hook";
 import {
   foldConfirmedThinkingEffort,
   writePendingThinkingEffort,
@@ -174,7 +173,8 @@ import {
   getAgentSubscriptionConnection,
   resolveConversationKeyForModel,
 } from "@/lib/chat/use-chat-preferences";
-import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
+import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state";
+import { useStreamStall } from "@/lib/chat/use-stream-stall";
 import { useConfig, useFeature } from "@/lib/config/config.query";
 import {
   type ConnectivityState,

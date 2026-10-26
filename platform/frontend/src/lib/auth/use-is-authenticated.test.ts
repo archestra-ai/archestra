@@ -1,7 +1,7 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useSession } from "@/lib/auth/auth.query";
+import { useIsAuthenticated } from "@/lib/auth/use-is-authenticated";
 
 vi.mock("@/lib/auth/auth.query");
 

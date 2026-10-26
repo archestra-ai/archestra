@@ -20,7 +20,7 @@ Install Archestra on Kubernetes with Helm. You need a cluster, Helm 3 or later, 
 1. Choose a release and download its chart defaults:
 
    ```bash
-   export ARCHESTRA_VERSION="1.5.0-rc.9" # x-release-please-version
+   export ARCHESTRA_VERSION="1.5.0-rc.10" # x-release-please-version
    helm show values \
      oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
      --version "$ARCHESTRA_VERSION" > values.yaml

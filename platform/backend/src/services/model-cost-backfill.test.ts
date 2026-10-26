@@ -58,7 +58,37 @@ describe("recomputing past costs", () => {
         ...overrides,
       });
 
+    const expectedCost = (await calculateCost(
+      model.modelId,
+      usage.inputTokens,
+      usage.outputTokens,
+      "anthropic",
+      {
+        readTokens: usage.cacheReadTokens,
+        writeTokens: usage.cacheWriteTokens,
+        write1hTokens: usage.cacheWrite1hTokens,
+      },
+    )) as number;
+    const expectedCache = await calculateCacheCost(
+      model.modelId,
+      "anthropic",
+      usage.cacheReadTokens,
+      usage.cacheWriteTokens,
+      usage.cacheWrite1hTokens,
+    );
+    const cost = expectedCost.toFixed(10);
+    const cacheCost = expectedCache?.cacheCost.toFixed(10);
+    const cacheSavings = expectedCache?.cacheSavings.toFixed(10);
+    expect(cost).not.toBe("9.0000000000");
+
     const plain = await row();
+    // Total already right, cache split wrong, and no source recorded.
+    const cacheOnly = await row({
+      cost,
+      baselineCost: cost,
+      cacheCost: "1.0000000000",
+      cacheSavings: "1.0000000000",
+    });
     const swapped = await row({ baselineModel: "another-model" });
     const knowledge = await row({
       source: "knowledge:embedding",
@@ -88,33 +118,16 @@ describe("recomputing past costs", () => {
       organizationId: org.id,
       userId: user.id,
     });
-    expect(started.rowsEstimated).toBe(4);
+    expect(started.rowsEstimated).toBe(5);
     await modelCostBackfillService.runNext();
 
-    const expectedCost = (await calculateCost(
-      model.modelId,
-      usage.inputTokens,
-      usage.outputTokens,
-      "anthropic",
-      {
-        readTokens: usage.cacheReadTokens,
-        writeTokens: usage.cacheWriteTokens,
-        write1hTokens: usage.cacheWrite1hTokens,
-      },
-    )) as number;
-    const expectedCache = await calculateCacheCost(
-      model.modelId,
-      "anthropic",
-      usage.cacheReadTokens,
-      usage.cacheWriteTokens,
-      usage.cacheWrite1hTokens,
-    );
-    const cost = expectedCost.toFixed(10);
-    const cacheCost = expectedCache?.cacheCost.toFixed(10);
-    const cacheSavings = expectedCache?.cacheSavings.toFixed(10);
-    expect(cost).not.toBe("9.0000000000");
-
     expect(await costsOf(plain.id)).toEqual({
+      cost,
+      baselineCost: cost,
+      cacheCost,
+      cacheSavings,
+    });
+    expect(await costsOf(cacheOnly.id)).toEqual({
       cost,
       baselineCost: cost,
       cacheCost,
@@ -143,8 +156,8 @@ describe("recomputing past costs", () => {
     const done = await modelCostBackfillService.getLatest(model.id);
     expect(done).toMatchObject({
       status: "completed",
-      rowsScanned: 4,
-      rowsUpdated: 4,
+      rowsScanned: 5,
+      rowsUpdated: 5,
     });
 
     // A second pass at the same prices finds every row already correct.
@@ -157,7 +170,7 @@ describe("recomputing past costs", () => {
     await modelCostBackfillService.runNext();
     expect(await modelCostBackfillService.getLatest(model.id)).toMatchObject({
       status: "completed",
-      rowsScanned: 4,
+      rowsScanned: 5,
       rowsUpdated: 0,
     });
   });
@@ -331,9 +344,25 @@ describe("previewing a recompute", () => {
         settledRequests: 1,
       },
     });
+
+    // Priced as numeric(10,2) will store it: "1.005" saves as 1.01.
+    const rounded = await modelCostBackfillService.getPreview({
+      model,
+      prices: {
+        input: "1.005",
+        output: "0",
+        cacheRead: null,
+        cacheWrite: null,
+      },
+      timeZone: "UTC",
+      since: null,
+    });
+    expect(rounded.days.map((day) => day.recomputedCost)).toEqual([1.01, 1.01]);
   });
 
   test("says why a model's past costs cannot be recomputed", async ({
+    makeAgent,
+    makeInteraction,
     makeLlmProviderApiKey,
     makeOrganization,
     makeSecret,
@@ -341,6 +370,7 @@ describe("previewing a recompute", () => {
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    const agent = await makeAgent();
     const preview = (
       model: Model,
       prices?: { input: string; output: string },
@@ -407,6 +437,33 @@ describe("previewing a recompute", () => {
       availability: "available",
       instancePriced: true,
     });
+    // Once its requests used the cache, the cache price must be set too: the
+    // proxy records no cost for a cache price the key never published.
+    // (Checked at start, which reads fresh totals; previews may lag 30s.)
+    await makeInteraction(agent.id, {
+      type: "openai:chatCompletions",
+      model: litellm.modelId,
+      inputTokens: 1_000,
+      outputTokens: 1_000,
+      cacheReadTokens: 5_000,
+      createdAt: new Date(Date.now() - DAY_MS),
+    });
+    const startLitellm = async (prices: Partial<Model>) =>
+      modelCostBackfillService.start({
+        model: (await ModelModel.update(litellm.id, prices)) as Model,
+        since: null,
+        organizationId: org.id,
+        userId: user.id,
+      });
+    await expect(
+      startLitellm({
+        customPricePerMillionInput: "2",
+        customPricePerMillionOutput: "8",
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    await expect(
+      startLitellm({ customPricePerMillionCacheRead: "1" }),
+    ).resolves.toMatchObject({ status: "pending" });
 
     await db.execute(
       sql.raw(`DROP INDEX IF EXISTS "interactions_model_created_at_idx"`),

@@ -59,13 +59,13 @@ class ModelCostBackfillService {
     since: Date | null;
   }): Promise<CostBackfillPreview> {
     const { model } = params;
-    const pricing = resolvePricing(model, params.prices);
-    const { availability, instancePriced } = await this.getAvailability(
+    const { pricing, instancePriced } = await this.resolvePricing(
       model,
-      pricing,
+      params.prices,
     );
-    if (availability !== "available") {
-      return { availability, instancePriced, days: [], window: null };
+    const blocked = await this.getBlocker(model, pricing, instancePriced);
+    if (blocked) {
+      return { availability: blocked, instancePriced, days: [], window: null };
     }
 
     const scope = toScope(model);
@@ -75,6 +75,21 @@ class ModelCostBackfillService {
         ? this.getCachedWindow(scope, model.id, params.since)
         : Promise.resolve(null),
     ]);
+    if (
+      missesCachePrice({
+        pricing,
+        instancePriced,
+        tokens: sumTokens(history.map((day) => day.tokens)),
+      })
+    ) {
+      return {
+        availability: "needs_custom_price",
+        instancePriced,
+        days: [],
+        window: null,
+      };
+    }
+    const availability = "available";
     return {
       availability,
       instancePriced,
@@ -115,12 +130,12 @@ class ModelCostBackfillService {
     userId: string;
   }): Promise<ModelCostBackfill> {
     const { model } = params;
-    const pricing = resolvePricing(model);
-    const { availability } = await this.getAvailability(model, pricing);
-    if (availability !== "available") {
+    const { pricing, instancePriced } = await this.resolvePricing(model);
+    const blocked = await this.getBlocker(model, pricing, instancePriced);
+    if (blocked) {
       throw new ApiError(
-        availability === "index_pending" ? 409 : 400,
-        UNAVAILABLE_MESSAGES[availability],
+        blocked === "index_pending" ? 409 : 400,
+        UNAVAILABLE_MESSAGES[blocked],
       );
     }
 
@@ -134,6 +149,9 @@ class ModelCostBackfillService {
       since,
       until: cutoff,
     });
+    if (missesCachePrice({ pricing, instancePriced, tokens: totals.tokens })) {
+      throw new ApiError(400, UNAVAILABLE_MESSAGES.needs_custom_price);
+    }
     const backfill = await ModelCostBackfillModel.create({
       organizationId: params.organizationId,
       modelId: model.id,
@@ -273,25 +291,67 @@ class ModelCostBackfillService {
     await ModelCostBackfillModel.release(lease);
   }
 
-  private async getAvailability(
+  /**
+   * The prices a recompute uses. For a model that provider keys price
+   * individually (LiteLLM), only the admin's custom prices apply: past rows
+   * don't record their key, and the proxy never derives a cache price such a
+   * key did not publish, so neither does the recompute.
+   */
+  private async resolvePricing(
+    model: Model,
+    prices?: CostBackfillPrices,
+  ): Promise<{ pricing: ResolvedPricing; instancePriced: boolean }> {
+    const priced: Model = prices
+      ? {
+          ...model,
+          customPricePerMillionInput: toStoredPrice(prices.input),
+          customPricePerMillionOutput: toStoredPrice(prices.output),
+          customPricePerMillionCacheRead: toStoredPrice(prices.cacheRead),
+          customPricePerMillionCacheWrite: toStoredPrice(prices.cacheWrite),
+        }
+      : model;
+    const pricing = ModelModel.getEffectivePricing(
+      priced,
+      model.modelId,
+      model.provider,
+    );
+    const instancePriced =
+      model.provider !== "openrouter" &&
+      (await LlmProviderApiKeyModelLinkModel.hasProviderPricing(model.id));
+    if (!instancePriced) return { pricing, instancePriced };
+
+    const cacheRead =
+      priced.customPricePerMillionCacheRead != null
+        ? pricing.pricePerMillionCacheRead
+        : null;
+    const cacheWrite =
+      priced.customPricePerMillionCacheWrite != null
+        ? pricing.pricePerMillionCacheWrite
+        : null;
+    return {
+      instancePriced,
+      pricing: {
+        ...pricing,
+        pricePerMillionCacheRead: cacheRead,
+        pricePerMillionCacheWrite: cacheWrite,
+        cacheSource:
+          cacheRead === null && cacheWrite === null ? null : pricing.cacheSource,
+      },
+    };
+  }
+
+  /** Why the model's past costs can't be recomputed, before reading any rows. */
+  private async getBlocker(
     model: Model,
     pricing: ResolvedPricing,
-  ): Promise<{
-    availability: CostBackfillAvailability;
-    instancePriced: boolean;
-  }> {
-    if (model.provider === "openrouter") {
-      return { availability: "provider_reported_cost", instancePriced: false };
-    }
-    const instancePriced =
-      await LlmProviderApiKeyModelLinkModel.hasProviderPricing(model.id);
+    instancePriced: boolean,
+  ): Promise<Exclude<CostBackfillAvailability, "available"> | null> {
+    if (model.provider === "openrouter") return "provider_reported_cost";
     if (instancePriced && pricing.source !== "custom") {
-      return { availability: "needs_custom_price", instancePriced };
+      return "needs_custom_price";
     }
-    if (!(await isModelHistoryIndexReady())) {
-      return { availability: "index_pending", instancePriced };
-    }
-    return { availability: "available", instancePriced };
+    if (!(await isModelHistoryIndexReady())) return "index_pending";
+    return null;
   }
 
   private async getCachedHistory(
@@ -357,32 +417,63 @@ const UNAVAILABLE_MESSAGES: Record<
   provider_reported_cost:
     "This provider reports what requests actually cost, so recorded costs are kept.",
   needs_custom_price:
-    "Provider keys price this model individually. Set a custom input and output price first.",
+    "Provider keys price this model individually. Set custom input and output prices first, and cache prices if its requests used the cache.",
 };
 
 function toScope(model: Model): BackfillScope {
   return { modelId: model.modelId, provider: model.provider };
 }
 
-function resolvePricing(
-  model: Model,
-  prices?: CostBackfillPrices,
-): ResolvedPricing {
-  const priced = prices
-    ? {
-        ...model,
-        customPricePerMillionInput: toStoredPrice(prices.input),
-        customPricePerMillionOutput: toStoredPrice(prices.output),
-        customPricePerMillionCacheRead: toStoredPrice(prices.cacheRead),
-        customPricePerMillionCacheWrite: toStoredPrice(prices.cacheWrite),
-      }
-    : model;
-  return ModelModel.getEffectivePricing(priced, model.modelId, model.provider);
+/**
+ * The price as `numeric(10,2)` will store it, so the preview prices what Save
+ * stores. Decimal half-up on the digits themselves: binary `toFixed` rounds
+ * "1.005" down where Postgres rounds it up.
+ */
+function toStoredPrice(price: string | null): string | null {
+  if (price === null) return null;
+  const [whole, fraction = ""] = price.split(".");
+  const roundUp = fraction.length > 2 && fraction[2] >= "5" ? 1n : 0n;
+  const cents = BigInt(whole + fraction.padEnd(2, "0").slice(0, 2)) + roundUp;
+  const digits = cents.toString().padStart(3, "0");
+  return `${digits.slice(0, -2)}.${digits.slice(-2)}`;
 }
 
-/** Custom prices are stored with two decimals; preview what Save will store. */
-function toStoredPrice(price: string | null): string | null {
-  return price === null ? null : Number(price).toFixed(2);
+/**
+ * A per-key priced model with cached requests but no custom price for that
+ * kind of cache token: the proxy would record no cost for such a request, so
+ * the recompute can't invent one.
+ */
+function missesCachePrice(params: {
+  pricing: ResolvedPricing;
+  instancePriced: boolean;
+  tokens: TokenSums;
+}): boolean {
+  const { pricing, instancePriced, tokens } = params;
+  return (
+    instancePriced &&
+    ((tokens.cacheReadTokens > 0 && pricing.pricePerMillionCacheRead === null) ||
+      (tokens.cacheWriteTokens > 0 &&
+        pricing.pricePerMillionCacheWrite === null))
+  );
+}
+
+function sumTokens(all: TokenSums[]): TokenSums {
+  return all.reduce(
+    (total, tokens) => ({
+      inputTokens: total.inputTokens + tokens.inputTokens,
+      outputTokens: total.outputTokens + tokens.outputTokens,
+      cacheReadTokens: total.cacheReadTokens + tokens.cacheReadTokens,
+      cacheWriteTokens: total.cacheWriteTokens + tokens.cacheWriteTokens,
+      cacheWrite1hTokens: total.cacheWrite1hTokens + tokens.cacheWrite1hTokens,
+    }),
+    {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      cacheWrite1hTokens: 0,
+    },
+  );
 }
 
 function sweepStart(backfill: ModelCostBackfill): Date {

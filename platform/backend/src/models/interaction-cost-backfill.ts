@@ -147,7 +147,9 @@ class InteractionCostBackfillModel {
       ),
       sql`, `,
     );
-    const knowledge = sql`i.source like 'knowledge:%'`;
+    // coalesce: a NULL source would make `not knowledge` NULL and silently
+    // drop rows whose only change is in the cache or baseline columns.
+    const knowledge = sql`coalesce(i.source, '') like 'knowledge:%'`;
     const baselineFollowsCost = sql`(i.baseline_model is null or i.baseline_model = i.model)`;
     const result = await tx.execute<{ id: string }>(sql`
       update interactions i set

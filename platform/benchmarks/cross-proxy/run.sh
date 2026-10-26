@@ -17,6 +17,7 @@ done
 mock_pid=''
 stats_pid=''
 cleanup() {
+  curl -fsS http://127.0.0.1:19092/samples > "$out/upstream-all.json" 2>/dev/null || true
   [[ -z "$stats_pid" ]] || kill "$stats_pid" 2>/dev/null || true
   [[ -z "$mock_pid" ]] || kill "$mock_pid" 2>/dev/null || true
   for name in "$project-db" "$project-archestra" "$project-litellm"; do
@@ -63,7 +64,7 @@ start_litellm() {
   wait_ready http://127.0.0.1:19400/health/liveliness
 }
 wait_ready() {
-  for ((i=0;i<180;i++)); do if curl -fsS "$1" >/dev/null; then return; fi; sleep 1; done
+  for ((i=0;i<180;i++)); do if curl -fsS "$1" >/dev/null 2>&1; then return; fi; sleep 1; done
   echo "Readiness timed out: $1"; return 1
 }
 stop_proxy() {

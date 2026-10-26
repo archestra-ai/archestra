@@ -148,7 +148,7 @@ jobs:
           save-if: 'false'
       - run: pnpm exec biome check benchmarks/*.mjs
       - name: Validate timing and reporting
-        run: node --test benchmarks/*.test.mjs ../.github/scripts/*proxy-benchmark*.test.mjs
+        run: node --test benchmarks/*.test.mjs benchmarks/cross-proxy/*.test.mjs ../.github/scripts/*proxy-benchmark*.test.mjs
       - name: Validate server timing boundaries
         run: pnpm --dir backend exec vitest run src/server/llm-proxy-timing.unit.test.ts
       - name: Run controlled LiteLLM comparison

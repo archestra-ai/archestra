@@ -28,7 +28,7 @@ const bodyFor = (id, stream) => ({
   model: "gpt-4o-mini",
   messages: [{ role: "user", content: "Reply with the benchmark marker." }],
   max_tokens: 32,
-  user: id,
+  user: id.padEnd(96, "_"),
   ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}),
 });
 // Exercise real auth before any measured load; a missing key must be rejected.
@@ -110,7 +110,11 @@ for (const streaming of [false, true]) {
       Array.from({ length: concurrency }, async () => {
         while (next < n) {
           const index = next++;
-          const id = `${target}-${repeat}-${streaming ? "stream" : "chat"}-${warmup ? "warm" : "measured"}-${index}`;
+          const id =
+            `${target}-${repeat}-${streaming ? "stream" : "chat"}-${warmup ? "warm" : "measured"}-${index}`.padEnd(
+              96,
+              "_",
+            );
           const sample = await measureRequest({
             url,
             body: bodyFor(id, streaming),
@@ -133,9 +137,14 @@ for (const streaming of [false, true]) {
   }
   try {
     await load(200, true);
+    const startedAt = new Date().toISOString();
     const start = performance.now();
     await load(count, false);
     const elapsedMs = performance.now() - start;
+    await writeFile(
+      `${output}/raw-${target}-${repeat}-${streaming ? "stream" : "chat"}.json`,
+      JSON.stringify({ elapsedMs, samples }),
+    );
     const upstream = await fetch("http://127.0.0.1:19092/samples").then((r) =>
       r.json(),
     );
@@ -152,32 +161,39 @@ for (const streaming of [false, true]) {
       assert.deepEqual(u.messages, bodyFor(s.id, streaming).messages);
       assert.equal(u.max_tokens, 32);
       assert.equal(u.stream, streaming);
+      assert.deepEqual(
+        u.stream_options,
+        streaming ? { include_usage: true } : null,
+      );
       s.upstream = u;
       s.clientAddedMs = s.totalMs - u.durationMs;
       s.firstContentAddedMs =
         s.firstContentMs === null ? null : s.firstContentMs - u.firstContentMs;
     }
+    const successful = samples.filter((s) => s.ok);
     const block = {
       target,
-      repeat: Number(repeat),
+      repeat: target === "direct" ? repeat : Number(repeat),
+      startedAt,
+      finishedAt: new Date().toISOString(),
       streaming,
       concurrency,
       count,
       warmup: 200,
       elapsedMs,
-      requestsPerSecond: count / (elapsedMs / 1000),
+      requestsPerSecond: successful.length / (elapsedMs / 1000),
       errors: samples.filter((s) => !s.ok).length,
-      totalMs: summarize(samples.map((s) => s.totalMs)),
-      clientAddedMs: summarize(samples.map((s) => s.clientAddedMs)),
+      totalMs: summarize(successful.map((s) => s.totalMs)),
+      clientAddedMs: summarize(successful.map((s) => s.clientAddedMs)),
       firstContentMs: streaming
-        ? summarize(samples.map((s) => s.firstContentMs))
+        ? summarize(successful.map((s) => s.firstContentMs))
         : null,
       firstContentAddedMs: streaming
-        ? summarize(samples.map((s) => s.firstContentAddedMs))
+        ? summarize(successful.map((s) => s.firstContentAddedMs))
         : null,
       gatewayOverheadMs:
         target === "archestra" && !streaming
-          ? summarize(samples.map((s) => s.gatewayTiming.overheadMs))
+          ? summarize(successful.map((s) => s.gatewayTiming.overheadMs))
           : null,
       samples,
     };

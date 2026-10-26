@@ -13,6 +13,11 @@ const blocks = (
   )
 ).flatMap((r) => r.blocks);
 assert.equal(blocks.length, 16);
+for (const b of blocks) {
+  assert.equal(b.errors, 0);
+  assert.equal(b.samples.length, b.count);
+  assert.ok(b.samples.every((s) => s.ok && Number.isFinite(s.clientAddedMs)));
+}
 const metrics = [];
 const lines = [
   "# Controlled LLM proxy comparison",
@@ -60,7 +65,7 @@ lines.push(
   "",
   "Client added = each client complete-body duration minus its correlated stub request duration (stub receipt through res.end). Includes transport, serialization and gateway processing; differs from the existing docs’ internal gateway-only overhead. TTFT here means first decoded content event, not first response byte. No percentile subtraction. Archestra internal timing is retained separately in JSON; no equivalent LiteLLM timer is asserted.",
   "",
-  "Virtual-key auth, PostgreSQL token accounting and stored response content validated. LiteLLM uses default asynchronous spend persistence with prompt storage enabled; Archestra retains awaited request persistence. This is a representative authenticated logging comparison with different durability semantics, not strict feature/durability parity. Persistence is drained and checked before each shutdown. No budgets, cache, retries configured, real inference or MCP requests. Throughput is observed closed-loop completion rate at c=50, not a saturation capacity claim.",
+  "Virtual-key auth, PostgreSQL token accounting and stored response content validated. LiteLLM uses default asynchronous spend persistence with prompt storage enabled; Archestra retains awaited request persistence. This is a representative authenticated logging comparison with different durability semantics, not strict feature/durability parity. Persistence is drained and checked before each shutdown. No configured budgets or cache; upstream evidence rejects duplicate attempts. No real inference or MCP requests. Throughput is observed closed-loop completion rate at c=50, not a saturation capacity claim; it excludes the later asynchronous persistence drain.",
   "",
   "Raw per-request samples, per-repeat distributions, resource traces, image inspections, exact commits, runtime versions, accounting checks and run order accompany this summary. See benchmarks/cross-proxy/README.md for reproduction.",
 );

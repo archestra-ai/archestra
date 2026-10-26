@@ -7,12 +7,14 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { measureRequest, summarize } from "../measure.mjs";
 
 const [target, repeat, key] = process.argv.slice(2);
-assert.ok(["archestra", "litellm", "direct"].includes(target));
+assert.ok(
+  ["archestra", "litellm", "litellm-default", "direct"].includes(target),
+);
 const output = "benchmarks/results/cross-proxy";
 const url =
   target === "archestra"
     ? "http://127.0.0.1:19000/v1/openai/chat/completions"
-    : target === "litellm"
+    : target.startsWith("litellm")
       ? "http://127.0.0.1:19400/v1/chat/completions"
       : "http://127.0.0.1:19092/v1/chat/completions";
 const headers =
@@ -21,7 +23,7 @@ const headers =
         authorization: "Bearer benchmark-no-inference",
         "x-archestra-virtual-key": key,
       }
-    : target === "litellm"
+    : target.startsWith("litellm")
       ? { authorization: `Bearer ${key}` }
       : {};
 const bodyFor = (id, stream) => ({
@@ -63,10 +65,16 @@ assert.deepEqual(probeBody.usage, {
 });
 // Establish that real accounting/prompt storage works before taking numbers.
 if (target !== "direct") {
+  const database =
+    target === "archestra"
+      ? "benchmark"
+      : target === "litellm-default"
+        ? "litellm_default"
+        : "litellm";
   const query =
     target === "archestra"
       ? "SELECT count(*) FROM interactions WHERE input_tokens=12 AND output_tokens=20 AND response::text LIKE '%archestra-benchmark-ok%'"
-      : `SELECT count(*) FROM "LiteLLM_SpendLogs" WHERE prompt_tokens=12 AND completion_tokens=20 AND response::text LIKE '%archestra-benchmark-ok%'`;
+      : `SELECT count(*) FROM "LiteLLM_SpendLogs" WHERE prompt_tokens=12 AND completion_tokens=20 AND status='success'`;
   let persisted = false;
   for (let i = 0; i < 60; i++) {
     const n = Number(
@@ -79,7 +87,7 @@ if (target !== "direct") {
           "-U",
           "benchmark",
           "-d",
-          target === "archestra" ? "benchmark" : "litellm",
+          database,
           "-Atc",
           query,
         ],

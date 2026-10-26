@@ -25,6 +25,18 @@ export function transformConfigArrayFields(
 ): Record<string, unknown> {
   const result = { ...config };
 
+  if (Array.isArray(config.repositoryPathFilters)) {
+    result.repositoryPathFilters = config.repositoryPathFilters.map(
+      (filter: Record<string, unknown>) => ({
+        ...transformConfigArrayFields(filter),
+        repository:
+          typeof filter.repository === "string"
+            ? filter.repository.trim()
+            : filter.repository,
+      }),
+    );
+  }
+
   // String array fields: split by comma, trim, filter empty
   const stringArrayFields = [
     "repos",

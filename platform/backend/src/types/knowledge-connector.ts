@@ -218,6 +218,34 @@ export const GithubConfigSchema = z.object({
    * whole repository, which is the pre-existing behaviour.
    */
   includePaths: z.array(z.string()).optional(),
+  repositoryPathFilters: z
+    .array(
+      z.object({
+        repository: z
+          .string()
+          .trim()
+          .regex(/^[^/\\\s]+(?:\/[^/\\\s]+)?$/),
+        includePaths: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "Omitted inherits global includePaths; an empty list includes the whole repository.",
+          ),
+        excludePaths: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "Files or folders to skip. Exclusions take precedence over includes; / excludes every file.",
+          ),
+      }),
+    )
+    .refine(
+      (filters) =>
+        new Set(filters.map((filter) => filter.repository.toLowerCase()))
+          .size === filters.length,
+      "Repository path filters must be unique",
+    )
+    .optional(),
   labelsToSkip: z.array(z.string()).optional(),
 });
 export type GithubConfig = z.infer<typeof GithubConfigSchema>;

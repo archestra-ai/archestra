@@ -77824,6 +77824,17 @@ export type GetConnectorsResponses = {
                 includeRepositoryFiles?: boolean;
                 fileTypes?: Array<string>;
                 includePaths?: Array<string>;
+                repositoryPathFilters?: Array<{
+                    repository: string;
+                    /**
+                     * Omitted inherits global includePaths; an empty list includes the whole repository.
+                     */
+                    includePaths?: Array<string>;
+                    /**
+                     * Files or folders to skip. Exclusions take precedence over includes; / excludes every file.
+                     */
+                    excludePaths?: Array<string>;
+                }>;
                 labelsToSkip?: Array<string>;
             } | {
                 type: 'gitlab';
@@ -78060,6 +78071,17 @@ export type CreateConnectorData = {
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             includePaths?: Array<string>;
+            repositoryPathFilters?: Array<{
+                repository: string;
+                /**
+                 * Omitted inherits global includePaths; an empty list includes the whole repository.
+                 */
+                includePaths?: Array<string>;
+                /**
+                 * Files or folders to skip. Exclusions take precedence over includes; / excludes every file.
+                 */
+                excludePaths?: Array<string>;
+            }>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -78369,6 +78391,17 @@ export type CreateConnectorResponses = {
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             includePaths?: Array<string>;
+            repositoryPathFilters?: Array<{
+                repository: string;
+                /**
+                 * Omitted inherits global includePaths; an empty list includes the whole repository.
+                 */
+                includePaths?: Array<string>;
+                /**
+                 * Files or folders to skip. Exclusions take precedence over includes; / excludes every file.
+                 */
+                excludePaths?: Array<string>;
+            }>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -78756,6 +78789,17 @@ export type GetConnectorResponses = {
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             includePaths?: Array<string>;
+            repositoryPathFilters?: Array<{
+                repository: string;
+                /**
+                 * Omitted inherits global includePaths; an empty list includes the whole repository.
+                 */
+                includePaths?: Array<string>;
+                /**
+                 * Files or folders to skip. Exclusions take precedence over includes; / excludes every file.
+                 */
+                excludePaths?: Array<string>;
+            }>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -78974,6 +79018,17 @@ export type UpdateConnectorData = {
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             includePaths?: Array<string>;
+            repositoryPathFilters?: Array<{
+                repository: string;
+                /**
+                 * Omitted inherits global includePaths; an empty list includes the whole repository.
+                 */
+                includePaths?: Array<string>;
+                /**
+                 * Files or folders to skip. Exclusions take precedence over includes; / excludes every file.
+                 */
+                excludePaths?: Array<string>;
+            }>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -79265,6 +79320,17 @@ export type UpdateConnectorResponses = {
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             includePaths?: Array<string>;
+            repositoryPathFilters?: Array<{
+                repository: string;
+                /**
+                 * Omitted inherits global includePaths; an empty list includes the whole repository.
+                 */
+                includePaths?: Array<string>;
+                /**
+                 * Files or folders to skip. Exclusions take precedence over includes; / excludes every file.
+                 */
+                excludePaths?: Array<string>;
+            }>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';

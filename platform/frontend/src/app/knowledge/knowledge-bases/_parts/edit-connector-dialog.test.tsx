@@ -111,6 +111,63 @@ function renderDialog(connector: ConnectorFixture = makeAsanaConnector()) {
   return { onOpenChange };
 }
 
+describe("EditConnectorDialog - GitHub repository path filters", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockMutateAsync.mockResolvedValue({ id: "conn-github" });
+  });
+
+  it("reloads saved arrays, edits one repository, and removes a rule without changing the other", async () => {
+    const user = userEvent.setup();
+    renderDialog({
+      ...makeAsanaConnector(),
+      id: "conn-github",
+      connectorType: "github",
+      config: {
+        type: "github",
+        githubUrl: "https://api.github.com",
+        owner: "example-org",
+        repos: ["repo-a", "repo-b"],
+        includeRepositoryFiles: true,
+        includePaths: ["legacy"],
+        repositoryPathFilters: [
+          {
+            repository: "repo-a",
+            includePaths: ["docs"],
+            excludePaths: ["docs/internal"],
+          },
+          {
+            repository: "repo-b",
+            includePaths: ["handbook"],
+            excludePaths: ["drafts"],
+          },
+        ],
+      },
+    } as ConnectorFixture);
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    expect(screen.getAllByLabelText(/^Include paths$/)[0]).toHaveValue("docs");
+    expect(screen.getAllByLabelText(/^Exclude paths$/)[1]).toHaveValue(
+      "drafts",
+    );
+    fireEvent.change(screen.getAllByLabelText(/^Include paths$/)[1], {
+      target: { value: "" },
+    });
+    await user.click(
+      screen.getAllByRole("button", { name: "Remove repository filter" })[0],
+    );
+    expect(screen.getAllByLabelText(/^Repository$/)).toHaveLength(1);
+    expect(screen.getByLabelText(/^Repository$/)).toHaveValue("repo-b");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    expect(mockMutateAsync.mock.calls[0][0].body.config).toMatchObject({
+      includePaths: ["legacy"],
+      repositoryPathFilters: [
+        { repository: "repo-b", includePaths: [], excludePaths: ["drafts"] },
+      ],
+    });
+  });
+});
+
 describe("EditConnectorDialog - Asana", () => {
   beforeEach(() => {
     vi.clearAllMocks();

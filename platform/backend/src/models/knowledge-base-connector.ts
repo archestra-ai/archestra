@@ -1122,6 +1122,20 @@ class KnowledgeBaseConnectorModel {
       knowledgeBases,
       memberOverrides,
       configKeys,
+      ...(row.config?.type === "github"
+        ? {
+            githubPathFilters: {
+              defaultIncludePaths: row.config.includePaths ?? [],
+              repositories: (row.config.repositoryPathFilters ?? []).map(
+                ({ repository, includePaths, excludePaths }) => ({
+                  repository,
+                  includePaths: includePaths ?? null,
+                  excludePaths: excludePaths ?? [],
+                }),
+              ),
+            },
+          }
+        : {}),
       permissionSyncIntervalSeconds: row.permissionSyncIntervalSeconds ?? null,
       environmentId: row.environmentId ?? null,
       createdAt: row.createdAt.toISOString(),

@@ -155,6 +155,60 @@ describe("CreateConnectorDialog", () => {
     vi.mocked(usePathname).mockReturnValue("/knowledge/knowledge-bases");
   });
 
+  it("creates GitHub connectors with independent repository include and exclude paths", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "connector-1" });
+    const { user } = await renderGithubConfigureStep();
+    await user.type(
+      screen.getByLabelText(/^Name$/),
+      "Repository documentation",
+    );
+    await user.type(screen.getByLabelText(/^Owner$/), "example-org");
+    await user.type(
+      screen.getByLabelText(/Personal Access Token/),
+      "local-placeholder",
+    );
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("switch", { name: /Include Repository Files/ }),
+    );
+    for (const [repository, include, exclude] of [
+      ["repo-a", "docs, handbook", "docs/internal"],
+      ["example-org/repo-b", "guides", "guides/drafts"],
+    ]) {
+      await user.click(
+        screen.getByRole("button", { name: "Add repository filter" }),
+      );
+      fireEvent.change(
+        screen.getAllByLabelText(/^Repository$/).at(-1) as HTMLElement,
+        { target: { value: repository } },
+      );
+      fireEvent.change(
+        screen.getAllByLabelText(/^Include paths$/).at(-1) as HTMLElement,
+        { target: { value: include } },
+      );
+      fireEvent.change(
+        screen.getAllByLabelText(/^Exclude paths$/).at(-1) as HTMLElement,
+        { target: { value: exclude } },
+      );
+    }
+    await user.click(screen.getByRole("button", { name: "Create Connector" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    expect(
+      mockMutateAsync.mock.calls[0][0].config.repositoryPathFilters,
+    ).toEqual([
+      {
+        repository: "repo-a",
+        includePaths: ["docs", "handbook"],
+        excludePaths: ["docs/internal"],
+      },
+      {
+        repository: "example-org/repo-b",
+        includePaths: ["guides"],
+        excludePaths: ["guides/drafts"],
+      },
+    ]);
+  });
+
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

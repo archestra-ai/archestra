@@ -3,6 +3,39 @@ import { describe, expect, it } from "vitest";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
 describe("transformConfigArrayFields", () => {
+  it("serializes independent repository filters and preserves them after edit/reload", () => {
+    const config = {
+      type: "github",
+      includePaths: ["legacy"],
+      repositoryPathFilters: [
+        {
+          repository: " repo-a ",
+          includePaths: "docs, handbook, ",
+          excludePaths: "docs/internal, generated",
+        },
+        { repository: "org/repo-b", includePaths: "", excludePaths: "private" },
+        { repository: "repo-c", excludePaths: ["build"] },
+      ],
+    };
+    const result = transformConfigArrayFields(config);
+    expect(result.repositoryPathFilters).toEqual([
+      {
+        repository: "repo-a",
+        includePaths: ["docs", "handbook"],
+        excludePaths: ["docs/internal", "generated"],
+      },
+      { repository: "org/repo-b", includePaths: [], excludePaths: ["private"] },
+      { repository: "repo-c", excludePaths: ["build"] },
+    ]);
+    expect(result.includePaths).toEqual(["legacy"]);
+    expect(
+      transformConfigArrayFields(JSON.parse(JSON.stringify(result))),
+    ).toEqual(result);
+    expect(config.repositoryPathFilters[0].includePaths).toBe(
+      "docs, handbook, ",
+    );
+  });
+
   it("converts comma-separated string fields to arrays", () => {
     const config = {
       type: "github",

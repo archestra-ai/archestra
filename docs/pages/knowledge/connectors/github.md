@@ -2,7 +2,7 @@
 title: GitHub
 description: Connect GitHub documents to Knowledge and configure source access
 order: 3
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-26
 ---
 
 Let agents answer from your GitHub repositories: "Why did we drop Redis?" finds the pull request where you decided it. The connector syncs issues, pull request discussions, and repository files.
@@ -28,7 +28,20 @@ Let agents answer from your GitHub repositories: "Why did we drop Redis?" finds 
 | Include Pull Requests | Toggle to sync pull requests and their comments (default: on)                                   |
 | Include Repository Files | Toggle to sync repository files (default: off)                                               |
 | File Types            | Comma-separated extensions (`.md`, `.tm.hcl`) or file names (`Dockerfile`, `Makefile`) to index when repository files are enabled, in any folder. `*` indexes every text file and skips binaries. Defaults to `.md`, `.mdx`, `.yaml`, `.yml` |
-| Folders               | Comma-separated folders to index, relative to the repository root (optional -- leave blank to index the whole repository) |
+| Default folders       | Comma-separated folders to index for repositories without an include override. Leave blank to index the whole repository. |
+| Repository path filters | Independent include and exclude lists for each repository. Exclusions take precedence. |
+
+## Filter Repository Files
+
+Index `docs` in one repository and `handbook` in another without including their private subfolders.
+
+1. Open **Advanced** and enable **Include Repository Files**.
+2. Click **Add repository filter**. Enter the **Repository**, such as `example-org/service`, and comma-separated **Include paths** and **Exclude paths**.
+3. Add another filter for the second repository. Save the connector, then reopen it to check both lists.
+
+- A bare repository name uses the configured **Owner**. An `owner/repo` rule takes precedence over a bare-name rule. Filters also apply to automatically discovered repositories; a filter does not select an additional repository to sync.
+- Paths name files or folders relative to the repository root, not globs. `docs` includes `docs/guide.md`, not `docs-internal/guide.md`. Git paths are case-sensitive; repository names are not. Excluding `docs/internal` skips that folder even when `docs` is included; excluding `/` skips every file.
+- A blank **Include paths** list indexes the whole repository, replacing **Default folders** for that repository. A blank **Exclude paths** list excludes nothing. Repositories without a filter keep **Default folders**. These filters do not affect issues or pull requests.
 
 ## GitHub Auto-Sync Permissions
 

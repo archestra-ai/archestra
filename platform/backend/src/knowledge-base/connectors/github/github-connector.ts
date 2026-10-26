@@ -387,10 +387,22 @@ export class GithubConnector extends BaseConnector {
     const { octokit, config, repo, checkpoint, isLastGroup } = params;
     const repoFullName = `${repo.owner}/${repo.name}`;
     const fileTypeFilter = getFileTypeFilter(config);
-    const indexedPathPrefixes = getIndexedPathPrefixes(config);
+    const repositoryFilter = getRepositoryPathFilter({ config, repo });
+    const indexedPathPrefixes = normalizePathPrefixes(
+      repositoryFilter?.includePaths ?? config.includePaths ?? [],
+    );
+    const excludedPathPrefixes = normalizePathPrefixes(
+      repositoryFilter?.excludePaths ?? [],
+      true,
+    );
 
     this.log.info(
-      { repo: repoFullName, fileTypeFilter, indexedPathPrefixes },
+      {
+        repo: repoFullName,
+        fileTypeFilter,
+        indexedPathPrefixes,
+        excludedPathPrefixes,
+      },
       "Starting repository file sync",
     );
 
@@ -449,6 +461,8 @@ export class GithubConnector extends BaseConnector {
             item.type === "blob" &&
             item.path &&
             isWithinIndexedPaths(item.path, indexedPathPrefixes) &&
+            (excludedPathPrefixes.length === 0 ||
+              !isWithinIndexedPaths(item.path, excludedPathPrefixes)) &&
             isIndexedRepositoryFile(item.path, fileTypeFilter) &&
             item.sha,
         )
@@ -1396,6 +1410,25 @@ function looksBinary(content: string): boolean {
   return content.slice(0, 8000).includes("\u0000");
 }
 
+function getRepositoryPathFilter({
+  config,
+  repo,
+}: {
+  config: GithubConfig;
+  repo: GithubRepo;
+}) {
+  const filters = config.repositoryPathFilters ?? [];
+  const fullName = `${repo.owner}/${repo.name}`.toLowerCase();
+  return (
+    filters.find((filter) => filter.repository.toLowerCase() === fullName) ??
+    filters.find(
+      (filter) =>
+        repo.owner.toLowerCase() === config.owner.toLowerCase() &&
+        filter.repository.toLowerCase() === repo.name.toLowerCase(),
+    )
+  );
+}
+
 /**
  * Normalize the configured folders into repo-root-relative prefixes: users
  * paste `/docs`, `docs/`, or `./docs` interchangeably, and a tree path never
@@ -1403,15 +1436,19 @@ function looksBinary(content: string): boolean {
  * `./`, `.`, blank) normalize away, leaving no filter at all rather than a
  * prefix that matches nothing.
  */
-function getIndexedPathPrefixes(config: GithubConfig): string[] {
-  return (config.includePaths ?? [])
+function normalizePathPrefixes(paths: string[], keepRoot = false): string[] {
+  return paths
+    .filter((entry) => entry.trim() !== "")
     .map((entry) =>
       entry
         .trim()
-        .replace(/^\.?\/+/, "")
+        .replace(/\\/g, "/")
+        .replace(/\/+/g, "/")
+        .replace(/^(\.\/|\/)+/, "")
         .replace(/\/+$/, ""),
     )
-    .filter((entry) => entry !== "" && entry !== ".");
+    .map((entry) => (entry === "." ? "" : entry))
+    .filter((entry) => keepRoot || entry !== "");
 }
 
 /**
@@ -1422,7 +1459,8 @@ function getIndexedPathPrefixes(config: GithubConfig): string[] {
 function isWithinIndexedPaths(path: string, prefixes: string[]): boolean {
   if (prefixes.length === 0) return true;
   return prefixes.some(
-    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
+    (prefix) =>
+      prefix === "" || path === prefix || path.startsWith(`${prefix}/`),
   );
 }
 

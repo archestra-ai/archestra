@@ -78,6 +78,91 @@ describe("knowledge base routes", () => {
     await app.close();
   });
 
+  test("GitHub path configuration survives create, edit and reload without changing legacy defaults", async () => {
+    const githubConfig = {
+      type: "github",
+      githubUrl: "https://api.github.com",
+      owner: "example-org",
+      repos: ["repo-a", "example-org/repo-b"],
+      includeRepositoryFiles: true,
+      includePaths: ["legacy"],
+      repositoryPathFilters: [
+        {
+          repository: "repo-a",
+          includePaths: ["docs"],
+          excludePaths: ["docs/internal"],
+        },
+        {
+          repository: "example-org/repo-b",
+          includePaths: [],
+          excludePaths: ["drafts"],
+        },
+      ],
+    };
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/connectors",
+      payload: {
+        name: "Repository path fixture",
+        connectorType: "github",
+        config: githubConfig,
+        credentials: { apiToken: "local-fixture-token" },
+        enabled: false,
+      },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const id = created.json().id;
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/connectors/${id}`,
+    });
+    expect(read.statusCode, read.body).toBe(200);
+    expect(read.json().config).toMatchObject(githubConfig);
+    const edited = {
+      ...githubConfig,
+      repositoryPathFilters: [
+        { repository: "repo-a", includePaths: ["handbook"], excludePaths: [] },
+        githubConfig.repositoryPathFilters[1],
+      ],
+    };
+    const updated = await app.inject({
+      method: "PUT",
+      url: `/api/connectors/${id}`,
+      payload: { config: edited },
+    });
+    expect(updated.statusCode, updated.body).toBe(200);
+    const reloaded = await app.inject({
+      method: "GET",
+      url: `/api/connectors/${id}`,
+    });
+    expect(reloaded.statusCode, reloaded.body).toBe(200);
+    expect(reloaded.json().config).toMatchObject(edited);
+    expect(JSON.stringify(reloaded.json())).not.toContain(
+      "local-fixture-token",
+    );
+    await drainBackgroundWork();
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId,
+      resourceType: "connector",
+      limit: 20,
+      offset: 0,
+    });
+    const audit = data.find(
+      (entry) => entry.resourceId === id && entry.httpMethod === "PUT",
+    );
+    expect(audit?.action).toBe("connector.updated");
+    expect(audit?.outcome).toBe("success");
+    expect(audit?.before?.githubPathFilters).toMatchObject({
+      defaultIncludePaths: ["legacy"],
+      repositories: githubConfig.repositoryPathFilters,
+    });
+    expect(audit?.after?.githubPathFilters).toMatchObject({
+      defaultIncludePaths: ["legacy"],
+      repositories: edited.repositoryPathFilters,
+    });
+    expect(JSON.stringify(audit)).not.toContain("local-fixture-token");
+  });
+
   test("single-resource responses expose persisted labels and label drift", async () => {
     const created = await app.inject({
       method: "POST",

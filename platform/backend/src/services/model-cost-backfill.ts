@@ -343,7 +343,9 @@ class ModelCostBackfillService {
         pricePerMillionCacheRead: cacheRead,
         pricePerMillionCacheWrite: cacheWrite,
         cacheSource:
-          cacheRead === null && cacheWrite === null ? null : pricing.cacheSource,
+          cacheRead === null && cacheWrite === null
+            ? null
+            : pricing.cacheSource,
       },
     };
   }
@@ -461,7 +463,8 @@ function missesCachePrice(params: {
   const { pricing, instancePriced, tokens } = params;
   return (
     instancePriced &&
-    ((tokens.cacheReadTokens > 0 && pricing.pricePerMillionCacheRead === null) ||
+    ((tokens.cacheReadTokens > 0 &&
+      pricing.pricePerMillionCacheRead === null) ||
       (tokens.cacheWriteTokens > 0 &&
         pricing.pricePerMillionCacheWrite === null))
   );

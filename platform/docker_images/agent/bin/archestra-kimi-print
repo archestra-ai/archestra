@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""Run one delegated Kimi Code turn in print mode.
+
+Used for plain runs, which have no terminal; other delegated runs use the TUI.
+`kimi -p` waits for its MCP catalog before the first model request, and the
+launcher's UserPromptSubmit hook blocks the prompt when the gateway catalog
+did not load (archestra-kimi-gateway-state), so the task never runs without the
+gateway's tools. The run log shows the conversation as it happens; the
+transcript, final answer and outcome come from Kimi's own session record.
+
+Usage: archestra-kimi-print [kimi arguments, such as --session ID]
+"""
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+
+def main() -> int:
+    runtime_dir = Path(os.environ.get("ARCHESTRA_AGENT_RUNTIME_DIR", "/var/run/archestra"))
+    script_dir = Path(__file__).resolve().parent
+    session_file = runtime_dir / "kimi-main-session"
+    blocked = runtime_dir / "kimi-gateway-blocked"
+    for marker in ("turn-complete", "turn-complete.failed", "final-answer.txt", blocked.name):
+        (runtime_dir / marker).unlink(missing_ok=True)
+
+    command = ["kimi", *sys.argv[1:], "-p", os.environ["ARCHESTRA_AGENT_RUNTIME_TASK"], "--output-format", "stream-json"]
+    try:
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, text=True)
+    except OSError:
+        subprocess.run([str(script_dir / "archestra-kimi-turn-failure"), "missing"], check=False)
+        return 1
+    assert process.stdout is not None
+    for line in process.stdout:
+        print_progress(line, session_file)
+    status = process.wait()
+
+    if blocked.exists():
+        # The prompt hook published the gateway failure and kept the task out.
+        blocked.unlink(missing_ok=True)
+        subprocess.run([str(script_dir / "archestra-mcp-startup-failure")], check=False)
+        return 1
+    session_id = session_file.read_text().strip() if session_file.exists() else ""
+    recorded = "pending"
+    answer_file = runtime_dir / "final-answer.txt"
+    if session_id:
+        recorded = subprocess.run(
+            [str(script_dir / "archestra-kimi-transcript"), session_id, "--answer", str(answer_file), "--failure", "end"],
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip() or "pending"
+    failure = failure_reason(status, recorded)
+    if failure:
+        # The turn hooks of TUI runs publish the same messages.
+        subprocess.run([str(script_dir / "archestra-kimi-turn-failure"), failure], check=False)
+        return 1
+    answer = answer_file.read_text(encoding="utf-8").strip() if answer_file.exists() else ""
+    answer = answer or "The session ended without producing a final message."
+    # The same completion markers the maintained TUI runner leaves.
+    answer_file.write_text(f"{answer}\n", encoding="utf-8")
+    (runtime_dir / "turn-complete").touch()
+    print("\n===ARCHESTRA-FINAL-ANSWER===")
+    print(answer)
+    print("===ARCHESTRA-FINAL-ANSWER-END===", flush=True)
+    return 0
+
+
+def failure_reason(status: int, recorded: str) -> str | None:
+    """The turn-failure reason for this exit status and the recorded turn.
+
+    The session record classifies the turn (archestra-kimi-transcript
+    --failure end), from the error code Kimi recorded for a failed one.
+    """
+    if recorded == "none":
+        return None if status == 0 else "unavailable"
+    if recorded == "pending":
+        # The CLI exited without recording the turn's end: a configuration Kimi
+        # refused or a crash, not the model's own decision.
+        return "unavailable"
+    return recorded
+
+
+def print_progress(line: str, session_file: Path) -> None:
+    try:
+        message = json.loads(line)
+    except json.JSONDecodeError:
+        return
+    if not isinstance(message, dict):
+        return
+    if message.get("type") == "session.resume_hint" and isinstance(message.get("session_id"), str):
+        # The SessionStart hook records the session first; this covers a
+        # session that started without it.
+        if not session_file.exists():
+            with open(os.open(session_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as file:
+                file.write(f"{message['session_id']}\n")
+        return
+    if message.get("role") == "assistant":
+        content = message.get("content")
+        if isinstance(content, str) and content:
+            sys.stdout.write(content + "\n")
+        for call in message.get("tool_calls") or []:
+            name = (call.get("function") or {}).get("name") if isinstance(call, dict) else None
+            if isinstance(name, str):
+                sys.stdout.write(f"[tool] {name}\n")
+        sys.stdout.flush()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

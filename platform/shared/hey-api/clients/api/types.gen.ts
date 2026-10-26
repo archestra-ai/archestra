@@ -105615,6 +105615,10 @@ export type UpdateIntegrationSettingsData = {
                 hidden?: boolean;
                 position?: number;
             };
+            kimi?: {
+                hidden?: boolean;
+                position?: number;
+            };
         } | null;
         modelProviderOverrides?: {
             [key: string]: {

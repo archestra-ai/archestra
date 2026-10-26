@@ -404457,6 +404457,20 @@
                           }
                         },
                         "additionalProperties": false
+                      },
+                      "kimi": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "additionalProperties": false
                       }
                     },
                     "additionalProperties": false

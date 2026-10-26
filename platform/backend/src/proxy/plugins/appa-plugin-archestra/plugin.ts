@@ -682,6 +682,20 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           approved.content += NO_REMEDY_PLAN_HINT;
         }
       }
+      // Already complete, and with no plan this client could act on.
+      const carried = await cacheManager.get<string>(
+        carriedRulingKey({
+          session: this.governedSession(binding),
+          callId: answer.id,
+        }),
+      );
+      if (typeof carried === "string")
+        result.toolResultUpdates[answer.id] = {
+          content: carried,
+          outputSource: "runtime",
+          denied: true,
+          offers: [],
+        };
     }
     binding.requiresRemedyContinuation = await hasRemedyOfferResult({
       binding,
@@ -1693,15 +1707,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // The ruling reaches the model as the result of an undeclared notice
         // call. The client answers it with an error, and the next request
         // restores the denied call and the ruling from the call's arguments.
-        const carrier = this.undeclaredNoticeTool(binding, context);
+        const carrier = await this.undeclaredNoticeCarrier({
+          binding,
+          context,
+          session,
+          callId: call.id,
+          ruling: contentMessage,
+        });
         if (carrier) {
-          // The runtime would answer this id with its full ruling, whose plans
-          // this client cannot act on; the result shows what the client can.
-          await cacheManager.set(
-            notLoadedRulingKey({ session, callId: call.id }),
-            contentMessage,
-            TimeInMs.Day,
-          );
           blocked.push({
             id: call.id,
             name: call.name,
@@ -2155,15 +2168,21 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   /**
    * The notice tool name a denial is released under when the client declares
    * no notice tool, for a client that answers an undeclared call with an error
-   * result. None when the client declares that name: it would run there.
+   * result. The ruling the call's result shows is kept first: the runtime
+   * would answer it with the plans this client cannot act on. None when the
+   * client declares that name, where it would run, or the ruling is not kept.
    */
-  private undeclaredNoticeTool(
-    binding: AppaPluginBinding,
-    context: LlmProxyToolCallsContext,
-  ): string | undefined {
+  private async undeclaredNoticeCarrier(params: {
+    binding: AppaPluginBinding;
+    context: LlmProxyToolCallsContext;
+    session: OpenAppaSession;
+    callId: string;
+    ruling: string;
+  }): Promise<string | undefined> {
+    const { binding } = params;
     if (
       !binding.adapter?.answersUndeclaredCalls ||
-      context.interactionType !== "anthropic:messages"
+      params.context.interactionType !== "anthropic:messages"
     )
       return undefined;
     const name = archestraMcpBranding.getToolName(
@@ -2173,7 +2192,18 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       ...binding.request.declaredTools,
       ...(binding.request.heldTools ?? []),
     ];
-    return declared.some((tool) => tool.name === name) ? undefined : name;
+    if (declared.some((tool) => tool.name === name)) return undefined;
+    try {
+      await cacheManager.set(
+        carriedRulingKey({ session: params.session, callId: params.callId }),
+        params.ruling,
+        TimeInMs.Day,
+      );
+    } catch (error) {
+      logger.warn({ err: error }, "OpenAPPA could not keep a carried ruling");
+      return undefined;
+    }
+    return name;
   }
 
   private async remedyToolsMissingBefore(
@@ -2269,6 +2299,15 @@ function notLoadedRulingKey(params: {
   callId: string;
 }): AllowedCacheKey {
   return `${CacheKey.OpenAppaNotLoadedRuling}-${Buffer.from(
+    `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
+  ).toString("base64url")}`;
+}
+
+function carriedRulingKey(params: {
+  session: OpenAppaSession;
+  callId: string;
+}): AllowedCacheKey {
+  return `${CacheKey.OpenAppaCarriedRuling}-${Buffer.from(
     `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
   ).toString("base64url")}`;
 }

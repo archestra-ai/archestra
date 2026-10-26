@@ -5995,6 +5995,120 @@ describe("rendering runtime text for this client", () => {
       expect(cancelCalls.mock.calls[0][1]).toEqual(["admitted"]);
     });
 
+    test("refuses and withdraws the admitted call when the carried ruling cannot be kept", async () => {
+      const set = cacheManager.set.bind(cacheManager);
+      const cacheSet = vi
+        .spyOn(cacheManager, "set")
+        .mockImplementation((key, ...rest) =>
+          key.startsWith(CacheKey.OpenAppaCarriedRuling)
+            ? Promise.reject(new Error("cache unavailable"))
+            : set(key, ...rest),
+        );
+      try {
+        const outcome = await rule({
+          sessionId: "carrier-cache-down",
+          adapter: new AppaClaudeCodeAdapter(),
+          userAgent: claudeCodeAgent,
+          interactionType: "anthropic:messages",
+          declaredTools: [{ name: "Read" }, { name: "Bash" }],
+        });
+        expect(outcome).toMatchObject({
+          decision: "refuse",
+          refusal: {
+            reason: "openappa_no_notice_tool",
+            blockedToolId: "denied",
+          },
+        });
+        expect(cancelCalls.mock.calls[0][1]).toEqual(["admitted"]);
+      } finally {
+        cacheSet.mockRestore();
+      }
+    });
+
+    test("answers the carried call with the carried ruling and asks for no remedy plan, though the journal offers one", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const sessionId = "carried-offered";
+      const call = () => {
+        const context = requestContext({ sessionId, organizationId: org.id });
+        context.headers = { "user-agent": claudeCodeAgent };
+        trustedOf(context).request = {
+          tools: undefined,
+          customTools: new Set(),
+          declaredTools: [{ name: "Read" }, { name: "Bash" }],
+          session: {},
+        };
+        return context;
+      };
+      const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+      const first = call();
+      await plugin.onSessionInit(first);
+      const carried = carriedNotice(
+        await plugin.onToolCalls({ ...first, toolCalls: [admitted, denied] }),
+        denied.id,
+      ).result;
+      await plugin.onCleanup(first);
+
+      await db.insert(schema.openappaSessionsTable).values({
+        organizationId: org.id,
+        callerId: "user:user",
+        sessionId,
+        actor: openappaActor(sessionId),
+        root: openappaActor(sessionId),
+        startDecision: { decision: "ack" },
+      });
+      await db.insert(schema.openappaOperationsTable).values({
+        organizationId: org.id,
+        callerId: "user:user",
+        sessionId,
+        root: openappaActor(sessionId),
+        operationId: `call:${denied.id}`,
+        status: "complete",
+        input: { semantic: { event: "tool_call" } },
+        decision: {
+          decision: "deny_call",
+          feedback: `${ruling} Call execute_remedy_plan(offer_id: "offer-1").`,
+          offers: [{ offer_id: "offer-1" }],
+        },
+      });
+      const processResults = vi
+        .spyOn(appaService, "processProxyResults")
+        .mockResolvedValue({
+          toolResultUpdates: {
+            [denied.id]: {
+              content: `${ruling} Call execute_remedy_plan(offer_id: "offer-1").`,
+              outputSource: "runtime",
+              denied: true,
+            },
+          },
+        });
+      const next = call();
+      const request = { system: "Base", messages: [] };
+      try {
+        await plugin.onSessionInit(next);
+        const results = await plugin.onToolResults({
+          ...next,
+          toolResults: [
+            {
+              id: denied.id,
+              name: "Bash",
+              content:
+                "<tool_use_error>Error: No such tool available: archestra__get_remedy_plans</tool_use_error>",
+              isError: true,
+            },
+          ],
+        });
+        await plugin.onBeforeModel({ ...next, request });
+
+        expect(results?.toolResultUpdates?.[denied.id]).toBe(carried);
+        expect(request).toEqual({ system: "Base", messages: [] });
+      } finally {
+        processResults.mockRestore();
+        await plugin.onCleanup(next);
+      }
+    });
+
     test("still swaps in the wait tool first while Claude Code's servers are pending", async () => {
       const outcome = await rule({
         sessionId: "pending",

@@ -878,8 +878,6 @@ export function declaredToolEntries(body: unknown): DeclaredToolEntry[] {
  * declared in `tools`.
  */
 type InlineToolChange = {
-  message: Record<string, unknown>;
-  content: unknown[];
   block: Record<string, unknown>;
   name: string;
   /** Present only on an addition that carries its own declaration. */
@@ -891,10 +889,9 @@ function inlineToolChanges(body: unknown): InlineToolChange[] {
   const messages = asRecord(body)?.messages;
   if (!Array.isArray(messages)) return [];
   const changes: InlineToolChange[] = [];
-  for (const entry of messages) {
-    const message = asRecord(entry);
-    const content = message?.content;
-    if (!message || !Array.isArray(content)) continue;
+  for (const message of messages) {
+    const content = asRecord(message)?.content;
+    if (!Array.isArray(content)) continue;
     for (const part of content) {
       const block = asRecord(part);
       if (block?.type !== "tool_addition" && block?.type !== "tool_removal")
@@ -907,8 +904,6 @@ function inlineToolChanges(body: unknown): InlineToolChange[] {
       const name = definition ? definition.name : tool?.name;
       if (typeof name !== "string") continue;
       changes.push({
-        message,
-        content,
         block,
         name,
         ...(definition && block.type === "tool_addition" ? { definition } : {}),
@@ -943,18 +938,23 @@ function stripInlineToolChanges(
   body: unknown,
   drop: (change: InlineToolChange) => boolean,
 ): void {
-  const dropped = inlineToolChanges(body).filter(drop);
-  if (dropped.length === 0) return;
-  const emptied = new Set<Record<string, unknown>>();
-  for (const { message, content, block } of dropped) {
-    content.splice(content.indexOf(block), 1);
-    if (content.length === 0) emptied.add(message);
-  }
   const record = asRecord(body);
-  if (emptied.size > 0 && record && Array.isArray(record.messages))
-    record.messages = record.messages.filter(
-      (message) => !emptied.has(message),
-    );
+  if (!record || !Array.isArray(record.messages)) return;
+  const dropped = new Set<unknown>(
+    inlineToolChanges(body)
+      .filter(drop)
+      .map((change) => change.block),
+  );
+  if (dropped.size === 0) return;
+  record.messages = record.messages.flatMap((entry) => {
+    const message = asRecord(entry);
+    if (!message || !Array.isArray(message.content)) return [entry];
+    const kept = message.content.filter((block) => !dropped.has(block));
+    if (kept.length === message.content.length) return [entry];
+    if (kept.length === 0) return [];
+    message.content = kept;
+    return [entry];
+  });
 }
 
 // === Internal helpers ===

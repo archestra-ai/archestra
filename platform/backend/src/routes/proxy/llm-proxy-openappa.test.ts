@@ -3784,12 +3784,15 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           input: call.input,
         },
       ]);
-      expect(sent.messages[2].content[0]).toMatchObject({
-        type: "tool_result",
-        tool_use_id: call.id,
-        is_error: true,
-        content: notice?.result,
-      });
+      expect(sent.messages).toHaveLength(3);
+      expect(sent.messages[2].content).toEqual([
+        expect.objectContaining({
+          type: "tool_result",
+          tool_use_id: call.id,
+          is_error: true,
+          content: notice?.result,
+        }),
+      ]);
     });
   });
 

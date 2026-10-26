@@ -10,13 +10,108 @@ import {
   moneyUnits,
   type PricedBillingUsage,
   type PricedComponent,
+  type PricingQuote,
   priceTokens,
   primaryBillingUsage,
+  promptTokens,
+  type QuotedPrices,
   scalePrice,
   sumMoney,
 } from "@/utils/billable-usage";
 
-/** Resolve a batch of model prices once, then retain the quote with each charge. */
+/**
+ * Resolve every component's prices for one request in a single batch, each at
+ * its own prompt size so long-context prices apply per component.
+ */
+export async function resolvePricingQuote(params: {
+  model: string;
+  provider: SupportedProvider;
+  usage: UsageView;
+  providerApiKeyId?: string;
+}): Promise<PricingQuote> {
+  const { model, provider, usage, providerApiKeyId } = params;
+  const breakdown = usage.billingUsage ?? primaryBillingUsage(usage, model);
+  const rows = await ModelModel.findByProviderAndModelIds(provider, [
+    ...new Set([model, ...breakdown.components.map((item) => item.model)]),
+  ]);
+  const instancePrices =
+    await LlmProviderApiKeyModelLinkModel.findProviderPricing({
+      apiKeyId: providerApiKeyId,
+      modelIds: [...rows.values()].map((row) => row.id),
+    });
+  const quote = (modelId: string, size: number): QuotedPrices => {
+    const row = rows.get(modelId);
+    const projected = row
+      ? ModelModel.withProviderPricing(row, [
+          instancePrices.get(row.id) ?? null,
+        ])
+      : null;
+    const pricing = ModelModel.getEffectivePricing(
+      projected,
+      modelId,
+      provider,
+      size,
+    );
+    const multiplier = CACHE_PRICE_MULTIPLIERS[provider];
+    return {
+      model: modelId,
+      prices: {
+        input: pricing.pricePerMillionInput,
+        output: pricing.pricePerMillionOutput,
+        cacheRead: pricing.pricePerMillionCacheRead,
+        cacheWrite: pricing.pricePerMillionCacheWrite,
+        cacheWrite1h:
+          pricing.pricePerMillionCacheWrite === null
+            ? null
+            : multiplier?.write1h && multiplier.write > 0
+              ? scalePrice(
+                  pricing.pricePerMillionCacheWrite,
+                  BigInt(Math.round(multiplier.write1h * 100)),
+                  BigInt(Math.round(multiplier.write * 100)),
+                )
+              : pricing.pricePerMillionCacheWrite,
+        source: pricing.source,
+      },
+      cacheSource: pricing.cacheSource,
+      instancePriced:
+        projected?.providerPricing !== undefined &&
+        projected.providerPricing !== "conflicting",
+    };
+  };
+  return {
+    model,
+    provider,
+    providerApiKeyId,
+    request: quote(model, promptTokens(usage)),
+    components: new Map(
+      breakdown.components.map((item) => [
+        item.id,
+        quote(item.model, promptTokens(item)),
+      ]),
+    ),
+  };
+}
+
+/** The request's quote, resolved once and retained on its usage snapshot. */
+export async function quoteUsagePricing(params: {
+  model: string;
+  provider: SupportedProvider;
+  usage: UsageView;
+  providerApiKeyId?: string;
+}): Promise<PricingQuote> {
+  const memo = params.usage.billingQuote?.pricing;
+  if (
+    memo?.model === params.model &&
+    memo.provider === params.provider &&
+    memo.providerApiKeyId === params.providerApiKeyId
+  )
+    return memo;
+  const pricing = await resolvePricingQuote(params);
+  params.usage.billingQuote = { pricing };
+  return pricing;
+}
+
+/** Price the request's billable components from its quote. */
 export async function priceBillingUsage(params: {
   model: string;
   provider: SupportedProvider;
@@ -25,54 +120,17 @@ export async function priceBillingUsage(params: {
   providerApiKeyId?: string;
 }): Promise<PricedBillingUsage> {
   const { provider, usage, model, mode } = params;
-  if (
-    usage.billingQuote?.model === model &&
-    usage.billingQuote.provider === provider &&
-    usage.billingQuote.providerApiKeyId === params.providerApiKeyId &&
-    usage.billingQuote.priced.mode === mode
-  )
-    return usage.billingQuote.priced;
+  const pricing = await quoteUsagePricing(params);
+  const memo = usage.billingQuote;
+  if (memo?.pricing === pricing && memo.priced?.mode === mode)
+    return memo.priced;
   const breakdown = usage.billingUsage ?? primaryBillingUsage(usage, model);
-  const models = await ModelModel.findByProviderAndModelIds(provider, [
-    ...new Set(breakdown.components.map((item) => item.model)),
-  ]);
-  const providerPrices =
-    await LlmProviderApiKeyModelLinkModel.findProviderPricing({
-      apiKeyId: params.providerApiKeyId,
-      modelIds: [...models.values()].map((row) => row.id),
-    });
   const issues = [...breakdown.issues];
   const components: PricedComponent[] = [];
   for (const component of breakdown.components) {
-    const row = models.get(component.model);
-    const projected = row
-      ? ModelModel.withProviderPricing(row, [
-          providerPrices.get(row.id) ?? null,
-        ])
-      : null;
-    const pricing = ModelModel.getEffectivePricing(
-      projected,
-      component.model,
-      provider,
-    );
-    const multiplier = CACHE_PRICE_MULTIPLIERS[provider];
-    const prices = {
-      input: pricing.pricePerMillionInput,
-      output: pricing.pricePerMillionOutput,
-      cacheRead: pricing.pricePerMillionCacheRead,
-      cacheWrite: pricing.pricePerMillionCacheWrite,
-      cacheWrite1h:
-        pricing.pricePerMillionCacheWrite === null
-          ? null
-          : multiplier?.write1h && multiplier.write > 0
-            ? scalePrice(
-                pricing.pricePerMillionCacheWrite,
-                BigInt(Math.round(multiplier.write1h * 100)),
-                BigInt(Math.round(multiplier.write * 100)),
-              )
-            : pricing.pricePerMillionCacheWrite,
-      source: pricing.source,
-    };
+    const quoted = pricing.components.get(component.id);
+    if (!quoted) throw new Error("Billing component missing from its quote");
+    const prices = { ...quoted.prices };
     const authoritative =
       usage.providerReportedCost !== undefined &&
       components.length === 0 &&
@@ -81,7 +139,7 @@ export async function priceBillingUsage(params: {
       usage.providerReportedCost >= 0;
     if (
       !authoritative &&
-      pricing.source === "default" &&
+      prices.source === "default" &&
       (prices.input !== "0.00" || prices.output !== "0.00")
     ) {
       issues.push("estimated_model_price");
@@ -152,11 +210,6 @@ export async function priceBillingUsage(params: {
     cost: sumMoney(components.map((item) => item.cost)),
   };
   // Request-scoped memoization keeps later metrics and settlement on this quote.
-  usage.billingQuote = {
-    model,
-    provider,
-    priced,
-    providerApiKeyId: params.providerApiKeyId,
-  };
+  usage.billingQuote = { pricing, priced };
   return priced;
 }

@@ -1,11 +1,8 @@
-import {
-  CACHE_PRICE_MULTIPLIERS,
-  type SupportedProvider,
-} from "@archestra/shared";
-import { ModelModel } from "@/models";
-import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
+import type { SupportedProvider } from "@archestra/shared";
+import { resolvePricingQuote } from "@/services/billable-usage";
 import type { ProviderMessage, Tokenizer } from "@/tokenizers";
 import type { CommonMcpToolDefinition } from "@/types";
+import type { QuotedPrices } from "@/utils/billable-usage";
 
 /**
  * Estimate token count for tool definitions by serializing them
@@ -38,22 +35,25 @@ interface CacheTokenCounts {
   write1hTokens?: number;
 }
 
-/**
- * Factor relating the 1-hour cache-write price to the default (5-minute) one for
- * a provider. The 5m write price is the configurable/synced value; the 1h price
- * is derived from it. Returns 1 when the provider has no distinct 1h tier.
- */
-function cacheWrite1hFactor(provider: SupportedProvider): number {
-  const mult = CACHE_PRICE_MULTIPLIERS[provider];
-  if (!mult || !mult.write1h || mult.write <= 0) {
-    return 1;
-  }
-  return mult.write1h / mult.write;
+interface CostTokens {
+  inputTokens: number;
+  outputTokens: number;
+  readTokens: number;
+  writeTokens: number;
+  write1hTokens: number;
 }
 
 /** Parse a per-million price string, treating null/unpriced as zero cost. */
 function parsePriceOrZero(price: string | null): number {
   return price == null ? 0 : Number.parseFloat(price);
+}
+
+function splitWrites(tokens: CostTokens) {
+  const write1h = Math.min(
+    Math.max(tokens.write1hTokens, 0),
+    tokens.writeTokens,
+  );
+  return { write1h, write5m: tokens.writeTokens - write1h };
 }
 
 /**
@@ -70,55 +70,66 @@ export async function calculateCost(
   provider: SupportedProvider,
   cacheTokens?: CacheTokenCounts,
 ): Promise<number | undefined> {
-  const readTokens = cacheTokens?.readTokens ?? 0;
-  const writeTokens = cacheTokens?.writeTokens ?? 0;
+  const tokens = {
+    inputTokens: inputTokens ?? 0,
+    outputTokens: outputTokens ?? 0,
+    readTokens: cacheTokens?.readTokens ?? 0,
+    writeTokens: cacheTokens?.writeTokens ?? 0,
+    write1hTokens: cacheTokens?.write1hTokens ?? 0,
+  };
+  if (
+    !tokens.inputTokens &&
+    !tokens.outputTokens &&
+    !tokens.readTokens &&
+    !tokens.writeTokens
+  ) {
+    return undefined;
+  }
+  const quoted = await quoteModel(
+    model,
+    provider,
+    tokens,
+    cacheTokens?.providerApiKeyId,
+  );
+  return costFromQuote(quoted, tokens);
+}
+
+/** The all-in cost of `tokens` at already-quoted prices. */
+export function costFromQuote(
+  quoted: QuotedPrices,
+  tokens: CostTokens,
+): number | undefined {
+  const { inputTokens, outputTokens, readTokens, writeTokens } = tokens;
   if (!inputTokens && !outputTokens && !readTokens && !writeTokens) {
     return undefined;
   }
-
-  const model_entry = await LlmProviderApiKeyModelLinkModel.findModelForPricing(
-    { provider, modelId: model, apiKeyId: cacheTokens?.providerApiKeyId },
-  );
-  const pricing = ModelModel.getEffectivePricing(model_entry, model, provider);
+  const { prices } = quoted;
   // A LiteLLM route may serve any vendor: OpenAI cache multipliers and a
   // generic base estimate cannot supply a price the instance did not publish.
-  const instance = model_entry?.providerPricing;
   if (
-    instance &&
-    instance !== "conflicting" &&
-    ((inputTokens &&
-      instance.promptPricePerToken === null &&
-      pricing.source !== "custom") ||
-      (outputTokens &&
-        instance.completionPricePerToken === null &&
-        pricing.source !== "custom") ||
-      (readTokens && pricing.pricePerMillionCacheRead === null) ||
-      (writeTokens && pricing.pricePerMillionCacheWrite === null))
+    quoted.instancePriced &&
+    ((inputTokens && prices.input === null) ||
+      (outputTokens && prices.output === null) ||
+      (readTokens && prices.cacheRead === null) ||
+      (writeTokens && prices.cacheWrite === null))
   )
     return undefined;
-  const priceIn = Number.parseFloat(pricing.pricePerMillionInput ?? "0");
-  const priceOut = Number.parseFloat(pricing.pricePerMillionOutput ?? "0");
-  // Resolved cache prices (explicit synced/custom, else multiplier-derived).
-  // Null when the provider has no cache pricing model — treat as zero so cache
-  // tokens add nothing rather than fabricating a cost.
-  const cacheReadPrice = parsePriceOrZero(pricing.pricePerMillionCacheRead);
-  const cacheWrite5mPrice = parsePriceOrZero(pricing.pricePerMillionCacheWrite);
-  const cacheWrite1hPrice = cacheWrite5mPrice * cacheWrite1hFactor(provider);
-
-  // Cache writes are billed per TTL: 1h costs more than the 5m default.
-  const write1h = Math.min(
-    Math.max(cacheTokens?.write1hTokens ?? 0, 0),
-    writeTokens,
-  );
-  const write5m = writeTokens - write1h;
-
+  // Null cache prices mean the provider has no cache pricing model — treat as
+  // zero so cache tokens add nothing rather than fabricating a cost.
+  const { write1h, write5m } = splitWrites(tokens);
   return (
-    ((inputTokens ?? 0) / 1_000_000) * priceIn +
-    ((outputTokens ?? 0) / 1_000_000) * priceOut +
-    (readTokens / 1_000_000) * cacheReadPrice +
-    (write5m / 1_000_000) * cacheWrite5mPrice +
-    (write1h / 1_000_000) * cacheWrite1hPrice
+    (inputTokens / 1_000_000) * parsePriceOrZero(prices.input) +
+    (outputTokens / 1_000_000) * parsePriceOrZero(prices.output) +
+    (readTokens / 1_000_000) * parsePriceOrZero(prices.cacheRead) +
+    (write5m / 1_000_000) * parsePriceOrZero(prices.cacheWrite) +
+    (write1h / 1_000_000) * parsePriceOrZero(prices.cacheWrite1h)
   );
+}
+
+interface CacheCostBreakdown {
+  cacheCost: number;
+  cacheSavings: number;
+  cacheReadSavings: number;
 }
 
 /**
@@ -141,27 +152,41 @@ export async function calculateCacheCost(
   /** Portion of writeTokens written at the 1-hour TTL (the rest is costed at the 5m rate). */
   write1hTokens = 0,
   providerApiKeyId?: string,
-): Promise<
-  | { cacheCost: number; cacheSavings: number; cacheReadSavings: number }
-  | undefined
-> {
+  /** Uncached input of the same request; it decides the prompt-size price tier. */
+  inputTokens = 0,
+): Promise<CacheCostBreakdown | undefined> {
   if (!readTokens && !writeTokens) {
     return undefined;
   }
-  const model_entry = await LlmProviderApiKeyModelLinkModel.findModelForPricing(
-    { provider, modelId: model, apiKeyId: providerApiKeyId },
-  );
-  const pricing = ModelModel.getEffectivePricing(model_entry, model, provider);
-  const instance = model_entry?.providerPricing;
+  const tokens = {
+    inputTokens,
+    outputTokens: 0,
+    readTokens,
+    writeTokens,
+    write1hTokens,
+  };
+  const quoted = await quoteModel(model, provider, tokens, providerApiKeyId);
+  return cacheCostFromQuote(quoted, tokens);
+}
+
+/** Cache cost and savings of `tokens` at already-quoted prices. */
+export function cacheCostFromQuote(
+  quoted: QuotedPrices,
+  tokens: CostTokens,
+): CacheCostBreakdown | undefined {
+  const { readTokens, writeTokens } = tokens;
+  if (!readTokens && !writeTokens) {
+    return undefined;
+  }
+  const { prices } = quoted;
   if (
-    instance &&
-    instance !== "conflicting" &&
-    ((instance.promptPricePerToken === null && pricing.source !== "custom") ||
-      (readTokens && pricing.pricePerMillionCacheRead === null) ||
-      (writeTokens && pricing.pricePerMillionCacheWrite === null))
+    quoted.instancePriced &&
+    (prices.input === null ||
+      (readTokens && prices.cacheRead === null) ||
+      (writeTokens && prices.cacheWrite === null))
   )
     return undefined;
-  if (pricing.cacheSource == null) {
+  if (quoted.cacheSource == null) {
     // Provider has no cache pricing model; don't fabricate cost/savings.
     return undefined;
   }
@@ -169,35 +194,24 @@ export async function calculateCacheCost(
   // known zero price (e.g. providers that don't charge for cache writes) still
   // contributes; a genuinely unpriced (null) direction is skipped so we neither
   // claim its cost nor fabricate savings for it.
-  const priceIn = Number.parseFloat(pricing.pricePerMillionInput ?? "0");
-  const cacheReadPrice =
-    pricing.pricePerMillionCacheRead != null
-      ? Number.parseFloat(pricing.pricePerMillionCacheRead)
-      : null;
-  const cacheWrite5mPrice =
-    pricing.pricePerMillionCacheWrite != null
-      ? Number.parseFloat(pricing.pricePerMillionCacheWrite)
-      : null;
-
-  // Split writes by TTL: 1h is billed at a higher surcharge than the 5m default.
-  const write1h = Math.min(Math.max(write1hTokens, 0), writeTokens);
-  const write5m = writeTokens - write1h;
+  const priceIn = parsePriceOrZero(prices.input);
+  const { write1h, write5m } = splitWrites(tokens);
 
   let cacheCost = 0;
   let cacheReadSavings = 0;
   let writeSurcharge = 0;
 
-  if (cacheReadPrice != null) {
-    const readActual = (readTokens / 1_000_000) * cacheReadPrice;
+  if (prices.cacheRead != null) {
+    const readActual = (readTokens / 1_000_000) * Number(prices.cacheRead);
     cacheCost += readActual;
     // Read saves the difference vs. paying the full input price (always >= 0).
     cacheReadSavings = (readTokens / 1_000_000) * priceIn - readActual;
   }
 
-  if (cacheWrite5mPrice != null) {
-    const cacheWrite1hPrice = cacheWrite5mPrice * cacheWrite1hFactor(provider);
-    const write5mActual = (write5m / 1_000_000) * cacheWrite5mPrice;
-    const write1hActual = (write1h / 1_000_000) * cacheWrite1hPrice;
+  if (prices.cacheWrite != null) {
+    const write5mActual = (write5m / 1_000_000) * Number(prices.cacheWrite);
+    const write1hActual =
+      (write1h / 1_000_000) * parsePriceOrZero(prices.cacheWrite1h);
     cacheCost += write5mActual + write1hActual;
     // Cache writes cost extra vs. the input price; this surcharge eats savings.
     writeSurcharge =
@@ -209,4 +223,25 @@ export async function calculateCacheCost(
   const cacheSavings = cacheReadSavings - writeSurcharge;
 
   return { cacheCost, cacheSavings, cacheReadSavings };
+}
+
+async function quoteModel(
+  model: string,
+  provider: SupportedProvider,
+  tokens: CostTokens,
+  providerApiKeyId?: string,
+): Promise<QuotedPrices> {
+  const quote = await resolvePricingQuote({
+    model,
+    provider,
+    providerApiKeyId,
+    usage: {
+      inputTokens: tokens.inputTokens,
+      outputTokens: tokens.outputTokens,
+      cacheReadTokens: tokens.readTokens,
+      cacheWriteTokens: tokens.writeTokens,
+      cacheWrite1hTokens: tokens.write1hTokens,
+    },
+  });
+  return quote.request;
 }

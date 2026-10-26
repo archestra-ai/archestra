@@ -759,6 +759,15 @@ class ModelModel {
       set.customPricePerMillionCacheWrite =
         data.customPricePerMillionCacheWrite;
     }
+    for (const field of [
+      "longContextThreshold",
+      "longContextPricePerMillionInput",
+      "longContextPricePerMillionOutput",
+      "longContextPricePerMillionCacheRead",
+      "longContextPricePerMillionCacheWrite",
+    ] as const) {
+      if (data[field] !== undefined) set[field] = data[field];
+    }
     if (data.ignored !== undefined) {
       set.ignored = data.ignored;
     }
@@ -895,12 +904,17 @@ class ModelModel {
    *
    * Cache prices are null when the provider has no cache pricing model and none
    * was synced/set (so cache cost is not fabricated for non-caching providers).
+   *
+   * With `promptTokens` above the model's long-context threshold, its long
+   * prices replace all four rates while the chosen source is kept.
    */
   static getEffectivePricing(
     model: ProviderPricedModel | null,
     modelId?: string,
     /** Provider hint used for cache-price derivation when `model` is null (default tier). */
     provider?: SupportedProvider,
+    /** Input + cache read + cache write tokens of the priced request. */
+    promptTokens?: number,
   ): EffectivePricing {
     if (model?.providerPricing && model.providerPricing !== "conflicting") {
       model = { ...model, ...model.providerPricing };
@@ -929,15 +943,32 @@ class ModelModel {
       provider,
     );
 
+    const cacheSource =
+      cache.cacheSource === "models_dev" && model?.providerPricing
+        ? "provider"
+        : cache.cacheSource;
+    if (
+      model?.longContextThreshold != null &&
+      promptTokens !== undefined &&
+      promptTokens > model.longContextThreshold
+    ) {
+      // The CHECK constraint makes the threshold and all four prices all-or-none.
+      return {
+        pricePerMillionInput: model.longContextPricePerMillionInput,
+        pricePerMillionOutput: model.longContextPricePerMillionOutput,
+        pricePerMillionCacheRead: model.longContextPricePerMillionCacheRead,
+        pricePerMillionCacheWrite: model.longContextPricePerMillionCacheWrite,
+        source,
+        cacheSource: cacheSource ?? source,
+      };
+    }
+
     return {
       pricePerMillionInput,
       pricePerMillionOutput,
       source,
       ...cache,
-      cacheSource:
-        cache.cacheSource === "models_dev" && model?.providerPricing
-          ? "provider"
-          : cache.cacheSource,
+      cacheSource,
     };
   }
 

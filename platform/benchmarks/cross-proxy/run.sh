@@ -3,9 +3,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 [[ $(uname -m) == x86_64 && $(nproc) -ge 8 && ! -e .env ]] || { echo 'Requires clean Linux x86_64 runner with >=8 CPUs and no .env'; exit 1; }
+mode=primary
+if [[ "${1:-}" == --sensitivity && $# == 1 ]]; then mode=sensitivity; elif (($#)); then echo "Unknown arguments"; exit 1; fi
+repeats=4
+db_memory=2g
+rows_per_run=13401
 out=benchmarks/results/cross-proxy
+if [[ "$mode" == sensitivity ]]; then repeats=2; db_memory=8g; rows_per_run=6401; out=benchmarks/results/cross-proxy-sensitivity; fi
 [[ ! -e "$out/versions.txt" ]] || { echo "Preserve/move previous cross-proxy results before rerunning."; exit 1; }
 mkdir -p "$out"
+node --input-type=module -e 'import {comparisonProfile} from "./benchmarks/cross-proxy/profile.mjs"; console.log(JSON.stringify(comparisonProfile(process.argv[1]),null,2))' "$mode" > "$out/profile.json"
 project=archestra-cross-proxy
 lite_image=ghcr.io/berriai/litellm-database@sha256:496cc6cb0295414585790b86467566fb4c93d8e12d7f0e889f18fcfc54cbdd5e
 pg_image=pgvector/pgvector:pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
@@ -43,7 +50,7 @@ docker pull "$pg_image"
 docker build -f benchmarks/cross-proxy/archestra.Dockerfile -t "$project-runtime" benchmarks/cross-proxy
 for image in "$lite_image" "$pg_image" "$project-runtime"; do docker image inspect "$image"; done > "$out/images.json"
 docker run --rm --entrypoint python "$lite_image" -c 'from importlib.metadata import distributions,version; assert version("litellm")=="1.106.4"; print("\n".join(sorted(f"{d.metadata["Name"]}=={d.version}" for d in distributions())))' > "$out/litellm-pip-freeze.txt"
-docker run -d --name "$project-db" --cpuset-cpus=6-7 --cpus=2 --memory=2g --shm-size=256m \
+docker run -d --name "$project-db" --cpuset-cpus=6-7 --cpus=2 --memory="$db_memory" --shm-size=256m \
   -p 127.0.0.1:15432:5432 --tmpfs /var/lib/postgresql/data \
   -e POSTGRES_USER=benchmark -e POSTGRES_PASSWORD=benchmark -e POSTGRES_DB=benchmark "$pg_image"
 for ((i=0;i<60;i++)); do docker exec "$project-db" pg_isready -U benchmark && break; sleep 1; done
@@ -92,10 +99,28 @@ done) > "$out/resources.jsonl" &
 stats_pid=$!
 archestra_key=''
 declare -A lite_keys=()
-for repeat in 1 2 3 4; do
+snapshot_cgroups() {
+  for container in "$project-db" "$project-$target"; do
+    file="$out/$target-$repeat-$1-${container##$project-}-cgroup.txt"
+    printf 'TIMESTAMP %s\n' "$(date -u +%FT%TZ)" > "$file"
+    docker exec "$container" sh -c 'for f in cpu.stat cpu.pressure memory.current memory.peak memory.events memory.pressure memory.swap.current; do echo "FILE $f"; cat "/sys/fs/cgroup/$f"; done' >> "$file"
+  done
+}
+for ((repeat=1; repeat<=repeats; repeat++)); do
   if ((repeat % 2)); then order='archestra litellm litellm-default'; else order='litellm-default litellm archestra'; fi
   for target in $order; do
     printf '%s repeat=%s target=%s\n' "$(date -u +%FT%TZ)" "$repeat" "$target" >> "$out/order.txt"
+    if [[ "$mode" == sensitivity ]]; then
+      case "$target" in archestra) db=benchmark;; litellm) db=litellm;; litellm-default) db=litellm_default;; esac
+      docker exec "$project-db" dropdb -U benchmark --force "$db"
+      docker exec "$project-db" createdb -U benchmark "$db"
+      if [[ "$target" == archestra ]]; then
+        node benchmarks/backend.mjs migrate > "$out/migrate-$repeat.log" 2>&1
+        archestra_key=''
+      else
+        unset 'lite_keys[$target]'
+      fi
+    fi
     "start_$target"
     if [[ "$target" == archestra ]]; then
       if [[ -z "$archestra_key" ]]; then archestra_key=$(node benchmarks/seed.mjs); fi
@@ -106,9 +131,12 @@ for repeat in 1 2 3 4; do
       fi
       key="${lite_keys[$target]}"
     fi
-    taskset -c 0-1 node benchmarks/cross-proxy/measure.mjs "$target" "$repeat" "$key"
+    snapshot_cgroups before
+    taskset -c 0-1 node benchmarks/cross-proxy/measure.mjs "$target" "$repeat" "$key" "$mode"
+    snapshot_cgroups after
     # Poll async LiteLLM persistence to completion before stopping the process.
-    expected=$((repeat * 13401))
+    expected=$((repeat * rows_per_run))
+    if [[ "$mode" == sensitivity ]]; then expected=$rows_per_run; fi
     if [[ "$target" == archestra ]]; then
       query="SELECT count(*), count(*) FILTER (WHERE input_tokens=12 AND output_tokens=20), count(*) FILTER (WHERE response::text LIKE '%archestra-benchmark-ok%') FROM interactions"
       db=benchmark
@@ -131,7 +159,8 @@ for repeat in 1 2 3 4; do
       docker exec "$project-db" psql -U benchmark -d "$db" -Atc 'SELECT status,count(*),sum(prompt_tokens),sum(completion_tokens),count(*) FILTER (WHERE messages::text LIKE '\''%benchmark marker%'\'') FROM "LiteLLM_SpendLogs" GROUP BY status' > "$out/$target-$repeat-accounting-status.txt"
     fi
     stop_proxy "$target" "$repeat"
-    taskset -c 0-1 node benchmarks/cross-proxy/measure.mjs direct "$target-$repeat" unused
+    if [[ "$mode" == sensitivity ]]; then docker exec "$project-db" dropdb -U benchmark --force "$db"; docker exec "$project-db" createdb -U benchmark "$db"; fi
+    taskset -c 0-1 node benchmarks/cross-proxy/measure.mjs direct "$target-$repeat" unused "$mode"
   done
 done
-node benchmarks/cross-proxy/report.mjs
+node benchmarks/cross-proxy/report.mjs "$mode"

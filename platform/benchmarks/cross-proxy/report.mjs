@@ -2,17 +2,24 @@ import assert from "node:assert/strict";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { summarize } from "../measure.mjs";
 
-const dir = "benchmarks/results/cross-proxy";
+import { comparisonProfile } from "./profile.mjs";
+
+const profile = comparisonProfile(process.argv[2]);
+const dir = profile.output;
 const files = (await readdir(dir)).filter((f) =>
   /^(archestra|litellm|litellm-default)-[1-4]\.json$/.test(f),
 );
-assert.equal(files.length, 12, "All twelve isolated runs must complete");
+assert.equal(
+  files.length,
+  3 * profile.repeats,
+  "All twelve isolated runs must complete",
+);
 const blocks = (
   await Promise.all(
     files.map(async (f) => JSON.parse(await readFile(`${dir}/${f}`))),
   )
 ).flatMap((r) => r.blocks);
-assert.equal(blocks.length, 24);
+assert.equal(blocks.length, 6 * profile.repeats);
 for (const b of blocks) {
   assert.equal(b.errors, 0);
   assert.equal(b.samples.length, b.count);
@@ -32,7 +39,7 @@ for (const target of ["archestra", "litellm", "litellm-default"])
     const runs = blocks.filter(
       (b) => b.target === target && b.streaming === streaming,
     );
-    assert.equal(runs.length, 4);
+    assert.equal(runs.length, profile.repeats);
     const samples = runs.flatMap((b) => b.samples);
     const result = {
       target,
@@ -61,7 +68,7 @@ for (const target of ["archestra", "litellm", "litellm-default"])
   }
 lines.push(
   "",
-  "Four fresh process runs each, alternating A→L→LD / LD→L→A (L: full-content logs; LD: default content omission). Each proxy: 4 pinned logical CPUs (2–5), 8 GiB memory limit, one web worker; database: CPUs 6–7 and 2 GiB; client and mock: CPUs 0–1. 50 concurrent HTTP/1.1 keep-alive requests, 200 warmup per workload per run. 10,000 chat and 3,000 streaming requests per run. Stream: 20 content events at nominal 10 ms intervals, nonzero synthetic 12 input + 20 output tokens.",
+  `Mode ${profile.mode}: ${profile.repeats} fresh process runs per profile, alternating A→L→LD / LD→L→A. Each proxy: 4 pinned logical CPUs (2–5), 8 GiB memory, one worker. Database: CPUs 6–7 and ${profile.databaseMemoryGiB} GiB; fresh per run=${profile.freshDatabasePerRun}. Client/mock: CPUs 0–1. Concurrency 50 with HTTP/1.1 keep-alive; ${profile.warmup} warmup per workload, ${profile.requests} chat / ${profile.streamRequests} streaming requests per run. Synthetic 12 input / 20 output tokens, 20 content events at nominal 10 ms cadence.`,
   "",
   "Client added = each client complete-body duration minus its correlated stub request duration (stub receipt through res.end). Includes transport, serialization and gateway processing; differs from the existing docs’ internal gateway-only overhead. TTFT here means first decoded content event, not first response byte. No percentile subtraction. Archestra internal timing is retained separately in JSON; no equivalent LiteLLM timer is asserted.",
   "",

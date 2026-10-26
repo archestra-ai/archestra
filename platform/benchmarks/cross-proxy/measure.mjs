@@ -6,11 +6,14 @@ import { performance } from "node:perf_hooks";
 import { setTimeout as sleep } from "node:timers/promises";
 import { measureRequest, summarize } from "../measure.mjs";
 
-const [target, repeat, key] = process.argv.slice(2);
+import { comparisonProfile } from "./profile.mjs";
+
+const [target, repeat, key, mode] = process.argv.slice(2);
+const profile = comparisonProfile(mode);
 assert.ok(
   ["archestra", "litellm", "litellm-default", "direct"].includes(target),
 );
-const output = "benchmarks/results/cross-proxy";
+const output = profile.output;
 const url =
   target === "archestra"
     ? "http://127.0.0.1:19000/v1/openai/chat/completions"
@@ -99,7 +102,13 @@ if (target !== "direct") {
         { encoding: "utf8" },
       ).trim(),
     );
-    if (n >= (Number(repeat) - 1) * 13401 + 1) {
+    if (
+      n >=
+      (profile.freshDatabasePerRun
+        ? 0
+        : (Number(repeat) - 1) * profile.successfulRowsPerRun) +
+        1
+    ) {
       persisted = true;
       break;
     }
@@ -110,7 +119,7 @@ if (target !== "direct") {
 const blocks = [];
 for (const streaming of [false, true]) {
   const concurrency = 50;
-  const count = streaming ? 3000 : 10000;
+  const count = streaming ? profile.streamRequests : profile.requests;
   const agent = new http.Agent({
     keepAlive: true,
     maxSockets: concurrency,
@@ -149,7 +158,7 @@ for (const streaming of [false, true]) {
     );
   }
   try {
-    await load(200, true);
+    await load(profile.warmup, true);
     const startedAt = new Date().toISOString();
     const start = performance.now();
     await load(count, false);
@@ -193,7 +202,8 @@ for (const streaming of [false, true]) {
       streaming,
       concurrency,
       count,
-      warmup: 200,
+      warmup: profile.warmup,
+      mode: profile.mode,
       elapsedMs,
       requestsPerSecond: successful.length / (elapsedMs / 1000),
       errors: samples.filter((s) => !s.ok).length,

@@ -1592,7 +1592,7 @@ describe("ConnectPage after copying the command", () => {
     expect(status()).toHaveTextContent("Connected.");
   });
 
-  it("stops waiting when the agent changes, but keeps a connection it saw", async () => {
+  it("stops waiting when the agent changes, and the connected card follows the selected agent", async () => {
     show(["cursor", "codex"]);
     await copyCommand();
     await userEvent.click(screen.getByRole("button", { name: /Codex/ }));
@@ -1602,6 +1602,15 @@ describe("ConnectPage after copying the command", () => {
     await copyCommand();
     await approveElsewhere();
     await userEvent.click(screen.getByRole("button", { name: /Codex/ }));
+    expect(status()).toBeNull();
+    expect(screen.getByRole("region", { name: "Connect" })).not.toHaveClass(
+      "opacity-50",
+    );
+    expect(
+      screen.getByRole("button", { name: "Show the starter prompt" }),
+    ).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: /Cursor/ }));
     expect(status()).toHaveTextContent(
       "Connected. Next, ask Cursor what it can do now",
     );

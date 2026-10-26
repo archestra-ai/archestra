@@ -679,6 +679,14 @@ describe("GET /api/connection-setups/script/:token", () => {
     } else {
       expect(response.body).not.toContain("archestra_skl_");
     }
+    // Pi uses a share link, so it must not create a shared-marketplace repo
+    // row with a name the client never registers.
+    expect(
+      await SkillMarketplaceRepoModel.findForViewer({
+        organizationId,
+        userId: user.id,
+      }),
+    ).toBeNull();
     expect((await fetchScript(rawToken)).statusCode).toBe(410);
   });
 
@@ -846,6 +854,7 @@ describe("GET /api/connection-setups/script/:token", () => {
 
     // Someone who never cloned gets the derived name, frozen when the script
     // renders, so a rename before their first clone cannot split the names.
+    // The request hook reads `user`, so the setups below belong to otherUser.
     user = otherUser;
     const fresh = await renderCodex();
     expect(fresh).toContain(`cli codex plugin marketplace remove '${derived}'`);

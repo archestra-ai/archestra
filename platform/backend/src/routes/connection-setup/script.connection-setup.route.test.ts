@@ -801,8 +801,8 @@ describe("GET /api/connection-setups/script/:token", () => {
     makeMember,
   }) => {
     // Codex registers the marketplace under the served manifest's name, which
-    // the user's repo row froze on first clone. After an app rename the setup
-    // must still remove and guard that name, or the add collides with it.
+    // the user's repo row freezes. After an app rename the setup must still
+    // remove and guard that name, or the add collides with it.
     const skill = await seedSkill({ organizationId, name: "alpha" });
     await OrganizationModel.patch(organizationId, { appName: "Acme Staging" });
     const derived = await deriveMarketplaceName(organizationId, "skills");
@@ -816,10 +816,10 @@ describe("GET /api/connection-setups/script/:token", () => {
       marketplaceName: "archestra-old-skills",
     });
 
-    const renderCodex = async () => {
+    const renderCodex = async (platform: "linux" | "windows" = "linux") => {
       const { rawToken } = await createSetup({
         clientId: "codex",
-        platform: "linux",
+        platform,
         baseUrl: "http://localhost:9000/v1",
         skills: { skillIds: [skill.id], ttlDays: null },
       });
@@ -835,12 +835,30 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(script).toContain("SKILLS_MARKETPLACE_NAME='archestra-old-skills'");
     expect(script).not.toContain(derived);
 
-    // Someone who never cloned gets the derived name, which their first clone
-    // then freezes.
+    const windowsScript = await renderCodex("windows");
+    expect(windowsScript).toContain(
+      "codex plugin marketplace remove 'archestra-old-skills'",
+    );
+    expect(windowsScript).toContain(
+      "$SkillsMarketplaceName = 'archestra-old-skills'",
+    );
+    expect(windowsScript).not.toContain(derived);
+
+    // Someone who never cloned gets the derived name, frozen when the script
+    // renders, so a rename before their first clone cannot split the names.
     user = otherUser;
     const fresh = await renderCodex();
     expect(fresh).toContain(`cli codex plugin marketplace remove '${derived}'`);
     expect(fresh).toContain(`SKILLS_MARKETPLACE_NAME='${derived}'`);
+
+    await OrganizationModel.patch(organizationId, {
+      appName: "Acme Production",
+    });
+    const afterRename = await renderCodex();
+    expect(afterRename).toContain(
+      `cli codex plugin marketplace remove '${derived}'`,
+    );
+    expect(afterRename).toContain(`SKILLS_MARKETPLACE_NAME='${derived}'`);
   });
 
   test("the shared marketplace URL carries the token as its password", async ({

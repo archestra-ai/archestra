@@ -24,7 +24,7 @@ To use the agent, your role needs [`sre:read`](/docs/reference/permissions#sre:r
          - 172.16.0.2/32
    ```
 
-3. After the rollout, open **Chat**, pick the **SRE** agent, and ask "Why did a pod restart in the last hour?" If the agent is missing, check your role's `sre:read` permission, then check **MCP Registry → Kubernetes** for a startup error.
+3. After the rollout, open **Chat**, pick the **SRE** agent, and ask "Why did a pod restart in the last hour?" If the agent is missing, check your role's [`sre:read`](/docs/reference/permissions#sre:read) permission, then check **MCP Registry → Kubernetes** for a startup error.
 
 What to know:
 

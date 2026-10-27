@@ -551,7 +551,7 @@ const AUDIT_RESOURCE_NAME_MAX_LENGTH = 512;
  * (deletes), then to the snapshot's `email` for entities addressed by email
  * rather than name (invitations). Keep the key/snapshot precedence in sync
  * with the frontend's legacy-row fallback `resourceDisplayName`
- * (frontend/src/app/audit/logs/_components/audit-log-action-labels.ts).
+ * (frontend/src/app/audit/logs/_parts/audit-log-action-labels.ts).
  * @public — shared with the Archestra MCP tool dispatch's audit writer so
  * names resolve identically on both surfaces.
  */

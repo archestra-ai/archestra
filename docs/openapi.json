@@ -173760,6 +173760,11 @@
                         "spent": {
                           "type": "number"
                         },
+                        "spenders": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
                         "resetsAt": {
                           "nullable": true,
                           "type": "string"
@@ -173808,6 +173813,7 @@
                         "environmentDefault",
                         "flaggedCustom",
                         "spent",
+                        "spenders",
                         "resetsAt",
                         "environments"
                       ],

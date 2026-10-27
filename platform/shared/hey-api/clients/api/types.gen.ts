@@ -47800,6 +47800,7 @@ export type ListUserLimitUsageResponses = {
             environmentDefault: number;
             flaggedCustom: number;
             spent: number;
+            spenders: number;
             resetsAt: string | null;
             environments: Array<{
                 environmentId: string;

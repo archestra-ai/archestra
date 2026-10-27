@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSession } from "@/lib/auth/auth.query";
-import { useMcpInstallOrchestrator } from "./mcp-install-orchestrator.hook";
+import { useMcpInstallOrchestrator } from "./use-mcp-install-orchestrator";
 
 const {
   mutateAsyncMock,

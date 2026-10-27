@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { parseRequirementsInput } from "./agent-hooks-editor.requirements";
+import { parseRequirementsInput } from "./agent-hooks-editor-requirements";
 
 describe("parseRequirementsInput", () => {
   it("returns an empty list for empty or whitespace-only input", () => {

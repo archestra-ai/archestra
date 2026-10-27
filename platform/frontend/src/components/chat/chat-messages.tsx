@@ -100,13 +100,13 @@ import {
   type ToolAuthState,
 } from "@/lib/chat/mcp-error-ui";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/chat/parse-thinking";
-import { UPSTREAM_IDLE_THRESHOLD_SECONDS } from "@/lib/chat/stream-stall.hook";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
+import { UPSTREAM_IDLE_THRESHOLD_SECONDS } from "@/lib/chat/use-stream-stall";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useStableCallback } from "@/lib/hooks/use-stable-callback";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
-import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
 import { useMcpCatalogDirectory } from "@/lib/mcp/mcp-registry.query";
+import { useMcpInstallOrchestrator } from "@/lib/mcp/use-mcp-install-orchestrator";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 import { identifyAskUserGroups } from "./ask-user-groups";

@@ -65,8 +65,8 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { SHORTCUT_NEW_CHAT } from "@/consts";
 import { prefetchApps } from "@/lib/app.query";
-import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useIsAuthenticated } from "@/lib/auth/use-is-authenticated";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { useDocsScreenshotMode } from "@/lib/docs-screenshot-mode";

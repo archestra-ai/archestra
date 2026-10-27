@@ -2,13 +2,10 @@
 
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import {
-  AccountRow,
-  AccountRows,
-} from "@/app/account/_components/account-rows";
-import { ChangePasswordDialog } from "@/app/account/_components/change-password-dialog";
-import { GatewayTokenRow } from "@/app/account/_components/gateway-token-row";
-import { TwoFactorRow } from "@/app/account/_components/two-factor-row";
+import { AccountRow, AccountRows } from "@/app/account/_parts/account-rows";
+import { ChangePasswordDialog } from "@/app/account/_parts/change-password-dialog";
+import { GatewayTokenRow } from "@/app/account/_parts/gateway-token-row";
+import { TwoFactorRow } from "@/app/account/_parts/two-factor-row";
 import { SettingsSection } from "@/components/settings-section";
 import { Button } from "@/components/ui/button";
 import { usePublicConfig } from "@/lib/config/config.query";

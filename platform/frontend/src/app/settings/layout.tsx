@@ -11,8 +11,8 @@ import { SectionNav } from "@/components/section-nav";
 import { useDisableInvitations } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useSecretsType } from "@/lib/secrets.query";
-import { AppearanceSubnav } from "./appearance/_components/appearance-navigation";
-import { MessagingProvidersSubnav } from "./messaging-channels/_components/messaging-providers";
+import { AppearanceSubnav } from "./appearance/_parts/appearance-navigation";
+import { MessagingProvidersSubnav } from "./messaging-channels/_parts/messaging-providers";
 import { resolveSettingsSection, useSettingsTabs } from "./settings-tabs";
 
 const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {

@@ -12,8 +12,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
-import { useServiceIcons } from "./service-logo-picker.hook";
 import { iconToDataUrl, type ServiceIcon } from "./service-logo-picker.utils";
+import { useServiceIcons } from "./use-service-icons";
 
 interface ServiceLogoPickerProps {
   onSelect: (dataUrl: string) => void;

@@ -44,7 +44,7 @@ const mockChatState: {
 
 vi.mock("next/navigation");
 
-vi.mock("@/lib/auth/auth.hook", () => ({
+vi.mock("@/lib/auth/use-is-authenticated", () => ({
   useIsAuthenticated: () => true,
 }));
 

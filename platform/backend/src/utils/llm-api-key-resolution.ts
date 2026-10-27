@@ -126,6 +126,12 @@ export async function resolveProviderApiKey(params: {
       provider,
       agentLlmApiKeyId,
     });
+  } else if (provider === "github-copilot") {
+    // Scheduled and email runs: an organization GitHub App key may serve them.
+    resolvedApiKey = await LlmProviderApiKeyModel.findSharedGithubAppKey({
+      organizationId,
+      agentLlmApiKeyId,
+    });
   }
 
   resolvedApiKey = params.selection

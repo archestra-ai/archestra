@@ -86514,6 +86514,9 @@ export type CreateLlmProviderApiKeyData = {
         awsAccessKeyId?: string;
         awsSecretAccessKey?: string;
         awsSessionToken?: string;
+        githubAppId?: string;
+        githubAppInstallationId?: string;
+        githubAppPrivateKey?: string;
         /**
          * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
          */

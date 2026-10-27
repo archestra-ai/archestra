@@ -56,6 +56,10 @@ import {
   secretManager,
 } from "@/secrets-manager";
 import { CredentialResourcePermissions } from "@/services/credential-resource-permissions";
+import {
+  encodeGithubAppCredential,
+  validateGithubAppCredential,
+} from "@/services/github-app-copilot-token";
 import { assertModelProviderAllowed } from "@/services/integration-overrides";
 import { modelSyncService } from "@/services/model-sync";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -403,6 +407,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             awsSecretAccessKey: z.string().min(1).optional(),
             /** Bedrock-only: optional AWS session token for STS/temporary creds */
             awsSessionToken: z.string().min(1).optional(),
+            /** GitHub Copilot only: GitHub App ID for an organization key */
+            githubAppId: z.string().min(1).optional(),
+            /** GitHub Copilot only: the App's installation ID on the organization */
+            githubAppInstallationId: z.string().min(1).optional(),
+            /** GitHub Copilot only: the App's private key (PEM) */
+            githubAppPrivateKey: z.string().min(1).optional(),
             labels: z
               .array(LabelWithDetailsSchema)
               .optional()
@@ -422,6 +432,19 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (data) => {
               const hasSigV4 = data.awsAccessKeyId && data.awsSecretAccessKey;
               if (hasSigV4) return data.provider === "bedrock";
+              if (
+                data.githubAppId ||
+                data.githubAppInstallationId ||
+                data.githubAppPrivateKey
+              ) {
+                return (
+                  data.provider === "github-copilot" &&
+                  !!data.githubAppId &&
+                  !!data.githubAppInstallationId &&
+                  !!data.githubAppPrivateKey &&
+                  !data.apiKey
+                );
+              }
               if (isByosEnabled()) {
                 return data.vaultSecretPath && data.vaultSecretKey;
               }
@@ -435,13 +458,16 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             {
               message:
-                "Either apiKey, both vaultSecretPath and vaultSecretKey, or AWS SigV4 credentials (Bedrock only) must be provided",
+                "Either apiKey, both vaultSecretPath and vaultSecretKey, or AWS SigV4 credentials (Bedrock only) must be provided. For a GitHub Copilot GitHub App key, send all three GitHub App fields instead of apiKey.",
             },
           ),
         response: constructResponseSchema(LlmProviderApiKeyWithScopeInfoSchema),
       },
     },
-    async ({ body, organizationId, user }, reply) => {
+    async ({ body: rawBody, organizationId, user }, reply) => {
+      // A GitHub App credential travels as one marker-encoded apiKey from here
+      // on, so every scope and per-user check below sees what it is.
+      const body = withGithubAppCredential(rawBody);
       // A service account acts under a synthetic user id with no `users` row,
       // so it cannot be the owner (`user_id`) of a key. Refuse before the key
       // is tested or its secret is stored.
@@ -1569,6 +1595,37 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
  * share one person's credential with everyone. Only own keys may hold them;
  * each user links their own account.
  */
+/**
+ * Fold the three GitHub App fields into one validated, marker-encoded apiKey.
+ * The private key never leaves the returned value.
+ */
+function withGithubAppCredential<
+  T extends {
+    apiKey?: string;
+    githubAppId?: string;
+    githubAppInstallationId?: string;
+    githubAppPrivateKey?: string;
+  },
+>(
+  body: T,
+): Omit<T, "githubAppId" | "githubAppInstallationId" | "githubAppPrivateKey"> {
+  const { githubAppId, githubAppInstallationId, githubAppPrivateKey, ...rest } =
+    body;
+  if (!githubAppId || !githubAppInstallationId || !githubAppPrivateKey) {
+    return rest;
+  }
+  return {
+    ...rest,
+    apiKey: encodeGithubAppCredential(
+      validateGithubAppCredential({
+        appId: githubAppId,
+        installationId: githubAppInstallationId,
+        privateKey: githubAppPrivateKey,
+      }),
+    ),
+  };
+}
+
 function assertPerUserCredentialOwnership(params: {
   provider: SupportedProvider;
   apiKey: string | null | undefined;

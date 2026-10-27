@@ -16,6 +16,14 @@ import config from "@/config";
 import { LRUCacheManager } from "@/in-memory-lru-cache";
 import logger from "@/logging";
 import { ApiError } from "@/types/api";
+import {
+  COPILOT_APP_WIRE_MODES,
+  type CopilotAppWireMode,
+  decodeGithubAppCredential,
+  type GithubAppCredential,
+  githubAppCopilotTokenManager,
+  githubErrorMessage,
+} from "./github-app-copilot-token";
 
 // Copilot endpoints require a recognized VS Code and Copilot Chat identity.
 // An hourly workflow proposes updates from stable upstream releases.
@@ -183,6 +191,16 @@ export function createGithubCopilotFetch(params: {
       return baseFetch(input, init);
     }
 
+    const appCredential = decodeGithubAppCredential(githubToken);
+    if (appCredential) {
+      return githubAppCopilotFetch({
+        credential: appCredential,
+        input,
+        init,
+        baseFetch,
+      });
+    }
+
     const doFetch = async (credentials: CachedBearer) => {
       const headers = new Headers(
         init?.headers ?? (input instanceof Request ? input.headers : undefined),
@@ -242,6 +260,62 @@ export function createGithubCopilotFetch(params: {
 
     return response;
   };
+}
+
+/**
+ * Find how Copilot accepts this App's installation token by trying each wire
+ * mode against GET /models, and remember the winner. A 403 saying App-token
+ * requests are not enabled stops early: no other mode can succeed. Throws an
+ * ApiError listing every attempt (status and GitHub's message) on failure.
+ */
+export async function detectGithubAppWireMode(params: {
+  credential: GithubAppCredential;
+  baseUrl?: string | null;
+  baseFetch?: FetchLike;
+}): Promise<CopilotAppWireMode> {
+  const { credential } = params;
+  const baseFetch = params.baseFetch ?? fetch;
+  const modelsUrl = `${(params.baseUrl || config.llm["github-copilot"].baseUrl).replace(/\/$/, "")}/models`;
+  const installation =
+    await githubAppCopilotTokenManager.getInstallationToken(credential);
+  const attempts: string[] = [];
+  for (const mode of COPILOT_APP_WIRE_MODES) {
+    let response: Response;
+    try {
+      response = await sendWithWireMode({
+        mode,
+        installationToken: installation.token,
+        input: modelsUrl,
+        init: undefined,
+        baseFetch,
+      });
+    } catch (error) {
+      const message =
+        error instanceof ApiError ? error.message : "request failed";
+      attempts.push(`${mode}: ${message}`);
+      logger.info(
+        { mode, error: message },
+        "[GithubAppCopilot] wire mode probe failed",
+      );
+      continue;
+    }
+    logger.info(
+      { mode, status: response.status },
+      "[GithubAppCopilot] wire mode probe",
+    );
+    if (response.ok) {
+      await response.body?.cancel();
+      githubAppCopilotTokenManager.setWireMode(credential, mode);
+      return mode;
+    }
+    const message = await githubErrorMessage(response);
+    attempts.push(`${mode}: ${response.status} ${message}`);
+    if (response.status === 403 && /not enabled|app/i.test(message)) break;
+  }
+  throw new ApiError(
+    401,
+    `GitHub Copilot did not accept the GitHub App installation token. ${attempts.join("; ")}`,
+  );
 }
 
 // ===== Internal helpers =====
@@ -306,4 +380,85 @@ function resolveCopilotRequestUrl(
   base.search = url.search;
   base.hash = "";
   return input instanceof Request ? new Request(base, input) : base;
+}
+
+/** Copilot request with an App credential: mint, pick the wire mode, retry a 401 once. */
+async function githubAppCopilotFetch(params: {
+  credential: GithubAppCredential;
+  input: string | URL | Request;
+  init?: RequestInit;
+  baseFetch: FetchLike;
+}): Promise<Response> {
+  const { credential, input, init, baseFetch } = params;
+  try {
+    let mode = githubAppCopilotTokenManager.getWireMode(credential);
+    if (!mode) {
+      mode = await detectGithubAppWireMode({
+        credential,
+        baseUrl: new URL(input instanceof Request ? input.url : input).origin,
+        baseFetch,
+      });
+    }
+    const installation =
+      await githubAppCopilotTokenManager.getInstallationToken(credential);
+    const response = await sendWithWireMode({
+      mode,
+      installationToken: installation.token,
+      input,
+      init,
+      baseFetch,
+    });
+    const bodyIsReplayable =
+      init?.body === undefined || typeof init.body === "string";
+    if (response.status !== 401 || !bodyIsReplayable) return response;
+    await response.body?.cancel();
+    githubAppCopilotTokenManager.invalidate(credential, installation.token);
+    if (mode === "C") {
+      githubCopilotTokenManager.invalidate(installation.token);
+    }
+    const fresh =
+      await githubAppCopilotTokenManager.getInstallationToken(credential);
+    return await sendWithWireMode({
+      mode,
+      installationToken: fresh.token,
+      input,
+      init,
+      baseFetch,
+    });
+  } catch (error) {
+    return exchangeErrorResponse(error);
+  }
+}
+
+/** Send one Copilot request the way the given wire mode presents the token. */
+async function sendWithWireMode(params: {
+  mode: CopilotAppWireMode;
+  installationToken: string;
+  input: string | URL | Request;
+  init?: RequestInit;
+  baseFetch: FetchLike;
+}): Promise<Response> {
+  const { mode, installationToken, input, init, baseFetch } = params;
+  const headers = new Headers(
+    init?.headers ?? (input instanceof Request ? input.headers : undefined),
+  );
+  if (mode === "C") {
+    const credentials =
+      await githubCopilotTokenManager.getCredentials(installationToken);
+    for (const [name, value] of Object.entries(GITHUB_COPILOT_HEADERS)) {
+      headers.set(name, value);
+    }
+    headers.set("authorization", `Bearer ${credentials.bearer}`);
+    return baseFetch(resolveCopilotRequestUrl(input, credentials.apiEndpoint), {
+      ...init,
+      headers,
+    });
+  }
+  if (mode === "A") {
+    for (const [name, value] of Object.entries(GITHUB_COPILOT_HEADERS)) {
+      headers.set(name, value);
+    }
+  }
+  headers.set("authorization", `Bearer ${installationToken}`);
+  return baseFetch(input, { ...init, headers });
 }

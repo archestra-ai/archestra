@@ -21,6 +21,9 @@ import { ResourceVisibilityScopeSchema } from "./visibility";
  */
 export const LlmProviderCredentialKindSchema = z.enum([
   "api_key",
+  // A GitHub App credential on `github-copilot`: organization-owned, so
+  // shareable even though personal Copilot sign-ins are not.
+  "github_app",
   ...SubscriptionCredentialKindSchema.options,
 ]);
 export type LlmProviderCredentialKind = z.infer<

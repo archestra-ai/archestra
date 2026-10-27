@@ -334573,6 +334573,18 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "githubAppId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "githubAppInstallationId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "githubAppPrivateKey": {
+                    "type": "string",
+                    "minLength": 1
+                  },
                   "labels": {
                     "description": "Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.",
                     "type": "array",

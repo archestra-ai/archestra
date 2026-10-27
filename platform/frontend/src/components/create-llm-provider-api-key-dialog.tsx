@@ -160,8 +160,18 @@ export function CreateLlmProviderApiKeyDialog({
     // same tick the credential lands — before any effect has run.
     // Ordinary keys use their grant policy for access. Creation grants the
     // caller full access; personal account credentials remain owner-only.
+    // A GitHub App key is the one Copilot credential that is an
+    // organization's, so it is created shared.
+    const isCopilotApp =
+      values.provider === "github-copilot" &&
+      !subscriptionKind &&
+      (values.copilotAuthMethod === "github-app" ||
+        credentialMode !== "subscription") &&
+      Boolean(values.githubAppPrivateKey);
     const shared =
-      !subscriptionKind && !providerRequiresPerUserCredential(values.provider);
+      isCopilotApp ||
+      (!subscriptionKind &&
+        !providerRequiresPerUserCredential(values.provider));
     try {
       const createdKey = await createMutation.mutateAsync({
         name:
@@ -170,7 +180,10 @@ export function CreateLlmProviderApiKeyDialog({
             ? SUBSCRIPTION_CREDENTIALS[subscriptionKind].label
             : providerCatalog.label(values.provider)),
         provider: values.provider,
-        apiKey: isBedrockSigV4 ? undefined : values.apiKey || undefined,
+        apiKey:
+          isBedrockSigV4 || isCopilotApp
+            ? undefined
+            : values.apiKey || undefined,
         baseUrl: values.baseUrl || undefined,
         inferenceBaseUrl: values.inferenceBaseUrl || undefined,
         extraHeaders: serializeExtraHeaders(values.extraHeaders) ?? undefined,
@@ -181,7 +194,7 @@ export function CreateLlmProviderApiKeyDialog({
         initialGrants:
           !shared ||
           subscriptionKind ||
-          providerRequiresPerUserCredential(values.provider)
+          (providerRequiresPerUserCredential(values.provider) && !isCopilotApp)
             ? []
             : (values.initialGrants ?? []).map(
                 ({ name: _name, ...grant }) => grant,
@@ -204,6 +217,15 @@ export function CreateLlmProviderApiKeyDialog({
           : undefined,
         awsSessionToken: isBedrockSigV4
           ? values.awsSessionToken || undefined
+          : undefined,
+        githubAppId: isCopilotApp
+          ? values.githubAppId?.trim() || undefined
+          : undefined,
+        githubAppInstallationId: isCopilotApp
+          ? values.githubAppInstallationId?.trim() || undefined
+          : undefined,
+        githubAppPrivateKey: isCopilotApp
+          ? values.githubAppPrivateKey || undefined
           : undefined,
         labels: finalLabels,
       });
@@ -374,6 +396,17 @@ function getIsCreateFormValid(params: {
 
   if (values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4") {
     return Boolean(values.awsAccessKeyId && values.awsSecretAccessKey);
+  }
+
+  if (
+    values.provider === "github-copilot" &&
+    values.copilotAuthMethod === "github-app"
+  ) {
+    return Boolean(
+      values.githubAppId?.trim() &&
+        values.githubAppInstallationId?.trim() &&
+        values.githubAppPrivateKey?.trim(),
+    );
   }
 
   return Boolean(

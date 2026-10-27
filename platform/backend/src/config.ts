@@ -2869,6 +2869,13 @@ const config = {
       clientId:
         process.env.ARCHESTRA_GITHUB_COPILOT_CLIENT_ID ||
         "Iv1.b507a08c87ecfe98",
+      /**
+       * GitHub REST API base used to mint GitHub App installation tokens for
+       * organization Copilot keys. Overridable for GitHub Enterprise.
+       */
+      appApiBaseUrl:
+        process.env.ARCHESTRA_GITHUB_COPILOT_APP_API_BASE_URL ||
+        "https://api.github.com",
     },
     "microsoft-365-copilot": {
       /** Microsoft Graph base URL serving the Microsoft 365 Copilot Chat API (beta). */

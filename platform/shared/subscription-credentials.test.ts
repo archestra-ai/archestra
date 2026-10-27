@@ -6,6 +6,7 @@ import {
 import {
   credentialRequiresPerUserScope,
   isCredentialLevelSubscriptionProvider,
+  isSharedGithubAppCredential,
   isSubscriptionCredential,
   perUserCredentialLabel,
   SUBSCRIPTION_CREDENTIAL_KINDS,
@@ -206,5 +207,39 @@ describe("perUserCredentialLabel", () => {
     expect(
       perUserCredentialLabel({ provider: "github-copilot", apiKey: "gho_x" }),
     ).toBe("github-copilot");
+  });
+});
+
+describe("GitHub App credentials on github-copilot", () => {
+  const appCredential = `github-app:${Buffer.from("{}").toString("base64url")}`;
+
+  it("are not per-user, unlike a personal Copilot sign-in", () => {
+    expect(
+      credentialRequiresPerUserScope({
+        provider: "github-copilot",
+        apiKey: appCredential,
+      }),
+    ).toBe(false);
+    expect(
+      credentialRequiresPerUserScope({
+        provider: "github-copilot",
+        apiKey: "gho_personal",
+      }),
+    ).toBe(true);
+  });
+
+  it("do not exempt other per-user providers", () => {
+    expect(
+      credentialRequiresPerUserScope({
+        provider: "microsoft-365-copilot",
+        apiKey: appCredential,
+      }),
+    ).toBe(true);
+    expect(
+      isSharedGithubAppCredential({
+        provider: "openai",
+        apiKey: appCredential,
+      }),
+    ).toBe(false);
   });
 });

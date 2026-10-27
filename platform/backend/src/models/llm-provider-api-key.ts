@@ -1,6 +1,7 @@
 import {
   getProvidersWithOptionalApiKey,
   isCredentialLevelSubscriptionProvider,
+  isGithubAppCredential,
   isVaultReference,
   PROVIDERS_REQUIRING_BASE_URL,
   parseVaultReference,
@@ -698,10 +699,18 @@ class LlmProviderApiKeyModel {
     // one user ride on another's token. Returns null (→ "link your account"
     // prompt) when the user has no personal key of their own.
     if (providerRequiresPerUserCredential(provider)) {
-      return LlmProviderApiKeyModel.findPersonalKey({
+      const personalKey = await LlmProviderApiKeyModel.findPersonalKey({
         organizationId,
         userId,
         provider,
+      });
+      if (personalKey || provider !== "github-copilot") return personalKey;
+      // No personal sign-in: an organization GitHub App key the user may use
+      // stands in. Never another user's personal key.
+      return LlmProviderApiKeyModel.findSharedGithubAppKey({
+        organizationId,
+        userId,
+        agentLlmApiKeyId,
       });
     }
 
@@ -1131,6 +1140,53 @@ class LlmProviderApiKeyModel {
    * oldest). Self-contained so the per-user-credential guard can call it before
    * the rest of getCurrentApiKey runs.
    */
+  /**
+   * A shared GitHub App key on `github-copilot` the user may use: the agent's
+   * configured key when it is one, else the best-ranked one they can reach.
+   */
+  static async findSharedGithubAppKey(params: {
+    organizationId: string;
+    userId?: string;
+    agentLlmApiKeyId?: string | null;
+  }): Promise<LlmProviderApiKey | null> {
+    const { organizationId, userId, agentLlmApiKeyId } = params;
+    const isAppKey = async (key: LlmProviderApiKey | null) =>
+      !!key &&
+      key.organizationId === organizationId &&
+      key.provider === "github-copilot" &&
+      key.userId === null &&
+      !!key.secretId &&
+      (await LlmProviderApiKeyModel.findCredentialKind(key.id)) ===
+        "github_app";
+    if (agentLlmApiKeyId) {
+      const agentKey = await LlmProviderApiKeyModel.findById(agentLlmApiKeyId);
+      if (await isAppKey(agentKey)) return agentKey;
+    }
+    if (!userId) {
+      const orgKey = await LlmProviderApiKeyModel.findOrganizationWideKey(
+        organizationId,
+        "github-copilot",
+      );
+      return (await isAppKey(orgKey)) ? orgKey : null;
+    }
+    const available = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+      organizationId,
+      userId,
+      [],
+      "github-copilot",
+    );
+    const sorted = [...available].sort(
+      (a, b) =>
+        Number(b.isPrimary) - Number(a.isPrimary) ||
+        a.createdAt.getTime() - b.createdAt.getTime(),
+    );
+    for (const candidate of sorted) {
+      const key = await LlmProviderApiKeyModel.findById(candidate.id);
+      if (await isAppKey(key)) return key;
+    }
+    return null;
+  }
+
   private static async findPersonalKey({
     organizationId,
     userId,
@@ -1646,6 +1702,7 @@ function toApiKeyWithScopeInfo<
 function credentialKindOf(
   apiKeyValue: string | null | undefined,
 ): LlmProviderCredentialKind {
+  if (isGithubAppCredential(apiKeyValue)) return "github_app";
   return subscriptionKindFromCredential(apiKeyValue) ?? "api_key";
 }
 
@@ -1659,6 +1716,7 @@ function isPerUserCredential(
   provider: SupportedProvider,
   kind: LlmProviderCredentialKind | null | undefined,
 ): boolean {
+  if (provider === "github-copilot" && kind === "github_app") return false;
   return providerRequiresPerUserCredential(provider) || kind !== "api_key";
 }
 
@@ -1690,7 +1748,7 @@ function subscriptionKindOf(
   kind: LlmProviderCredentialKind | null | undefined,
 ): SubscriptionCredentialKind | null {
   if (!isCredentialLevelSubscriptionProvider(provider)) return null;
-  return kind && kind !== "api_key" ? kind : null;
+  return kind && kind !== "api_key" && kind !== "github_app" ? kind : null;
 }
 
 /**

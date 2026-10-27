@@ -114,12 +114,16 @@ describe("CopilotOrganizationConnectDialog", () => {
       "placeholder",
       "my-org or https://github.com/my-org",
     );
+    // The error takes the help text's place under the field.
     expect(field).toHaveAccessibleDescription(
-      "Organization's GitHub handle or URL",
+      "Enter an organization name or its GitHub address.",
     );
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Enter an organization name or its GitHub address.",
     );
+    expect(
+      screen.queryByText("Organization's GitHub handle or URL"),
+    ).not.toBeInTheDocument();
 
     await user.type(field, "https://github.example.com/other-org/settings");
     expect(

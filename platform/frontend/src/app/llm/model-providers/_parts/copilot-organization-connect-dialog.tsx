@@ -20,6 +20,7 @@ import {
   useStartCopilotGithubApp,
   useValidateExistingCopilotGithubApp,
 } from "@/lib/github-copilot-app.query";
+import { cn } from "@/lib/utils/tailwind";
 import { onCopilotAppSetup } from "./copilot-organization-channel";
 
 type Step = "start" | "install" | "existing" | "result";
@@ -532,14 +533,18 @@ function OrganizationField({
         aria-invalid={error ? true : undefined}
         aria-describedby={`${id}-help`}
       />
-      <p id={`${id}-help`} className="text-xs text-muted-foreground">
-        Organization's GitHub handle or URL
+      {/* One line under the field: the error takes the help text's place, so
+          the dialog does not grow or jump when an error appears or clears. */}
+      <p
+        id={`${id}-help`}
+        className={cn(
+          "min-h-4 text-xs",
+          error ? "text-destructive" : "text-muted-foreground",
+        )}
+        role={error ? "alert" : undefined}
+      >
+        {error ?? "Organization's GitHub handle or URL"}
       </p>
-      {error && (
-        <p className="text-xs text-destructive" role="alert">
-          {error}
-        </p>
-      )}
     </div>
   );
 }

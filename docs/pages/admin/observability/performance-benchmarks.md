@@ -15,7 +15,7 @@ pinned to its published evidence; do not replace it with release measurements.
 <span id="streaming-first-content"></span>
 <span id="results"></span>
 
-## LLM Proxy Comparison
+## LLM Proxy Results
 
 Archestra handled 851–859 requests per second versus LiteLLM’s 172–175 on the same machine.
 

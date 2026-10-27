@@ -83,3 +83,5 @@ Update `archestra.imageTag` in your values file too: an old values file or `--re
 Keep `archestra.terminationGracePeriodSeconds` at least **120**. During shutdown, Archestra rejects new model requests and gives active requests up to 60 seconds to finish; longer requests can lose their connection.
 
 For Docker, use `docker stop --time 120` or Compose's `stop_grace_period: 120s`.
+
+New companion and agent runtime images are published at `ghcr.io/archestra-ai`. The main platform image remains at `archestra/platform` on Docker Hub. If you mirror images internally, import the release’s companion images from GHCR and preserve your Helm registry overrides. Existing releases remain at their original addresses.

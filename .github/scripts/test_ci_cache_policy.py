@@ -30,6 +30,26 @@ process.stdout.write(JSON.stringify(vm.runInNewContext(input.expression, input.c
 
 
 class CachePolicyTests(unittest.TestCase):
+    def test_dockerhub_has_no_cache_reads_or_writes(self):
+        workflow = (ROOT / ".github/workflows/build-native-multi-arch-image.yml").read_text()
+        step = workflow.split("      - name: Resolve build cache refs\n", 1)[1].split("      - name:", 1)[0]
+        env_block, run_block = step.split("        run: |\n", 1)
+        expression = re.search(r"USE_REGISTRY_CACHE: \$\{\{ (.*) \}\}", env_block).group(1)
+        script = "\n".join(line[10:] for line in run_block.splitlines())
+        for provider in ("dockerhub", "ghcr", "gar", "none"):
+            for export in ("true", "false"):
+                with self.subTest(provider=provider, export=export), tempfile.TemporaryDirectory() as directory:
+                    output = Path(directory) / "outputs"
+                    enabled = evaluate(expression, {"inputs": {"auth_provider": provider}})
+                    subprocess.run(["bash", "-e", "-c", script], check=True, env=os.environ | {
+                        "GITHUB_OUTPUT": str(output), "USE_REGISTRY_CACHE": str(enabled).lower(),
+                        "CAN_EXPORT_CACHE": export, "CACHE_COMPRESSION": "zstd",
+                        "CACHE_REF": "registry.test/platform:buildcache-amd64",
+                    })
+                    values = dict(line.split("=", 1) for line in output.read_text().splitlines())
+                    self.assertEqual(bool(values["cache-from"]), provider != "dockerhub")
+                    self.assertEqual(bool(values["cache-to"]), provider != "dockerhub" and export == "true")
+
     def test_persistent_builder_is_opt_in_and_untrusted_events_use_local_builder(self):
         action = (ROOT / ".github/actions/setup-docker-builder/action.yml").read_text()
         expression = action.split("    - name: Setup persistent Docker builder\n", 1)[1]

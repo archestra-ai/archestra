@@ -30313,6 +30313,9 @@ export type UpdateAutoRoutingSettingsResponses = {
             status: 'active';
             planId: string;
         } | {
+            status: 'unchanged';
+            planId: string;
+        } | {
             status: 'cold_start';
             planId: string | null;
         } | {
@@ -30666,6 +30669,9 @@ export type ReplanAutoRoutingResponses = {
         };
         fit: {
             status: 'active';
+            planId: string;
+        } | {
+            status: 'unchanged';
             planId: string;
         } | {
             status: 'cold_start';

@@ -88,21 +88,36 @@ describe("PUT /api/auto-routing/settings", () => {
     );
   });
 
-  test("a router failure saves the settings and reports the failed fit", async () => {
+  test("an infeasible budget is refused, keeping the saved budget and the serving plan", async () => {
     const trio = await configureAutoRouting(ctx.organizationId);
     await seedHistory(ctx.organizationId, trio[2].id);
+    const serving = (await putSettings({ budgetUsdPerDay: 30 })).json();
 
     const response = await putSettings({ budgetUsdPerDay: 0.01 });
 
-    expect(response.statusCode, response.body).toBe(200);
-    const body = response.json();
-    expect(body.fit).toMatchObject({ status: "failed" });
-    expect(body.fit.error).toMatch(/^ARCHESTRA_ROUTER_INFEASIBLE: /);
-    expect(body.status.lastFitError).toBe(body.fit.error);
+    expect(response.statusCode, response.body).toBe(400);
+    const minimum = /\$(\d+\.\d{2})\/day\.$/.exec(
+      response.json().error.message,
+    )?.[1];
+    expect(minimum).toBeDefined();
     expect(
-      (await AutoRoutingSettingsModel.find(ctx.organizationId))
-        ?.budgetUsdPerDay,
-    ).toBe("0.01");
+      await AutoRoutingSettingsModel.find(ctx.organizationId),
+    ).toMatchObject({
+      budgetUsdPerDay: "30.00",
+      generation: serving.generation,
+    });
+    expect(await RoutingPlanModel.findHistory(ctx.organizationId, 10)).toEqual([
+      expect.objectContaining({
+        plan: expect.objectContaining({
+          id: serving.fit.planId,
+          status: "active",
+        }),
+      }),
+    ]);
+
+    const atMinimum = await putSettings({ budgetUsdPerDay: Number(minimum) });
+    expect(atMinimum.statusCode, atMinimum.body).toBe(200);
+    expect(atMinimum.json().fit).toMatchObject({ status: "active" });
   });
 
   test("concurrent changes leave one active plan on the latest settings", async () => {

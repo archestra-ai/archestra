@@ -4,6 +4,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
+import { toast } from "sonner";
 import {
   afterAll,
   afterEach,
@@ -151,6 +152,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  vi.clearAllMocks();
   settings = makeSettings();
   updates.length = 0;
   setCanUpdate(true);
@@ -196,7 +198,7 @@ describe("AutoRoutingOverviewPage", () => {
     const [fastTier] = screen.getAllByRole("combobox");
     await user.click(fastTier);
     await user.click(await screen.findByText("claude-haiku-next"));
-    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
       expect(updates).toEqual([{ fastModelId: toolModel.dbId }]),
@@ -293,7 +295,7 @@ describe("AutoRoutingOverviewPage", () => {
     settings = makeSettings({ enabled: false, budgetUsdPerDay: null });
     const user = userEvent.setup();
     renderPage();
-    await user.click(await screen.findByRole("switch", { name: "Enabled" }));
+    await user.click(await screen.findByRole("switch", { name: "Disabled" }));
     await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
 
     expect(await screen.findByText("Set a daily budget")).toBeInTheDocument();
@@ -378,7 +380,7 @@ describe("AutoRoutingOverviewPage", () => {
 
     expect(await screen.findByText("$12.50/day")).toBeInTheDocument();
     expect(screen.getByText("84.0%")).toBeInTheDocument();
-    expect(screen.getByText("+2.0 pp")).toBeInTheDocument();
+    expect(screen.getByText("+2.0 points")).toBeInTheDocument();
     expect(screen.getByTestId("auto-routing-status")).toHaveTextContent(
       "Active plan from",
     );
@@ -460,7 +462,8 @@ describe("AutoRoutingOverviewPage", () => {
   });
 
   it("shows the error of a re-plan whose fit failed", async () => {
-    const error = "ARCHESTRA_ROUTER_INFEASIBLE: budget below the cheapest tier";
+    const error =
+      "ARCHESTRA_ROUTER_INFEASIBLE: cheapest routing costs 8.85889296187498 USD/day, above the 0.01 USD/day budget";
     server.use(
       http.post(`${API_ORIGIN}/api/auto-routing/replan`, () =>
         HttpResponse.json({
@@ -478,7 +481,11 @@ describe("AutoRoutingOverviewPage", () => {
     );
 
     expect(await screen.findByText("Last fit failed")).toBeInTheDocument();
-    expect(screen.getByText(error)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Budget too low for these models: the cheapest routing costs $8.86/day.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("previews the tier a prompt would get", async () => {
@@ -518,6 +525,79 @@ describe("AutoRoutingOverviewPage", () => {
     expect(within(result).getByText("70.0%")).toBeInTheDocument();
     expect(within(result).getByText("25.0%")).toBeInTheDocument();
     expect(within(result).getByText("$0.000123")).toBeInTheDocument();
+    expect(within(result).getByText("$0.42")).toBeInTheDocument();
+  });
+
+  it("refuses an infeasible budget, keeping the edited value", async () => {
+    const message =
+      "Budget too low for these models: the cheapest routing costs $8.86/day.";
+    server.use(
+      http.put(`${API_ORIGIN}/api/auto-routing/settings`, () =>
+        HttpResponse.json(
+          { error: { message, type: "api_validation_error" } },
+          { status: 400 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    const budget = await screen.findByLabelText("Daily budget (USD)");
+    await user.clear(budget);
+    await user.type(budget, "0.01");
+    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(message, expect.anything()),
+    );
+    expect(budget).toHaveValue(0.01);
+    expect(
+      screen.getByRole("button", { name: "Save and re-plan" }),
+    ).toBeEnabled();
+  });
+
+  it("keeps the slider range from the saved budget while a new one is typed", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const budget = await screen.findByLabelText("Daily budget (USD)");
+    const slider = screen.getByRole("slider");
+
+    for (const typed of ["50", "80"]) {
+      await user.clear(budget);
+      await user.type(budget, typed);
+      expect(slider).toHaveAttribute("aria-valuenow", typed);
+      expect(slider).toHaveAttribute("aria-valuemax", "100");
+    }
+  });
+
+  it("tells when a re-plan found nothing new", async () => {
+    server.use(
+      http.post(`${API_ORIGIN}/api/auto-routing/replan`, () =>
+        HttpResponse.json({
+          ...withActivePlan(makeSettings()),
+          fit: { status: "unchanged", planId: PLAN_ID },
+        } satisfies AutoRoutingSettingsChange),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: "Re-plan now" }),
+    );
+
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Plan is up to date"),
+    );
+  });
+
+  it("offers a plain save when routing is switched off", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("switch", { name: "Enabled" }));
+
+    expect(screen.getByRole("switch", { name: "Disabled" })).not.toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updates).toEqual([{ enabled: false }]));
   });
 });
 

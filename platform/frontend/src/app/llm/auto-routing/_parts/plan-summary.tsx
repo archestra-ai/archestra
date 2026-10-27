@@ -26,19 +26,16 @@ export function PlanSummaryView({
             of {formatCurrency(budgetUsdPerDay)} budget
           </span>
         </SummaryTile>
-        <SummaryTile label="Value">
+        <SummaryTile label="Quality vs all-smart">
           <span className="text-2xl font-semibold tabular-nums">
             {formatPercent(summary.value_size_weighted)}
           </span>
-          <span className="text-xs text-muted-foreground">
-            of frontier quality (Jev estimate)
-          </span>
         </SummaryTile>
-        <SummaryTile label="Next $10/day buys">
+        <SummaryTile label="Extra $10/day">
           <span className="text-2xl font-semibold tabular-nums">
-            +{(summary.value_per_usd * 10 * 100).toFixed(1)} pp
+            +{(summary.value_per_usd * 10 * 100).toFixed(1)} points
           </span>
-          <span className="text-xs text-muted-foreground">of value</span>
+          <span className="text-xs text-muted-foreground">of quality</span>
         </SummaryTile>
         <SummaryTile label="Sessions/day">
           <span className="text-2xl font-semibold tabular-nums">

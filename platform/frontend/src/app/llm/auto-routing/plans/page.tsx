@@ -10,7 +10,11 @@ import {
 } from "@/lib/auto-routing.query";
 import { formatDate } from "@/lib/utils/date-time";
 import { formatCurrency } from "@/lib/utils/format-currency";
-import { rejectionReason } from "../_parts/plan-document";
+import {
+  describeFitError,
+  parsePlanSummary,
+  rejectionReason,
+} from "../_parts/plan-document";
 
 export default function AutoRoutingPlansPage() {
   const query = useAutoRoutingPlans();
@@ -51,26 +55,47 @@ const COLUMNS: ColumnDef<AutoRoutingPlanSummary>[] = [
       </Badge>
     ),
   },
-  { accessorKey: "generation", header: "Generation" },
   {
     id: "budget",
     header: "Budget",
     cell: ({ row }) => `${formatCurrency(row.original.budgetUsdPerDay)}/day`,
   },
   {
-    id: "scorer",
-    header: "Scorer",
+    id: "expectedSpend",
+    header: "Expected spend",
     cell: ({ row }) => {
-      const scorer = row.original.scorerVersion;
+      const summary = parsePlanSummary(row.original.summary);
+      return summary ? `${formatCurrency(summary.expected_spend)}/day` : null;
+    },
+  },
+  {
+    id: "tierSplit",
+    header: "Sessions fast / normal / smart",
+    cell: ({ row }) => {
+      const summary = parsePlanSummary(row.original.summary);
+      return summary
+        ? summary.tier_session_share
+            .map((share) => `${Math.round(share * 100)}%`)
+            .join(" / ")
+        : null;
+    },
+  },
+  { accessorKey: "decisionCount", header: "Decisions" },
+  {
+    id: "versions",
+    header: "Versions",
+    cell: ({ row }) => {
+      const { scorerVersion: scorer, coreVersion } = row.original;
       return (
-        <span title={scorer.specHash}>
-          {scorer.name} · {scorer.model} · {scorer.specHash.slice(0, 8)}
+        <span
+          className="text-xs text-muted-foreground"
+          title={`Scorer ${scorer.name} · ${scorer.model} · ${scorer.specHash}\nRouter core ${coreVersion}`}
+        >
+          {scorer.model} · {coreVersion}
         </span>
       );
     },
   },
-  { accessorKey: "coreVersion", header: "Core" },
-  { accessorKey: "decisionCount", header: "Decisions" },
   {
     id: "error",
     header: "Error",
@@ -81,7 +106,7 @@ const COLUMNS: ColumnDef<AutoRoutingPlanSummary>[] = [
         </span>
       ) : (
         <span className="line-clamp-2 text-destructive">
-          {row.original.error}
+          {row.original.error && describeFitError(row.original.error).message}
         </span>
       ),
   },

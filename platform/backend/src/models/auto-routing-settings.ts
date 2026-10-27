@@ -23,14 +23,19 @@ class AutoRoutingSettingsModel {
   /**
    * Applies `update` and bumps the generation, so a fit that read the earlier
    * settings can no longer publish. An empty update only requests a re-plan.
-   * `validate` sees the merged settings under the lock and throws to abort, so
-   * concurrent partial updates cannot jointly persist an invalid configuration.
+   * `validate` sees the merged and current settings under the lock and throws
+   * to abort, so concurrent partial updates cannot jointly persist an invalid
+   * configuration.
    * Null when the organization has no LLM Proxy.
    */
   static async update(
     organizationId: string,
     update: UpdateAutoRoutingSettings,
-    validate?: (next: AutoRoutingSettings, tx: Transaction) => Promise<void>,
+    validate?: (
+      next: AutoRoutingSettings,
+      tx: Transaction,
+      current: AutoRoutingSettings,
+    ) => Promise<void>,
   ): Promise<AutoRoutingSettings | null> {
     return withDbTransaction(async (tx) => {
       await lockRoutingPlan(tx, organizationId);
@@ -40,7 +45,7 @@ class AutoRoutingSettingsModel {
           .from(agents)
           .where(organizationLlmProxy(organizationId));
         if (!current) return null;
-        await validate(mergeSettings(current, update), tx);
+        await validate(mergeSettings(current, update), tx, current);
       }
       const [row] = await tx
         .update(agents)
@@ -113,7 +118,7 @@ export function organizationLlmProxy(organizationId: string) {
   );
 }
 
-function mergeSettings(
+export function mergeSettings(
   current: AutoRoutingSettings,
   update: UpdateAutoRoutingSettings,
 ): AutoRoutingSettings {

@@ -27,7 +27,15 @@ const base: AutoRoutingPlanSummary = {
   },
   coreVersion: "0.1.0",
   planFormatVersion: 1,
-  summary: null,
+  summary: {
+    sessions_per_day: 140,
+    tokens_per_day: 9_000_000,
+    expected_spend: 12.5,
+    value_size_weighted: 0.84,
+    tier_session_share: [0.5, 0.3, 0.2],
+    tier_token_share: [0.2, 0.3, 0.5],
+    value_per_usd: 0.002,
+  },
   diagnostics: {
     holdout: {
       status: "evaluated",
@@ -46,8 +54,10 @@ const failed: AutoRoutingPlanSummary = {
   trigger: "manual",
   status: "failed",
   generation: 3,
+  summary: null,
   diagnostics: null,
-  error: "ARCHESTRA_ROUTER_INFEASIBLE: budget below the cheapest tier",
+  error:
+    "ARCHESTRA_ROUTER_INFEASIBLE: cheapest routing costs 8.85889296187498 USD/day, above the 0.01 USD/day budget",
   decisionCount: 0,
 };
 
@@ -56,6 +66,7 @@ const rejected: AutoRoutingPlanSummary = {
   id: "00000000-0000-4000-8000-000000000003",
   status: "rejected",
   generation: 2,
+  summary: null,
   error: "stale_watermark",
   decisionCount: 0,
 };
@@ -77,7 +88,7 @@ afterAll(() => {
 });
 
 describe("AutoRoutingPlansPage", () => {
-  it("lists plan history with its scorer and errors", async () => {
+  it("lists plan history with its spend, tier split and errors", async () => {
     render(
       <QueryClientProvider client={new QueryClient()}>
         <AutoRoutingPlansPage />
@@ -85,9 +96,12 @@ describe("AutoRoutingPlansPage", () => {
     );
 
     expect(
-      await screen.findByText(/budget below the cheapest tier/),
+      await screen.findByText(
+        "Budget too low for these models: the cheapest routing costs $8.86/day.",
+      ),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("jev · jev-1.13.0 · abcdef01")).toHaveLength(3);
+    expect(screen.getByText("$12.50/day")).toBeInTheDocument();
+    expect(screen.getByText("50% / 30% / 20%")).toBeInTheDocument();
     expect(screen.getByText("420")).toBeInTheDocument();
   });
 

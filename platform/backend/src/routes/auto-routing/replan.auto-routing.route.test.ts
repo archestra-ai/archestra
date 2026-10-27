@@ -52,6 +52,37 @@ describe("POST /api/auto-routing/replan", () => {
     expect((await AutoRoutingSettingsModel.find(other.id))?.generation).toBe(1);
   });
 
+  test("a re-plan with nothing new keeps the active plan without recording another", async () => {
+    const trio = await configureAutoRouting(ctx.organizationId);
+    await seedHistory(ctx.organizationId, trio[2].id, 40);
+    const first = (await replan()).json();
+
+    const response = await replan();
+
+    expect(response.statusCode, response.body).toBe(200);
+    const body = response.json();
+    expect(body.fit).toEqual({ status: "unchanged", planId: first.fit.planId });
+    expect(body.generation).toBe(first.generation);
+    expect(body.status.activePlan.id).toBe(first.fit.planId);
+    expect(
+      await RoutingPlanModel.findHistory(ctx.organizationId, 10),
+    ).toHaveLength(1);
+  });
+
+  test("a re-plan after new usage fits a new plan", async () => {
+    const trio = await configureAutoRouting(ctx.organizationId);
+    await seedHistory(ctx.organizationId, trio[2].id, 40);
+    const first = (await replan()).json();
+    await seedHistory(ctx.organizationId, trio[2].id, 5);
+
+    const response = await replan();
+
+    expect(response.statusCode, response.body).toBe(200);
+    const body = response.json();
+    expect(body.fit).toMatchObject({ status: "active" });
+    expect(body.fit.planId).not.toBe(first.fit.planId);
+  });
+
   test("reports a cold start below the session minimum", async () => {
     await configureAutoRouting(ctx.organizationId);
 
@@ -101,3 +132,16 @@ describe("POST /api/auto-routing/replan", () => {
     );
   });
 });
+
+async function seedHistory(
+  organizationId: string,
+  modelId: string,
+  sessions: number,
+) {
+  await seedFitHistory({
+    organizationId,
+    modelId,
+    scorerVersionId: (await activeSourceVersion()).id,
+    sessions,
+  });
+}

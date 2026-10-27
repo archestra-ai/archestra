@@ -12,7 +12,13 @@ import {
 } from "@/lib/auto-routing.query";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { formatDate } from "@/lib/utils/date-time";
-import { parsePlanSummary, parseTierModelIds } from "./_parts/plan-document";
+import {
+  describeFitError,
+  type FittedHistory,
+  parseFittedHistory,
+  parsePlanSummary,
+  parseTierModelIds,
+} from "./_parts/plan-document";
 import { PlanSummaryView } from "./_parts/plan-summary";
 import { AutoRoutingSettingsForm } from "./_parts/settings-form";
 import type { TierName } from "./_parts/tiers";
@@ -47,25 +53,42 @@ export default function AutoRoutingOverviewPage() {
 
 function PlanStatus({ settings }: { settings: AutoRoutingSettings }) {
   const { activePlan, coldStart, lastFitError } = settings.status;
+  const { data: plan } = useAutoRoutingPlan(activePlan?.id ?? null);
+  const history = plan ? parseFittedHistory(plan.diagnostics) : null;
+  const fitError = lastFitError ? describeFitError(lastFitError) : null;
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <span data-testid="auto-routing-status">
           {activePlan
-            ? `Active plan from ${formatDate({ date: activePlan.createdAt })}`
+            ? `Active plan from ${formatDate({ date: activePlan.createdAt })}${history ? `. ${learnedFrom(history)}` : ""}`
             : `Cold start: ${coldStart.sessions} of ${coldStart.required} sessions`}
         </span>
       </div>
-      {lastFitError && (
+      {fitError && (
         <InlineNotice variant="error">
           <AlertTriangle />
           <span className="font-medium">Last fit failed</span>
-          <InlineNoticeText>{lastFitError}</InlineNoticeText>
+          <InlineNoticeText>
+            {fitError.message}
+            {fitError.code && (
+              <span className="ml-1 font-mono text-xs">
+                ({fitError.code})
+              </span>
+            )}
+          </InlineNoticeText>
         </InlineNotice>
       )}
     </div>
   );
+}
+
+function learnedFrom(history: FittedHistory): string {
+  const sessions = `Learned from ${history.sessions.toLocaleString("en-US")} sessions`;
+  return history.last_created_at
+    ? `${sessions}, data up to ${formatDate({ date: history.last_created_at })}`
+    : sessions;
 }
 
 function ActivePlanSummary({ settings }: { settings: AutoRoutingSettings }) {

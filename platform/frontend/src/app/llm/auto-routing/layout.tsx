@@ -2,6 +2,7 @@
 
 import { DocsPage } from "@archestra/shared";
 import { Info } from "lucide-react";
+import Link from "next/link";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
@@ -39,6 +40,13 @@ export default function AutoRoutingLayout({
               </ExternalDocsLink>
             </span>
           )}
+          <span className="block">
+            Clients use it by requesting model <code>auto</code> through the{" "}
+            <Link href="/llm/proxy" className="underline">
+              Model Router
+            </Link>
+            .
+          </span>
         </>
       }
       tabs={enabled ? TABS : []}

@@ -47,9 +47,14 @@ export type AutoRoutingSettingsResponse = z.infer<
   typeof AutoRoutingSettingsResponseSchema
 >;
 
-/** Outcome of the fit a settings change or re-plan ran; a fit that lost to a concurrent one reports the winner's. */
+/**
+ * Outcome of the fit a settings change or re-plan ran; a fit that lost to a
+ * concurrent one reports the winner's. `unchanged`: a re-plan found nothing
+ * new since the active plan, so it ran no fit.
+ */
 export const AutoRoutingFitResultSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("active"), planId: z.string().uuid() }),
+  z.object({ status: z.literal("unchanged"), planId: z.string().uuid() }),
   z.object({
     status: z.literal("cold_start"),
     planId: z.string().uuid().nullable(),

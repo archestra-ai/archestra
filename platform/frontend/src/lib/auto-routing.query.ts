@@ -119,6 +119,9 @@ async function applyFit(
     case "active":
       toast.success("New plan is active");
       break;
+    case "unchanged":
+      toast.success("Plan is up to date");
+      break;
     case "cold_start":
       toast.success("Saved; collecting sessions before the first plan");
       break;

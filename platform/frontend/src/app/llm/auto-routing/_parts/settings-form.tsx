@@ -52,7 +52,13 @@ export function AutoRoutingSettingsForm({
 
   const modelOptions = useTierModelOptions(settings);
   const budget = Number(form.watch("budgetUsdPerDay")) || 0;
-  const sliderMax = Math.max(100, Math.ceil(budget * 2));
+  // From the saved budget, so the thumb moves while a new amount is typed.
+  const sliderMax = Math.max(
+    100,
+    Math.ceil((settings.budgetUsdPerDay ?? 0) * 2),
+  );
+  const enabled = form.watch("enabled");
+  const dirty = form.formState.isDirty;
   const pending = update.isPending || replan.isPending;
   const disabled = !canUpdate || pending;
 
@@ -79,7 +85,9 @@ export function AutoRoutingSettingsForm({
                   disabled={disabled}
                 />
               </FormControl>
-              <FormLabel className="!mt-0">Enabled</FormLabel>
+              <FormLabel className="!mt-0">
+                {field.value ? "Enabled" : "Disabled"}
+              </FormLabel>
             </FormItem>
           )}
         />
@@ -149,19 +157,21 @@ export function AutoRoutingSettingsForm({
         {canUpdate && (
           <Button
             // Remounted per action so a click never flips its own type.
-            key={form.formState.isDirty ? "save" : "replan"}
-            type={form.formState.isDirty ? "submit" : "button"}
+            key={dirty ? "save" : "replan"}
+            type={dirty ? "submit" : "button"}
             size="sm"
             disabled={pending}
-            onClick={form.formState.isDirty ? undefined : () => replan.mutate()}
+            title={dirty ? undefined : "Refit on the latest traffic"}
+            onClick={dirty ? undefined : () => replan.mutate()}
           >
             {pending ? (
               <Loader2 className="animate-spin" />
             ) : (
-              !form.formState.isDirty && <RefreshCw />
+              !dirty && <RefreshCw />
             )}
             <span>
-              {form.formState.isDirty ? "Save and re-plan" : "Re-plan now"}
+              {/* Disabled routing fits nothing, so its save is only a save. */}
+              {!dirty ? "Re-plan now" : enabled ? "Save and re-plan" : "Save"}
             </span>
           </Button>
         )}

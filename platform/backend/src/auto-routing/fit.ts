@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import {
   coreVersion,
   plan as fitPlan,
@@ -8,8 +9,9 @@ import config from "@/config";
 import logger from "@/logging";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import RoutingPlanModel from "@/models/routing-plan";
-import RoutingUsageModel from "@/models/routing-usage";
+import RoutingUsageModel, { type FitVolume } from "@/models/routing-usage";
 import {
+  type AutoRoutingSettings,
   type RouterDocument,
   RouterDocumentSchema,
   type RoutingFitOutcome,
@@ -20,6 +22,7 @@ import {
 import type { AutoRoutingFitResult } from "@/types/auto-routing-api";
 import { activeSourceVersion, routerFeatures } from "./signals";
 import {
+  fingerprintMatches,
   loadTrio,
   type RouterTierSet,
   TierThresholdMismatchError,
@@ -62,41 +65,71 @@ export async function prepareFit(
     scorerVersion.id,
   );
   const settings = await AutoRoutingSettingsModel.find(organizationId);
-  if (!settings?.enabled || settings.budgetUsdPerDay === null) return null;
-  const loaded = await loadTrio(settings);
-  if (loaded.kind !== "ok") return null;
-  const tiers = fitTiers(loaded.trio);
-  const [latest] = await RoutingPlanModel.findHistory(organizationId, 1);
-  const inputWatermark = new Date();
-  const history =
-    tiers.kind === "ok"
-      ? await RoutingUsageModel.findFitHistory(
-          {
-            organizationId,
-            scorerVersionId: scorerVersion.id,
-            inputWatermark,
-            longContextThreshold: tiers.tiers.long_context_threshold,
-          },
-          maxSessions,
-        )
-      : EMPTY_HISTORY;
-  const trigger: RoutingPlanTrigger =
-    requestedTrigger ??
-    (latest && latest.plan.scorerVersionId !== scorerVersion.id
-      ? "scorer_change"
-      : settings.generation > settings.plannedGeneration
-        ? "settings"
-        : "nightly");
-  return {
+  return (
+    settings &&
+    readFitInputs({
+      organizationId,
+      settings,
+      scorerVersionId: scorerVersion.id,
+      requestedTrigger,
+      maxSessions,
+    })
+  );
+}
+
+/**
+ * The cheapest routing's USD/day when `settings` cannot be met on the current
+ * usage, from a fit that publishes nothing; null when they can be, or no fit
+ * would run on them.
+ */
+export async function infeasibleBudget(
+  organizationId: string,
+  settings: AutoRoutingSettings,
+): Promise<number | null> {
+  const inputs = await readFitInputs({
     organizationId,
-    trigger,
-    generation: settings.generation,
-    inputWatermark,
-    tiers,
-    budgetUsdPerDay: settings.budgetUsdPerDay,
+    settings,
+    scorerVersionId: (await activeSourceVersion()).id,
+    requestedTrigger: "settings",
+  });
+  if (!inputs) return null;
+  const { outcome } = await fit(inputs);
+  if (outcome.status !== "failed") return null;
+  const cheapest = INFEASIBLE_ERROR.exec(outcome.error)?.[1];
+  return cheapest === undefined ? null : Number(cheapest);
+}
+
+/**
+ * Whether a fit started now would read exactly what `plan` was fitted on:
+ * the same settings generation and scorer version, the same tier prices and
+ * the same usage window.
+ */
+export async function fitInputsUnchanged(
+  organizationId: string,
+  settings: AutoRoutingSettings,
+  plan: RoutingPlan,
+): Promise<boolean> {
+  const scorerVersion = await activeSourceVersion();
+  if (
+    plan.generation !== settings.generation ||
+    plan.scorerVersionId !== scorerVersion.id ||
+    settings.scorerVersionId !== scorerVersion.id
+  ) {
+    return false;
+  }
+  const loaded = await loadTrio(settings);
+  if (
+    loaded.kind !== "ok" ||
+    !fingerprintMatches(plan.tiersFingerprint, loaded.trio)
+  ) {
+    return false;
+  }
+  const volume = await RoutingUsageModel.findFitVolume({
+    organizationId,
     scorerVersionId: scorerVersion.id,
-    history,
-  };
+    inputWatermark: new Date(),
+  });
+  return isDeepStrictEqual(plan.diagnostics?.history, volumeDocument(volume));
 }
 
 /**
@@ -203,6 +236,64 @@ export async function fitNow(
 }
 
 // === Internal ===
+
+async function readFitInputs(params: {
+  organizationId: string;
+  settings: AutoRoutingSettings;
+  scorerVersionId: string;
+  requestedTrigger?: RoutingPlanTrigger;
+  maxSessions?: number;
+}): Promise<FitInputs | null> {
+  const { organizationId, settings, scorerVersionId } = params;
+  if (!settings.enabled || settings.budgetUsdPerDay === null) return null;
+  const loaded = await loadTrio(settings);
+  if (loaded.kind !== "ok") return null;
+  const tiers = fitTiers(loaded.trio);
+  const [latest] = await RoutingPlanModel.findHistory(organizationId, 1);
+  const inputWatermark = new Date();
+  const history =
+    tiers.kind === "ok"
+      ? await RoutingUsageModel.findFitHistory(
+          {
+            organizationId,
+            scorerVersionId,
+            inputWatermark,
+            longContextThreshold: tiers.tiers.long_context_threshold,
+          },
+          params.maxSessions,
+        )
+      : EMPTY_HISTORY;
+  const trigger: RoutingPlanTrigger =
+    params.requestedTrigger ??
+    (latest && latest.plan.scorerVersionId !== scorerVersionId
+      ? "scorer_change"
+      : settings.generation > settings.plannedGeneration
+        ? "settings"
+        : "nightly");
+  return {
+    organizationId,
+    trigger,
+    generation: settings.generation,
+    inputWatermark,
+    tiers,
+    budgetUsdPerDay: settings.budgetUsdPerDay,
+    scorerVersionId,
+    history,
+  };
+}
+
+/** The fitted usage window, stored with an active plan so a re-plan can tell whether usage moved. */
+function volumeDocument(volume: FitVolume): RouterDocument {
+  return {
+    sessions: volume.sessions,
+    tokens: volume.tokens,
+    first_created_at: volume.firstCreatedAt?.toISOString() ?? null,
+    last_created_at: volume.lastCreatedAt?.toISOString() ?? null,
+  };
+}
+
+const INFEASIBLE_ERROR =
+  /^ARCHESTRA_ROUTER_INFEASIBLE: cheapest routing costs (\S+) USD\/day/;
 
 const fitsInFlight = new Map<string, Promise<FitRun | null>>();
 
@@ -346,7 +437,10 @@ async function fit(inputs: FitInputs): Promise<{
         status: "active",
         plan,
         summary: plan.summary,
-        diagnostics: plan.diagnostics,
+        diagnostics: {
+          ...plan.diagnostics,
+          history: volumeDocument(inputs.history.volume),
+        },
       },
     };
   } catch (error) {

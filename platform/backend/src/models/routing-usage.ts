@@ -1,4 +1,14 @@
-import { and, count, eq, gte, isNotNull, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  eq,
+  gte,
+  isNotNull,
+  max,
+  min,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import db, { schema, type Transaction } from "@/database";
 import {
@@ -24,19 +34,39 @@ class RoutingUsageModel {
       .onConflictDoNothing({ target: usage.interactionId });
   }
 
-  /** How many sessions a fit started now would read: the cold-start progress. */
-  static async countFitSessions(params: FitWindow): Promise<number> {
+  /** The window a fit started at `inputWatermark` would read: the cold-start progress, and what a refit would change. */
+  static async findFitVolume(params: FitWindow): Promise<FitVolume> {
     const window = fitWindow(params);
+    const tokens = sql`${usage.input} + ${usage.cacheRead} + ${usage.cacheWrite} + ${usage.output}`;
     const sessions = db
-      .select({ id: decisions.id })
+      .select({
+        createdAt: decisions.createdAt,
+        tokens: sql<number>`sum(${tokens})`.as("tokens"),
+      })
       .from(decisions)
       .innerJoin(usage, eq(usage.decisionId, decisions.id))
       .where(window.where)
       .groupBy(decisions.id)
       .having(window.having)
       .as("sessions");
-    const [row] = await db.select({ sessions: count() }).from(sessions);
-    return row?.sessions ?? 0;
+    const [row] = await db
+      .select({
+        sessions: count(),
+        tokens: sql<number>`coalesce(sum(${sessions.tokens}), 0)`.mapWith(
+          Number,
+        ),
+        firstCreatedAt: min(sessions.createdAt),
+        lastCreatedAt: max(sessions.createdAt),
+      })
+      .from(sessions);
+    return (
+      row ?? {
+        sessions: 0,
+        tokens: 0,
+        firstCreatedAt: null,
+        lastCreatedAt: null,
+      }
+    );
   }
 
   /**
@@ -129,7 +159,7 @@ type FitWindow = {
 const MAX_FIT_SESSIONS = 50_000;
 
 /** The whole fit window, however many of its sessions the sample keeps. */
-type FitVolume = {
+export type FitVolume = {
   sessions: number;
   tokens: number;
   firstCreatedAt: Date | null;

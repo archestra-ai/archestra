@@ -1,7 +1,9 @@
 import config from "@/config";
 import type { Transaction } from "@/database";
 import { AgentModel, ModelModel } from "@/models";
-import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import AutoRoutingSettingsModel, {
+  mergeSettings,
+} from "@/models/auto-routing-settings";
 import RoutingPlanModel from "@/models/routing-plan";
 import RoutingUsageModel from "@/models/routing-usage";
 import { ApiError, type Model } from "@/types";
@@ -17,7 +19,12 @@ import type {
   AutoRoutingSettingsResponse,
   UpdateAutoRoutingSettingsBody,
 } from "@/types/auto-routing-api";
-import { type FitSessions, fitNow } from "./fit";
+import {
+  type FitSessions,
+  fitInputsUnchanged,
+  fitNow,
+  infeasibleBudget,
+} from "./fit";
 import { activeSourceVersion } from "./signals";
 import { sharedLongContextThreshold, TIER_NAMES } from "./tiers";
 
@@ -36,7 +43,10 @@ export async function getAutoRoutingSettings(
   );
 }
 
-/** Writes `body` with a generation bump if the merged settings are valid, then fits a plan on them. */
+/**
+ * Writes `body` with a generation bump if the merged settings are valid and
+ * their budget can be met on the current usage, then fits a plan on them.
+ */
 export async function updateAutoRoutingSettings(
   organizationId: string,
   body: UpdateAutoRoutingSettingsBody,
@@ -48,26 +58,54 @@ export async function updateAutoRoutingSettings(
       return id === undefined ? [] : [{ tier, id }];
     }),
   );
-  const updated = await AutoRoutingSettingsModel.update(
-    organizationId,
-    {
-      enabled: body.enabled,
-      budgetUsdPerDay: body.budgetUsdPerDay?.toFixed(2),
-      fastModelId: body.fastModelId,
-      normalModelId: body.normalModelId,
-      smartModelId: body.smartModelId,
-    },
-    assertValidSettings,
-  );
-  if (!updated) throw new ApiError(404, "LLM Proxy not found");
+  const update = {
+    enabled: body.enabled,
+    budgetUsdPerDay: body.budgetUsdPerDay?.toFixed(2),
+    fastModelId: body.fastModelId,
+    normalModelId: body.normalModelId,
+    smartModelId: body.smartModelId,
+  };
+  // The feasibility fit runs outside the routing-plan lock; the write then
+  // applies only over the settings it checked, retrying when they moved.
+  let updated: AutoRoutingSettings | null = null;
+  for (let attempt = 0; !updated; attempt++) {
+    if (attempt === UPDATE_ATTEMPTS) {
+      throw new ApiError(
+        409,
+        "Auto routing settings changed concurrently; try again.",
+      );
+    }
+    const checked = await loadAutoRoutingSettings(organizationId);
+    await assertFeasibleBudget(organizationId, mergeSettings(checked, update));
+    updated = await AutoRoutingSettingsModel.update(
+      organizationId,
+      update,
+      async (next, tx, current) => {
+        if (current.generation !== checked.generation) throw SETTINGS_MOVED;
+        await assertValidSettings(next, tx);
+      },
+    ).catch((error) => {
+      if (error === SETTINGS_MOVED) return null;
+      throw error;
+    });
+  }
   return fitAndDescribe(organizationId, "settings");
 }
 
-/** Fits a new plan at the current settings. */
+/** Fits a new plan at the current settings, unless the active plan was fitted on exactly what a fit would read now. */
 export async function replanAutoRouting(
   organizationId: string,
 ): Promise<AutoRoutingSettingsChangeResponse> {
-  await AgentModel.getOrgLlmProxy(organizationId);
+  const settings = await loadAutoRoutingSettings(organizationId);
+  const active = settings.enabled
+    ? await RoutingPlanModel.findActive(organizationId)
+    : null;
+  if (active && (await fitInputsUnchanged(organizationId, settings, active))) {
+    return {
+      ...(await describe(organizationId, settings)),
+      fit: { status: "unchanged", planId: active.id },
+    };
+  }
   const updated = await AutoRoutingSettingsModel.update(organizationId, {});
   if (!updated) throw new ApiError(404, "LLM Proxy not found");
   return fitAndDescribe(organizationId, "manual");
@@ -104,6 +142,9 @@ export function toPlanDetail(record: RoutingPlanRecord): AutoRoutingPlanDetail {
 }
 
 // === Internal ===
+
+const UPDATE_ATTEMPTS = 3;
+const SETTINGS_MOVED = Symbol("settings moved");
 
 /** The organization's settings; its LLM Proxy row is created on first use. */
 export async function loadAutoRoutingSettings(
@@ -194,6 +235,21 @@ async function assertValidSettings(
   }
 }
 
+/** Runs a fit on `next` that publishes nothing, so a budget the trio cannot meet is never stored. */
+async function assertFeasibleBudget(
+  organizationId: string,
+  next: AutoRoutingSettings,
+): Promise<void> {
+  const cheapest = await infeasibleBudget(organizationId, next);
+  if (cheapest === null) return;
+  // Rounded up, so the amount shown is itself enough.
+  const minimum = (Math.ceil(cheapest * 100) / 100).toFixed(2);
+  throw new ApiError(
+    400,
+    `Budget too low for these models: the cheapest routing costs $${minimum}/day.`,
+  );
+}
+
 /** `fitted` is the cold-start progress a fit just read, reused when it is for the running scorer version. */
 async function describe(
   organizationId: string,
@@ -233,11 +289,13 @@ async function describe(
         sessions:
           fitted?.scorerVersionId === scorerVersion.id
             ? fitted.sessions
-            : await RoutingUsageModel.countFitSessions({
-                organizationId,
-                scorerVersionId: scorerVersion.id,
-                inputWatermark: new Date(),
-              }),
+            : (
+                await RoutingUsageModel.findFitVolume({
+                  organizationId,
+                  scorerVersionId: scorerVersion.id,
+                  inputWatermark: new Date(),
+                })
+              ).sessions,
         required: config.autoRouting.minSessions,
       },
       lastFitError: latest?.status === "failed" ? latest.error : null,

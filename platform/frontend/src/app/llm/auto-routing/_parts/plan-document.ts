@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { formatCurrency } from "@/lib/utils/format-currency";
 
 // router-core plan documents travel as untyped JSON; these mirror the Rust
 // structs (plan.rs) at plan format version 1.
@@ -45,4 +46,48 @@ const REJECTION_REASONS: Record<string, string> = {
 /** Why a `rejected` fit lost at publication, from its stored reason. */
 export function rejectionReason(error: string | null): string {
   return (error && REJECTION_REASONS[error]) ?? "Superseded by a newer fit.";
+}
+
+/** The usage window an active plan was fitted on, which the backend stores in its diagnostics. */
+const FittedHistorySchema = z.object({
+  history: z.object({
+    sessions: z.number(),
+    last_created_at: z.string().nullable(),
+  }),
+});
+export type FittedHistory = z.infer<typeof FittedHistorySchema>["history"];
+
+export function parseFittedHistory(document: unknown): FittedHistory | null {
+  return FittedHistorySchema.safeParse(document).data?.history ?? null;
+}
+
+const ROUTER_ERROR = /^(ARCHESTRA_ROUTER_[A-Z_]+): (.*)$/;
+const CHEAPEST_ROUTING = /cheapest routing costs (\S+) USD\/day/;
+
+const ROUTER_ERROR_MESSAGES: Record<string, string> = {
+  ARCHESTRA_ROUTER_EMPTY_HISTORY: "There is no usable session history yet.",
+  ARCHESTRA_ROUTER_BASELINE_SOURCE_MISSING:
+    "The session history is incomplete; the next fit retries.",
+  ARCHESTRA_ROUTER_FIT_FAILED:
+    "The usage model could not be fitted on this history; the next fit retries.",
+  ARCHESTRA_ROUTER_INVALID_INPUT:
+    "The tier prices or the budget cannot be used for routing.",
+};
+
+/** A stored fit error in words, with the router's code (when it has one) as detail. */
+export function describeFitError(error: string): {
+  message: string;
+  code: string | null;
+} {
+  const [, code, detail] = ROUTER_ERROR.exec(error) ?? [];
+  if (!code) return { message: error, code: null };
+  const cheapest = CHEAPEST_ROUTING.exec(detail)?.[1];
+  if (code === "ARCHESTRA_ROUTER_INFEASIBLE" && cheapest) {
+    const minimum = Math.ceil(Number(cheapest) * 100) / 100;
+    return {
+      message: `Budget too low for these models: the cheapest routing costs ${formatCurrency(minimum)}/day.`,
+      code,
+    };
+  }
+  return { message: ROUTER_ERROR_MESSAGES[code] ?? detail, code };
 }

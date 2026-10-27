@@ -55,7 +55,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # CVE-2026-39883: OTel SDK untrusted search path fixed in >= 1.43.0
     go get go.opentelemetry.io/otel/sdk@v1.43.0 && \
     # CVE-2026-34986: go-jose uncaught exception fixed in >= 4.1.4
-    go get github.com/go-jose/go-jose/v4@v4.1.4 && \
+    # CVE-2026-116587: go-jose inefficient algorithmic complexity fixed in >= 4.1.6
+    go get github.com/go-jose/go-jose/v4@v4.1.6 && \
     # CVE-2026-17106: go-archive path traversal fixed in >= 0.3.0 (vendor.mod floors it at 0.2.0)
     go get github.com/moby/go-archive@v0.3.0 && \
     # x/sys/x/term must be pinned for `go mod vendor` to find windows/registry and plan9 sub-pkgs.
@@ -95,7 +96,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod edit -require=github.com/docker/docker@v29.3.1+incompatible && \
     go mod edit -replace=github.com/docker/docker=./dockercompat && \
     # cve-2026-34986: go-jose uncaught exception fixed in >= 4.1.4
-    go get github.com/go-jose/go-jose/v4@v4.1.4 && \
+    # cve-2026-116587: go-jose inefficient algorithmic complexity fixed in >= 4.1.6
+    go get github.com/go-jose/go-jose/v4@v4.1.6 && \
     # cve-2026-45022: go-git validation issue fixed in >= 5.19.0
     # cve-2026-71556: go-git link following fixed in >= 5.19.2
     go get github.com/go-git/go-git/v5@v5.19.2 && \
@@ -455,7 +457,8 @@ RUN apk --no-cache upgrade && \
     # would pick up the fix, but this RUN layer is Docker-cached on its instruction text and
     # never re-ran against the newer index — pin curl/libcurl explicitly so the fixed version
     # is guaranteed (and adding this line busts the stale cache).
-    apk add --no-cache --upgrade "curl>=8.20.0-r0" "libcurl>=8.20.0-r0" && \
+    # CVE-2026-92392: curl/libcurl vulnerability (HIGH) fixed in 8.23.0-r0.
+    apk add --no-cache --upgrade "curl>=8.23.0-r0" "libcurl>=8.23.0-r0" && \
     # CVE-2026-63076, CVE-2026-63075, CVE-2026-63072, CVE-2026-54874, CVE-2026-18798,
     # CVE-2026-14457, CVE-2026-14456: OpenSSL vulnerabilities (HIGH) fixed in 3.5.8-r0.
     # The pinned base ships 3.5.6-r0 and only the libraries are installed here — the
@@ -530,7 +533,8 @@ ENV _EXPERIMENTAL_DAGGER_CLI_BIN=/usr/local/bin/dagger
 # before python3 is installed and cannot lift it.
 # CVE-2026-77214, CVE-2026-102633: expat vulnerabilities (HIGH) fixed in 2.9.0-r0. expat arrives
 # transitively with python3 here, so it needs the same explicit floor.
-RUN apk add --no-cache --upgrade supervisor "python3>=3.12.14-r0" "expat>=2.9.0-r0" && \
+# CVE-2026-115557 (CRITICAL) in python3 is fixed in 3.12.16-r0.
+RUN apk add --no-cache --upgrade supervisor "python3>=3.12.16-r0" "expat>=2.9.0-r0" && \
     # CVE-2026-24049: wheel 0.45.1 path traversal. Vendored inside py3-setuptools
     # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
     rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/wheel \

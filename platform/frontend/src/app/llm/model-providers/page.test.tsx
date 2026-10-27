@@ -71,6 +71,13 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   }),
 }));
 
+vi.mock("@/lib/github-copilot-app.query", () => ({
+  useCopilotGithubAppKeySummary: () => ({ data: null, isPending: true }),
+  useReplaceCopilotGithubAppPrivateKey: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+}));
 vi.mock("@/lib/oauth-clients.query", () => ({
   useOauthClients: (...args: unknown[]) => mockUseOauthClients(...args),
 }));
@@ -540,6 +547,57 @@ describe("ApiKeysPage", () => {
     expect(
       screen.getByRole("button", { name: "Disconnect" }),
     ).toBeInTheDocument();
+  });
+
+  it("shows an organization subscription as a card with the shared Manage and Disconnect dialogs", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    const appKey = {
+      id: "copilot-app-key",
+      name: "GitHub Copilot (acme)",
+      provider: "github-copilot",
+      scope: "org",
+      userId: null,
+      secretId: "secret-1",
+      isGithubAppKey: true,
+      githubOrganization: "acme",
+      requiresReauthentication: false,
+    };
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [appKey],
+      isPending: false,
+    });
+
+    render(<ApiKeysPage />);
+
+    expect(
+      screen.getByText(
+        "Your organization's Copilot plan is linked through a GitHub App. Usage is billed to acme.",
+      ),
+    ).toBeInTheDocument();
+    // Not a table row, and no extra header action.
+    expect(screen.queryByText("GitHub Copilot (acme)")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Connect another/ }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Manage" }));
+    await waitFor(() =>
+      expect(mockLlmProviderApiKeyForm).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          existingKey: expect.objectContaining({ id: "copilot-app-key" }),
+          credentialSection: expect.anything(),
+        }),
+      ),
+    );
+
+    const disconnects = screen.getAllByRole("button", { name: "Disconnect" });
+    fireEvent.click(disconnects[disconnects.length - 1]);
+    expect(await screen.findByTestId("delete-dialog")).toHaveTextContent(
+      "The GitHub App stays installed on acme. Uninstall it on GitHub if you no longer need it.",
+    );
   });
 
   it("does not classify an ordinary key from the mutable X Premium display name", () => {

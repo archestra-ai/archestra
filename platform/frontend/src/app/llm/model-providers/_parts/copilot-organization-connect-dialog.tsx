@@ -2,8 +2,9 @@
 
 import { Check, CircleAlert, Info, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { ConnectionSignInDialog } from "@/components/connection-sign-in-dialog";
+import { GitHubConnectButton } from "@/components/github-connect-button";
 import { ResourceAccessSection } from "@/components/resource-access-section";
-import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
@@ -135,102 +136,61 @@ export function CopilotOrganizationConnectDialog({
     );
   }
 
-  const title =
-    step === "result"
-      ? "GitHub Copilot connected"
-      : replace
-        ? "Replace App credentials"
-        : "Connect GitHub Copilot for an organization";
+  const title = replace
+    ? "Reconnect GitHub Copilot"
+    : "Connect GitHub Copilot for your organization";
 
   return (
-    <StandardDialog
+    <ConnectionSignInDialog
       open={open}
       onOpenChange={onOpenChange}
       title={title}
-      description={
-        step === "result"
-          ? undefined
-          : "Members use the organization's Copilot plan without their own seat."
-      }
-      size="medium"
-      footer={
+      description="Use your GitHub organization's Copilot plan. Members use it without their own seat."
+      action={
         step === "start" ? (
-          <>
-            <Button
-              variant="link"
-              className="mr-auto px-0"
-              onClick={() => setStep("existing")}
-            >
-              <span>Use an existing App</span>
-            </Button>
-            <Button
-              onClick={createApp}
-              disabled={!organization.trim() || waiting === "create"}
-            >
-              <span>
-                {waiting === "create"
-                  ? "Waiting for GitHub..."
-                  : "Create the App on GitHub"}
-              </span>
-            </Button>
-          </>
+          <StartStep
+            organization={organization}
+            onOrganizationChange={setOrganization}
+            githubUrl={githubUrl}
+            onGithubUrlChange={setGithubUrl}
+            showAdvanced={showAdvanced}
+            onShowAdvanced={() => setShowAdvanced(true)}
+            error={start.error?.message ?? null}
+            creating={waiting === "create"}
+            onCreate={createApp}
+            onUseExisting={() => setStep("existing")}
+          />
         ) : step === "install" ? (
-          <>
-            <Button
-              variant="ghost"
-              className="mr-auto"
-              onClick={() => {
-                discard.mutate();
-                complete.reset();
-                setWaiting(null);
-                setStep("start");
-              }}
-            >
-              <span>Start over</span>
-            </Button>
-            <Button onClick={openInstall} disabled={!createdApp}>
-              <span>{`Install on ${createdApp?.organization ?? organization}`}</span>
-            </Button>
-          </>
-        ) : step === "result" ? (
-          <Button onClick={() => onOpenChange(false)}>
-            <span>Done</span>
-          </Button>
+          <InstallStep
+            name={createdApp?.name ?? null}
+            organization={createdApp?.organization ?? organization}
+            waiting={waiting === "install"}
+            error={install.error?.message ?? null}
+            canInstall={!!createdApp}
+            onInstall={openInstall}
+            onStartOver={() => {
+              discard.mutate();
+              complete.reset();
+              setWaiting(null);
+              setStep("start");
+            }}
+          />
+        ) : step === "existing" ? (
+          <ExistingAppStep
+            defaultOrganization={organization}
+            githubUrl={githubUrl}
+            replaceKeyId={replace?.id}
+            onBack={replace ? undefined : () => setStep("start")}
+            onConnected={(connected) => {
+              setResult(connected);
+              setStep("result");
+            }}
+          />
+        ) : result ? (
+          <ResultStep result={result} onDone={() => onOpenChange(false)} />
         ) : null
       }
-    >
-      {step === "start" ? (
-        <StartStep
-          organization={organization}
-          onOrganizationChange={setOrganization}
-          githubUrl={githubUrl}
-          onGithubUrlChange={setGithubUrl}
-          showAdvanced={showAdvanced}
-          onShowAdvanced={() => setShowAdvanced(true)}
-          error={start.error?.message ?? null}
-        />
-      ) : step === "install" ? (
-        <InstallStep
-          name={createdApp?.name ?? null}
-          organization={createdApp?.organization ?? organization}
-          waiting={waiting === "install"}
-          error={install.error?.message ?? null}
-        />
-      ) : step === "existing" ? (
-        <ExistingAppStep
-          defaultOrganization={organization}
-          githubUrl={githubUrl}
-          replaceKeyId={replace?.id}
-          onBack={replace ? undefined : () => setStep("start")}
-          onConnected={(connected) => {
-            setResult(connected);
-            setStep("result");
-          }}
-        />
-      ) : result ? (
-        <ResultStep result={result} />
-      ) : null}
-    </StandardDialog>
+    />
   );
 }
 
@@ -247,6 +207,9 @@ function StartStep(props: {
   showAdvanced: boolean;
   onShowAdvanced: () => void;
   error: string | null;
+  creating: boolean;
+  onCreate: () => void;
+  onUseExisting: () => void;
 }) {
   const organizationLabel = props.organization.trim() || "the organization";
   return (
@@ -297,6 +260,17 @@ function StartStep(props: {
         </ul>
       </div>
       {props.error && <ErrorNotice message={props.error} />}
+      <div className="flex flex-wrap items-center gap-2">
+        <GitHubConnectButton
+          label="Create the App on GitHub"
+          pending={props.creating}
+          disabled={!props.organization.trim()}
+          onClick={props.onCreate}
+        />
+        <Button variant="link" size="sm" onClick={props.onUseExisting}>
+          <span>Use an existing App</span>
+        </Button>
+      </div>
     </div>
   );
 }
@@ -306,6 +280,9 @@ function InstallStep(props: {
   organization: string;
   waiting: boolean;
   error: string | null;
+  canInstall: boolean;
+  onInstall: () => void;
+  onStartOver: () => void;
 }) {
   return (
     <div className="space-y-4">
@@ -323,6 +300,16 @@ function InstallStep(props: {
         </p>
       )}
       {props.error && <ErrorNotice message={props.error} />}
+      <div className="flex flex-wrap items-center gap-2">
+        <GitHubConnectButton
+          label={`Install on ${props.organization}`}
+          disabled={!props.canInstall}
+          onClick={props.onInstall}
+        />
+        <Button variant="ghost" size="sm" onClick={props.onStartOver}>
+          <span>Start over</span>
+        </Button>
+      </div>
     </div>
   );
 }
@@ -430,14 +417,16 @@ function ExistingAppStep(props: {
           message={(connect.error ?? validate.error)?.message ?? ""}
         />
       )}
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {props.onBack && (
-          <Button variant="ghost" className="mr-auto" onClick={props.onBack}>
+          <Button variant="ghost" size="sm" onClick={props.onBack}>
             <span>Back</span>
           </Button>
         )}
         {validate.data ? (
           <Button
+            variant="outline"
+            size="sm"
             disabled={!fields || connect.isPending}
             onClick={() =>
               fields &&
@@ -460,6 +449,8 @@ function ExistingAppStep(props: {
           </Button>
         ) : (
           <Button
+            variant="outline"
+            size="sm"
             disabled={!fields || validate.isPending}
             onClick={() => fields && validate.mutate(fields)}
           >
@@ -471,7 +462,13 @@ function ExistingAppStep(props: {
   );
 }
 
-function ResultStep({ result }: { result: ConnectedResult }) {
+function ResultStep({
+  result,
+  onDone,
+}: {
+  result: ConnectedResult;
+  onDone: () => void;
+}) {
   return (
     <div className="space-y-4">
       <div className="space-y-1">
@@ -498,6 +495,9 @@ function ResultStep({ result }: { result: ConnectedResult }) {
           on Stop usage when budget limit is reached in GitHub billing.
         </InlineNoticeText>
       </InlineNotice>
+      <Button variant="outline" size="sm" onClick={onDone}>
+        <span>Done</span>
+      </Button>
     </div>
   );
 }

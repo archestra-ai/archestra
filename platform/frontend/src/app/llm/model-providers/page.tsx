@@ -54,10 +54,7 @@ import { ResourceListActions } from "@/components/resource-list-actions";
 import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { SettingsLink } from "@/components/settings-link";
-import {
-  StandardDialog,
-  StandardFormDialog,
-} from "@/components/standard-dialog";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
@@ -88,6 +85,7 @@ import {
   useLlmProviderApiKeyLabelKeys,
   useLlmProviderApiKeyLabelValues,
 } from "@/lib/entity-labels.query";
+import { useReplaceCopilotGithubAppPrivateKey } from "@/lib/github-copilot-app.query";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
@@ -102,6 +100,7 @@ import {
 import { useOauthClients } from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
+import { CopilotAppKeyCredential } from "./_parts/copilot-app-key-credential";
 import { CopilotOrganizationConnectDialog } from "./_parts/copilot-organization-connect-dialog";
 import { OrganizationSubscriptionCards } from "./_parts/organization-subscription-cards";
 import {
@@ -239,7 +238,8 @@ export default function ApiKeysPage() {
   // says "disconnect" rather than talking about deleting an API key.
   const deletingSubscription =
     selectedApiKey !== null &&
-    subscriptionKindOfCredential(selectedApiKey) !== null;
+    (subscriptionKindOfCredential(selectedApiKey) !== null ||
+      selectedApiKey.isGithubAppKey === true);
 
   const getKeyUsage = useCallback(
     (keyId: string): string | null => {
@@ -315,6 +315,15 @@ export default function ApiKeysPage() {
     );
 
     try {
+      // An organization subscription's new App key is checked with GitHub and
+      // stored first; the dialog's other fields save as for any key.
+      if (editingApiKey.isGithubAppKey && replacementPrivateKey) {
+        await replacePrivateKey.mutateAsync({
+          id: editingApiKey.id,
+          privateKey: replacementPrivateKey,
+        });
+        setReplacementPrivateKey(null);
+      }
       await permissionsSave.current?.();
       await updateMutation.mutateAsync({
         id: editingApiKey.id,
@@ -454,9 +463,12 @@ export default function ApiKeysPage() {
   const [copilotConnect, setCopilotConnect] = useState<{
     replace: { id: string; organization: string | null } | null;
   } | null>(null);
-  const [accessKey, setAccessKey] = useState<LlmProviderApiKeyResponse | null>(
-    null,
-  );
+  // A replacement private key for the organization subscription being
+  // edited; held for Test & Save and never rendered.
+  const [replacementPrivateKey, setReplacementPrivateKey] = useState<
+    string | null
+  >(null);
+  const replacePrivateKey = useReplaceCopilotGithubAppPrivateKey();
 
   /** Keys the cards already stand for, so the table never repeats them. */
   const connectedSubscriptionIds = useMemo(
@@ -734,8 +746,7 @@ export default function ApiKeysPage() {
             permissionsPending || (apiKeyQueriesEnabled && allApiKeysPending)
           }
           onConnect={() => setCopilotConnect({ replace: null })}
-          onManageAccess={setAccessKey}
-          onReplace={(credential) =>
+          onReconnect={(credential) =>
             setCopilotConnect({
               replace: {
                 id: credential.id,
@@ -743,7 +754,14 @@ export default function ApiKeysPage() {
               },
             })
           }
+          onManage={openEditDialog}
           onDisconnect={openDeleteDialog}
+          disconnectBlockedReason={(credential) => {
+            const usage = getKeyUsage(credential.id);
+            return usage
+              ? `${usage}. Remove it from Settings > Knowledge before disconnecting.`
+              : null;
+          }}
         />
         {copilotConnect !== null && (
           <CopilotOrganizationConnectDialog
@@ -754,21 +772,6 @@ export default function ApiKeysPage() {
             replace={copilotConnect.replace}
           />
         )}
-        <StandardDialog
-          open={accessKey !== null}
-          onOpenChange={(open) => {
-            if (!open) setAccessKey(null);
-          }}
-          title={`Who can use GitHub Copilot · ${accessKey?.githubOrganization ?? ""}`}
-          size="medium"
-        >
-          {accessKey && (
-            <ResourceAccessSection
-              resource="llmProviderApiKey"
-              id={accessKey.id}
-            />
-          )}
-        </StandardDialog>
 
         <div className="space-y-1 pt-1">
           <h2 className="text-sm font-medium">Provider API keys</h2>
@@ -919,7 +922,10 @@ export default function ApiKeysPage() {
         <StandardFormDialog
           open={!!editingApiKey}
           onOpenChange={(open) => {
-            if (!open) closeEditDialog();
+            if (!open) {
+              setReplacementPrivateKey(null);
+              closeEditDialog();
+            }
           }}
           title="Edit API Key"
           description="Update the name, the API key value, or who can reach it"
@@ -929,9 +935,13 @@ export default function ApiKeysPage() {
               <DialogCancelButton>Cancel</DialogCancelButton>
               <Button
                 type="submit"
-                disabled={!isEditValid || updateMutation.isPending}
+                disabled={
+                  !isEditValid ||
+                  updateMutation.isPending ||
+                  replacePrivateKey.isPending
+                }
               >
-                {updateMutation.isPending && (
+                {(updateMutation.isPending || replacePrivateKey.isPending) && (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
                 <span>Test & Save</span>
@@ -968,6 +978,14 @@ export default function ApiKeysPage() {
                 labels={editLabels}
                 onLabelsChange={setEditLabels}
                 labelsRef={editLabelsRef}
+                credentialSection={
+                  editingApiKey.isGithubAppKey ? (
+                    <CopilotAppKeyCredential
+                      keyId={editingApiKey.id}
+                      onPrivateKeyChange={setReplacementPrivateKey}
+                    />
+                  ) : undefined
+                }
               />
               <ResourceAccessSection
                 resource="llmProviderApiKey"
@@ -990,6 +1008,11 @@ export default function ApiKeysPage() {
             <DeleteApiKeyDescription
               apiKey={selectedApiKey}
               isSubscription={deletingSubscription}
+              githubAppOrganization={
+                selectedApiKey?.isGithubAppKey
+                  ? (selectedApiKey.githubOrganization ?? "the organization")
+                  : null
+              }
               knowledgeBaseUsages={
                 selectedApiKey
                   ? knowledgeBaseUsagesOf(organization, selectedApiKey.id)
@@ -1043,6 +1066,7 @@ export default function ApiKeysPage() {
 function DeleteApiKeyDescription({
   apiKey,
   isSubscription,
+  githubAppOrganization,
   knowledgeBaseUsages,
   virtualKeys,
   oauthClients,
@@ -1050,6 +1074,8 @@ function DeleteApiKeyDescription({
 }: {
   apiKey: LlmProviderApiKeyResponse | null;
   isSubscription: boolean;
+  /** For an organization subscription: where its GitHub App stays installed. */
+  githubAppOrganization: string | null;
   /** Knowledge base jobs ("embedding", "OCR") configured with this key. */
   knowledgeBaseUsages: string[];
   virtualKeys: MappedVirtualKey[];
@@ -1074,6 +1100,9 @@ function DeleteApiKeyDescription({
     }),
     knowledgeBaseSentence(knowledgeBaseUsages),
   ].filter((sentence) => sentence !== "");
+  const appSentence = githubAppOrganization
+    ? ` The GitHub App stays installed on ${githubAppOrganization}. Uninstall it on GitHub if you no longer need it.`
+    : "";
 
   if (sentences.length === 0 && !isLoading) {
     // Distinct keys: the two branches share a tag, so without them React would
@@ -1082,7 +1111,7 @@ function DeleteApiKeyDescription({
     return isSubscription ? (
       <span key="disconnect">
         Disconnect "{apiKey.name}"? Anything using it stops working until you
-        sign in again.
+        sign in again.{appSentence}
       </span>
     ) : (
       <span key="delete">
@@ -1092,7 +1121,11 @@ function DeleteApiKeyDescription({
     );
   }
 
-  const lead = [...sentences, isSubscription ? "" : "This cannot be undone."]
+  const lead = [
+    ...sentences,
+    isSubscription ? "" : "This cannot be undone.",
+    appSentence.trim(),
+  ]
     .filter((sentence) => sentence !== "")
     .join(" ");
   const shownVirtualKeys = deletedVirtualKeys.slice(0, 5);

@@ -123,3 +123,40 @@ function invalidateKeys(client: QueryClient) {
   client.invalidateQueries({ queryKey: ["llm-models"] });
   client.invalidateQueries({ queryKey: ["models-with-api-keys"] });
 }
+
+/** What the edit dialog shows for an organization subscription's App. */
+export function useCopilotGithubAppKeySummary(keyId: string | null) {
+  return useQuery({
+    enabled: !!keyId,
+    queryKey: ["github-copilot-app", "key", keyId],
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getCopilotGithubAppKeySummary({
+          path: { id: keyId as string },
+        });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+  });
+}
+
+export function useReplaceCopilotGithubAppPrivateKey() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { id: string; privateKey: string }) => {
+      const { data, error } =
+        await archestraApiSdk.replaceCopilotGithubAppPrivateKey({
+          path: { id: params.id },
+          body: { privateKey: params.privateKey },
+        });
+      if (error) throw toApiError(error);
+      return data;
+    },
+    onSuccess: (_data, params) => {
+      client.invalidateQueries({
+        queryKey: ["github-copilot-app", "key", params.id],
+      });
+      invalidateKeys(client);
+    },
+  });
+}

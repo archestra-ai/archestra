@@ -4,43 +4,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { hasPermissions } from "@/lib/auth/auth.utils";
-import { useLlmModels } from "@/lib/llm-models.query";
-import { useResourcePermissions } from "@/lib/resource-permissions.query";
-import {
-  describeKeyAudience,
-  OrganizationSubscriptionCards,
-} from "./organization-subscription-cards";
+import { OrganizationSubscriptionCards } from "./organization-subscription-cards";
 
 vi.mock("@/lib/auth/auth.query");
-vi.mock("@/lib/llm-models.query", () => ({ useLlmModels: vi.fn() }));
-vi.mock("@/lib/resource-permissions.query", () => ({
-  useResourcePermissions: vi.fn(),
-}));
 
 beforeEach(() => {
   vi.mocked(useHasPermissions).mockImplementation(
     (permissions) =>
       ({
         data: hasPermissions(
-          { llmProviderApiKey: ["read", "create", "update"] },
+          { llmProviderApiKey: ["read", "create", "update", "delete"] },
           permissions,
         ),
       }) as ReturnType<typeof useHasPermissions>,
   );
-  vi.mocked(useLlmModels).mockReturnValue({
-    data: [{ id: "gpt-4o" }, { id: "gpt-4.1" }],
-  } as unknown as ReturnType<typeof useLlmModels>);
-  vi.mocked(useResourcePermissions).mockReturnValue({
-    data: {
-      grants: [
-        {
-          subject: { type: "organization", id: "*" },
-          actions: ["read", "use"],
-          name: "Everyone",
-        },
-      ],
-    },
-  } as unknown as ReturnType<typeof useResourcePermissions>);
 });
 
 afterEach(() => {
@@ -48,76 +25,99 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const handlers = () => ({
-  onConnect: vi.fn(),
-  onManageAccess: vi.fn(),
-  onReplace: vi.fn(),
-  onDisconnect: vi.fn(),
-});
+const appKey = (overrides?: Partial<LlmProviderApiKeyResponse>) =>
+  ({
+    id: "key-1",
+    provider: "github-copilot",
+    name: "GitHub Copilot (acme)",
+    scope: "org",
+    userId: null,
+    isGithubAppKey: true,
+    githubOrganization: "acme",
+    requiresReauthentication: false,
+    ...overrides,
+  }) as LlmProviderApiKeyResponse;
+
+function renderCards(
+  credentials: LlmProviderApiKeyResponse[],
+  blockedReason: string | null = null,
+) {
+  const handlers = {
+    onConnect: vi.fn(),
+    onReconnect: vi.fn(),
+    onManage: vi.fn(),
+    onDisconnect: vi.fn(),
+  };
+  render(
+    <OrganizationSubscriptionCards
+      credentials={credentials}
+      isLoading={false}
+      disconnectBlockedReason={() => blockedReason}
+      {...handlers}
+    />,
+  );
+  return handlers;
+}
 
 describe("OrganizationSubscriptionCards", () => {
-  it("offers to connect when no organization is connected", async () => {
+  it("offers Connect when no organization is connected", async () => {
     const user = userEvent.setup();
-    const props = handlers();
-    render(
-      <OrganizationSubscriptionCards
-        credentials={[]}
-        isLoading={false}
-        {...props}
-      />,
-    );
+    const handlers = renderCards([]);
 
+    expect(screen.getByText("GitHub Copilot")).toBeInTheDocument();
     expect(
-      screen.getByText("Use your GitHub organization's Copilot plan"),
+      screen.getByText("Use your GitHub organization's Copilot plan."),
     ).toBeInTheDocument();
     expect(screen.getByText("Not connected")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Connect" }));
-    expect(props.onConnect).toHaveBeenCalledOnce();
+    expect(handlers.onConnect).toHaveBeenCalledOnce();
   });
 
-  it("shows who pays, how many models and who can use a connected organization", async () => {
+  it("shows a connected organization like a personal subscription, with Manage and Disconnect", async () => {
     const user = userEvent.setup();
-    const props = handlers();
-    const credential = {
-      id: "key-1",
-      provider: "github-copilot",
-      name: "GitHub Copilot (acme)",
-      scope: "org",
-      isGithubAppKey: true,
-      githubOrganization: "acme",
-    } as LlmProviderApiKeyResponse;
-    render(
-      <OrganizationSubscriptionCards
-        credentials={[credential]}
-        isLoading={false}
-        {...props}
-      />,
-    );
+    const handlers = renderCards([appKey()]);
 
     expect(
-      screen.getByText("acme · billed to acme on GitHub"),
+      screen.getByText(
+        "Your organization's Copilot plan is linked through a GitHub App. Usage is billed to acme.",
+      ),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("2 models · Everyone in the organization"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Connected")).toBeInTheDocument();
+    // One card per organization, no extra header or menu actions.
     expect(screen.queryByText("Not connected")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Manage access" }));
-    expect(props.onManageAccess).toHaveBeenCalledWith(credential);
-  });
-});
-
-describe("describeKeyAudience", () => {
-  it("names the people granted use, or says admins only", () => {
     expect(
-      describeKeyAudience([
-        {
-          subject: { type: "team" },
-          actions: ["read", "use"],
-          name: "Platform",
-        },
-        { subject: { type: "user" }, actions: ["read"], name: "Read only" },
-      ]),
-    ).toBe("Platform");
-    expect(describeKeyAudience([])).toBe("Admins only");
+      screen.queryByRole("button", { name: /Connect another/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Manage access" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/models/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Manage" }));
+    expect(handlers.onManage).toHaveBeenCalledWith(appKey());
+    await user.click(screen.getByRole("button", { name: "Disconnect" }));
+    expect(handlers.onDisconnect).toHaveBeenCalledWith(appKey());
+  });
+
+  it("asks for a reconnect when GitHub refused the App", async () => {
+    const user = userEvent.setup();
+    const handlers = renderCards([appKey({ requiresReauthentication: true })]);
+
+    expect(screen.getByText("Reconnect required")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Reconnect" }));
+    expect(handlers.onReconnect).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole("button", { name: "Manage" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("blocks Disconnect while the key is in use, like personal cards", () => {
+    renderCards([appKey()], "Used for knowledge base embedding");
+
+    const disconnect = screen.getByRole("button", { name: "Disconnect" });
+    expect(disconnect).toHaveAttribute("aria-disabled", "true");
+    expect(disconnect).toHaveAccessibleDescription(
+      "Used for knowledge base embedding",
+    );
   });
 });

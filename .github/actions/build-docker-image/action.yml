@@ -159,6 +159,7 @@ runs:
         INPUT_CACHE_FROM: ${{ inputs.cache-from }}
         INPUT_CACHE_TO: ${{ inputs.cache-to }}
         PERSISTENT_BUILDER: ${{ steps.builder.outputs.persistent }}
+        REUSE_BUILDER: ${{ inputs.setup-builder == 'false' }}
         SECRET_TURBO_TEAM: ${{ inputs.turbo-team }}
         SECRET_TURBO_TOKEN: ${{ inputs.turbo-token }}
         SECRET_SENTRY_AUTH_TOKEN: ${{ inputs.sentry-auth-token }}
@@ -176,12 +177,20 @@ runs:
 
         [ -n "${INPUT_PLATFORMS}" ] && ARGS+=( --platform "${INPUT_PLATFORMS}" )
         [ -n "${INPUT_TARGET}" ] && ARGS+=( --target "${INPUT_TARGET}" )
-        # Cache specs contain commas, so unlike tags they must split on newlines only.
-        while IFS= read -r cache_from; do
-          cache_from="${cache_from#"${cache_from%%[![:space:]]*}"}"
-          cache_from="${cache_from%"${cache_from##*[![:space:]]}"}"
-          [ -n "${cache_from}" ] && ARGS+=( --cache-from "${cache_from}" )
-        done <<< "${INPUT_CACHE_FROM}"
+        # Persistent builders retain layers on disk. A second build in the same
+        # job also has the first build's cache: importing a multi-GB registry
+        # cache again only adds egress. The first standard/fallback build still
+        # imports the registry cache, so a sticky-disk outage can build normally.
+        if [ "${PERSISTENT_BUILDER}" = "true" ] || [ "${REUSE_BUILDER}" = "true" ]; then
+          echo "::notice::Reusing builder cache; skipping registry cache imports"
+        else
+          # Cache specs contain commas, so split on newlines only.
+          while IFS= read -r cache_from; do
+            cache_from="${cache_from#"${cache_from%%[![:space:]]*}"}"
+            cache_from="${cache_from%"${cache_from##*[![:space:]]}"}"
+            [ -n "${cache_from}" ] && ARGS+=( --cache-from "${cache_from}" )
+          done <<< "${INPUT_CACHE_FROM}"
+        fi
         # A registry cache export from reused BuildKit state crashes buildkitd
         # (rpc EOF) after the image is pushed. The persistent builder keeps its
         # layers on its own disk, so it does not export one.

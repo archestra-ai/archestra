@@ -22,10 +22,10 @@ import { formatCompactNumber } from "@/lib/utils/format-compact-number";
 import {
   area,
   centroid,
+  isoFastGuide,
   type Point,
   routingRegions,
   warp,
-  warpLeg,
   warpPolygon,
 } from "./routing-regions";
 import { TIER_COLOR, TIER_NAMES, type TierName } from "./tiers";
@@ -246,6 +246,17 @@ export function SizeScatter({ sessions }: { sessions: Session[] }) {
 
 const TRI = { size: 360, pad: 44 };
 const LABEL_OFFSET = 22;
+/** p_fast levels drawn as dashed guides; most sessions sit below the first. */
+const ISO_FAST = [0.01, 0.1, 0.5];
+/** Each tier's all-in corner, its name set just outside it (offsets in px). */
+const CORNERS: Record<
+  TierName,
+  { at: Point; dx: number; dy: number; anchor: "start" | "middle" | "end" }
+> = {
+  fast: { at: [0, 0], dx: -4, dy: 4, anchor: "end" },
+  normal: { at: [1, 0], dx: 4, dy: 4, anchor: "start" },
+  smart: { at: [0, 1], dx: 0, dy: -6, anchor: "middle" },
+};
 /** Below this share of the unit square a region is too thin to hold its label. */
 const MIN_LABEL_AREA = 0.02;
 
@@ -287,7 +298,6 @@ export function RoutingTriangle({ data }: { data: Ready }) {
     const past = (k: number): Point => [u + k * out, 1 - u + k * out];
     return [{ tier, at: past(1), leader: [past(0), past(0.4)] }];
   });
-  const ticks = [0, 0.5, 0.75, 0.9, 1];
 
   return (
     <svg
@@ -317,26 +327,40 @@ export function RoutingTriangle({ data }: { data: Ready }) {
         className="fill-none stroke-muted-foreground"
         strokeWidth={1}
       />
-      {ticks.map((tick) => (
-        <g key={tick}>
+      {ISO_FAST.map((pFast) => {
+        const [[x1, y1], [x2, y2]] = isoFastGuide(pFast);
+        return (
+          <g key={pFast} data-iso-fast={pFast}>
+            <line
+              x1={x(x1)}
+              y1={y(y1)}
+              x2={x(x2)}
+              y2={y(y2)}
+              className="stroke-muted-foreground/40"
+              strokeDasharray="3 3"
+              strokeWidth={1}
+            />
+            <text x={x(x1)} y={y(y1) + 12} textAnchor="middle" className={TICK}>
+              {`p_fast ${String(pFast).replace(/^0/, "")}`}
+            </text>
+          </g>
+        );
+      })}
+      {TIER_NAMES.map((tier) => {
+        const { at, dx, dy, anchor } = CORNERS[tier];
+        return (
           <text
-            x={x(warpLeg(tick))}
-            y={size - pad + 14}
-            textAnchor="middle"
-            className={TICK}
+            key={tier}
+            data-corner={tier}
+            x={x(at[0]) + dx}
+            y={y(at[1]) + dy}
+            textAnchor={anchor}
+            className={`${TIER_COLOR[tier].dot} text-[10px] font-medium`}
           >
-            {tick}
+            {tier}
           </text>
-          <text
-            x={pad - 6}
-            y={y(warpLeg(tick)) + 3}
-            textAnchor="end"
-            className={TICK}
-          >
-            {tick}
-          </text>
-        </g>
-      ))}
+        );
+      })}
       {data.sessions.map((s, i) => (
         <circle
           // biome-ignore lint/suspicious/noArrayIndexKey: points are positional
@@ -376,16 +400,6 @@ export function RoutingTriangle({ data }: { data: Ready }) {
           </text>
         </g>
       ))}
-      <text x={size / 2} y={size - 4} textAnchor="middle" className={TICK}>
-        p_normal
-      </text>
-      <text
-        transform={`translate(8 ${size / 2}) rotate(-90)`}
-        textAnchor="middle"
-        className={TICK}
-      >
-        p_smart
-      </text>
     </svg>
   );
 }

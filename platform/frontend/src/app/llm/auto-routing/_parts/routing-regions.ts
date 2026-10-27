@@ -54,9 +54,13 @@ export function warp([x, y]: Point): Point {
   return [x * scale, y * scale];
 }
 
-/** Where `v` on either leg lands under {@link warp}. */
-export function warpLeg(v: number): number {
-  return 1 - Math.sqrt(1 - v);
+/** The straight line, leg to leg, that {@link warp} puts every point with this p_fast on. */
+export function isoFastGuide(pFast: number): readonly [Point, Point] {
+  const leg = 1 - Math.sqrt(pFast);
+  return [
+    [leg, 0],
+    [0, leg],
+  ];
 }
 
 /** `polygon` under {@link warp}, its edges subdivided to follow the bend. */

@@ -1077,7 +1077,10 @@ describe("past sessions", () => {
     const section = await screen.findByTestId("auto-routing-past-sessions");
     expect(
       within(section).getByTestId("auto-routing-add-jev-key"),
-    ).toHaveAttribute("href", "/llm/model-providers");
+    ).toHaveAttribute(
+      "href",
+      "/llm/model-providers?create=jev&access=organization",
+    );
     expect(
       within(section).queryByRole("button", { name: /^Score/ }),
     ).not.toBeInTheDocument();

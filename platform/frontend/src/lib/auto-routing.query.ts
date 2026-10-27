@@ -76,6 +76,9 @@ export function useAutoRoutingSettings() {
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;
     },
+    // The scorer state follows Jev keys and their grants, which change on other pages.
+    refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
   });
 }
 

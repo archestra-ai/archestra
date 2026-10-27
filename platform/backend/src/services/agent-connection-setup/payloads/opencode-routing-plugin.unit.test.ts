@@ -565,6 +565,82 @@ describe("OpenCode routing plugin", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  test("OpenCode 2 variant keeps both Kimi Code plan catalogs available", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "opencode-plugin-v2-kimi-"));
+    const file = path.join(root, "archestra-llm-proxy.mjs");
+    const route = "https://example.com/v1/kimi-code";
+    try {
+      await writeFile(
+        file,
+        renderOpenCodeRoutingPluginV2({
+          routes: {},
+          headers: { "X-Archestra-Agent-Id": "opencode" },
+          // The catalog an organization's Kimi Code key produces.
+          catalog: {
+            routes: {
+              "kimi-code-plan-global": route,
+              "kimi-code-plan-cn": route,
+            },
+            managed: {
+              "kimi-code-plan-global": ["k3.1-pro"],
+              "kimi-code-plan-cn": ["k3.1-pro"],
+            },
+            passthrough: [],
+            legacy: { "archestra-kimi-code": "kimi-code-plan-global" },
+          },
+        }),
+      );
+      const { default: plugin } = await import(
+        `${pathToFileURL(file).href}?t=${Date.now()}`
+      );
+      const providers: Record<string, { id: string; activation: string }> = {
+        "kimi-code-plan-global": {
+          id: "kimi-code-plan-global",
+          activation: "auto",
+        },
+        "kimi-code-plan-cn": { id: "kimi-code-plan-cn", activation: "auto" },
+        opencode: { id: "opencode", activation: "auto" },
+      };
+      let modelRequest: ((event: ModelRequest) => void) | undefined;
+      await plugin.setup({
+        provider: {
+          transform: async (
+            callback: (editor: Record<string, unknown>) => void,
+          ) => {
+            callback({
+              get: () => undefined,
+              list: () =>
+                Object.values(providers).map((provider) => ({ provider })),
+              update: (
+                id: string,
+                update: (provider: { activation: string }) => void,
+              ) => update(providers[id]),
+            });
+            return { dispose: async () => {} };
+          },
+        },
+        session: {
+          hook: async (name: string, callback: typeof modelRequest) => {
+            if (name === "model.request") modelRequest = callback;
+            return { dispose: async () => {} };
+          },
+        },
+      });
+
+      expect(providers["kimi-code-plan-global"].activation).toBe("auto");
+      expect(providers["kimi-code-plan-cn"].activation).toBe("auto");
+      expect(providers.opencode.activation).toBe("disabled");
+      const pinned = modelEvent(
+        "kimi-code-plan-cn",
+        "https://api.kimi.com/coding/v1",
+      );
+      modelRequest?.(pinned);
+      expect(pinned.baseURL).toBe(route);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 interface ModelRequest {

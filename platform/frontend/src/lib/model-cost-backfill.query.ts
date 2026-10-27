@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError, throwOnApiError } from "@/lib/utils/api";
+import { browserTimeZone } from "@/lib/utils/time-zone";
 
 const {
   previewModelCostBackfill,
@@ -122,8 +123,4 @@ const ACTIVE_POLL_MS = 2_000;
 
 function modelCostBackfillKey(modelId: string) {
   return ["model-cost-backfill", modelId] as const;
-}
-
-function browserTimeZone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }

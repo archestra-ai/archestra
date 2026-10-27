@@ -10,16 +10,22 @@ concurrency:
   group: claude-coreteam-review-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+# piercypixel opted out: their pull requests get only the Archestra Runtime
+# Review, so neither job runs for them.
 jobs:
   author:
     name: Resolve PR Author
-    if: github.repository == 'archestra-ai/archestra'
+    if: >-
+      github.repository == 'archestra-ai/archestra' &&
+      github.event.pull_request.user.login != 'piercypixel'
     uses: archestra-ai/.github/.github/workflows/claude-review-context.yml@8987fe47352ca023ad44ffbed3e0364dc7de98c3 # v1.1.1
 
   review:
     name: Claude Review
     needs: author
-    if: github.repository == 'archestra-ai/archestra'
+    if: >-
+      github.repository == 'archestra-ai/archestra' &&
+      github.event.pull_request.user.login != 'piercypixel'
     permissions:
       contents: read
       pull-requests: write # Publish PR review comments.

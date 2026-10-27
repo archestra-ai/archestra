@@ -1,7 +1,8 @@
 name: Archestra Runtime Review
 
-# Reviews a maintainer's pull request on an Archestra Agent Runtime, beside
-# the Claude core-team review, and posts as the Archestra Lobster App.
+# Reviews a maintainer's pull request on an Archestra Agent Runtime and posts
+# as the Archestra Lobster App. The Claude core-team review also runs, except
+# for the authors that claude-coreteam-review.yml opts out.
 #
 # - Automatically, when the author, a maintainer, opens, pushes to, reopens or
 #   readies it.

@@ -10,9 +10,9 @@ concurrency:
   group: claude-coreteam-review-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-# piercypixel opted out: their pull requests get only the Archestra Runtime
-# Review, so neither job runs for them.
 jobs:
+  # Authors listed here opted out: their pull requests get only the Archestra
+  # Runtime Review. Skipping this job also skips the review, which needs it.
   author:
     name: Resolve PR Author
     if: >-
@@ -23,9 +23,7 @@ jobs:
   review:
     name: Claude Review
     needs: author
-    if: >-
-      github.repository == 'archestra-ai/archestra' &&
-      github.event.pull_request.user.login != 'piercypixel'
+    if: github.repository == 'archestra-ai/archestra'
     permissions:
       contents: read
       pull-requests: write # Publish PR review comments.

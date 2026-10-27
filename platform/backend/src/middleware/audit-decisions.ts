@@ -89,6 +89,21 @@ type AuditDecision =
  * @public — consumed by audit-log-snapshot.test.ts invariant tests
  */
 export const AUDIT_DECISIONS = {
+  jiraChatOpsIdentitiesTable: {
+    audited: false,
+    reason:
+      "Observed external human identity pinning; internal ChatOps authorization state without admin mutation routes",
+  },
+  jiraChatOpsEventsTable: {
+    audited: false,
+    reason:
+      "Jira webhook receipt and dispatch state; internal high-volume runtime ledger",
+  },
+  jiraChatOpsDeliveriesTable: {
+    audited: false,
+    reason:
+      "Jira comment delivery and reconciliation state; internal runtime ledger",
+  },
   guardrailsPolicyRevisionsTable: {
     audited: true,
     model: GuardrailsPolicyModel,

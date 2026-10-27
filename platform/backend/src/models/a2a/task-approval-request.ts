@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, isNotNull, isNull, lte } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 import type { A2AArchestraApprovalRequest } from "@/agents/a2a/a2a-protocol";
 import db, { schema } from "@/database";
 import type {
@@ -102,11 +102,16 @@ class A2ATaskApprovalRequestModel {
     approvalId: string;
     userId: string;
     channelId: string;
+    threadId?: string;
   }) {
     const table = schema.a2aTaskApprovalRequestsTable;
     await db
       .update(table)
-      .set({ reviewerUserId: params.userId, chatChannelId: params.channelId })
+      .set({
+        reviewerUserId: params.userId,
+        chatChannelId: params.channelId,
+        ...(params.threadId ? { chatThreadId: params.threadId } : {}),
+      })
       .where(
         and(
           eq(table.taskId, params.taskId),
@@ -114,6 +119,54 @@ class A2ATaskApprovalRequestModel {
           eq(table.resolved, false),
         ),
       );
+  }
+
+  /** A bare chat approval is accepted only when exactly one result is returned. */
+  static async findPendingInChatThread(params: {
+    organizationId: string;
+    channelId: string;
+    threadId: string;
+    approvalId?: string;
+  }): Promise<A2ATaskApprovalRequest[]> {
+    const table = schema.a2aTaskApprovalRequestsTable;
+    const now = new Date();
+    const rows = await db
+      .select({ approval: table })
+      .from(table)
+      .innerJoin(
+        schema.a2aTasksTable,
+        eq(table.taskId, schema.a2aTasksTable.id),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.a2aTasksTable.agentId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          eq(schema.a2aTasksTable.state, "TASK_STATE_INPUT_REQUIRED"),
+          eq(table.chatChannelId, params.channelId),
+          eq(table.chatThreadId, params.threadId),
+          eq(table.resolved, false),
+          isNotNull(table.reviewerUserId),
+          isNull(table.ruling),
+          params.approvalId
+            ? eq(table.approvalId, params.approvalId)
+            : undefined,
+          or(
+            gt(table.expiresAt, now),
+            and(
+              isNull(table.expiresAt),
+              gt(
+                table.createdAt,
+                new Date(now.getTime() - 24 * 60 * 60 * 1000),
+              ),
+            ),
+          ),
+        ),
+      )
+      .limit(2);
+    return rows.map((row) => row.approval);
   }
 
   /**

@@ -1149,6 +1149,34 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (_id, _orgId) =>
       chatOpsConfigModel.getRedactedSnapshotForAudit(),
   },
+  "/api/chatops/jira/config": {
+    resourceType: "chatOpsConfig",
+    action: "chatOpsConfig.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, orgId) =>
+      chatOpsConfigModel.getJiraSnapshotForAudit(orgId),
+  },
+  "/api/chatops/jira/bots": {
+    resourceType: "chatOpsConfig",
+    action: "chatOpsConfig.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, orgId) =>
+      chatOpsConfigModel.getJiraSnapshotForAudit(orgId),
+  },
+  "/api/chatops/jira/bots/:botId": {
+    resourceType: "chatOpsConfig",
+    action: "chatOpsConfig.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, orgId) =>
+      chatOpsConfigModel.getJiraSnapshotForAudit(orgId),
+  },
+  "/api/chatops/jira/bots/:botId/bindings": {
+    resourceType: "chatOpsBinding",
+    action: "chatOpsBinding.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, orgId) =>
+      ChatOpsChannelBindingModel.findBindingsFingerprintForOrganization(orgId),
+  },
   // Which chatops Slack bot and channel the UI feedback overlay posts to.
   "/api/dev-feedback/setup": {
     resourceType: "chatOpsConfig",

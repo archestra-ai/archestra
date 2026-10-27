@@ -799,6 +799,13 @@ export const RouteId = {
   GetAgentEmailAddress: "getAgentEmailAddress",
 
   // ChatOps Routes
+  GetJiraChatOpsConfig: "getJiraChatOpsConfig",
+  UpdateJiraChatOpsConfig: "updateJiraChatOpsConfig",
+  CreateJiraChatOpsBot: "createJiraChatOpsBot",
+  UpdateJiraChatOpsBot: "updateJiraChatOpsBot",
+  DeleteJiraChatOpsBot: "deleteJiraChatOpsBot",
+  ListJiraChatOpsProjects: "listJiraChatOpsProjects",
+  CreateJiraChatOpsBinding: "createJiraChatOpsBinding",
   GetChatOpsStatus: "getChatOpsStatus",
   ListChatOpsBindings: "listChatOpsBindings",
   DeleteChatOpsBinding: "deleteChatOpsBinding",

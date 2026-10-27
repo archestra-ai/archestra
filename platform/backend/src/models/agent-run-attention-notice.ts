@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import type { AgentRunAttentionNotice } from "@/types/agent-run-attention-notice";
 import type { AgentRunRecord } from "@/types/agent-runtime";
@@ -30,8 +30,7 @@ class AgentRunAttentionNoticeModel {
       return;
     }
     const target = run.completionTarget;
-    if (target?.type !== "chatops" || !/^\d+\.\d+$/.test(target.threadId))
-      return;
+    if (target?.type !== "chatops") return;
     const [binding] = await tx
       .select()
       .from(schema.chatopsChannelBindingsTable)
@@ -42,10 +41,26 @@ class AgentRunAttentionNoticeModel {
             schema.chatopsChannelBindingsTable.organizationId,
             run.organizationId,
           ),
-          eq(schema.chatopsChannelBindingsTable.provider, "slack"),
+          inArray(schema.chatopsChannelBindingsTable.provider, [
+            "slack",
+            "jira",
+          ]),
         ),
       );
-    if (!binding?.workspaceId || !/^[CDG][A-Z0-9]+$/.test(binding.channelId))
+    if (!binding?.workspaceId) return;
+    if (
+      binding.provider === "slack" &&
+      (!/^\d+\.\d+$/.test(target.threadId) ||
+        !/^[CDG][A-Z0-9]+$/.test(binding.channelId))
+    )
+      return;
+    if (
+      binding.provider === "jira" &&
+      (!/^\d+$/.test(target.threadId) ||
+        !/^[a-f0-9-]{36}:\d+$/i.test(binding.channelId) ||
+        binding.agentId !== run.agentId ||
+        (target.pinnedAgentId && target.pinnedAgentId !== run.agentId))
+    )
       return;
     const [notice] = await tx
       .insert(table)

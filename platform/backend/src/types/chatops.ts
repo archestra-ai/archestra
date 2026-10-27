@@ -10,6 +10,7 @@ export const ChatOpsProviderTypeSchema = z.enum([
   "ms-teams",
   "slack",
   "telegram",
+  "jira",
 ]);
 export type ChatOpsProviderType = z.infer<typeof ChatOpsProviderTypeSchema>;
 

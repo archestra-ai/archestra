@@ -87,6 +87,62 @@ afterAll(() => {
 });
 
 describe("Channel takeover agent names", () => {
+  it("keeps pinned Jira projects out of the channel transfer picker", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/chatops/bindings`, () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: "binding-slack",
+              provider: "slack",
+              channelId: "channel-1",
+              channelName: "support",
+              agentId: "source-agent",
+              isDm: false,
+            },
+            {
+              id: "binding-jira",
+              provider: "jira",
+              channelId: "bot-id:project-id",
+              channelName: "Pinned project",
+              agentId: "source-agent",
+              isDm: false,
+            },
+          ],
+          pagination: { hasNext: false },
+        }),
+      ),
+      http.get(`${API_ORIGIN}/api/agents/options`, () =>
+        HttpResponse.json({
+          data: [{ id: "source-agent", name: "Existing Responder" }],
+          pagination: { hasNext: false, nextCursor: null },
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AgentChatAppsEditor
+          subject={{ id: "target-agent", name: "New Responder", scope: "org" }}
+          emailAgent={null}
+        />
+      </QueryClientProvider>,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Add channel" }),
+    );
+    expect(
+      await screen.findByRole("button", {
+        name: "supportAnswered by Existing Responder",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Pinned project")).not.toBeInTheDocument();
+    queryClient.clear();
+  });
+
   it.each([
     { name: "Help Desk", builtIn: true },
     { name: "Escalation Coordinator", builtIn: false },

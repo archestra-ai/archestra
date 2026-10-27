@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { EXTERNAL_AGENT_ID_HEADER } from "@archestra/shared/consts";
 import { isClaudeDesktopClientAgentId } from "@archestra/shared/interactions/client";
 import { verifyChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
@@ -469,11 +468,16 @@ export class AppaClaudeDesktopAdapter extends AppaClaudeCodeAdapter {
   override extractSessionIdentity(
     context: AppaMatchContext,
   ): AppaSessionIdentity | undefined {
-    const native = super.extractSessionIdentity(context);
-    if (native) return native;
-    const chatSessionId = extractDesktopChatSessionId(context.requestBody);
-    return chatSessionId
-      ? { sessionId: chatSessionId, provenance: this.provenance.metadata }
+    const headerSession =
+      readHeader(context.headers, "x-claude-code-session-id")?.trim() ??
+      readHeader(context.headers, "x-claude-desktop-session-id")?.trim() ??
+      readHeader(context.headers, "x-claude-desktop-conversation-id")?.trim();
+    if (headerSession) {
+      return { sessionId: headerSession, provenance: this.provenance.header };
+    }
+    const conversationId = extractDesktopConversationId(context);
+    return conversationId
+      ? { sessionId: conversationId, provenance: this.provenance.metadata }
       : undefined;
   }
 }
@@ -512,63 +516,34 @@ function hasClaudeDesktopBillingEntrypoint(requestBody: unknown): boolean {
 }
 
 /**
- * Derives a stable, isolated per-conversation session ID for headerless Claude
- * Desktop Chat conversations from the system prompt and opening user message.
- * Strips `cache_control` breakpoints so subsequent turns in the same
- * conversation resolve to the same root. Returns `undefined` when no opening
- * user turn is present.
+ * Extracts a client-supplied per-conversation or per-session identifier from
+ * a Claude Desktop request body without deriving identity from prompt content.
+ * Rejects contradictory conversation metadata claims.
  */
-function extractDesktopChatSessionId(requestBody: unknown): string | undefined {
-  const body = asRecord(requestBody);
+function extractDesktopConversationId(
+  context: AppaMatchContext,
+): string | undefined {
+  const body = asRecord(context.requestBody);
   if (!body) return undefined;
-  const messages = body.messages;
-  if (!Array.isArray(messages) || messages.length === 0) return undefined;
-  const firstMessage = asRecord(messages[0]);
-  if (firstMessage?.role !== "user") return undefined;
-  const firstUserContent = normalizeDesktopChatMessageContent(
-    firstMessage.content,
-  );
-  if (!firstUserContent) return undefined;
-  const system = normalizeDesktopChatSystemContent(body.system);
-  const digest = createHash("sha256")
-    .update(JSON.stringify({ system, firstUserContent }))
-    .digest("hex")
-    .slice(0, 32);
-  return `desktop-chat-${digest}`;
-}
-
-function normalizeDesktopChatMessageContent(
-  content: unknown,
-): unknown[] | undefined {
-  if (typeof content === "string") {
-    const trimmed = content.trim();
-    return trimmed.length > 0 ? [{ type: "text", text: trimmed }] : undefined;
+  const metadata = asRecord(body.metadata);
+  const userMetadata = claudeUserMetadata(context);
+  const candidates = [
+    parseClaudeMetadataSessionId(stringField(metadata?.user_id)) ?? undefined,
+    stringField(userMetadata?.conversation_id)?.trim(),
+    stringField(metadata?.session_id)?.trim(),
+    stringField(metadata?.conversation_id)?.trim(),
+    stringField(body.conversation_id)?.trim(),
+    stringField(body.conversation)?.trim(),
+  ].filter((value): value is string => Boolean(value));
+  const [first] = candidates;
+  if (!first) return undefined;
+  if (candidates.some((candidate) => candidate !== first)) {
+    throw new ApiError(
+      400,
+      "OpenAPPA cannot bind contradictory Claude Desktop conversation metadata",
+    );
   }
-  if (!Array.isArray(content)) return undefined;
-  const parts = content.flatMap((part) => {
-    if (typeof part === "string") {
-      const trimmed = part.trim();
-      return trimmed.length > 0 ? [{ type: "text", text: trimmed }] : [];
-    }
-    const record = asRecord(part);
-    if (!record || record.type === "tool_result") return [];
-    if (record.type === "text" || typeof record.text === "string") {
-      const text = stringField(record.text)?.trim() ?? "";
-      return text.length > 0 ? [{ type: "text", text }] : [];
-    }
-    const { cache_control: _cacheControl, ...rest } = record;
-    return Object.keys(rest).length > 0 ? [rest] : [];
-  });
-  return parts.length > 0 ? parts : undefined;
-}
-
-function normalizeDesktopChatSystemContent(system: unknown): string {
-  if (typeof system === "string") return system.trim();
-  if (!Array.isArray(system)) return "";
-  return system
-    .map((block) => stringField(asRecord(block)?.text)?.trim() ?? "")
-    .filter((text) => text.length > 0)
-    .join("\n");
+  return first;
 }
 
 /**

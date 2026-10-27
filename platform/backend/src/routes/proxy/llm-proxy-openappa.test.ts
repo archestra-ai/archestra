@@ -2907,6 +2907,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       payload: {
         model: "claude-haiku-4-5-20251001",
         max_tokens: 1,
+        metadata: {
+          user_id:
+            "user_0123456789abcdef_account__session_11111111-2222-3333-4444-555555555555",
+        },
         messages: [{ role: "user", content: "hi" }],
       },
     });
@@ -2939,9 +2943,13 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       }),
     ]);
 
-    // Two headerless Desktop Chat conversations bind isolated per-conversation roots,
-    // not a shared credential fallback root.
+    // Two headerless Desktop Chat conversations with the exact same system prompt
+    // and opening user message bind isolated client-supplied conversation roots,
+    // never merging on prompt content.
     block = true;
+    const sharedOpeningMessages = [
+      { role: "user", content: "Check the weather in SF" },
+    ];
     const chatOneDenied = await app.inject({
       method: "POST",
       url: url(),
@@ -2950,9 +2958,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         ...externalClientHeaders(),
         "user-agent": "ClaudeDesktop/1.0.0",
       },
-      payload: payload(false, [
-        { role: "user", content: "Check the weather in SF" },
-      ]) as Record<string, unknown>,
+      payload: {
+        ...(payload(false, sharedOpeningMessages) as Record<string, unknown>),
+        system: "You are Claude.",
+        metadata: { conversation_id: "desktop-chat-1" },
+      },
     });
     expect(chatOneDenied.statusCode, chatOneDenied.body).toBe(200);
     expect(
@@ -2968,12 +2978,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     );
     expect(startsAfterChatOne).toHaveLength(2);
     const chatOneSessionId = String(startsAfterChatOne[1]?.session_id);
-    expect(chatOneSessionId).toMatch(
-      new RegExp(`^user:${userId}\\|desktop-chat-[0-9a-f]{32}$`),
-    );
+    expect(chatOneSessionId).toBe(`user:${userId}|desktop-chat-1`);
 
     // Superyelling the first Chat conversation exempts its own follow-up turn
-    // without disabling enforcement for a second headerless Chat conversation.
+    // without disabling enforcement for a second headerless Chat conversation
+    // that shares the exact same system prompt and opening message.
     await OpenAppaUnenforcedModel.recordSession({
       organizationId: agent.organizationId,
       sessionId: chatOneSessionId,
@@ -2989,11 +2998,15 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         ...externalClientHeaders(),
         "user-agent": "ClaudeDesktop/1.0.0",
       },
-      payload: payload(false, [
-        { role: "user", content: "Check the weather in SF" },
-        { role: "assistant", content: "I could not run that tool." },
-        { role: "user", content: "Try again after disabling guardrails" },
-      ]) as Record<string, unknown>,
+      payload: {
+        ...(payload(false, [
+          ...sharedOpeningMessages,
+          { role: "assistant", content: "I could not run that tool." },
+          { role: "user", content: "Try again after disabling guardrails" },
+        ]) as Record<string, unknown>),
+        system: "You are Claude.",
+        metadata: { conversation_id: "desktop-chat-1" },
+      },
     });
     expect(chatOneFollowUp.statusCode, chatOneFollowUp.body).toBe(200);
     expect(
@@ -3012,9 +3025,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         ...externalClientHeaders(),
         "x-archestra-agent-id": "anthropic_claude_desktop",
       },
-      payload: payload(false, [
-        { role: "user", content: "Check the weather in NYC" },
-      ]) as Record<string, unknown>,
+      payload: {
+        ...(payload(false, sharedOpeningMessages) as Record<string, unknown>),
+        system: "You are Claude.",
+        metadata: { conversation_id: "desktop-chat-2" },
+      },
     });
     expect(chatTwoDenied.statusCode, chatTwoDenied.body).toBe(200);
     expect(
@@ -3030,13 +3045,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     );
     expect(startsAfterChatTwo).toHaveLength(3);
     const chatTwoSessionId = String(startsAfterChatTwo[2]?.session_id);
-    expect(chatTwoSessionId).toMatch(
-      new RegExp(`^user:${userId}\\|desktop-chat-[0-9a-f]{32}$`),
-    );
+    expect(chatTwoSessionId).toBe(`user:${userId}|desktop-chat-2`);
     expect(chatTwoSessionId).not.toBe(chatOneSessionId);
 
-    // A headerless Desktop request whose conversation identity cannot be established
-    // is rejected as unsupported in block mode rather than sharing a fallback root.
+    // A headerless Desktop request without a client-supplied conversation identifier
+    // is rejected as unsupported in block mode even when prompt content is present.
     const unidentifiable = await app.inject({
       method: "POST",
       url: url(),
@@ -3045,10 +3058,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         ...externalClientHeaders(),
         "x-archestra-agent-id": "anthropic_claude_desktop",
       },
-      payload: payload(false, [{ role: "user", content: "   " }]) as Record<
-        string,
-        unknown
-      >,
+      payload: {
+        ...(payload(false, sharedOpeningMessages) as Record<string, unknown>),
+        system: "You are Claude.",
+      },
     });
     expect(unidentifiable.statusCode).toBe(400);
     expect(unidentifiable.json().error.message).toContain(

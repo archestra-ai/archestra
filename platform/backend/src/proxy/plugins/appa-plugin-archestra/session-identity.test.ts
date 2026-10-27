@@ -313,12 +313,13 @@ describe("client trajectory identity", () => {
       });
     });
 
-    test("derives stable, isolated per-conversation identities for headerless Desktop Chat conversations and leaves unidentifiable requests unmatched", () => {
+    test("requires a client-supplied conversation identifier for headerless Desktop Chat, isolates same-opener conversations, and leaves headerless Chat without an identifier unmatched", () => {
       const chatOneTurnOne = extractAppaSessionIdentity({
         family: "anthropic:messages",
         body: {
           system: "You are Claude.",
-          messages: [{ role: "user", content: "Summarize Q1 report" }],
+          metadata: { conversation_id: "desktop-chat-1" },
+          messages: [{ role: "user", content: "Hello" }],
         },
         headers: { "user-agent": "ClaudeDesktop/1.0.0" },
       });
@@ -328,56 +329,96 @@ describe("client trajectory identity", () => {
           system: [
             {
               type: "text",
-              text: "You are Claude.",
+              text: "You are Claude. Today is Wednesday.",
               cache_control: { type: "ephemeral" },
             },
           ],
+          metadata: { conversation_id: "desktop-chat-1" },
           messages: [
             {
               role: "user",
               content: [
                 {
                   type: "text",
-                  text: "Summarize Q1 report",
+                  text: "Hello",
                   cache_control: { type: "ephemeral" },
                 },
               ],
             },
-            { role: "assistant", content: "Here is the summary." },
-            { role: "user", content: "Now export it" },
+            { role: "assistant", content: "Hi! How can I help?" },
+            { role: "user", content: "Summarize Q1 report" },
           ],
         },
         headers: { "user-agent": "ClaudeDesktop/1.0.0" },
       });
-      const chatTwo = extractAppaSessionIdentity({
+      const chatTwoSameOpener = extractAppaSessionIdentity({
         family: "anthropic:messages",
         body: {
           system: "You are Claude.",
-          messages: [{ role: "user", content: "Summarize Q2 report" }],
+          metadata: { conversation_id: "desktop-chat-2" },
+          messages: [{ role: "user", content: "Hello" }],
         },
         headers: { "user-agent": "ClaudeDesktop/1.0.0" },
       });
 
       expect(chatOneTurnOne).toMatchObject({
-        sessionId: expect.stringMatching(/^desktop-chat-[0-9a-f]{32}$/),
+        sessionId: "desktop-chat-1",
         provenance: "claude-desktop-metadata",
       });
-      expect(chatOneTurnTwo.sessionId).toBe(chatOneTurnOne.sessionId);
-      expect(chatTwo).toMatchObject({
-        sessionId: expect.stringMatching(/^desktop-chat-[0-9a-f]{32}$/),
+      expect(chatOneTurnTwo).toMatchObject({
+        sessionId: "desktop-chat-1",
         provenance: "claude-desktop-metadata",
       });
-      expect(chatTwo.sessionId).not.toBe(chatOneTurnOne.sessionId);
+      expect(chatTwoSameOpener).toMatchObject({
+        sessionId: "desktop-chat-2",
+        provenance: "claude-desktop-metadata",
+      });
+      expect(chatTwoSameOpener.sessionId).not.toBe(chatOneTurnOne.sessionId);
 
+      // Headerless Desktop Chat without a conversation identifier is not matched
+      // and never derives conversation identity from prompt content.
       expect(
         extractAppaSessionIdentity({
           family: "anthropic:messages",
-          body: { messages: [] },
+          body: {
+            system: "You are Claude.",
+            messages: [{ role: "user", content: "Hello" }],
+          },
           headers: { "user-agent": "ClaudeDesktop/1.0.0" },
         }),
       ).toMatchObject({
         provenance: "none",
       });
+      expect(
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {
+            system: "You are Claude.",
+            messages: [{ role: "user", content: "Hello" }],
+          },
+          headers: {
+            "x-archestra-agent-id": "anthropic_claude_desktop",
+          },
+        }),
+      ).toMatchObject({
+        provenance: "none",
+      });
+
+      expect(() =>
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {
+            metadata: {
+              session_id: "desktop-chat-1",
+              conversation_id: "desktop-chat-2",
+            },
+            messages: [{ role: "user", content: "Hello" }],
+          },
+          headers: { "user-agent": "ClaudeDesktop/1.0.0" },
+        }),
+      ).toThrow(
+        "OpenAPPA cannot bind contradictory Claude Desktop conversation metadata",
+      );
     });
   });
 

@@ -49,9 +49,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PLATFORM_IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+  PLATFORM_IMAGE_REGISTRY: ghcr.io/archestra-ai/ci
   PLATFORM_IMAGE_NAME: platform
-  MCP_SERVER_BASE_IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+  MCP_SERVER_BASE_IMAGE_REGISTRY: ghcr.io/archestra-ai/ci
   MCP_SERVER_BASE_IMAGE_NAME: mcp-server-base
   # Dependabot PRs use the same restricted secret context as forks even though
   # their branches live in this repository and report head.repo.fork=false.
@@ -100,7 +100,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'run-e2e') }}
     permissions:
       contents: read # Required to checkout the repository and build images for E2E jobs.
-      id-token: write # Required for Workload Identity Federation when pushing trusted images.
+      packages: write # Trusted CI publishes images and caches to GHCR.
     strategy:
       fail-fast: false
       matrix:
@@ -158,13 +158,13 @@ jobs:
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache-amd64
 
-      - name: Authenticate to Google Artifact Registry
+      - name: Log in to GHCR
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
-        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        uses: $/.github/actions/docker-login
         with:
-          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-          registry: europe-west1-docker.pkg.dev
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       # Reuse a platform image already built for this exact image-input hash —
       # by a labeled run-e2e build, a prior merge-queue entry, or the scheduled
@@ -318,13 +318,13 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Authenticate to Google Artifact Registry
+      - name: Log in to GHCR
         if: ${{ !matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
-        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        uses: $/.github/actions/docker-login
         with:
-          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-          registry: europe-west1-docker.pkg.dev
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       # Same input-hash reuse as the Platform image above. This image rarely
       # changes, and the lite/quickstart/K8s jobs wait for its push — so on a match, a
@@ -909,7 +909,7 @@ jobs:
           # registry — they fall back to the script's published :latest
           # default (host-loaded images are invisible to the embedded Kind).
           # supply-chain-policy: allow-latest quickstart needs a published public fallback
-          MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && format('{0}/{1}:latest', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+          MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && 'europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest' || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
         run: ./platform/scripts/e2e-lite.sh up
 
       - name: Configure embedded Kind registry cache
@@ -1086,7 +1086,7 @@ jobs:
           ARCHESTRA_BETA: "true"
           # Same MCP server base image choice as the lite job.
           # supply-chain-policy: allow-latest quickstart needs a published public fallback
-          MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && format('{0}/{1}:latest', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+          MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && 'europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest' || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
         run: ./platform/scripts/e2e-lite.sh up
 
       - name: Configure embedded Kind registry cache (OpenAPPA)

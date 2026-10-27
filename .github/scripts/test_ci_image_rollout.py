@@ -47,12 +47,22 @@ class ImageReuseTests(unittest.TestCase):
 
         (self.bin / "docker").write_text(
             "#!/bin/bash\n"
+            "if [[ \"$3\" == create ]]; then touch \"$FAKE_TAG_MARKER\"; exit 0; fi\n"
             "if [[ \"$4\" == *\":${SOURCE_VERSION}\" && \"${FAKE_SOURCE_MISSING:-}\" == 1 ]]; then exit 1; fi\n"
             "if [[ \"$4\" == *\":${VERSION}\" && \"${FAKE_TARGET_MISMATCH:-}\" == 1 ]]; then\n"
             "  printf '{\"digest\":\"sha256:%064d\"}\\n' 2\n"
             "else\n"
             "  printf '{\"digest\":\"sha256:%064d\"}\\n' 1\n"
             "fi\n"
+        )
+        (self.bin / "gh").write_text(
+            "#!/usr/bin/env python3\n"
+            "import datetime, json, os, sys\n"
+            "assert sys.argv[1:2] == ['api']\n"
+            "assert 'container/ci%2Fp4-shim/versions?' in sys.argv[2]\n"
+            "if os.environ.get('FAKE_METADATA_MISSING') == '1': sys.exit(1)\n"
+            "created = '2000-01-01T00:00:00Z' if os.environ.get('FAKE_OLD_IMAGE') == '1' else datetime.datetime.now(datetime.timezone.utc).isoformat()\n"
+            "print(json.dumps([{'name': 'sha256:' + '1'.zfill(64), 'created_at': created}]))\n"
         )
         (self.bin / "gcloud").write_text(
             "#!/usr/bin/env python3\n"
@@ -77,7 +87,7 @@ class ImageReuseTests(unittest.TestCase):
             "field = projection.removeprefix('--format=value(').removesuffix(')')\n"
             "print(metadata.get(field, ''))\n"
         )
-        for command in ("docker", "gcloud"):
+        for command in ("docker", "gcloud", "gh"):
             (self.bin / command).chmod(0o755)
 
     def git(self, *args):
@@ -112,6 +122,19 @@ class ImageReuseTests(unittest.TestCase):
         self.reuse()
         self.assertTrue(self.marker.exists())
         self.assertEqual(self.output.read_text(), "reused=true\n")
+
+    def test_ghcr_retags_exact_digest_without_google_access(self):
+        self.reuse(IMAGE="ghcr.io/archestra-ai/ci/p4-shim")
+        self.assertEqual(self.output.read_text(), "reused=true\n")
+        self.assertTrue(self.marker.exists())
+        self.assertFalse(self.gcloud_calls.exists())
+
+    def test_ghcr_old_or_inaccessible_metadata_rebuilds(self):
+        for flag in ("FAKE_OLD_IMAGE", "FAKE_METADATA_MISSING"):
+            with self.subTest(flag=flag):
+                self.reuse(IMAGE="ghcr.io/archestra-ai/ci/p4-shim", **{flag: "1"})
+                self.assertFalse(self.output.exists())
+                self.assertFalse(self.marker.exists())
 
     def test_release_tag_reuses_the_same_source_commit(self):
         self.reuse(VERSION="1.4.0-rc.7")

@@ -128,7 +128,10 @@ jobs:
           helm_args=(
             upgrade "$release" ./platform/helm/archestra
             --install --namespace "$namespace"
-            --set "archestra.image=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${PLATFORM_IMAGE_TAG}"
+            --set "archestra.image=ghcr.io/archestra-ai/ci/platform:${PLATFORM_IMAGE_TAG}"
+            --set "archestra.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE=ghcr.io/archestra-ai/ci/p4-shim:${PLATFORM_IMAGE_TAG}"
+            --set "archestra.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY=ghcr.io/archestra-ai/ci"
+            --set "archestra.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=ghcr.io/archestra-ai/ci/mcp-server-base:${PLATFORM_IMAGE_TAG}"
             --set-string "archestra.env.ARCHESTRA_AUTH_ADMIN_EMAIL=${AUTH_ADMIN_EMAIL}"
             --set-string "archestra.env.ARCHESTRA_AUTH_ADMIN_PASSWORD=${AUTH_ADMIN_PASSWORD}"
             --set "archestra.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN=${MFILES_VAF_ADD_ON_GITHUB_TOKEN}"

@@ -123,6 +123,20 @@ export function mergeUpdatedConversationIntoCache(
   if (variables.chatApiKeyId !== undefined || variables.agentId !== undefined) {
     merged.chatApiKeyId = updatedConversation.chatApiKeyId;
   }
+  // A pool comes with one of its members' key and model, and a key, model or
+  // agent change leaves the pool (or takes the new agent's).
+  if (variables.modelPoolId !== undefined) {
+    merged.modelId = updatedConversation.modelId;
+    merged.chatApiKeyId = updatedConversation.chatApiKeyId;
+  }
+  if (
+    variables.modelPoolId !== undefined ||
+    variables.modelId !== undefined ||
+    variables.chatApiKeyId !== undefined ||
+    variables.agentId !== undefined
+  ) {
+    merged.modelPoolId = updatedConversation.modelPoolId;
+  }
   if (variables.agentId !== undefined) {
     merged.agentId = updatedConversation.agentId;
     merged.agent = updatedConversation.agent;

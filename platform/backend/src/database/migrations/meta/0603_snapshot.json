@@ -1,5 +1,5 @@
 {
-  "id": "b6d51ed6-ca5d-4e58-bd0d-981cc469c2a6",
+  "id": "3cd94cdf-8d94-4ea7-ba08-e7b232c9d36f",
   "prevId": "4b3388ce-99a7-4717-89ab-4fb3ae64c453",
   "version": "7",
   "dialect": "postgresql",
@@ -24241,7 +24241,7 @@
         },
         "routing_plans_trigger_check": {
           "name": "routing_plans_trigger_check",
-          "value": "\"routing_plans\".\"trigger\" IN ('nightly', 'settings', 'manual', 'scorer_change')"
+          "value": "\"routing_plans\".\"trigger\" IN ('initial', 'nightly', 'settings', 'manual', 'scorer_change', 'backfill')"
         },
         "routing_plans_plan_check": {
           "name": "routing_plans_plan_check",

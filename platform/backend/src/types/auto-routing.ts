@@ -12,10 +12,12 @@ export const RoutingDecisionReasonSchema = z.enum([
 export type RoutingDecisionReason = z.infer<typeof RoutingDecisionReasonSchema>;
 
 export const RoutingPlanTriggerSchema = z.enum([
+  "initial",
   "nightly",
   "settings",
   "manual",
   "scorer_change",
+  "backfill",
 ]);
 export type RoutingPlanTrigger = z.infer<typeof RoutingPlanTriggerSchema>;
 

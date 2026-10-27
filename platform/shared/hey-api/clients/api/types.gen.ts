@@ -30412,7 +30412,7 @@ export type GetAutoRoutingPlansResponses = {
     200: Array<{
         id: string;
         createdAt: string;
-        trigger: 'nightly' | 'settings' | 'manual' | 'scorer_change';
+        trigger: 'initial' | 'nightly' | 'settings' | 'manual' | 'scorer_change' | 'backfill';
         status: 'active' | 'superseded' | 'failed' | 'cold_start' | 'rejected';
         generation: number;
         inputWatermark: string;
@@ -30522,7 +30522,7 @@ export type GetAutoRoutingPlanResponses = {
     200: {
         id: string;
         createdAt: string;
-        trigger: 'nightly' | 'settings' | 'manual' | 'scorer_change';
+        trigger: 'initial' | 'nightly' | 'settings' | 'manual' | 'scorer_change' | 'backfill';
         status: 'active' | 'superseded' | 'failed' | 'cold_start' | 'rejected';
         generation: number;
         inputWatermark: string;

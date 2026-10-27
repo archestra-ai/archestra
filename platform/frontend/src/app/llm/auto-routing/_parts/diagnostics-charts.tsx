@@ -19,7 +19,15 @@ import {
 } from "@/components/ui/chart";
 import type { AutoRoutingDiagnostics } from "@/lib/auto-routing.query";
 import { formatCompactNumber } from "@/lib/utils/format-compact-number";
-import { centroid, type Point, routingRegions } from "./routing-regions";
+import {
+  area,
+  centroid,
+  type Point,
+  routingRegions,
+  warp,
+  warpLeg,
+  warpPolygon,
+} from "./routing-regions";
 import { TIER_COLOR, TIER_NAMES, type TierName } from "./tiers";
 
 type Ready = Extract<AutoRoutingDiagnostics, { status: "ready" }>;
@@ -38,6 +46,7 @@ const LABEL = "fill-foreground stroke-background text-sm font-semibold";
 // === Jev answers ===
 
 const BINS = 20;
+/** Room above the plot for the spike marker, clear of the median label inside it. */
 const HIST_TOP = 18;
 const PANELS = [
   { label: "p_fast", value: (s: Session) => s.tierNeeded[0] },
@@ -95,7 +104,7 @@ export function JevHistograms({ sessions }: { sessions: Session[] }) {
                 tickFormatter={(v) => `${v}%`}
                 tickLine={false}
                 axisLine={false}
-                width={28}
+                width={36}
               />
               <ChartTooltip
                 cursor={false}
@@ -118,7 +127,7 @@ export function JevHistograms({ sessions }: { sessions: Session[] }) {
                     Number(value) > yMax ? (
                       <text
                         x={Number(x) + Number(width) + 2}
-                        y={HIST_TOP + 8}
+                        y={HIST_TOP - 6}
                         className={TICK}
                       >
                         {`▲ ${Number(value).toFixed(0)}%`}
@@ -237,6 +246,8 @@ export function SizeScatter({ sessions }: { sessions: Session[] }) {
 
 const TRI = { size: 360, pad: 36 };
 const LABEL_OFFSET = 22;
+/** Below this share of the unit square a region is too thin to hold its label. */
+const MIN_LABEL_AREA = 0.02;
 
 type TierLabel = {
   tier: TierName;
@@ -253,24 +264,30 @@ export function RoutingTriangle({ data }: { data: Ready }) {
     `M${polygon.map(([px, py]) => `${x(px)},${y(py)}`).join("L")}Z`;
   // Region boundaries hold at one set of prices; long-context pricing gives each session its own.
   const prices = sharedPrices(data.sessions);
-  const regions = prices && routingRegions(data.lamStar, prices);
+  const raw = prices && routingRegions(data.lamStar, prices);
+  const regions =
+    raw &&
+    (Object.fromEntries(
+      TIER_NAMES.map((tier) => [
+        tier,
+        raw[tier].length > 0 ? warpPolygon(raw[tier]) : [],
+      ]),
+    ) as Record<TierName, Point[]>);
+  const dotAt = (s: Session) => warp([s.tierNeeded[1], s.tierNeeded[2]]);
   const labels = TIER_NAMES.flatMap((tier): TierLabel[] => {
     const region = regions?.[tier] ?? [];
-    if (region.length > 0)
-      return [{ tier, at: centroid(region), leader: null }];
-    const routed = data.sessions.filter((s) => s.tier === tier);
-    if (routed.length === 0) return [];
-    const dots = centroid(
-      routed.map((s) => [s.tierNeeded[1], s.tierNeeded[2]]),
-    );
-    if (!regions) return [{ tier, at: dots, leader: null }];
-    // A tier holding no area would label another tier's region: label it past the hypotenuse instead.
-    const u = Math.min(0.9, Math.max(0.1, (dots[0] - dots[1] + 1) / 2));
+    const routed = data.sessions.filter((s) => s.tier === tier).map(dotAt);
+    if (region.length === 0 && routed.length === 0) return [];
+    const anchor = centroid(region.length > 0 ? region : routed);
+    if (!regions || area(region) >= MIN_LABEL_AREA)
+      return [{ tier, at: anchor, leader: null }];
+    // A sliver or no area would put the label over another tier's region: label it past the hypotenuse.
+    const u = Math.min(0.9, Math.max(0.1, (anchor[0] - anchor[1] + 1) / 2));
     const out = LABEL_OFFSET / (span * Math.SQRT2);
     const past = (k: number): Point => [u + k * out, 1 - u + k * out];
     return [{ tier, at: past(1), leader: [past(0), past(0.4)] }];
   });
-  const ticks = [0, 0.25, 0.5, 0.75, 1];
+  const ticks = [0, 0.5, 0.75, 0.9, 1];
 
   return (
     <svg
@@ -303,14 +320,19 @@ export function RoutingTriangle({ data }: { data: Ready }) {
       {ticks.map((tick) => (
         <g key={tick}>
           <text
-            x={x(tick)}
+            x={x(warpLeg(tick))}
             y={size - pad + 14}
             textAnchor="middle"
             className={TICK}
           >
             {tick}
           </text>
-          <text x={pad - 6} y={y(tick) + 3} textAnchor="end" className={TICK}>
+          <text
+            x={pad - 6}
+            y={y(warpLeg(tick)) + 3}
+            textAnchor="end"
+            className={TICK}
+          >
             {tick}
           </text>
         </g>
@@ -320,13 +342,13 @@ export function RoutingTriangle({ data }: { data: Ready }) {
           // biome-ignore lint/suspicious/noArrayIndexKey: points are positional
           key={i}
           data-tier={s.tier}
-          cx={x(s.tierNeeded[1])}
-          cy={y(s.tierNeeded[2])}
+          cx={x(dotAt(s)[0])}
+          cy={y(dotAt(s)[1])}
           r={3}
           className={`${TIER_COLOR[s.tier].dot} stroke-background`}
           strokeWidth={1}
         >
-          <title>{`${s.tier} · p_normal ${s.tierNeeded[1].toFixed(2)} · p_smart ${s.tierNeeded[2].toFixed(2)}`}</title>
+          <title>{`${s.tier} · p_fast ${s.tierNeeded[0].toFixed(2)} · p_normal ${s.tierNeeded[1].toFixed(2)} · p_smart ${s.tierNeeded[2].toFixed(2)}`}</title>
         </circle>
       ))}
       {labels.map(({ tier, at, leader }) => (

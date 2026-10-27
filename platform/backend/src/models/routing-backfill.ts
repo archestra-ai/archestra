@@ -133,6 +133,24 @@ class RoutingBackfillModel {
     return row ? SelectRoutingBackfillSchema.parse(row) : null;
   }
 
+  /** Whether a finished backfill bumped the organization to `generation`. */
+  static async bumpedGeneration(
+    organizationId: string,
+    generation: number,
+  ): Promise<boolean> {
+    const [row] = await db
+      .select({ id: t.id })
+      .from(t)
+      .where(
+        and(
+          eq(t.organizationId, organizationId),
+          eq(t.fitGeneration, generation),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
   /** The newest backfill whose scan finished, the sessions a re-score reuses. */
   static async findLatestScanned(
     organizationId: string,

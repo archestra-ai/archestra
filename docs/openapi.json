@@ -107617,10 +107617,12 @@
                       "trigger": {
                         "type": "string",
                         "enum": [
+                          "initial",
                           "nightly",
                           "settings",
                           "manual",
-                          "scorer_change"
+                          "scorer_change",
+                          "backfill"
                         ]
                       },
                       "status": {
@@ -108001,10 +108003,12 @@
                     "trigger": {
                       "type": "string",
                       "enum": [
+                        "initial",
                         "nightly",
                         "settings",
                         "manual",
-                        "scorer_change"
+                        "scorer_change",
+                        "backfill"
                       ]
                     },
                     "status": {

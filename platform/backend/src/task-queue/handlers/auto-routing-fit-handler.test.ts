@@ -6,7 +6,7 @@ import { getAutoRoutingSettings } from "@/auto-routing/settings";
 import { activeSourceVersion } from "@/auto-routing/signals";
 import { loadTrio, tiersFingerprint } from "@/auto-routing/tiers";
 import config from "@/config";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import { AgentModel, ModelModel } from "@/models";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import RoutingPlanModel from "@/models/routing-plan";
@@ -58,6 +58,52 @@ describe("auto routing plan fit", () => {
     const refit = await RoutingPlanModel.findActive(org.organizationId);
     expect(refit?.id).not.toBe(active?.id);
     expect(refit?.trigger).toBe("nightly");
+  });
+
+  test("names an unrequested fit by what moved: nothing yet, then a finished backfill", async ({
+    makeOrganization,
+  }) => {
+    const org = await configuredOrganization(makeOrganization);
+    await AutoRoutingSettingsModel.activateScorerVersion(
+      org.organizationId,
+      (await activeSourceVersion()).id,
+    );
+    await db
+      .update(schema.agentsTable)
+      .set({
+        autoRoutingPlannedGeneration: sql`${schema.agentsTable.autoRoutingGeneration}`,
+      })
+      .where(eq(schema.agentsTable.organizationId, org.organizationId));
+    await seedHistory(org, 40);
+
+    await handleAutoRoutingFit({ organizationId: org.organizationId });
+    expect(
+      (await RoutingPlanModel.findActive(org.organizationId))?.trigger,
+    ).toBe("initial");
+
+    const scorerVersionId = (await activeSourceVersion()).id;
+    await withDbTransaction(async (tx) => {
+      const fitGeneration = await AutoRoutingSettingsModel.bumpGeneration(
+        org.organizationId,
+        tx,
+      );
+      await tx.insert(schema.routingBackfillsTable).values({
+        organizationId: org.organizationId,
+        status: "done",
+        phase: "score",
+        cutoff: new Date(),
+        windowStart: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        scannedAt: new Date(),
+        scorerVersionId,
+        maxSessions: 40,
+        maxCostUsd: "1",
+        fitGeneration,
+      });
+    });
+    await handleAutoRoutingFit({ organizationId: org.organizationId });
+    expect(
+      (await RoutingPlanModel.findActive(org.organizationId))?.trigger,
+    ).toBe("backfill");
   });
 
   test("records a router failure with its code and keeps the organization clean", async ({

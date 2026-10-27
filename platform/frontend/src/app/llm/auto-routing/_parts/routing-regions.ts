@@ -6,6 +6,8 @@ type TierTriple = readonly [number, number, number];
 /** a·x + b·y ≥ c */
 type HalfPlane = readonly [number, number, number];
 
+const WARP_STEPS = 32;
+
 const TRIANGLE: Point[] = [
   [0, 0],
   [1, 0],
@@ -40,6 +42,36 @@ export function routingRegions(
   ) as Record<TierName, Point[]>;
 }
 
+/**
+ * Draws p_fast as √p_fast deep from the hypotenuse, keeping p_normal : p_smart:
+ * Jev puts most sessions at p_fast ≈ 0, where the fast/smart boundary sits
+ * whenever smart is affordable, and a linear depth crushes both into a sliver.
+ */
+export function warp([x, y]: Point): Point {
+  const rest = x + y;
+  if (rest <= 0) return [0, 0];
+  const scale = (1 - Math.sqrt(Math.max(0, 1 - rest))) / rest;
+  return [x * scale, y * scale];
+}
+
+/** Where `v` on either leg lands under {@link warp}. */
+export function warpLeg(v: number): number {
+  return 1 - Math.sqrt(1 - v);
+}
+
+/** `polygon` under {@link warp}, its edges subdivided to follow the bend. */
+export function warpPolygon(polygon: Point[]): Point[] {
+  return polygon.flatMap((p, i) => {
+    const q = polygon[(i + 1) % polygon.length];
+    return Array.from({ length: WARP_STEPS }, (_, k) =>
+      warp([
+        p[0] + ((q[0] - p[0]) * k) / WARP_STEPS,
+        p[1] + ((q[1] - p[1]) * k) / WARP_STEPS,
+      ]),
+    );
+  });
+}
+
 export function centroid(polygon: Point[]): Point {
   const n = polygon.length;
   return [
@@ -64,7 +96,7 @@ function clip(polygon: Point[], [a, b, c]: HalfPlane): Point[] {
   return out;
 }
 
-function area(polygon: Point[]): number {
+export function area(polygon: Point[]): number {
   let twice = 0;
   polygon.forEach(([x1, y1], i) => {
     const [x2, y2] = polygon[(i + 1) % polygon.length];

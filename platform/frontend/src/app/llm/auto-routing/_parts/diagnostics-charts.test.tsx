@@ -12,14 +12,14 @@ const SHORT: Prices = [1e-7, 6e-7, 2e-6];
 const LONG: Prices = [1e-7, 2e-7, 2e-6];
 
 /** Jev readings over the triangle, each routed at its own prices by router-core's rule. */
-function triangle(pricesOf: (i: number) => Prices): Ready {
+function triangle(pricesOf: (i: number) => Prices, lamStar = LAM_STAR): Ready {
   const sessions = Array.from({ length: 120 }, (_, i) => {
     const pNormal = ((i * 0.618) % 1) * 0.98;
     const pSmart = (1 - pNormal) * ((i * 0.414) % 1) * 0.98;
     const pFast = 1 - pNormal - pSmart;
     const prices = pricesOf(i);
     const score = [pFast, pFast + pNormal, 1].map(
-      (adequacy, k) => adequacy - LAM_STAR * prices[k],
+      (adequacy, k) => adequacy - lamStar * prices[k],
     );
     const best = score.indexOf(Math.max(...score));
     return {
@@ -35,7 +35,7 @@ function triangle(pricesOf: (i: number) => Prices): Ready {
     status: "ready",
     budgetUsdPerDay: 50,
     savedBudgetUsdPerDay: 50,
-    lamStar: LAM_STAR,
+    lamStar,
     q: 0,
     tierSessionShare: [1 / 3, 1 / 3, 1 / 3],
     sizeFit: { status: "no_holdout" },
@@ -50,38 +50,70 @@ function polygon(d: string): [number, number][] {
     .map((p) => p.split(",").map(Number) as [number, number]);
 }
 
-/** Inside or on the boundary of a convex polygon. */
+/** Inside `vertices` (even–odd), or within half a pixel of its boundary. */
 function contains(vertices: [number, number][], [x, y]: [number, number]) {
-  const sides = vertices.map(([x1, y1], i) => {
+  let inside = false;
+  let nearest = Number.POSITIVE_INFINITY;
+  vertices.forEach(([x1, y1], i) => {
     const [x2, y2] = vertices[(i + 1) % vertices.length];
-    return (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1);
+    if (y1 > y !== y2 > y && x < ((x2 - x1) * (y - y1)) / (y2 - y1) + x1)
+      inside = !inside;
+    const length2 = (x2 - x1) ** 2 + (y2 - y1) ** 2;
+    const t =
+      length2 === 0
+        ? 0
+        : Math.max(
+            0,
+            Math.min(
+              1,
+              ((x - x1) * (x2 - x1) + (y - y1) * (y2 - y1)) / length2,
+            ),
+          );
+    nearest = Math.min(
+      nearest,
+      Math.hypot(x - (x1 + t * (x2 - x1)), y - (y1 + t * (y2 - y1))),
+    );
   });
-  return sides.every((s) => s >= -1e-6) || sides.every((s) => s <= 1e-6);
+  return inside || nearest <= 0.5;
+}
+
+function regionsOf(container: HTMLElement) {
+  return new Map(
+    [...container.querySelectorAll("path[data-tier]")].map((path) => [
+      path.getAttribute("data-tier"),
+      polygon(path.getAttribute("d") ?? ""),
+    ]),
+  );
 }
 
 describe("RoutingTriangle", () => {
-  it("draws regions that hold every dot when sessions share prices", () => {
-    const { container } = render(
-      <RoutingTriangle data={triangle(() => SHORT)} />,
-    );
+  it("draws regions that hold every dot and move with the budget's λ*", () => {
+    const drawn = [LAM_STAR, LAM_STAR / 4].map((lamStar) => {
+      const { container, unmount } = render(
+        <RoutingTriangle data={triangle(() => SHORT, lamStar)} />,
+      );
+      const regions = regionsOf(container);
+      expect([...regions.keys()].sort()).toEqual(["fast", "normal", "smart"]);
+      const dots = [...container.querySelectorAll("circle[data-tier]")];
+      expect(dots).toHaveLength(120);
+      for (const dot of dots) {
+        const region = regions.get(dot.getAttribute("data-tier")) ?? [];
+        const at: [number, number] = [
+          Number(dot.getAttribute("cx")),
+          Number(dot.getAttribute("cy")),
+        ];
+        expect(contains(region, at), dot.textContent ?? "").toBe(true);
+      }
+      const tiers = dots.map((dot) => dot.getAttribute("data-tier"));
+      unmount();
+      return { regions, tiers };
+    });
 
-    const regions = new Map(
-      [...container.querySelectorAll("path[data-tier]")].map((path) => [
-        path.getAttribute("data-tier"),
-        polygon(path.getAttribute("d") ?? ""),
-      ]),
-    );
-    expect([...regions.keys()].sort()).toEqual(["fast", "normal", "smart"]);
-    const dots = [...container.querySelectorAll("circle[data-tier]")];
-    expect(dots).toHaveLength(120);
-    for (const dot of dots) {
-      const region = regions.get(dot.getAttribute("data-tier")) ?? [];
-      const at: [number, number] = [
-        Number(dot.getAttribute("cx")),
-        Number(dot.getAttribute("cy")),
-      ];
-      expect(contains(region, at), dot.textContent ?? "").toBe(true);
-    }
+    const [tight, loose] = drawn;
+    expect(loose.regions.get("smart")).not.toEqual(tight.regions.get("smart"));
+    const smartShare = ({ tiers }: (typeof drawn)[number]) =>
+      tiers.filter((t) => t === "smart").length;
+    expect(smartShare(loose)).toBeGreaterThan(smartShare(tight));
   });
 
   it("draws no regions when long-context pricing varies sessions' prices", () => {
@@ -118,9 +150,7 @@ describe("RoutingTriangle", () => {
     };
     const { container } = render(<RoutingTriangle data={data} />);
 
-    const regions = [...container.querySelectorAll("path[data-tier]")].map(
-      (path) => polygon(path.getAttribute("d") ?? ""),
-    );
+    const regions = [...regionsOf(container).values()];
     expect(regions.length).toBeGreaterThan(0);
     expect(container.querySelector('path[data-tier="smart"]')).toBeNull();
     const label = container.querySelector('[data-label="smart"] text');

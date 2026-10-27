@@ -3,6 +3,7 @@
 import {
   AUTO_ROUTING_BACKFILL_MAX_COST_USD,
   AUTO_ROUTING_BACKFILL_SCORER_CALLS,
+  clientForExternalAgentIds,
 } from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
@@ -41,7 +42,7 @@ const API_SHAPES: Record<Backfill["breakdown"][number]["apiShape"], string> = {
 /**
  * Past sessions from the interaction log the plan can learn from: a free scan
  * counts them, then an explicit, capped scoring run reads a sample with the
- * session scorer.
+ * session scorer. Beside an active plan it folds into one line until opened.
  */
 export function PastSessions({
   required,
@@ -55,10 +56,43 @@ export function PastSessions({
   const { data } = useAutoRoutingBackfill();
   const scan = useScanAutoRoutingBackfill();
   const cancel = useCancelAutoRoutingBackfill();
+  const [opened, setOpened] = useState(false);
   if (!data) return null;
   const { backfill, scoreOffer } = data;
   const running = backfill?.status === "running";
-  if (hasActivePlan && !running && !scoreOffer?.rescore) return null;
+  if (hasActivePlan && !running && !opened) {
+    return (
+      <p
+        className="flex items-center gap-2 text-sm text-muted-foreground"
+        data-testid="auto-routing-past-traffic"
+      >
+        <span className="tabular-nums">
+          Past traffic:{" "}
+          {(backfill?.progress?.scored ?? 0).toLocaleString("en-US")} scored
+        </span>
+        {canUpdate && (
+          <>
+            <span aria-hidden>·</span>
+            <Button
+              size="xs"
+              variant="link"
+              className="h-auto p-0 text-sm"
+              disabled={scan.isPending}
+              onClick={() => (scoreOffer ? setOpened(true) : scan.mutate())}
+            >
+              {scoreOffer
+                ? scoreOffer.rescore
+                  ? "Re-score"
+                  : "Score"
+                : backfill
+                  ? "Scan again"
+                  : "Scan"}
+            </Button>
+          </>
+        )}
+      </p>
+    );
+  }
 
   return (
     <section
@@ -129,7 +163,8 @@ function BackfillStatus({
         <ul className="text-muted-foreground">
           {backfill.breakdown.map((row) => (
             <li key={`${row.apiShape}-${row.client}`}>
-              {API_SHAPES[row.apiShape]}, {row.client}:{" "}
+              {API_SHAPES[row.apiShape]},{" "}
+              {clientForExternalAgentIds([row.client])?.label ?? row.client}:{" "}
               {row.sessions.toLocaleString("en-US")}
             </li>
           ))}

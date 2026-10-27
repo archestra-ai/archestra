@@ -69,7 +69,7 @@ function PlanStatus({ settings }: { settings: AutoRoutingSettings }) {
         <span data-testid="auto-routing-status">
           {activePlan
             ? `Active plan from ${formatDate({ date: activePlan.createdAt })}${history ? `. ${learnedFrom(history)}` : ""}`
-            : `Cold start: ${coldStart.sessions} of ${coldStart.required} sessions`}
+            : `Cold start: ${Math.min(coldStart.sessions, coldStart.required).toLocaleString("en-US")} of ${coldStart.required.toLocaleString("en-US")} scored sessions`}
         </span>
       </div>
       {fitError && (

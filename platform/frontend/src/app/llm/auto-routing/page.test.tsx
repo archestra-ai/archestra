@@ -384,7 +384,22 @@ describe("AutoRoutingOverviewPage", () => {
     renderPage();
 
     expect(await screen.findByTestId("auto-routing-status")).toHaveTextContent(
-      "Cold start: 12 of 100 sessions",
+      "Cold start: 12 of 100 scored sessions",
+    );
+  });
+
+  it("caps cold-start progress at the minimum while the first fit is pending", async () => {
+    const base = makeSettings();
+    settings = makeSettings({
+      status: {
+        ...base.status,
+        coldStart: { ...base.status.coldStart, sessions: 1064, required: 1000 },
+      },
+    });
+    renderPage();
+
+    expect(await screen.findByTestId("auto-routing-status")).toHaveTextContent(
+      "Cold start: 1,000 of 1,000 scored sessions",
     );
   });
 
@@ -786,7 +801,7 @@ describe("past sessions", () => {
     eligibleSessions: 240,
     eligibleTokens: 9_000_000,
     breakdown: [
-      { apiShape: "messages", client: "claude-code", sessions: 200 },
+      { apiShape: "messages", client: "anthropic_claude_code", sessions: 200 },
       { apiShape: "chat_completions", client: "opencode", sessions: 40 },
     ],
     scorerCurrent: null,
@@ -841,7 +856,11 @@ describe("past sessions", () => {
     renderPage();
 
     const section = await screen.findByTestId("auto-routing-past-sessions");
-    expect(within(section).getAllByRole("listitem")).toHaveLength(2);
+    expect(
+      within(section)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["Messages, Claude Code: 200", "Chat Completions, OpenCode: 40"]);
   });
 
   it("accepts a spending limit up to the API's bound and no further", async () => {
@@ -1025,6 +1044,7 @@ describe("past sessions", () => {
     });
     const user = userEvent.setup();
     renderPage();
+    await user.click(await screen.findByRole("button", { name: "Re-score" }));
     await user.click(
       await screen.findByRole("button", { name: /^Re-score 240 sessions/ }),
     );
@@ -1046,17 +1066,25 @@ describe("past sessions", () => {
     );
   });
 
-  it("stays out of the way of an active plan with nothing to re-score", async () => {
+  it("folds into one line beside an active plan with nothing to re-score", async () => {
     settings = makeSettings({
       status: {
         ...makeSettings().status,
         activePlan: { id: PLAN_ID, createdAt: activePlan.createdAt },
       },
     });
-    serveBackfill({ backfill: scanned({ status: "done" }), scoreOffer: null });
+    serveBackfill({
+      backfill: scanned({
+        status: "done",
+        progress: { sample: 240, scored: 238, noText: 2, failed: 0 },
+      }),
+      scoreOffer: null,
+    });
     renderPage();
 
-    await screen.findByText(/Active plan from/);
+    expect(
+      await screen.findByTestId("auto-routing-past-traffic"),
+    ).toHaveTextContent("Past traffic: 238 scored");
     expect(
       screen.queryByTestId("auto-routing-past-sessions"),
     ).not.toBeInTheDocument();

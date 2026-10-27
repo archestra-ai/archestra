@@ -412,6 +412,32 @@ async function simulate(
   }
 }
 
+/** Why a fit nobody requested runs: what moved since the organization's last fit outcome. */
+async function scheduledTrigger(params: {
+  organizationId: string;
+  settings: AutoRoutingSettings;
+  scorerVersionId: string;
+  latestScorerVersionId: string | null;
+}): Promise<RoutingPlanTrigger> {
+  const { settings, latestScorerVersionId } = params;
+  if (
+    latestScorerVersionId !== null &&
+    latestScorerVersionId !== params.scorerVersionId
+  )
+    return "scorer_change";
+  const unplanned = settings.generation > settings.plannedGeneration;
+  if (
+    unplanned &&
+    (await RoutingBackfillModel.bumpedGeneration(
+      params.organizationId,
+      settings.generation,
+    ))
+  )
+    return "backfill";
+  if (unplanned) return "settings";
+  return latestScorerVersionId === null ? "initial" : "nightly";
+}
+
 async function readFitInputs(params: {
   organizationId: string;
   settings: AutoRoutingSettings;
@@ -437,13 +463,14 @@ async function readFitInputs(params: {
           params.maxSessions,
         )
       : EMPTY_HISTORY;
-  const trigger: RoutingPlanTrigger =
+  const trigger =
     params.requestedTrigger ??
-    (latest && latest.plan.scorerVersionId !== scorerVersionId
-      ? "scorer_change"
-      : settings.generation > settings.plannedGeneration
-        ? "settings"
-        : "nightly");
+    (await scheduledTrigger({
+      organizationId,
+      settings,
+      scorerVersionId,
+      latestScorerVersionId: latest?.plan.scorerVersionId ?? null,
+    }));
   return {
     organizationId,
     trigger,

@@ -113,6 +113,33 @@ describe("GET /api/auto-routing/diagnostics", () => {
     expect(routedTiers.size).toBeGreaterThan(1);
   });
 
+  test("its tier shares are the shown sessions' tiers, and both move with the budget", async () => {
+    await withActivePlan();
+    const cheapest: number = (await diagnostics(0.01)).json()
+      .minBudgetUsdPerDay;
+
+    const solved: Ready[] = [];
+    for (const budget of [cheapest * 1.5, cheapest * 6]) {
+      const body = await ready(budget);
+      const dots = TIERS.map(
+        (tier) =>
+          body.sessions.filter((s) => s.tier === tier).length /
+          body.sessions.length,
+      );
+      // The tie cohort is drawn per session, so its split is off by at most one session.
+      for (const [k, share] of dots.entries()) {
+        expect(Math.abs(share - body.tierSessionShare[k])).toBeLessThanOrEqual(
+          1 / SESSIONS + 1e-9,
+        );
+      }
+      solved.push(body);
+    }
+
+    const [low, high] = solved;
+    expect(high.tierSessionShare[2]).toBeGreaterThan(low.tierSessionShare[2]);
+    expect(high.lamStar).toBeLessThan(low.lamStar);
+  });
+
   test("predicts sizes out of sample only for each client's latest 30%", async () => {
     await withActivePlan();
 

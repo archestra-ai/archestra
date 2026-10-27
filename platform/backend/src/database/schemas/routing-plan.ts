@@ -70,7 +70,7 @@ const routingPlansTable = pgTable(
     ),
     check(
       "routing_plans_trigger_check",
-      sql`${table.trigger} IN ('nightly', 'settings', 'manual', 'scorer_change')`,
+      sql`${table.trigger} IN ('initial', 'nightly', 'settings', 'manual', 'scorer_change', 'backfill')`,
     ),
     check(
       "routing_plans_plan_check",

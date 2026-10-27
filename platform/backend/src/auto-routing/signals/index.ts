@@ -28,7 +28,7 @@ export function activeSourceVersion() {
 export function decisionFeatures(params: {
   version: string;
   reading: JevSessionReading;
-  input: Pick<PreRunInput, "kind" | "client">;
+  input: Pick<PreRunInput, "client">;
 }): RoutingDecisionFeatures {
   return {
     signals: {
@@ -38,7 +38,6 @@ export function decisionFeatures(params: {
         p_long: params.reading.pLong,
       },
     },
-    kind: params.input.kind,
     client: params.input.client ?? "unknown",
   };
 }
@@ -48,5 +47,5 @@ export function routerFeatures(
   features: RoutingDecisionFeatures,
 ): RoutingSessionFeatures {
   const { tier_needed, p_long } = features.signals[preRunSource.id];
-  return { tier_needed, p_long, kind: features.kind, source: features.client };
+  return { tier_needed, p_long, source: features.client };
 }

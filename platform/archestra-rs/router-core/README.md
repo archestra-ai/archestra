@@ -29,8 +29,7 @@ post-run signals ┘   (later: calibration, learning)
 1. **Pre-run signals.** What we know about a session before its first model call. Today this
    is one scorer reading of the opening user message: `tier_needed`, a distribution over the
    weakest adequate tier, and `p_long`, the chance the session crosses the long-context
-   threshold. Session `kind` (main or subagent) and `source` (client) come from request
-   metadata. The backend stores each signal source's reading under its id and version in
+   threshold. The session's `source` (client) comes from request metadata. The backend stores each signal source's reading under its id and version in
    `routing_decisions.features.signals`, and `routerFeatures` flattens them into
    `SessionFeatures`.
 2. **Budget constraints.** Tier prices (short- and long-context blocks, four token types each),
@@ -48,7 +47,7 @@ For each session `i` and tier `k`:
   fit is L2-penalized Newton with step halving. Each Newton step is solved as a weighted
   least-squares problem, not by forming the Hessian.
 - **Long share** `ℓ_i`: the token-weighted share of tokens in long prompts. It is a clipped
-  linear model on `[1, log s_i, is_subagent]`, fitted by weighted least squares.
+  linear model on `[1, log s_i]`, fitted by weighted least squares.
 - **Price** `π_ik` (USD per token): the tier's prices weighted by the historical token mix
   (input, cache read, cache write, output) of each block, blended as
   `π_ik = (1 − ℓ_i) · short_k + ℓ_i · long_k`.
@@ -59,8 +58,8 @@ The expected cost of serving session `i` on tier `k` is `c_ik = s_i · π_ik` US
 Both fits share one solver: Householder QR (nalgebra) of the √weight-scaled design, with
 columns in priority order. A column whose part independent of the earlier columns is at most
 `1e-5` of the largest such part counts as dependent and gets coefficient 0. This drops
-zero-variance and (near-)collinear regressors, e.g. log size affine in `is_subagent`, instead
-of fitting them as a huge offsetting pair.
+zero-variance and (near-)collinear regressors, e.g. a near-constant log size, instead of
+fitting them as a huge offsetting pair.
 
 ### Allocate
 

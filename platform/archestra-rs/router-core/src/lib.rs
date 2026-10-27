@@ -14,9 +14,9 @@ mod plan;
 
 pub use allocate::{Decision, Policy};
 pub use domain::{
-    HistoryRow, ModelId, PerDay, PlanInput, Probability, SessionFeatures, SessionKind, Source,
-    TIER_COUNT, TierNeeded, TierSet, TierSpec, TokenCounts, TokenMix, TokenPrices, TokenTypes,
-    UsdPerDay, UsdPerMTok, Volume,
+    HistoryRow, ModelId, PerDay, PlanInput, Probability, SessionFeatures, Source, TIER_COUNT,
+    TierNeeded, TierSet, TierSpec, TokenCounts, TokenMix, TokenPrices, TokenTypes, UsdPerDay,
+    UsdPerMTok, Volume,
 };
 pub use estimate::{LongShareModel, SizeModel, SourceEffect, TokenMixes};
 pub use plan::{Diagnostics, Holdout, PLAN_FORMAT_VERSION, Plan, Summary, Versions};
@@ -226,7 +226,6 @@ mod tests {
         SessionFeatures {
             tier_needed: TierNeeded::new([0.5, 0.25, 0.25]).unwrap(),
             p_long: Probability::new(0.0).unwrap(),
-            kind: SessionKind::Main,
             source: Source(source.into()),
         }
     }
@@ -389,20 +388,6 @@ mod tests {
     }
 
     #[test]
-    fn plan_fits_when_source_and_kind_coincide() {
-        let mut input = input(4.0);
-        for row in input.history.iter_mut().skip(20) {
-            row.features.kind = SessionKind::Subagent;
-            row.features.source = Source("sub".into());
-            row.short.cache_read *= 10;
-            row.long.input = 5_000;
-        }
-        let plan = plan(input).unwrap();
-        assert_eq!(plan.long_share.is_subagent, 0.0);
-        assert!(plan.long_share.coefficients().iter().all(|c| c.is_finite()));
-    }
-
-    #[test]
     fn single_window_history_skips_holdout() {
         let mut input = input(4.0);
         for row in &mut input.history {
@@ -452,7 +437,7 @@ mod tests {
         assert!(TierNeeded::new([0.5, 0.5, 0.5]).is_err());
         assert!(
             serde_json::from_str::<SessionFeatures>(
-                r#"{"tier_needed":[0.5,0.5,0.5],"p_long":0,"kind":"main","source":"x"}"#
+                r#"{"tier_needed":[0.5,0.5,0.5],"p_long":0,"source":"x"}"#
             )
             .is_err()
         );
@@ -472,7 +457,7 @@ mod tests {
 
     #[test]
     fn steep_p_long_fit_still_routes_long_sessions() {
-        // one source and kind; the sessions with a slightly higher p_long are vastly larger
+        // one source; the sessions with a slightly higher p_long are vastly larger
         let mut input = input(4.0);
         for (i, row) in input.history.iter_mut().enumerate() {
             if i % 2 == 1 {

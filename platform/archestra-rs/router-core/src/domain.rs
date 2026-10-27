@@ -224,32 +224,15 @@ impl From<ModelId> for String {
     }
 }
 
-/// Session origin (client and main/subagent), one-hot encoded by the size model.
+/// Session origin (client), one-hot encoded by the size model.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Source(pub String);
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SessionKind {
-    Main,
-    Subagent,
-}
-
-impl SessionKind {
-    pub(crate) fn indicator(self) -> f64 {
-        match self {
-            Self::Main => 0.0,
-            Self::Subagent => 1.0,
-        }
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SessionFeatures {
     pub tier_needed: TierNeeded,
     pub p_long: Probability,
-    pub kind: SessionKind,
     pub source: Source,
 }
 

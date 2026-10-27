@@ -108977,14 +108977,6 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 20000
-                  },
-                  "kind": {
-                    "default": "main",
-                    "type": "string",
-                    "enum": [
-                      "main",
-                      "subagent"
-                    ]
                   }
                 },
                 "required": [

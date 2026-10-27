@@ -116,7 +116,6 @@ describe("RoutingDecisionModel", () => {
     expect(stored?.features && routerFeatures(stored.features)).toEqual({
       tier_needed: [0.2, 0.5, 0.3],
       p_long: 0.1,
-      kind: "main",
       source: "claude-code",
     });
   });
@@ -129,7 +128,6 @@ describe("RoutingDecisionModel", () => {
     };
     const valid = {
       signals: { "jev-session": signal },
-      kind: "main",
       client: "claude-code",
     };
     const parse = (value: unknown) =>

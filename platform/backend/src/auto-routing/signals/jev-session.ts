@@ -21,7 +21,7 @@ export interface JevSessionReading {
   costUsd: number | null;
 }
 
-// State template v1 (spec.stateTemplateVersion): ported from the router PoC rubric.
+// State template v2 (spec.stateTemplateVersion): ported from the router PoC rubric.
 const PROMPT_HEAD = 3000;
 const PROMPT_TAIL = 1000;
 const SECRET =
@@ -172,22 +172,7 @@ function tierDistribution(
 }
 
 function sessionState(input: PreRunInput): Record<string, string> {
-  const kind = sessionKindPhrase(input);
-  return {
-    prompt: clip(input.firstUserText.replace(SECRET, "<redacted>")),
-    ...(kind ? { session_kind: kind } : {}),
-  };
-}
-
-function sessionKindPhrase(input: PreRunInput): string | undefined {
-  switch (input.kind) {
-    case "subagent":
-      return "a self-contained brief written by an orchestrator agent for a sub-agent";
-    case "main":
-      return input.client
-        ? "a human's first message to an AI coding agent"
-        : undefined;
-  }
+  return { prompt: clip(input.firstUserText.replace(SECRET, "<redacted>")) };
 }
 
 function clip(text: string): string {

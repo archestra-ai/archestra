@@ -128,12 +128,12 @@ describe("Model Router auto model", () => {
         expect(decision).toMatchObject({
           scorerVersionId: version,
           featuresSchemaVersion: 1,
-          features: {
-            signals: {
-              "jev-session": { version, tier_needed: [0, 0, 1], p_long: 0.1 },
-            },
-            kind: "main",
+        });
+        expect(decision.features).toEqual({
+          signals: {
+            "jev-session": { version, tier_needed: [0, 0, 1], p_long: 0.1 },
           },
+          client: expect.any(String),
         });
         expect(await usage(decision.id)).toEqual([
           expect.objectContaining({ input: 12, output: 10 }),
@@ -217,7 +217,7 @@ describe("Model Router auto model", () => {
             reason: "cold_start",
             tierIndex: 1,
             planId: null,
-            features: expect.objectContaining({ kind: "main" }),
+            features: expect.objectContaining({ client: expect.any(String) }),
             lambda: null,
             expectedCostUsd: null,
           }),
@@ -1030,7 +1030,6 @@ async function publishPlan(
   const features = {
     tier_needed: [0.4, 0.3, 0.3],
     p_long: 0,
-    kind: "main",
     source: "unknown",
   };
   const planJson = await fitPlan(

@@ -32,7 +32,6 @@ describe("extractAutoRoutingSessionMetadata", () => {
       expected: {
         sessionId: "ses_main",
         sessionSource: "opencode_session",
-        kind: "main",
         client: OPENCODE_CLIENT_ID,
       },
     },
@@ -47,7 +46,6 @@ describe("extractAutoRoutingSessionMetadata", () => {
       expected: {
         sessionId: "ses_child",
         sessionSource: "opencode_session",
-        kind: "subagent",
         client: OPENCODE_CLIENT_ID,
       },
     },
@@ -58,7 +56,6 @@ describe("extractAutoRoutingSessionMetadata", () => {
       expected: {
         sessionId: CODEX_THREAD,
         sessionSource: "codex_session",
-        kind: "main",
         client: CODEX_CLIENT_ID,
       },
     },
@@ -73,7 +70,6 @@ describe("extractAutoRoutingSessionMetadata", () => {
       expected: {
         sessionId: "ses_child",
         sessionSource: "opencode_session",
-        kind: "subagent",
         client: OPENCODE_CLIENT_ID,
       },
     },
@@ -95,7 +91,6 @@ describe("extractAutoRoutingSessionMetadata", () => {
     ).toEqual({
       sessionId: null,
       sessionSource: null,
-      kind: "main",
       client: null,
     });
   });
@@ -118,7 +113,6 @@ describe("extractAutoRoutingSessionMetadata", () => {
     ).toEqual({
       sessionId: "run-42",
       sessionSource: "header",
-      kind: "main",
       client: null,
     });
   });
@@ -133,6 +127,6 @@ describe("extractAutoRoutingSessionMetadata", () => {
         },
         body: chatCompletionsBody,
       }),
-    ).toMatchObject({ kind: "main", client: "nightly-bot" });
+    ).toMatchObject({ client: "nightly-bot" });
   });
 });

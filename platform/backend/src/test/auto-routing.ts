@@ -59,7 +59,6 @@ export function plannedDecision(params: {
           p_long: 0.1,
         },
       },
-      kind: "main",
       client: "claude-code",
     },
     featuresSchemaVersion: FEATURES_SCHEMA_VERSION,
@@ -114,7 +113,6 @@ export async function publishFittedPlan(params: {
   const features = {
     tier_needed: [0.4, 0.3, 0.3],
     p_long: 0,
-    kind: "main",
     source: "unknown",
   };
   const planJson = await fitPlan(

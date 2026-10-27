@@ -1,10 +1,8 @@
-import type { SessionKind } from "@/routes/proxy/utils/headers/session-metadata";
 import type { ScorerSpec } from "./spec";
 
 /** What a pre-run source sees of a new session: its opening and the client's metadata. */
 export interface PreRunInput {
   firstUserText: string;
-  kind: SessionKind;
   client: string | null;
 }
 

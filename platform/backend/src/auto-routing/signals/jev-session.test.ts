@@ -24,7 +24,6 @@ const ANSWERS = {
 
 const INPUT = {
   firstUserText: "Refactor the billing module and fix the flaky tests",
-  kind: "main" as const,
   client: "opencode",
 };
 
@@ -76,10 +75,7 @@ describe("JevSessionSource", () => {
         authorization: "Bearer sk-typesafe",
         body: {
           model: JEV_SESSION_SPEC.model,
-          state: {
-            prompt: INPUT.firstUserText,
-            session_kind: "a human's first message to an AI coding agent",
-          },
+          state: { prompt: INPUT.firstUserText },
           questions: JEV_SESSION_SPEC.questions,
         },
       },
@@ -194,7 +190,7 @@ describe("JevSessionSource", () => {
     );
   });
 
-  test("describes a subagent brief and redacts secrets in the clipped prompt", async () => {
+  test("redacts secrets in the clipped prompt", async () => {
     let state: unknown;
     server.use(
       http.post(TYPESAFE_ENDPOINT, async ({ request }) => {
@@ -206,17 +202,10 @@ describe("JevSessionSource", () => {
     const text = `use sk-${"a".repeat(30)} then ${tail}`;
     const redacted = `use <redacted> then ${tail}`;
 
-    await source.read(
-      { firstUserText: text, kind: "subagent", client: null },
-      ctx(),
-    );
+    await source.read({ firstUserText: text, client: null }, ctx());
 
-    const { prompt, session_kind } = state as Record<string, string>;
-    expect(session_kind).toBe(
-      "a self-contained brief written by an orchestrator agent for a sub-agent",
-    );
-    expect(prompt).toBe(
-      `${redacted.slice(0, 3000)}\n…[${redacted.length - 4000} chars omitted]…\n${redacted.slice(-1000)}`,
-    );
+    expect(state).toEqual({
+      prompt: `${redacted.slice(0, 3000)}\n…[${redacted.length - 4000} chars omitted]…\n${redacted.slice(-1000)}`,
+    });
   });
 });

@@ -517,9 +517,7 @@ describe("AutoRoutingOverviewPage", () => {
     await user.click(screen.getByRole("button", { name: "Preview" }));
 
     const result = await screen.findByTestId("auto-routing-preview");
-    expect(previewed).toEqual([
-      { text: "Refactor the billing module", kind: "main" },
-    ]);
+    expect(previewed).toEqual([{ text: "Refactor the billing module" }]);
     expect(result).toHaveTextContent("smart");
     expect(result).toHaveTextContent("anthropic/claude-opus");
     expect(within(result).getByText("70.0%")).toBeInTheDocument();

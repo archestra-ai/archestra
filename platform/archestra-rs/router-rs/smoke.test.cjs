@@ -16,7 +16,6 @@ const prices = (input) => ({
 const features = {
   tier_needed: [0.5, 0.25, 0.25],
   p_long: 0,
-  kind: "main",
   source: "main",
 };
 const planInput = {

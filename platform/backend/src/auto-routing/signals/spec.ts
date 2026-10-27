@@ -71,5 +71,5 @@ export const JEV_SESSION_SPEC: JevSessionSpec = {
         "(about 75,000 words), for example by reading many large files, long logs, or running a long multi-step task?",
     },
   },
-  stateTemplateVersion: 1,
+  stateTemplateVersion: 2,
 };

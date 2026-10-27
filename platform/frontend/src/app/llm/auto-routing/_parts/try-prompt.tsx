@@ -4,28 +4,17 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   type AutoRoutingPreview,
-  type AutoRoutingPreviewBody,
   usePreviewAutoRouting,
 } from "@/lib/auto-routing.query";
 import { formatCurrency } from "@/lib/utils/format-currency";
 import { formatPercent } from "./plan-summary";
 import { TIER_NAMES } from "./tiers";
 
-type SessionKind = NonNullable<AutoRoutingPreviewBody["kind"]>;
-
 export function TryPrompt({ canUpdate }: { canUpdate: boolean }) {
   const [text, setText] = useState("");
-  const [kind, setKind] = useState<SessionKind>("main");
   const preview = usePreviewAutoRouting();
 
   return (
@@ -39,28 +28,13 @@ export function TryPrompt({ canUpdate }: { canUpdate: boolean }) {
         rows={3}
         disabled={!canUpdate}
       />
-      <div className="flex items-center gap-2">
-        <Select
-          value={kind}
-          onValueChange={(value) => setKind(value as SessionKind)}
-          disabled={!canUpdate}
-        >
-          <SelectTrigger size="sm" className="w-36" aria-label="Session kind">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="main">Main session</SelectItem>
-            <SelectItem value="subagent">Subagent</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button
-          size="sm"
-          disabled={!canUpdate || !text.trim() || preview.isPending}
-          onClick={() => preview.mutate({ text, kind })}
-        >
-          Preview
-        </Button>
-      </div>
+      <Button
+        size="sm"
+        disabled={!canUpdate || !text.trim() || preview.isPending}
+        onClick={() => preview.mutate({ text })}
+      >
+        Preview
+      </Button>
       {preview.data && <PreviewResult result={preview.data} />}
     </section>
   );

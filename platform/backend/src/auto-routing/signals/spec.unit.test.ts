@@ -47,7 +47,7 @@ describe("specHash", () => {
     expect(specHash({ ...JEV_SESSION_SPEC, model: "jev-1.14.0" })).not.toBe(
       baseline,
     );
-    expect(specHash({ ...JEV_SESSION_SPEC, stateTemplateVersion: 2 })).not.toBe(
+    expect(specHash({ ...JEV_SESSION_SPEC, stateTemplateVersion: JEV_SESSION_SPEC.stateTemplateVersion + 1 })).not.toBe(
       baseline,
     );
   });

@@ -4,7 +4,7 @@ use nalgebra::{DMatrix, DVector};
 use serde::{Deserialize, Serialize};
 
 use crate::RouterError;
-use crate::domain::{HistoryRow, SessionFeatures, SessionKind, Source, TokenCounts, TokenMix};
+use crate::domain::{HistoryRow, SessionFeatures, Source, TokenCounts, TokenMix};
 use crate::linalg::least_squares;
 
 /// Sizes are fit in millions of tokens.
@@ -197,47 +197,42 @@ fn fit_poisson(x: &[Vec<f64>], y: &[f64], max_iterations: usize) -> Result<Vec<f
 pub struct LongShareModel {
     pub intercept: f64,
     pub log_size: f64,
-    pub is_subagent: f64,
 }
 
 impl LongShareModel {
-    pub(crate) fn predict(&self, size_tokens: f64, kind: SessionKind) -> f64 {
-        (self.intercept + self.log_size * size_tokens.ln() + self.is_subagent * kind.indicator())
-            .clamp(0.0, 1.0)
+    pub(crate) fn predict(&self, size_tokens: f64) -> f64 {
+        (self.intercept + self.log_size * size_tokens.ln()).clamp(0.0, 1.0)
     }
 
-    pub(crate) fn coefficients(&self) -> [f64; 3] {
-        [self.intercept, self.log_size, self.is_subagent]
+    pub(crate) fn coefficients(&self) -> [f64; 2] {
+        [self.intercept, self.log_size]
     }
 }
 
-/// Token-weighted least squares of long share on [1, log E[size], is_subagent], solved as
-/// ordinary least squares on √w-scaled rows. Column priority is that order: a column that is
-/// (numerically) a linear combination of the ones before it — zero variance, or e.g. log size
-/// affine in is_subagent — gets coefficient 0.
+/// Token-weighted least squares of long share on [1, log E[size]], solved as ordinary least
+/// squares on √w-scaled rows. A (numerically) constant log size gets coefficient 0.
 pub(crate) fn fit_long_share(
     rows: &[HistoryRow],
     sizes: &[f64],
 ) -> Result<LongShareModel, RouterError> {
-    let weighted: Vec<(f64, [f64; 3], f64)> = rows
+    let weighted: Vec<(f64, [f64; 2], f64)> = rows
         .iter()
         .zip(sizes)
         .filter_map(|(r, &size)| {
             let w = r.total_tokens();
             (w > 0.0).then(|| {
                 let root = w.sqrt();
-                let x = [1.0, size.ln(), r.features.kind.indicator()];
+                let x = [1.0, size.ln()];
                 (root, x, r.long.total() / w)
             })
         })
         .collect();
-    let design = DMatrix::from_fn(weighted.len(), 3, |i, j| weighted[i].0 * weighted[i].1[j]);
+    let design = DMatrix::from_fn(weighted.len(), 2, |i, j| weighted[i].0 * weighted[i].1[j]);
     let target = DVector::from_fn(weighted.len(), |i, _| weighted[i].0 * weighted[i].2);
     let coef = least_squares(design, target).ok_or(RouterError::SingularLongShare)?;
     Ok(LongShareModel {
         intercept: coef[0],
         log_size: coef[1],
-        is_subagent: coef[2],
     })
 }
 
@@ -285,7 +280,7 @@ mod tests {
     use super::*;
     use crate::domain::{Probability, TierNeeded};
 
-    fn row(source: &str, kind: SessionKind, p_long: f64, short: u64, long: u64) -> HistoryRow {
+    fn row(source: &str, p_long: f64, short: u64, long: u64) -> HistoryRow {
         let counts = |n: u64| TokenCounts {
             input: n,
             cache_read: 2 * n,
@@ -296,7 +291,6 @@ mod tests {
             features: SessionFeatures {
                 tier_needed: TierNeeded::new([0.2, 0.3, 0.5]).unwrap(),
                 p_long: Probability::new(p_long).unwrap(),
-                kind,
                 source: Source(source.into()),
             },
             short: counts(short),
@@ -307,52 +301,33 @@ mod tests {
 
     #[test]
     fn empty_long_block_uses_short_mix_and_vice_versa() {
-        let short_only = [row("a", SessionKind::Main, 0.0, 100, 0)];
+        let short_only = [row("a", 0.0, 100, 0)];
         let mixes = fit_mixes(&short_only).unwrap();
         assert_eq!(mixes.long, mixes.short);
         assert_eq!(mixes.short.cache_read, 2.0 / 3.5);
 
-        let long_only = [row("a", SessionKind::Main, 0.0, 0, 100)];
+        let long_only = [row("a", 0.0, 0, 100)];
         let mixes = fit_mixes(&long_only).unwrap();
         assert_eq!(mixes.short, mixes.long);
 
-        let empty = [row("a", SessionKind::Main, 0.0, 0, 0)];
+        let empty = [row("a", 0.0, 0, 0)];
         assert_eq!(fit_mixes(&empty), Err(RouterError::EmptyTokenHistory));
     }
 
     #[test]
     fn long_share_drops_zero_variance_columns() {
         let rows = [
-            row("a", SessionKind::Main, 0.0, 300, 100),
-            row("a", SessionKind::Main, 0.0, 100, 100),
-            row("a", SessionKind::Main, 0.0, 900, 100),
+            row("a", 0.0, 300, 100),
+            row("a", 0.0, 100, 100),
+            row("a", 0.0, 900, 100),
         ];
         let model = fit_long_share(&rows, &[1e5, 2e5, 4e5]).unwrap();
-        assert_eq!(model.is_subagent, 0.0);
         assert!(model.log_size != 0.0);
 
         let same_size = fit_long_share(&rows, &[1e5, 1e5, 1e5]).unwrap();
         let (tokens, long) = (3.5 * 1600.0, 3.5 * 300.0);
         assert!((same_size.intercept - long / tokens).abs() < 1e-15);
-        assert_eq!((same_size.log_size, same_size.is_subagent), (0.0, 0.0));
-    }
-
-    #[test]
-    fn collinear_long_share_regressors_drop_the_dependent_column() {
-        // log size is affine in is_subagent: each population has one size and one share
-        let rows = [
-            row("a", SessionKind::Main, 0.0, 300, 100),
-            row("a", SessionKind::Main, 0.0, 600, 200),
-            row("b", SessionKind::Subagent, 0.0, 100, 100),
-            row("b", SessionKind::Subagent, 0.0, 200, 200),
-        ];
-        let sizes = [1e5, 1e5, 2e5, 2e5];
-        let model = fit_long_share(&rows, &sizes).unwrap();
-        assert_eq!(model.is_subagent, 0.0);
-        for (r, &size) in rows.iter().zip(&sizes) {
-            let observed = r.long.total() / r.total_tokens();
-            assert!((model.predict(size, r.features.kind) - observed).abs() < 1e-12);
-        }
+        assert_eq!(same_size.log_size, 0.0);
 
         assert_eq!(
             fit_long_share(&[], &[]),
@@ -361,18 +336,17 @@ mod tests {
     }
 
     #[test]
-    fn near_collinear_long_share_regressors_stay_bounded() {
-        // as above, but one subagent size is off by a relative 3e-6: log size is almost, not
-        // exactly, affine in is_subagent, and that sliver alone would "explain" the subagent
-        // share spread with a huge offsetting log_size / is_subagent pair
+    fn near_constant_log_size_stays_bounded() {
+        // one size is off by a relative 3e-6: that sliver alone would "explain" the share
+        // spread with a huge offsetting intercept / log_size pair
         let rows = [
-            row("a", SessionKind::Main, 0.0, 300, 100),
-            row("a", SessionKind::Main, 0.0, 600, 100),
-            row("b", SessionKind::Subagent, 0.0, 100, 100),
-            row("b", SessionKind::Subagent, 0.0, 300, 100),
+            row("a", 0.0, 300, 100),
+            row("a", 0.0, 600, 100),
+            row("a", 0.0, 100, 100),
+            row("a", 0.0, 300, 100),
         ];
-        let exact = fit_long_share(&rows, &[1e5, 1e5, 2e5, 2e5]).unwrap();
-        let near = fit_long_share(&rows, &[1e5, 1e5, 2e5, 2e5 * (1.0 + 3e-6)]).unwrap();
+        let exact = fit_long_share(&rows, &[1e5; 4]).unwrap();
+        let near = fit_long_share(&rows, &[1e5, 1e5, 1e5, 1e5 * (1.0 + 3e-6)]).unwrap();
         for (a, b) in near.coefficients().iter().zip(exact.coefficients()) {
             assert!((a - b).abs() < 1e-4, "{near:?} vs {exact:?}");
         }
@@ -381,9 +355,9 @@ mod tests {
     #[test]
     fn poisson_matches_closed_form_and_reports_non_convergence() {
         let rows = [
-            row("base", SessionKind::Main, 0.0, 1000, 0),
-            row("base", SessionKind::Main, 0.0, 3000, 0),
-            row("other", SessionKind::Main, 0.0, 8000, 0),
+            row("base", 0.0, 1000, 0),
+            row("base", 0.0, 3000, 0),
+            row("other", 0.0, 8000, 0),
         ];
         let baseline = Source("base".into());
         let model = fit_size(&rows, &baseline, MAX_NEWTON_ITERATIONS).unwrap();
@@ -410,7 +384,7 @@ mod tests {
     /// s00..s03 seen once, s04/s05 twice, s06..s24 three times: the cap keeps s06..s24 plus s04,
     /// which wins the count tie with s05 on label.
     fn many_sources() -> Vec<HistoryRow> {
-        let mut rows = vec![row("base", SessionKind::Main, 0.0, 1000, 0)];
+        let mut rows = vec![row("base", 0.0, 1000, 0)];
         for i in 0..MAX_FIT_SOURCES + 5 {
             let repeats = match i {
                 0..4 => 1,
@@ -419,7 +393,7 @@ mod tests {
             };
             for k in 0..repeats {
                 let tokens = 1000 + 100 * i as u64 + 10 * k;
-                rows.push(row(&format!("s{i:02}"), SessionKind::Main, 0.0, tokens, 0));
+                rows.push(row(&format!("s{i:02}"), 0.0, tokens, 0));
             }
         }
         rows
@@ -461,7 +435,7 @@ mod tests {
             source_effects: vec![],
             p_long,
         };
-        let mut features = row("base", SessionKind::Main, 1.0, 0, 0).features;
+        let mut features = row("base", 1.0, 0, 0).features;
         assert_eq!(model(1178.0).predict(&features), MAX_SESSION_TOKENS);
         assert_eq!(model(-1178.0).predict(&features), MIN_SESSION_TOKENS);
         features.p_long = Probability::new(0.0).unwrap();
@@ -470,10 +444,7 @@ mod tests {
 
     #[test]
     fn unknown_source_predicts_as_baseline() {
-        let rows = [
-            row("base", SessionKind::Main, 0.0, 1000, 0),
-            row("other", SessionKind::Main, 0.0, 8000, 0),
-        ];
+        let rows = [row("base", 0.0, 1000, 0), row("other", 0.0, 8000, 0)];
         let model = fit_size(&rows, &Source("base".into()), MAX_NEWTON_ITERATIONS).unwrap();
         let mut features = rows[0].features.clone();
         let baseline = model.predict(&features);

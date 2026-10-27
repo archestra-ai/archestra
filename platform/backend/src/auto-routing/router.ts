@@ -197,7 +197,6 @@ export async function resolveAutoModel(params: {
       sessionKey,
       scorerInput: {
         firstUserText: text,
-        kind: metadata.kind,
         client: metadata.client,
       },
     }),

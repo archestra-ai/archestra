@@ -33,7 +33,6 @@ export type RoutingPlanStatus = z.infer<typeof RoutingPlanStatusSchema>;
 export const RoutingSessionFeaturesSchema = z.object({
   tier_needed: z.tuple([z.number(), z.number(), z.number()]),
   p_long: z.number().min(0).max(1),
-  kind: z.enum(["main", "subagent"]),
   source: z.string(),
 });
 export type RoutingSessionFeatures = z.infer<
@@ -53,7 +52,6 @@ export const JevSessionSignalSchema = z.object({
 /** A decision's pre-run inputs: signals by source id, plus the request's metadata. */
 export const RoutingDecisionFeaturesSchema = z.object({
   signals: z.object({ "jev-session": JevSessionSignalSchema }),
-  kind: z.enum(["main", "subagent"]),
   client: z.string(),
 });
 export type RoutingDecisionFeatures = z.infer<

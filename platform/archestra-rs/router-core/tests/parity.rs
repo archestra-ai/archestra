@@ -64,12 +64,6 @@ fn matches_reference_fit_and_policy() {
     let reference = expected.long_share;
     assert_close("ls intercept", ls.intercept, reference.intercept, COEF_RTOL);
     assert_close("ls log_size", ls.log_size, reference.log_size, COEF_RTOL);
-    assert_close(
-        "ls is_subagent",
-        ls.is_subagent,
-        reference.is_subagent,
-        COEF_RTOL,
-    );
 
     assert_close(
         "lam_star",

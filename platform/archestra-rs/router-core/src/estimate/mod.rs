@@ -63,9 +63,7 @@ impl Estimator<'_> {
         let size = self.size_model.predict(features);
         SessionEstimate {
             size,
-            price: self
-                .prices
-                .session(self.long_share.predict(size, features.kind)),
+            price: self.prices.session(self.long_share.predict(size)),
             adequacy: features.tier_needed.adequacy(),
         }
     }

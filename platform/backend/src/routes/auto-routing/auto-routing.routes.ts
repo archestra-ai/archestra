@@ -140,11 +140,7 @@ const autoRoutingRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, body }, reply) =>
       reply.send(
-        await previewAutoRouting({
-          organizationId,
-          text: body.text,
-          kind: body.kind,
-        }),
+        await previewAutoRouting({ organizationId, text: body.text }),
       ),
   );
 };

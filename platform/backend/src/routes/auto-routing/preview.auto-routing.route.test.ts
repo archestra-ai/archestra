@@ -30,15 +30,15 @@ const SMART_ANSWERS = {
 describe("POST /api/auto-routing/preview", () => {
   const ctx = useRouteTestApp(autoRoutingRoutes);
   const server = useMswServer();
-  let jevPrompts: string[];
+  let jevStates: unknown[];
 
   beforeEach(async ({ makeSecret, makeLlmProviderApiKey }) => {
     config.autoRouting.enabled = true;
-    jevPrompts = [];
+    jevStates = [];
     server.use(
       http.post(config.llm.jev.baseUrl, async ({ request }) => {
-        const body = (await request.json()) as { state: { prompt: string } };
-        jevPrompts.push(body.state.prompt);
+        const body = (await request.json()) as { state: unknown };
+        jevStates.push(body.state);
         return HttpResponse.json(SMART_ANSWERS);
       }),
     );
@@ -79,7 +79,7 @@ describe("POST /api/auto-routing/preview", () => {
       expectedCostUsd: expect.any(Number),
       scorerCostUsd: 0.0001,
     });
-    expect(jevPrompts).toEqual(["Refactor the billing module"]);
+    expect(jevStates).toEqual([{ prompt: "Refactor the billing module" }]);
     expect(await db.$count(schema.routingDecisionsTable)).toBe(0);
     expect(await db.$count(schema.routingUsageTable)).toBe(0);
     expect(await AutoRoutingSettingsModel.find(ctx.organizationId)).toEqual(
@@ -108,7 +108,7 @@ describe("POST /api/auto-routing/preview", () => {
   test("without a plan, reports the cold-start normal tier", async () => {
     const trio = await configureAutoRouting(ctx.organizationId);
 
-    const response = await preview({ text: "Fix a typo", kind: "subagent" });
+    const response = await preview({ text: "Fix a typo" });
 
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json()).toMatchObject({
@@ -144,13 +144,13 @@ describe("POST /api/auto-routing/preview", () => {
     const response = await preview({ text: "x".repeat(20_001) });
 
     expect(response.statusCode).toBe(400);
-    expect(jevPrompts).toEqual([]);
+    expect(jevStates).toEqual([]);
   });
 
   test("needs a configured trio", async () => {
     const response = await preview({ text: "Fix a typo" });
 
     expect(response.statusCode).toBe(400);
-    expect(jevPrompts).toEqual([]);
+    expect(jevStates).toEqual([]);
   });
 });

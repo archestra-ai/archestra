@@ -61,7 +61,6 @@ def history(rng: np.random.Generator) -> list[dict]:
             "features": {
                 "tier_needed": [v / 20 for v in k],
                 "p_long": p_long,
-                "kind": "subagent" if sub else "main",
                 "source": source,
             },
             "short": split(rng, (1 - share) * size),
@@ -109,7 +108,6 @@ def main() -> None:
     features = [r["features"] for r in rows]
     total = np.array([sum(r["short"].values()) + sum(r["long"].values()) for r in rows], dtype=float)
     long_total = np.array([sum(r["long"].values()) for r in rows], dtype=float)
-    is_sub = np.array([f["kind"] == "subagent" for f in features], dtype=float)
     p_long = np.array([f["p_long"] for f in features])
 
     others = sorted({f["source"] for f in features} - {BASELINE})
@@ -118,7 +116,7 @@ def main() -> None:
     glm.fit(x, total / TOKEN_SCALE)
     size = glm.predict(x) * TOKEN_SCALE
 
-    ls_x = np.column_stack([np.log(size), is_sub])
+    ls_x = np.log(size)[:, None]
     ls = LinearRegression().fit(ls_x, long_total / total, sample_weight=total)
     share = np.clip(ls.predict(ls_x), 0.0, 1.0)
 
@@ -182,8 +180,7 @@ def main() -> None:
             "size_intercept": float(glm.intercept_),
             "size_source_effects": dict(zip(others, map(float, glm.coef_[:-1]))),
             "size_p_long": float(glm.coef_[-1]),
-            "long_share": {"intercept": float(ls.intercept_), "log_size": float(ls.coef_[0]),
-                           "is_subagent": float(ls.coef_[1])},
+            "long_share": {"intercept": float(ls.intercept_), "log_size": float(ls.coef_[0])},
             "policy": {"lam_star": float(lam_star), "q": float(q)},
             "expected_spend": float(expected_spend),
             "routes": routes,

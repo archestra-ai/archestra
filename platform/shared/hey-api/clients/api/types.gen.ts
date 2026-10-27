@@ -30689,7 +30689,6 @@ export type ReplanAutoRoutingResponse = ReplanAutoRoutingResponses[keyof ReplanA
 export type PreviewAutoRoutingData = {
     body: {
         text: string;
-        kind?: 'main' | 'subagent';
     };
     path?: never;
     query?: never;

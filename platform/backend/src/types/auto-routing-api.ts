@@ -129,7 +129,6 @@ export const AUTO_ROUTING_PREVIEW_MAX_CHARS = 20_000;
 
 export const AutoRoutingPreviewBodySchema = z.strictObject({
   text: z.string().trim().min(1).max(AUTO_ROUTING_PREVIEW_MAX_CHARS),
-  kind: z.enum(["main", "subagent"]).default("main"),
 });
 
 export const AutoRoutingPreviewResponseSchema = z.object({

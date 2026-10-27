@@ -33,10 +33,7 @@ export type RequestBodyForExtraction =
     }
   | undefined;
 
-export type SessionKind = "main" | "subagent";
-
 export interface AutoRoutingSessionMetadata extends SessionInfo {
-  kind: SessionKind;
   /** Resolved client attribution; null when no known client was detected. */
   client: string | null;
 }
@@ -96,9 +93,5 @@ export function extractAutoRoutingSessionMetadata({
     body,
     externalAgentId: client,
   });
-  const kind: SessionKind =
-    detectOpenCodeFamilyTurn(headers, client)?.kind === "subagent"
-      ? "subagent"
-      : "main";
-  return { sessionId, sessionSource, kind, client: client ?? null };
+  return { sessionId, sessionSource, client: client ?? null };
 }

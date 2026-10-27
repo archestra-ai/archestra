@@ -15,7 +15,6 @@ import { loadTrio, TIER_NAMES } from "./tiers";
 export async function previewAutoRouting(params: {
   organizationId: string;
   text: string;
-  kind: PreRunInput["kind"];
 }): Promise<AutoRoutingPreviewResponse> {
   const { organizationId } = params;
   const loaded = await loadTrio(await loadAutoRoutingSettings(organizationId));
@@ -26,7 +25,7 @@ export async function previewAutoRouting(params: {
     );
   }
   const { trio } = loaded;
-  const input = { firstUserText: params.text, kind: params.kind, client: null };
+  const input: PreRunInput = { firstUserText: params.text, client: null };
   const scored = await preRunSource
     .read(input, { organizationId })
     .catch((error: unknown) => {

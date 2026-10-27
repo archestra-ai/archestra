@@ -199408,6 +199408,14 @@
                         "not_checked"
                       ]
                     },
+                    "openappa": {
+                      "type": "string",
+                      "enum": [
+                        "ready",
+                        "disabled",
+                        "not_checked"
+                      ]
+                    },
                     "sandbox": {
                       "type": "string",
                       "enum": [
@@ -199426,6 +199434,7 @@
                     "status",
                     "version",
                     "database",
+                    "openappa",
                     "sandbox"
                   ],
                   "additionalProperties": false
@@ -199455,8 +199464,19 @@
                     "database": {
                       "type": "string",
                       "enum": [
+                        "connected",
                         "disconnected"
                       ]
+                    },
+                    "openappa": {
+                      "type": "string",
+                      "enum": [
+                        "starting",
+                        "unavailable"
+                      ]
+                    },
+                    "openappaReason": {
+                      "type": "string"
                     }
                   },
                   "required": [

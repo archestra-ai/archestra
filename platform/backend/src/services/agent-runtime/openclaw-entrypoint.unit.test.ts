@@ -5,6 +5,7 @@ import {
   mkdtemp,
   readFile,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -26,6 +27,7 @@ describe("OpenClaw image entrypoint", () => {
       baseUrl: "http://host.orb.internal:9000/v1/model-router/test",
       expectedBaseUrl: "http://[fd00::123]:9000/v1/model-router/test",
       workspaceId: "retained-workspace",
+      openappa: false,
     },
     {
       protocol: "openai_responses",
@@ -34,6 +36,7 @@ describe("OpenClaw image entrypoint", () => {
       expectedBaseUrl: "http://localhost:9000/v1/model-router/test",
       workspaceId: undefined,
       separateState: true,
+      openappa: true,
     },
   ])("configures the $protocol transport as $expectedApi", async (testCase) => {
     const { protocol, expectedApi, baseUrl, expectedBaseUrl } = testCase;
@@ -130,6 +133,10 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:
           "Follow the configured Agent instructions.",
         ARCHESTRA_AGENT_RUNTIME_MODE: "one_shot",
+        ARCHESTRA_AGENT_RUNTIME_OPENAPPA: testCase.openappa ? "1" : "0",
+        ARCHESTRA_AGENT_RUNTIME_BINDING: testCase.openappa
+          ? "synthetic-binding"
+          : "",
         ARCHESTRA_MCP_GATEWAY_URL: "http://localhost:9000/v1/mcp/test",
         ARCHESTRA_MCP_GATEWAY_TOKEN: "test-token",
         ARCHESTRA_AGENT_ATTENTION_COMMAND: attentionCommand,
@@ -163,7 +170,6 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
       expect(config.agents.defaults.skipBootstrap).toBe(true);
       expect(config.plugins).toMatchObject({
         enabled: true,
-        bundledDiscovery: "allowlist",
         allow: ["archestra-runtime-attention", "archestra-transcript"],
         load: {
           paths: [
@@ -182,6 +188,18 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
           },
         },
       });
+      expect(config.plugins).not.toHaveProperty("bundledDiscovery");
+      expect(config.tools).toEqual(
+        testCase.openappa ? { toolSearch: false, codeMode: false } : {},
+      );
+      for (const directory of config.plugins.load.paths) {
+        expect((await stat(directory)).mode & 0o777).toBe(0o700);
+        for (const name of ["openclaw.plugin.json", "package.json"]) {
+          expect((await stat(path.join(directory, name))).mode & 0o777).toBe(
+            0o600,
+          );
+        }
+      }
       const pluginManifest = JSON.parse(
         await readFile(
           path.join(runtime, "openclaw-attention", "openclaw.plugin.json"),

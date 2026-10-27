@@ -152,6 +152,9 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
+      - name: Configure Git identity
+        uses: $/.github/actions/configure-git-identity
+
       - name: Prepare automation branch
         id: branch
         env:
@@ -159,8 +162,6 @@ jobs:
         run: |
           set -euo pipefail
           gh auth setup-git --hostname github.com --force
-          git config user.name "Archestra releaser automation"
-          git config user.email "releaser-bot@users.noreply.github.com"
           git fetch origin main
 
           target="$RUNNER_TEMP/client-versions-branch"
@@ -328,6 +329,9 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
+      - name: Configure Git identity
+        uses: $/.github/actions/configure-git-identity
+
       - name: Prepare automation branch
         id: branch
         env:
@@ -335,8 +339,6 @@ jobs:
         run: |
           set -euo pipefail
           gh auth setup-git --hostname github.com --force
-          git config user.name "Archestra releaser automation"
-          git config user.email "releaser-bot@users.noreply.github.com"
           git fetch origin main
 
           target="$RUNNER_TEMP/agent-runtime-clis-branch"
@@ -476,6 +478,9 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
+      - name: Configure Git identity
+        uses: $/.github/actions/configure-git-identity
+
       - name: Prepare automation branch
         id: branch
         env:
@@ -483,8 +488,6 @@ jobs:
         run: |
           set -euo pipefail
           gh auth setup-git --hostname github.com --force
-          git config user.name "Archestra releaser automation"
-          git config user.email "releaser-bot@users.noreply.github.com"
           git fetch origin main
 
           target="$RUNNER_TEMP/playwright-mcp-branch"

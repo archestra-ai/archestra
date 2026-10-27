@@ -11,6 +11,10 @@ import {
   type SpendCapValue,
 } from "@/components/credential-billing/budget-fields";
 import { ExpirySelect } from "@/components/credential-billing/expiry-select";
+import {
+  ModelPoolsField,
+  useCanSetModelPools,
+} from "@/components/credential-billing/model-pools-field";
 import { primaryKeyMappings } from "@/components/credential-billing/provider-key-data";
 import { ProviderKeyList } from "@/components/credential-billing/provider-key-list";
 import { FormDialog } from "@/components/form-dialog";
@@ -157,6 +161,8 @@ export function CreateVirtualKeyDialog({
   const [providerApiKeyIds, setProviderApiKeyIds] =
     useState<ProviderApiKeyMappings>([]);
   const [grants, setGrants] = useState<InitialPermissionGrant[]>([]);
+  const [modelPoolIds, setModelPoolIds] = useState<string[]>([]);
+  const canSetModelPools = useCanSetModelPools();
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const [createdKey, setCreatedKey] = useState<CreatedVirtualKey | null>(null);
@@ -217,6 +223,7 @@ export function CreateVirtualKeyDialog({
       setBillingTeamId(null);
       setSpendCap(null);
       setGrants([]);
+      setModelPoolIds([]);
       setLabels([]);
       initialSnapshotRef.current = {
         keyType,
@@ -227,6 +234,7 @@ export function CreateVirtualKeyDialog({
         billingTeamId: null,
         spendCap: null,
         grants: [],
+        modelPoolIds: [],
         labels: [],
       };
     }
@@ -287,6 +295,7 @@ export function CreateVirtualKeyDialog({
       billingTeamId,
       spendCap,
       grants,
+      modelPoolIds,
       labels,
     });
 
@@ -313,6 +322,7 @@ export function CreateVirtualKeyDialog({
                 subject,
                 actions,
               })),
+              ...(canSetModelPools && { modelPoolIds }),
             },
       });
       setNewKeyName("");
@@ -328,9 +338,11 @@ export function CreateVirtualKeyDialog({
       // handled by mutation
     }
   }, [
+    canSetModelPools,
     createMutation,
     expiresAt,
     grants,
+    modelPoolIds,
     isPassthrough,
     labels,
     includeFutureProviders,
@@ -440,6 +452,13 @@ export function CreateVirtualKeyDialog({
                       providerApiKeys={parentableKeys}
                     />
                   }
+                />
+              )}
+              {!isPassthrough && canSetModelPools && (
+                <ModelPoolsField
+                  id="virtual-key-model-pools"
+                  value={modelPoolIds}
+                  onChange={setModelPoolIds}
                 />
               )}
               <AdvancedSection keepMounted>

@@ -786,6 +786,8 @@ export async function handleLLMProxy<
   let wasVirtualKeyResolved = false;
   /** The pool a virtual key with no key of this provider was let in for. */
   let virtualKeyOnlyPoolId: string | undefined;
+  // A pool an OAuth client may use for the requested model.
+  let oauthPoolId: string | undefined;
   let wasOAuthAuthenticated = false;
   let authMethod = authOverride?.authMethod;
   let authenticatedApp = authOverride?.authenticatedApp;
@@ -860,6 +862,7 @@ export async function handleLLMProxy<
       expectedProvider: providerName,
       agent: resolvedAgent,
       requestedModel: requestAdapter.getModel(),
+      allowModelPool: true,
     });
     if (oauthResult) {
       apiKey = oauthResult.apiKey;
@@ -870,6 +873,7 @@ export async function handleLLMProxy<
       authenticatedApp = oauthResult.authenticatedApp;
       billingTeamId ??= oauthResult.billingTeamId;
       serviceAccountId = oauthResult.serviceAccountId;
+      oauthPoolId = oauthResult.modelPoolId;
       if (oauthResult.userId) {
         oauthUserId = oauthResult.userId;
         userId = oauthResult.userId;
@@ -1370,7 +1374,8 @@ export async function handleLLMProxy<
             virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
             providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
           },
-          grantedPoolId: authOverride?.modelPoolId ?? virtualKeyOnlyPoolId,
+          grantedPoolId:
+            authOverride?.modelPoolId ?? virtualKeyOnlyPoolId ?? oauthPoolId,
           sessionId,
         })
       : null;
@@ -1380,6 +1385,12 @@ export async function handleLLMProxy<
       throw new ApiError(
         400,
         `Virtual API key is not mapped to provider "${providerName}".`,
+      );
+    }
+    if (oauthPoolId && !perKeyChatApiKeyId && !modelPoolPlan) {
+      throw new ApiError(
+        400,
+        `LLM OAuth client is not mapped to provider "${providerName}".`,
       );
     }
 

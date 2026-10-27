@@ -1,6 +1,6 @@
 "use client";
 
-import { isModelPoolProvider } from "@archestra/shared";
+import { isModelPoolProvider, type SupportedProvider } from "@archestra/shared";
 import { useMemo } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
@@ -10,64 +10,154 @@ import {
   type ModelPoolInput,
   useModelPools,
 } from "@/lib/model-pools.query";
-import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 import { isPoolableModel, poolModelName } from "./model-name";
 
+/**
+ * A pool's members in the order requests try them. A linked member shares the
+ * order of the one above it, and the two split traffic by weight; any other
+ * member starts the next order, a fallback for every member above it.
+ */
 export type PoolFormValues = {
   name: string;
-  members: {
-    providerApiKeyId: string;
-    modelId: string;
-    priority: number;
-    weight: number;
-    enabled: boolean;
-  }[];
-  virtualApiKeyIds: string[];
+  members: PoolFormMember[];
+};
+
+export type PoolFormMember = {
+  providerApiKeyId: string;
+  modelId: string;
+  linked: boolean;
+  weight: number;
+  enabled: boolean;
 };
 
 export type PoolForm = UseFormReturn<PoolFormValues>;
 
-/** The API's limits on a member's priority and weight. */
-export const MAX_PRIORITY = 100;
+/** The API's limit on a member's weight. */
 export const MAX_WEIGHT = 1000;
-
-export function isValidPriority(value: number): boolean {
-  return Number.isInteger(value) && value >= 1 && value <= MAX_PRIORITY;
-}
 
 export function isValidWeight(value: number): boolean {
   return Number.isInteger(value) && value >= 1 && value <= MAX_WEIGHT;
 }
 
 export function toFormValues(pool: ModelPool | null): PoolFormValues {
+  const members = [...(pool?.members ?? [])].sort(
+    (a, b) => a.priority - b.priority,
+  );
   return {
     name: pool?.name ?? "",
-    members: compactPriorities(
-      pool?.members.map((member) => ({
-        providerApiKeyId: member.providerApiKeyId,
-        modelId: member.modelId,
-        priority: member.priority,
-        weight: member.weight,
-        enabled: member.enabled,
-      })) ?? [],
-    ),
-    virtualApiKeyIds: pool?.virtualApiKeyIds ?? [],
+    members: members.map((member, index) => ({
+      providerApiKeyId: member.providerApiKeyId,
+      modelId: member.modelId,
+      linked: index > 0 && members[index - 1]?.priority === member.priority,
+      weight: member.weight,
+      enabled: member.enabled,
+    })),
   };
 }
 
 export function toPoolInput(values: PoolFormValues): ModelPoolInput {
+  const orders = memberOrders(values.members);
   return {
     name: values.name.trim(),
-    members: compactPriorities(values.members).map((member) => ({
-      ...member,
+    members: values.members.map((member, index) => ({
+      providerApiKeyId: member.providerApiKeyId,
       modelId: member.modelId.trim(),
+      priority: orders[index] ?? 1,
+      weight: member.weight,
+      enabled: member.enabled,
     })),
-    virtualApiKeyIds: values.virtualApiKeyIds,
   };
 }
 
+/** Each member's order, 1 for the first: linked members share one. */
+export function memberOrders(members: { linked: boolean }[]): number[] {
+  const orders: number[] = [];
+  members.forEach((member, index) => {
+    const above = orders[index - 1] ?? 0;
+    orders.push(index > 0 && member.linked ? above : above + 1);
+  });
+  return orders;
+}
+
 /**
- * The provider keys, model ids and virtual keys the pool fields choose from.
+ * The members after one moves from `from` to `to`. Dropped between two linked
+ * members, it joins their order; anywhere else it starts an order of its own.
+ * A member that followed it in its old order now leads that order. Moved
+ * within its own order, it only trades places.
+ */
+export function moveMember(
+  members: PoolFormMember[],
+  from: number,
+  to: number,
+): PoolFormMember[] {
+  const orders = memberOrders(members);
+  if (orders[from] === orders[to]) {
+    // Within one order, the rows trade places and the order stays as it is.
+    const next = [...members];
+    const [moved] = next.splice(from, 1);
+    if (!moved) return members;
+    next.splice(to, 0, moved);
+    return next.map((member, index) => ({
+      ...member,
+      linked: members[index]?.linked ?? false,
+    }));
+  }
+  const next = unlinkFollower(members, from);
+  const [moved] = next.splice(from, 1);
+  if (!moved) return members;
+  const insideOrder = to > 0 && next[to]?.linked === true;
+  next.splice(to, 0, { ...moved, linked: insideOrder });
+  return leadWithUnlinked(next);
+}
+
+/** The members after one is removed, keeping the others' orders. */
+export function removeMember(
+  members: PoolFormMember[],
+  index: number,
+): PoolFormMember[] {
+  const next = unlinkFollower(members, index);
+  next.splice(index, 1);
+  return leadWithUnlinked(next);
+}
+
+/** A leading member leaving its order hands the lead to the one after it. */
+function unlinkFollower(members: PoolFormMember[], index: number) {
+  const next = [...members];
+  const follower = next[index + 1];
+  if (!next[index]?.linked && follower?.linked) {
+    next[index + 1] = { ...follower, linked: false };
+  }
+  return next;
+}
+
+function leadWithUnlinked(members: PoolFormMember[]) {
+  const [first, ...rest] = members;
+  return first?.linked ? [{ ...first, linked: false }, ...rest] : members;
+}
+
+/**
+ * The member's percent of its order's traffic, among members that are on.
+ * Null when it is off or alone on its order, where it takes all of it.
+ */
+export function orderShare(
+  members: PoolFormMember[],
+  index: number,
+): number | null {
+  const orders = memberOrders(members);
+  const member = members[index];
+  const sameOrder = members.filter(
+    (_, other) => orders[other] === orders[index],
+  );
+  if (!member?.enabled || sameOrder.length < 2) return null;
+  const total = sameOrder
+    .filter((other) => other.enabled)
+    .reduce((sum, other) => sum + (other.weight || 0), 0);
+  if (total <= 0) return null;
+  return Math.round(((member.weight || 0) / total) * 100);
+}
+
+/**
+ * The provider keys and models the pool fields choose from.
  */
 export function usePoolOptions() {
   const { data: allKeys = [] } = useLlmProviderApiKeys();
@@ -105,6 +195,18 @@ export function usePoolOptions() {
     }
     return byKey;
   }, [chatModels]);
+  // Every model id a provider's keys list, offered for a key that has synced
+  // none of its own yet.
+  const modelIdsByProvider = useMemo(() => {
+    const byProvider = new Map<SupportedProvider, string[]>();
+    for (const model of chatModels) {
+      const ids = byProvider.get(model.provider) ?? [];
+      if (!ids.includes(model.modelId)) {
+        byProvider.set(model.provider, [...ids, model.modelId]);
+      }
+    }
+    return byProvider;
+  }, [chatModels]);
   // Names, not provider ids: Bedrock's `us.zai.glm-5.3` is offered as `glm-5.3`.
   const modelNames = useMemo(
     () =>
@@ -118,16 +220,13 @@ export function usePoolOptions() {
     [chatModels],
   );
 
-  // Pass-through keys carry the caller's own provider key, so they can't
-  // spend a pool's keys.
-  const { data: virtualKeyPage } = useAllVirtualApiKeys({
-    limit: 100,
-    keyType: "standard",
-    toastOnError: false,
-  });
-  const virtualKeys = virtualKeyPage?.data ?? [];
-
-  return { sharedKeys, keysById, modelIdsByKey, modelNames, virtualKeys };
+  return {
+    sharedKeys,
+    keysById,
+    modelIdsByKey,
+    modelIdsByProvider,
+    modelNames,
+  };
 }
 
 export type PoolOptions = ReturnType<typeof usePoolOptions>;
@@ -151,18 +250,12 @@ export function usePoolProblem(
     members.some((member) => !member.providerApiKeyId || !member.modelId.trim())
   )
     return "members";
-  if (
-    members.some(
-      (member) =>
-        !isValidPriority(member.priority) || !isValidWeight(member.weight),
-    )
-  )
-    return "numbers";
+  if (members.some((member) => !isValidWeight(member.weight))) return "numbers";
   if (hasRepeatedMember(members)) return "repeated";
   return null;
 }
 
-export function hasRepeatedMember(members: PoolFormValues["members"]) {
+export function hasRepeatedMember(members: PoolFormMember[]) {
   const keys = members.map(
     (member) => `${member.providerApiKeyId}|${member.modelId.trim()}`,
   );
@@ -170,68 +263,20 @@ export function hasRepeatedMember(members: PoolFormValues["members"]) {
 }
 
 /**
- * Priorities renumbered 1, 2, 3 in the same order, shown as each member's
- * order (LiteLLM's word for it). Routing only compares them.
+ * "3 members · tries 2, then 1": how many there are, and how many share each
+ * order among the members that are on.
  */
-export function compactPriorities(
-  members: PoolFormValues["members"],
-): PoolFormValues["members"] {
-  const ranks = [...new Set(members.map((member) => member.priority))].sort(
-    (a, b) => a - b,
-  );
-  return members.map((member) => ({
-    ...member,
-    priority: ranks.indexOf(member.priority) + 1,
-  }));
-}
-
-/** The first member gets order 1; later ones start at order 2. */
-export function nextPriority(members: PoolFormValues["members"]): number {
-  return members.length === 0 ? 1 : 2;
-}
-
-/**
- * The member's percent of its order's traffic, among members that are on, or
- * null when it is off.
- */
-export function orderShare(
-  members: PoolFormValues["members"],
-  index: number,
-): number | null {
-  const member = members[index];
-  if (!member?.enabled) return null;
-  const sameOrder = members.filter(
-    (other) => other.enabled && other.priority === member.priority,
-  );
-  const total = sameOrder.reduce((sum, other) => sum + (other.weight || 0), 0);
-  if (total <= 0) return null;
-  return Math.round(((member.weight || 0) / total) * 100);
-}
-
-/** "3 members, 2 on order 1": how many there are and how many go first. */
-export function orderSummary(members: { priority: number }[]): string {
-  const count = `${members.length} member${members.length === 1 ? "" : "s"}`;
-  if (members.length === 0) return count;
-  const first = Math.min(...members.map((member) => member.priority));
-  const leading = members.filter((member) => member.priority === first).length;
-  return leading === members.length
-    ? count
-    : `${count}, ${leading} on order ${first}`;
-}
-
-/** The same summary for a saved pool, leading with the members that are on. */
 export function memberSummary(pool: ModelPool): string {
-  const on = pool.members.filter((member) => member.enabled);
   const count = `${pool.members.length} member${pool.members.length === 1 ? "" : "s"}`;
-  if (on.length === 0) return count;
-  const first = Math.min(...on.map((member) => member.priority));
-  const leading = on.filter((member) => member.priority === first).length;
-  return leading === pool.members.length
-    ? count
-    : `${count}, ${leading} on order ${first}`;
-}
-
-export function accessSummary(count: number): string {
-  if (count === 0) return "No virtual keys";
-  return `${count} virtual key${count === 1 ? "" : "s"}`;
+  const counts = new Map<number, number>();
+  for (const member of pool.members) {
+    if (!member.enabled) continue;
+    counts.set(member.priority, (counts.get(member.priority) ?? 0) + 1);
+  }
+  if (counts.size < 2) return count;
+  const tries = [...counts.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([, size]) => size)
+    .join(", then ");
+  return `${count} · tries ${tries}`;
 }

@@ -98619,6 +98619,7 @@ export type GetOauthClientsResponses = {
             scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
             allowedGatewayIds: Array<string>;
             includeFutureProviders: boolean;
+            modelPoolIds: Array<string>;
         }>;
         pagination: {
             currentPage: number;
@@ -98644,6 +98645,10 @@ export type CreateOauthClientData = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
         }>;
+        /**
+         * Model pools the client may call by name without mapping one of their members. Omit on update to keep them. Only applies to client_credentials clients.
+         */
+        modelPoolIds?: Array<string>;
         /**
          * Use current and future shared primary provider keys, with selected keys as overrides. Defaults to false on creation; omit on update to preserve the mode. Only valid for client_credentials with LLM Proxy access.
          */
@@ -98812,6 +98817,7 @@ export type CreateOauthClientResponses = {
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;
+        modelPoolIds: Array<string>;
         clientSecret: string;
     };
 };
@@ -98917,6 +98923,10 @@ export type UpdateOauthClientData = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
         }>;
+        /**
+         * Model pools the client may call by name without mapping one of their members. Omit on update to keep them. Only applies to client_credentials clients.
+         */
+        modelPoolIds?: Array<string>;
         /**
          * Use current and future shared primary provider keys, with selected keys as overrides. Defaults to false on creation; omit on update to preserve the mode. Only valid for client_credentials with LLM Proxy access.
          */
@@ -99065,6 +99075,7 @@ export type UpdateOauthClientResponses = {
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;
+        modelPoolIds: Array<string>;
     };
 };
 
@@ -99194,6 +99205,7 @@ export type RotateOauthClientSecretResponses = {
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
         includeFutureProviders: boolean;
+        modelPoolIds: Array<string>;
         clientSecret: string;
     };
 };
@@ -130375,6 +130387,7 @@ export type CreateVirtualApiKeyData = {
             limitValue: number;
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         } | null;
+        modelPoolIds?: Array<string>;
         ownerId?: string;
         initialGrants?: Array<{
             subject: {
@@ -130768,6 +130781,7 @@ export type UpdateVirtualApiKeyData = {
             limitValue: number;
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         } | null;
+        modelPoolIds?: Array<string>;
     };
     path: {
         id: string;

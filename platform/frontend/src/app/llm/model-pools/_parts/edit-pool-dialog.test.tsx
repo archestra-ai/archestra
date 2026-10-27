@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/organization.query");
 vi.mock("next/image", () => ({
   default: ({
     alt,
@@ -23,15 +24,16 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
 vi.mock("@/lib/llm-models.query", () => ({
   useModelsWithApiKeys: () => ({ data: [] }),
 }));
-vi.mock("@/lib/virtual-api-keys.query", () => ({
-  useAllVirtualApiKeys: () => ({ data: { data: [] } }),
-}));
 vi.mock("@/components/virtual-key-connection-base-url", () => ({
   useConnectionBaseUrl: () => "http://localhost:9000/v1",
 }));
 
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { type ModelPool, useModelPools } from "@/lib/model-pools.query";
+import {
+  useAppearanceSettings,
+  useOrganization,
+} from "@/lib/organization.query";
 import { EditPoolDialog } from "./edit-pool-dialog";
 
 const NOW = Date.now();
@@ -44,22 +46,21 @@ function pool(benchedUntil: string | null): ModelPool {
     createdAt: new Date(NOW).toISOString(),
     updatedAt: new Date(NOW).toISOString(),
     virtualApiKeyIds: [],
-    members: [
-      {
-        id: "member",
-        poolId: "pool",
-        providerApiKeyId: "key",
-        providerApiKeyName: "Z.ai",
-        provider: "zhipuai",
-        modelId: "glm-5",
-        priority: 1,
-        weight: 1,
-        enabled: true,
-        createdAt: new Date(NOW).toISOString(),
-        benchedUntil,
-        benchReason: benchedUntil ? "rate_limited (429)" : null,
-      },
-    ],
+    members: ["glm-5", "glm-5-air"].map((modelId) => ({
+      id: modelId,
+      poolId: "pool",
+      providerApiKeyId: "key",
+      providerApiKeyName: "Z.ai",
+      provider: "zhipuai",
+      modelId,
+      priority: 1,
+      weight: 1,
+      enabled: true,
+      createdAt: new Date(NOW).toISOString(),
+      benchedUntil: modelId === "glm-5" ? benchedUntil : null,
+      benchReason:
+        modelId === "glm-5" && benchedUntil ? "rate_limited (429)" : null,
+    })),
   } as ModelPool;
 }
 
@@ -68,6 +69,12 @@ describe("EditPoolDialog", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: null,
+    } as unknown as ReturnType<typeof useOrganization>);
+    vi.mocked(useAppearanceSettings).mockReturnValue({
+      data: null,
+    } as unknown as ReturnType<typeof useAppearanceSettings>);
   });
 
   it("keeps edits in progress when the list refetches with new status", async () => {
@@ -77,11 +84,14 @@ describe("EditPoolDialog", () => {
       data: [saved],
     } as unknown as ReturnType<typeof useModelPools>);
     const { rerender } = render(
-      <EditPoolDialog pool={saved} onOpenChange={() => {}} />,
+      <EditPoolDialog
+        pool={saved}
+        onOpenChange={() => {}}
+        onConnect={() => {}}
+      />,
     );
 
-    await user.click(screen.getAllByRole("button", { name: "Members" })[0]);
-    const weight = screen.getByRole("spinbutton", { name: /Weight/ });
+    const weight = screen.getAllByRole("spinbutton", { name: /Weight/ })[0];
     await user.clear(weight);
     await user.type(weight, "5");
 
@@ -90,11 +100,19 @@ describe("EditPoolDialog", () => {
     vi.mocked(useModelPools).mockReturnValue({
       data: [refetched],
     } as unknown as ReturnType<typeof useModelPools>);
-    rerender(<EditPoolDialog pool={refetched} onOpenChange={() => {}} />);
+    rerender(
+      <EditPoolDialog
+        pool={refetched}
+        onOpenChange={() => {}}
+        onConnect={() => {}}
+      />,
+    );
 
-    expect(screen.getByRole("spinbutton", { name: /Weight/ })).toHaveValue(5);
-    expect(screen.getByText(/Benched \d+ s/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save Changes" })).toBeEnabled();
+    expect(
+      screen.getAllByRole("spinbutton", { name: /Weight/ })[0],
+    ).toHaveValue(5);
+    expect(screen.getByText(/Cooling down · \d+ s/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
   });
 
   it.each([
@@ -107,13 +125,20 @@ describe("EditPoolDialog", () => {
     vi.mocked(useModelPools).mockReturnValue({
       data: [saved],
     } as unknown as ReturnType<typeof useModelPools>);
-    render(<EditPoolDialog pool={saved} onOpenChange={() => {}} />);
-    await user.click(screen.getAllByRole("button", { name: "Members" })[0]);
-    const input = screen.getByRole("spinbutton", { name: new RegExp(field) });
+    render(
+      <EditPoolDialog
+        pool={saved}
+        onOpenChange={() => {}}
+        onConnect={() => {}}
+      />,
+    );
+    const input = screen.getAllByRole("spinbutton", {
+      name: new RegExp(field),
+    })[0];
     await user.clear(input);
     if (value) await user.type(input, value);
     expect(input).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByRole("button", { name: "Save Changes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
   });
 
   it("asks before Cancel discards edits", async () => {
@@ -123,9 +148,14 @@ describe("EditPoolDialog", () => {
       data: [saved],
     } as unknown as ReturnType<typeof useModelPools>);
     const onOpenChange = vi.fn();
-    render(<EditPoolDialog pool={saved} onOpenChange={onOpenChange} />);
-    await user.click(screen.getAllByRole("button", { name: "Members" })[0]);
-    const weight = screen.getByRole("spinbutton", { name: /Weight/ });
+    render(
+      <EditPoolDialog
+        pool={saved}
+        onOpenChange={onOpenChange}
+        onConnect={() => {}}
+      />,
+    );
+    const weight = screen.getAllByRole("spinbutton", { name: /Weight/ })[0];
     await user.clear(weight);
     await user.type(weight, "5");
     await user.click(screen.getByRole("button", { name: "Cancel" }));

@@ -190,11 +190,12 @@ async function assertValidVirtualApiKeys(params: {
   organizationId: string;
   input: ModelPoolInput;
 }): Promise<void> {
+  const ids = params.input.virtualApiKeyIds ?? [];
   const keys = await VirtualApiKeyModel.findSummariesByIds({
-    ids: params.input.virtualApiKeyIds,
+    ids,
     organizationId: params.organizationId,
   });
-  for (const id of params.input.virtualApiKeyIds) {
+  for (const id of ids) {
     const key = keys.get(id);
     if (!key) throw new ApiError(400, `Virtual key ${id} not found.`);
     if (key.keyType !== "standard") {

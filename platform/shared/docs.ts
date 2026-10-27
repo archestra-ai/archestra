@@ -78,6 +78,7 @@ export const DocsPage = {
   PlatformKnowledgeSettings: "knowledge/settings",
   PlatformLlmProxyAuthentication: "llm-proxy/authentication",
   PlatformLlmProxy: "llm-proxy",
+  PlatformLlmProxyModelPools: "llm-proxy/model-pools",
   PlatformMastraExample: "integrations/sdks-and-frameworks",
   PlatformMcpGateway: "mcp/gateway",
   PlatformMigrateYourAgents: "get-started/migrate",

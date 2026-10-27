@@ -2,12 +2,13 @@
 
 import {
   CircleCheck,
-  CircleDashed,
   CircleSlash,
   CircleX,
   type LucideIcon,
+  Snowflake,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
@@ -19,43 +20,31 @@ import { cn } from "@/lib/utils/tailwind";
 type SavedMember = ModelPool["members"][number];
 
 /**
- * Whether a member takes traffic now: benched after a failure (with the
- * seconds left and why), off, or healthy. A member not saved yet has none.
- *
- * A glyph beside the word, as the service-account status does: healthy is the
- * usual reading and stays neutral, so only a benched member is coloured.
+ * "Cooling down · 23 s" while a member is skipped after a failure (LiteLLM's
+ * word for it), with the reason on hover. Nothing otherwise: a member that
+ * answers is the usual case.
  */
-export function MemberStatus({
-  enabled,
-  saved,
-}: {
-  enabled: boolean;
-  saved: SavedMember | null;
-}) {
+export function MemberCooldown({ saved }: { saved: SavedMember | null }) {
   const secondsLeft = useSecondsLeft(saved?.benchedUntil ?? null);
-  if (!saved) {
-    return <StatusReading icon={CircleDashed}>Not saved yet</StatusReading>;
-  }
-  if (!enabled || !saved.enabled) {
-    return <StatusReading icon={CircleSlash}>Off</StatusReading>;
-  }
-  if (secondsLeft > 0) {
-    const reading = (
-      <StatusReading icon={CircleX} danger>
-        Benched {secondsLeft} s
-      </StatusReading>
-    );
-    if (!saved.benchReason) return reading;
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex">{reading}</span>
-        </TooltipTrigger>
-        <TooltipContent>{saved.benchReason}</TooltipContent>
-      </Tooltip>
-    );
-  }
-  return <StatusReading icon={CircleCheck}>Healthy</StatusReading>;
+  if (!saved?.enabled || secondsLeft <= 0) return null;
+  const badge = (
+    <Badge
+      variant="outline"
+      className="gap-1 border-sky-300 text-sky-700 dark:border-sky-800 dark:text-sky-300"
+    >
+      <Snowflake className="size-3" aria-hidden="true" />
+      <span>Cooling down · {secondsLeft} s</span>
+    </Badge>
+  );
+  if (!saved.benchReason) return badge;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex">{badge}</span>
+      </TooltipTrigger>
+      <TooltipContent>{saved.benchReason}</TooltipContent>
+    </Tooltip>
+  );
 }
 
 /** One line for a whole pool: all healthy, or how many are benched. */
@@ -71,7 +60,7 @@ export function PoolHealth({ pool }: { pool: ModelPool }) {
   const longest = Math.max(...benched.map((member) => member.secondsLeft));
   return (
     <StatusReading icon={CircleX} danger>
-      {benched.length} benched, {longest} s
+      {benched.length} cooling down, {longest} s
     </StatusReading>
   );
 }

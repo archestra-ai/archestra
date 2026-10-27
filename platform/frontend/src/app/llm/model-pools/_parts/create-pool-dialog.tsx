@@ -2,14 +2,13 @@
 
 import { Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
-import { AdvancedSection } from "@/components/advanced-section";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useCreateModelPool } from "@/lib/model-pools.query";
-import { AccessField, MembersEditor, ModelNameField } from "./pool-fields";
+import type { ConnectablePool } from "./connect-pool-dialog";
+import { FailoverNote, MembersEditor, ModelNameField } from "./pool-fields";
 import {
   type PoolFormValues,
   toFormValues,
@@ -19,13 +18,16 @@ import {
 } from "./pool-form";
 
 /**
- * Creates a pool: its name, its members, and (under Advanced) the virtual keys
- * that may use it. Mount it only while open, so each opening starts blank.
+ * Creates a pool: its name and its members. Mount it only while open, so each
+ * opening starts blank.
  */
 export function CreatePoolDialog({
   onOpenChange,
+  onCreated,
 }: {
   onOpenChange: (open: boolean) => void;
+  /** Called with the new pool, to show how to connect to it. */
+  onCreated: (pool: ConnectablePool) => void;
 }) {
   const form = useForm<PoolFormValues>({ defaultValues: toFormValues(null) });
   const options = usePoolOptions();
@@ -34,7 +36,7 @@ export function CreatePoolDialog({
 
   const onSubmit = form.handleSubmit(async (values) => {
     const created = await createPool.mutateAsync(toPoolInput(values));
-    if (created) onOpenChange(false);
+    if (created) onCreated(created);
   });
 
   return (
@@ -42,9 +44,9 @@ export function CreatePoolDialog({
       open
       onOpenChange={onOpenChange}
       title="New model pool"
-      description="Serve one model from several provider keys, with failover between them."
+      description="Serve one model name from several provider keys, with failover between them."
       size="small"
-      className="sm:max-w-[720px]"
+      className="sm:max-w-[860px]"
       isDirty={form.formState.isDirty}
     >
       <form onSubmit={onSubmit} className="flex min-h-0 flex-col">
@@ -55,18 +57,13 @@ export function CreatePoolDialog({
             disabled={false}
             taken={problem === "taken"}
           />
-          <div className="space-y-2">
-            <Label>Members</Label>
-            <MembersEditor
-              form={form}
-              options={options}
-              disabled={false}
-              savedMembers={[]}
-            />
-          </div>
-          <AdvancedSection keepMounted>
-            <AccessField form={form} options={options} disabled={false} />
-          </AdvancedSection>
+          <MembersEditor
+            form={form}
+            options={options}
+            disabled={false}
+            savedMembers={[]}
+          />
+          <FailoverNote />
         </DialogBody>
         <DialogStickyFooter className="mt-0">
           {options.sharedKeys.length === 0 ? (

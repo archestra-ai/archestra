@@ -31,6 +31,7 @@ import AgentModel from "@/models/agent";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { credentialBilling } from "@/services/credential-billing";
+import { assertCanGrantModelPools } from "@/services/model-pool-grants";
 import { validateOauthServiceAccountBinding } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -84,6 +85,14 @@ const OauthClientFields = z
     allowedGatewayIds: z.array(z.string().uuid()).optional(),
     grantType: LlmOauthClientGrantTypeSchema.default("client_credentials"),
     providerApiKeys: z.array(LlmOauthClientProviderKeyBodySchema).optional(),
+    modelPoolIds: z
+      .array(z.string().uuid())
+      .max(500)
+      .optional()
+      .describe(
+        "Model pools the client may call by name without mapping one of their members. " +
+          "Omit on update to keep them. Only applies to client_credentials clients.",
+      ),
     includeFutureProviders: z
       .boolean()
       .optional()
@@ -333,6 +342,11 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         teamId: body.billingTeamId,
       });
+      await assertCanGrantModelPools({
+        modelPoolIds: body.modelPoolIds,
+        organizationId,
+        userId: user.id,
+      });
       const serviceAccountId = await validateOauthServiceAccountBinding({
         ...body,
         organizationId,
@@ -348,6 +362,7 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         allowedGatewayIds: body.allowedGatewayIds,
         providerApiKeys: body.providerApiKeys,
         includeFutureProviders: body.includeFutureProviders,
+        modelPoolIds: body.modelPoolIds,
         redirectUris: body.redirectUris,
         authorId: user.id,
         initialGrants: body.initialGrants,
@@ -463,6 +478,11 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         cap: body.spendCap,
         current: existing.spendCap,
       });
+      await assertCanGrantModelPools({
+        modelPoolIds: body.modelPoolIds,
+        organizationId,
+        userId: user.id,
+      });
       const serviceAccountId = await validateOauthServiceAccountBinding({
         ...body,
         organizationId,
@@ -477,6 +497,7 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         allowedGatewayIds: body.allowedGatewayIds,
         providerApiKeys: body.providerApiKeys,
         includeFutureProviders: body.includeFutureProviders,
+        modelPoolIds: body.modelPoolIds,
         redirectUris: body.redirectUris,
         billingTeamId: body.billingTeamId,
       });

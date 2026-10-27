@@ -1,13 +1,18 @@
 "use client";
 
-import { isModelPoolProvider, type SupportedProvider } from "@archestra/shared";
+import {
+  DocsPage,
+  isModelPoolProvider,
+  type SupportedProvider,
+} from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Layers, Pencil, Plus, Server, Trash2 } from "lucide-react";
+import { Layers, Pencil, Plug, Plus, Server, Trash2 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { useCallback, useState } from "react";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   CollectionFilters,
   FilterBar,
@@ -29,6 +34,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -37,14 +43,30 @@ import {
   useDeleteModelPool,
   useModelPools,
 } from "@/lib/model-pools.query";
+import {
+  type ConnectablePool,
+  ConnectPoolDialog,
+} from "./_parts/connect-pool-dialog";
 import { CreatePoolDialog } from "./_parts/create-pool-dialog";
 import { EditPoolDialog } from "./_parts/edit-pool-dialog";
 import { PoolHealth } from "./_parts/member-status";
 import { PoolProviders } from "./_parts/pool-fields";
-import { accessSummary, memberSummary } from "./_parts/pool-form";
+import { memberSummary } from "./_parts/pool-form";
 
-const DESCRIPTION =
-  "Serve one model from several provider keys, on one provider or several. Clients ask for the pool's name; requests go to the lowest order first, split by weight, and to the next order on rate limits and outages.";
+const DESCRIPTION = (
+  <>
+    <span>
+      Serve one model name from several provider keys, with load balancing and
+      failover.
+    </span>{" "}
+    <ExternalDocsLink
+      href={getFrontendDocsUrl(DocsPage.PlatformLlmProxyModelPools)}
+      showIcon={false}
+    >
+      Read more in the docs
+    </ExternalDocsLink>
+  </>
+);
 
 const EMPTY_MESSAGE =
   "No model pools yet. Create one to serve a model from several provider keys.";
@@ -69,6 +91,11 @@ function ModelPools() {
 
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // The pool itself, so a pool just created shows before the list refetches.
+  const [connecting, setConnecting] = useState<{
+    pool: ConnectablePool;
+    ready: boolean;
+  } | null>(null);
   const [deleting, setDeleting] = useState<ModelPool | null>(null);
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
   const deletePool = useDeleteModelPool();
@@ -116,11 +143,18 @@ function ModelPools() {
       itemName={pool.name}
       actions={[
         {
+          icon: <Plug className="h-4 w-4" />,
+          label: "Connect",
+          onClick: () => setConnecting({ pool, ready: false }),
+        },
+        {
           icon: <Pencil className="h-4 w-4" />,
           label: "Edit",
           permissions: { llmModel: ["update"] },
           onClick: () => setEditingId(pool.id),
         },
+      ]}
+      dropdownActions={[
         {
           icon: <Trash2 className="h-4 w-4" />,
           label: "Delete",
@@ -165,16 +199,6 @@ function ModelPools() {
       header: "Status",
       size: 150,
       cell: ({ row }) => <PoolHealth pool={row.original} />,
-    },
-    {
-      id: "access",
-      header: "Access",
-      size: 140,
-      cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
-          {accessSummary(row.original.virtualApiKeyIds.length)}
-        </span>
-      ),
     },
     {
       id: "actions",
@@ -265,7 +289,7 @@ function ModelPools() {
                 showSearch={false}
                 items={[
                   { value: "all", label: "Any status" },
-                  { value: "benched", label: "Has benched members" },
+                  { value: "benched", label: "Has members cooling down" },
                   { value: "healthy", label: "All healthy" },
                 ]}
               />
@@ -297,14 +321,6 @@ function ModelPools() {
                       <dt className="text-muted-foreground">Members</dt>
                       <dd className="min-w-0 truncate">
                         {memberSummary(pool)}
-                      </dd>
-                      <dt className="text-muted-foreground">Routing</dt>
-                      <dd className="min-w-0 truncate">
-                        Priority, then weight
-                      </dd>
-                      <dt className="text-muted-foreground">Access</dt>
-                      <dd className="min-w-0 truncate">
-                        {accessSummary(pool.virtualApiKeyIds.length)}
                       </dd>
                     </dl>
                   </TableCard>
@@ -341,6 +357,10 @@ function ModelPools() {
           onOpenChange={(open) => {
             if (!open) setCreating(false);
           }}
+          onCreated={(pool) => {
+            setCreating(false);
+            setConnecting({ pool, ready: true });
+          }}
         />
       ) : null}
       {editing ? (
@@ -349,6 +369,23 @@ function ModelPools() {
           pool={editing}
           onOpenChange={(open) => {
             if (!open) setEditingId(null);
+          }}
+          onConnect={() => {
+            setEditingId(null);
+            setConnecting({ pool: editing, ready: false });
+          }}
+        />
+      ) : null}
+      {connecting ? (
+        <ConnectPoolDialog
+          key={connecting.pool.id}
+          pool={
+            pools.find((pool) => pool.id === connecting.pool.id) ??
+            connecting.pool
+          }
+          ready={connecting.ready}
+          onOpenChange={(open) => {
+            if (!open) setConnecting(null);
           }}
         />
       ) : null}

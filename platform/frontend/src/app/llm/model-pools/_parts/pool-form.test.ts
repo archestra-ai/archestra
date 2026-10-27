@@ -1,40 +1,126 @@
 import { describe, expect, it } from "vitest";
-import { compactPriorities, orderShare, orderSummary } from "./pool-form";
+import {
+  memberOrders,
+  moveMember,
+  orderShare,
+  type PoolFormMember,
+  removeMember,
+  toFormValues,
+  toPoolInput,
+} from "./pool-form";
 
-function member(priority: number, weight = 1, enabled = true) {
-  return { providerApiKeyId: "key", modelId: "m", priority, weight, enabled };
+function member(
+  modelId: string,
+  linked = false,
+  weight = 1,
+  enabled = true,
+): PoolFormMember {
+  return { providerApiKeyId: "key", modelId, linked, weight, enabled };
 }
 
-describe("compactPriorities", () => {
-  it("renumbers priorities 1, 2, 3 in the same order", () => {
-    const members = [member(5), member(1), member(40), member(5)];
-    expect(compactPriorities(members).map((m) => m.priority)).toEqual([
-      2, 1, 3, 2,
+/** "a b+c d": a alone, b and c linked, d alone. */
+function layout(members: PoolFormMember[]): string {
+  return members
+    .map((row, index) =>
+      index === 0 ? row.modelId : `${row.linked ? "+" : " "}${row.modelId}`,
+    )
+    .join("");
+}
+
+describe("memberOrders", () => {
+  it("gives linked members the order of the member above", () => {
+    expect(
+      memberOrders([
+        member("a"),
+        member("b", true),
+        member("c"),
+        member("d", true),
+        member("e", true),
+      ]),
+    ).toEqual([1, 1, 2, 2, 2]);
+  });
+});
+
+describe("toFormValues and toPoolInput", () => {
+  it("round-trips priorities through links, in order", () => {
+    const values = toFormValues({
+      id: "pool",
+      organizationId: "org",
+      name: "glm-5",
+      createdAt: "",
+      updatedAt: "",
+      virtualApiKeyIds: [],
+      members: [5, 1, 5, 9].map((priority, index) => ({
+        id: String(index),
+        poolId: "pool",
+        providerApiKeyId: "key",
+        providerApiKeyName: "Key",
+        provider: "zhipuai" as const,
+        modelId: `m${index}`,
+        priority,
+        weight: 1,
+        enabled: true,
+        createdAt: "",
+        benchedUntil: null,
+        benchReason: null,
+      })),
+    });
+    expect(layout(values.members)).toBe("m1 m0+m2 m3");
+    expect(
+      toPoolInput(values).members.map((row) => [row.modelId, row.priority]),
+    ).toEqual([
+      ["m1", 1],
+      ["m0", 2],
+      ["m2", 2],
+      ["m3", 3],
     ]);
+  });
+});
+
+describe("moveMember", () => {
+  const members = [
+    member("a"),
+    member("b", true),
+    member("c"),
+    member("d", true),
+  ];
+
+  it("trades places within an order and keeps the order", () => {
+    expect(layout(moveMember(members, 1, 0))).toBe("b+a c+d");
+  });
+
+  it("joins an order when dropped between two linked members", () => {
+    expect(layout(moveMember(members, 2, 1))).toBe("a+c+b d");
+  });
+
+  it("starts an order of its own anywhere else", () => {
+    expect(layout(moveMember(members, 3, 0))).toBe("d a+b c");
+  });
+
+  it("hands the lead of its old order to the member after it", () => {
+    expect(layout(moveMember(members, 0, 3))).toBe("b c+d a");
+  });
+});
+
+describe("removeMember", () => {
+  it("keeps the remaining members of an order together", () => {
+    expect(
+      layout(removeMember([member("a"), member("b", true), member("c")], 0)),
+    ).toBe("b c");
   });
 });
 
 describe("orderShare", () => {
   it("splits an order's traffic by weight, among members that are on", () => {
     const members = [
-      member(1, 3),
-      member(1, 1),
-      member(1, 5, false),
-      member(2),
+      member("a", false, 3),
+      member("b", true, 1),
+      member("c", true, 5, false),
+      member("d"),
     ];
     expect(orderShare(members, 0)).toBe(75);
     expect(orderShare(members, 1)).toBe(25);
     expect(orderShare(members, 2)).toBeNull();
-    expect(orderShare(members, 3)).toBe(100);
-  });
-});
-
-describe("orderSummary", () => {
-  it("counts the members and how many go first", () => {
-    expect(orderSummary([member(1), member(1), member(2)])).toBe(
-      "3 members, 2 on order 1",
-    );
-    expect(orderSummary([member(1)])).toBe("1 member");
-    expect(orderSummary([])).toBe("0 members");
+    expect(orderShare(members, 3)).toBeNull();
   });
 });

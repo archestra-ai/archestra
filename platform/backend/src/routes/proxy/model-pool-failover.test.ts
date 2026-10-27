@@ -274,6 +274,10 @@ describe("planModelPool", () => {
     expect(
       await plan({ virtualKeyId: neither.id, providerApiKeyIds: [openai.id] }),
     ).toBeNull();
+    // An OAuth client gets in by a grant kept on the client.
+    expect(
+      await plan({ providerApiKeyIds: [openai.id], modelPoolIds: [pool.id] }),
+    ).not.toBeNull();
     // Any other caller must already use a member's key.
     expect(await plan({ providerApiKeyIds: [zai.id] })).not.toBeNull();
     expect(await plan({ providerApiKeyIds: [openai.id] })).toBeNull();

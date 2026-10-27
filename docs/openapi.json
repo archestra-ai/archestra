@@ -373083,7 +373083,6 @@
                     }
                   },
                   "virtualApiKeyIds": {
-                    "default": [],
                     "maxItems": 500,
                     "type": "array",
                     "items": {
@@ -373539,7 +373538,6 @@
                     }
                   },
                   "virtualApiKeyIds": {
-                    "default": [],
                     "maxItems": 500,
                     "type": "array",
                     "items": {
@@ -378741,6 +378739,14 @@
                           },
                           "includeFutureProviders": {
                             "type": "boolean"
+                          },
+                          "modelPoolIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            }
                           }
                         },
                         "required": [
@@ -378763,7 +378769,8 @@
                           "spendCap",
                           "scopes",
                           "allowedGatewayIds",
-                          "includeFutureProviders"
+                          "includeFutureProviders",
+                          "modelPoolIds"
                         ],
                         "additionalProperties": false
                       }
@@ -379155,6 +379162,16 @@
                         "provider",
                         "providerApiKeyId"
                       ]
+                    }
+                  },
+                  "modelPoolIds": {
+                    "description": "Model pools the client may call by name without mapping one of their members. Omit on update to keep them. Only applies to client_credentials clients.",
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
                   },
                   "includeFutureProviders": {
@@ -379624,6 +379641,14 @@
                     "includeFutureProviders": {
                       "type": "boolean"
                     },
+                    "modelPoolIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "clientSecret": {
                       "type": "string"
                     }
@@ -379649,6 +379674,7 @@
                     "scopes",
                     "allowedGatewayIds",
                     "includeFutureProviders",
+                    "modelPoolIds",
                     "clientSecret"
                   ],
                   "additionalProperties": false
@@ -379998,6 +380024,16 @@
                       ]
                     }
                   },
+                  "modelPoolIds": {
+                    "description": "Model pools the client may call by name without mapping one of their members. Omit on update to keep them. Only applies to client_credentials clients.",
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    }
+                  },
                   "includeFutureProviders": {
                     "description": "Use current and future shared primary provider keys, with selected keys as overrides. Defaults to false on creation; omit on update to preserve the mode. Only valid for client_credentials with LLM Proxy access.",
                     "type": "boolean"
@@ -380342,6 +380378,14 @@
                     },
                     "includeFutureProviders": {
                       "type": "boolean"
+                    },
+                    "modelPoolIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
                     }
                   },
                   "required": [
@@ -380364,7 +380408,8 @@
                     "spendCap",
                     "scopes",
                     "allowedGatewayIds",
-                    "includeFutureProviders"
+                    "includeFutureProviders",
+                    "modelPoolIds"
                   ],
                   "additionalProperties": false
                 }
@@ -381150,6 +381195,14 @@
                     "includeFutureProviders": {
                       "type": "boolean"
                     },
+                    "modelPoolIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "clientSecret": {
                       "type": "string"
                     }
@@ -381175,6 +381228,7 @@
                     "scopes",
                     "allowedGatewayIds",
                     "includeFutureProviders",
+                    "modelPoolIds",
                     "clientSecret"
                   ],
                   "additionalProperties": false
@@ -496937,6 +496991,15 @@
                       "cleanupInterval"
                     ]
                   },
+                  "modelPoolIds": {
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    }
+                  },
                   "ownerId": {
                     "type": "string"
                   },
@@ -498318,6 +498381,15 @@
                       "limitValue",
                       "cleanupInterval"
                     ]
+                  },
+                  "modelPoolIds": {
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    }
                   }
                 },
                 "required": [

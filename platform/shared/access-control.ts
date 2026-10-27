@@ -535,6 +535,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ListRuntimeCredentials]: { credential: ["read"] },
   [RouteId.StartGitHubUserConnection]: {},
   [RouteId.CompleteGitHubUserConnection]: { credential: ["read"] },
+  // Public: a GitHub Actions OIDC token is the proof, checked in the handler
+  // against the gateway's GitHub Actions setting. The authnz layer exempts it.
+  [RouteId.ExchangeGitHubActionsToken]: {},
   // A credential just for you is self-service; the route requires
   // credential:create for organization and shared ones.
   [RouteId.CreateRuntimeCredential]: {},

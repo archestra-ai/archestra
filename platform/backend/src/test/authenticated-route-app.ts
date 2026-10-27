@@ -3,6 +3,7 @@ import { vi } from "vitest";
 import { betterAuth } from "@/auth";
 import { authPlugin } from "@/auth/fastify-plugin";
 import { createFastifyInstance } from "@/fastify-instance";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 
 /** The request header that names the user a request acts as. */
 export const USER_HEADER = "x-test-user";
@@ -17,6 +18,8 @@ export const USER_HEADER = "x-test-user";
 export async function authenticatedRouteApp(params: {
   organizationId: string;
   routes: FastifyPluginAsyncZod[];
+  /** Write audit records as the server does, for tests that read them. */
+  auditLog?: boolean;
 }) {
   vi.spyOn(betterAuth.api, "getSession").mockImplementation((async ({
     headers,
@@ -40,6 +43,7 @@ export async function authenticatedRouteApp(params: {
   }) as unknown as typeof betterAuth.api.getSession);
   const app = createFastifyInstance();
   await app.register(authPlugin);
+  if (params.auditLog) registerAuditLogHook(app);
   for (const routes of params.routes) {
     await app.register(routes);
   }

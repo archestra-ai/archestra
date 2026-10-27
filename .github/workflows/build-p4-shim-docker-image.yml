@@ -108,4 +108,4 @@ jobs:
           load: "true"
           tags: p4-shim:${{ github.sha }}
           # Read-only: the publish paths own cache export for this image.
-          cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:buildcache-amd64
+          cache-from: type=registry,ref=ghcr.io/archestra-ai/ci/p4-shim:buildcache-amd64

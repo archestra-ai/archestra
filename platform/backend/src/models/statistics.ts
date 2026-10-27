@@ -349,6 +349,7 @@ class StatisticsModel {
           // Reset before accumulating; the `...row` spread would otherwise leave
           // the first row's value in place and the merge would never sum it.
           ...("cacheReadTokens" in row ? { cacheReadTokens: 0 } : {}),
+          ...("cacheWriteTokens" in row ? { cacheWriteTokens: 0 } : {}),
           ...("subscriptionCost" in row ? { subscriptionCost: 0 } : {}),
         } as T);
       }
@@ -372,6 +373,10 @@ class StatisticsModel {
       if ("cacheReadTokens" in row && "cacheReadTokens" in existing) {
         (existing as { cacheReadTokens: number }).cacheReadTokens +=
           Number((row as { cacheReadTokens: number }).cacheReadTokens) || 0;
+      }
+      if ("cacheWriteTokens" in row && "cacheWriteTokens" in existing) {
+        (existing as { cacheWriteTokens: number }).cacheWriteTokens +=
+          Number((row as { cacheWriteTokens: number }).cacheWriteTokens) || 0;
       }
     }
 
@@ -673,6 +678,7 @@ class StatisticsModel {
         inputTokens: modelInput,
         outputTokens: modelOutput,
         cacheReadTokens: modelCacheRead,
+        cacheWriteTokens: modelCacheWrite,
         // Billed spend: subscription-fulfilled traffic incurs no per-token
         // charge, so its list-price `cost` is excluded from the reported total.
         cost: modelBilledCost,
@@ -1621,6 +1627,7 @@ class StatisticsModel {
           inputTokens: modelInput,
           outputTokens: modelOutput,
           cacheReadTokens: modelCacheRead,
+          cacheWriteTokens: modelCacheWrite,
           cost: modelBilledCost,
           baselineCost: modelBaselineCost,
           actualCost: modelBilledCost,
@@ -1726,6 +1733,7 @@ class StatisticsModel {
           inputTokens: 0,
           outputTokens: 0,
           cacheReadTokens: 0,
+          cacheWriteTokens: 0,
           cost: 0,
           percentage: 0,
           timeSeries: [],
@@ -1738,6 +1746,8 @@ class StatisticsModel {
       model.inputTokens += Number(row.inputTokens);
       model.outputTokens += Number(row.outputTokens);
       model.cacheReadTokens += Number(row.cacheReadTokens) || 0;
+      model.cacheWriteTokens =
+        (model.cacheWriteTokens ?? 0) + (Number(row.cacheWriteTokens) || 0);
       model.cost += cost;
       model.timeSeries.push({
         timestamp: row.timeBucket,
@@ -1746,6 +1756,7 @@ class StatisticsModel {
         inputTokens: Number(row.inputTokens),
         outputTokens: Number(row.outputTokens),
         cacheReadTokens: Number(row.cacheReadTokens) || 0,
+        cacheWriteTokens: Number(row.cacheWriteTokens) || 0,
       });
     }
 
@@ -2693,6 +2704,7 @@ type ModelStatisticsRow = {
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
+  cacheWriteTokens: number;
   cost: number;
 };
 type CostSavingsRow = {
@@ -2718,6 +2730,7 @@ const billingModelFacts = sql`LATERAL (
     sum((component->>'inputTokens')::bigint) AS input_tokens,
     sum((component->>'outputTokens')::bigint) AS output_tokens,
     sum((component->>'cacheReadTokens')::bigint) AS cache_read_tokens,
+    sum((component->>'cacheWriteTokens')::bigint) AS cache_write_tokens,
     sum((component->>'cost')::numeric) AS cost,
     sum(round((
       ((component->>'cacheReadTokens')::numeric + (component->>'cacheWriteTokens')::numeric) * (component->'prices'->>'input')::numeric
@@ -2732,6 +2745,7 @@ const billedModel = sql<string>`COALESCE(billing_model.model, ${schema.interacti
 const modelRequests = sql<number>`CAST(COUNT(*) FILTER (WHERE billing_model.model IS NULL OR billing_model.parent_request) AS INTEGER)`;
 const modelInput = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.input_tokens, ${schema.interactionsTable.inputTokens})), 0) AS BIGINT)`;
 const modelOutput = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.output_tokens, ${schema.interactionsTable.outputTokens})), 0) AS BIGINT)`;
+const modelCacheWrite = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cache_write_tokens, ${schema.interactionsTable.cacheWriteTokens})), 0) AS BIGINT)`;
 const modelCacheRead = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cache_read_tokens, ${schema.interactionsTable.cacheReadTokens})), 0) AS BIGINT)`;
 const modelBilledCost = sql<number>`CAST(COALESCE(SUM(COALESCE(billing_model.cost, ${schema.interactionsTable.cost})) FILTER (WHERE ${schema.interactionsTable.billingMode} <> 'subscription'), 0) AS DOUBLE PRECISION)`;
 

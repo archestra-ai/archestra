@@ -217,6 +217,66 @@ beforeEach(() => {
 });
 
 describe("OrganizationCostsPage", () => {
+  it("explores cache reads and writes by model without another summary panel", async () => {
+    models = [
+      model(),
+      {
+        ...model("example/model-b"),
+        cacheReadTokens: 6000,
+        cacheWriteTokens: 500,
+      },
+    ];
+    show();
+    await view("Cache reads by model");
+    const explorer = screen.getByRole("region", { name: "Cost explorer" });
+    expect(await within(explorer).findByText("10,000")).toBeVisible();
+    expect(
+      within(explorer).getByRole("button", { name: "Show Cache reads" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("region", { name: "Prompt caching" }),
+    ).not.toBeInTheDocument();
+    await metric("Cache writes");
+    expect(within(explorer).getAllByText("500").length).toBeGreaterThan(0);
+    expect(
+      requests.some((url) => url.pathname === "/api/statistics/costs"),
+    ).toBe(true);
+  });
+  it.each([
+    [3.75, "$3.75"],
+    [-1.25, "-$1.25"],
+    [0, "$0.00"],
+    [0.000125, "$0.000125"],
+  ])("explores net cache savings over time, preserving %s", async (net, formatted) => {
+    savings = {
+      ...savings,
+      totalCacheSavings: net,
+      totalSavings: 999,
+      timeSeries: [
+        {
+          timestamp: "2026-01-01T00:00:00Z",
+          cacheSavings: net,
+          actualCost: 8.25,
+        },
+      ],
+    };
+    show();
+    await metric("Net cache savings");
+    const explorer = screen.getByRole("region", { name: "Cost explorer" });
+    await waitFor(() =>
+      expect(within(explorer).getAllByText(formatted).length).toBeGreaterThan(
+        0,
+      ),
+    );
+    expect(
+      within(explorer).getByRole("button", { name: "by Time" }),
+    ).toBeVisible();
+    expect(
+      within(explorer).getByText(/subscription usage is excluded/),
+    ).toBeVisible();
+    expect(within(explorer).queryByText("$999.00")).not.toBeInTheDocument();
+  });
+
   it("holds placeholders rather than zeros until statistics arrive", async () => {
     pending = true;
     const { container } = show();

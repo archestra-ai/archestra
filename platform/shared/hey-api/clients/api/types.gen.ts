@@ -114767,6 +114767,7 @@ export type GetTeamStatisticsResponses = {
             inputTokens?: number;
             outputTokens?: number;
             cacheReadTokens?: number;
+            cacheWriteTokens?: number;
             billedCost?: number;
             subscriptionCost?: number;
         }>;
@@ -114873,6 +114874,7 @@ export type GetAgentStatisticsResponses = {
             inputTokens?: number;
             outputTokens?: number;
             cacheReadTokens?: number;
+            cacheWriteTokens?: number;
             billedCost?: number;
             subscriptionCost?: number;
         }>;
@@ -114968,6 +114970,7 @@ export type GetModelStatisticsResponses = {
         inputTokens: number;
         outputTokens: number;
         cacheReadTokens: number;
+        cacheWriteTokens?: number;
         cost: number;
         percentage: number;
         timeSeries: Array<{
@@ -114977,6 +114980,7 @@ export type GetModelStatisticsResponses = {
             inputTokens?: number;
             outputTokens?: number;
             cacheReadTokens?: number;
+            cacheWriteTokens?: number;
             billedCost?: number;
             subscriptionCost?: number;
         }>;
@@ -115113,6 +115117,7 @@ export type GetUserStatisticsResponses = {
                     inputTokens?: number;
                     outputTokens?: number;
                     cacheReadTokens?: number;
+                    cacheWriteTokens?: number;
                     billedCost?: number;
                     subscriptionCost?: number;
                 }>;
@@ -115124,6 +115129,7 @@ export type GetUserStatisticsResponses = {
                 inputTokens?: number;
                 outputTokens?: number;
                 cacheReadTokens?: number;
+                cacheWriteTokens?: number;
                 billedCost?: number;
                 subscriptionCost?: number;
             }>;
@@ -115249,6 +115255,7 @@ export type GetMyStatisticsResponses = {
                 inputTokens?: number;
                 outputTokens?: number;
                 cacheReadTokens?: number;
+                cacheWriteTokens?: number;
                 billedCost?: number;
                 subscriptionCost?: number;
             }>;
@@ -115260,6 +115267,7 @@ export type GetMyStatisticsResponses = {
             inputTokens?: number;
             outputTokens?: number;
             cacheReadTokens?: number;
+            cacheWriteTokens?: number;
             billedCost?: number;
             subscriptionCost?: number;
         }>;
@@ -115809,6 +115817,7 @@ export type GetCostStatisticsResponses = {
             inputTokens: number;
             outputTokens: number;
             cacheReadTokens: number;
+            cacheWriteTokens?: number;
             cost: number;
             percentage: number;
             timeSeries: Array<{
@@ -115818,6 +115827,7 @@ export type GetCostStatisticsResponses = {
                 inputTokens?: number;
                 outputTokens?: number;
                 cacheReadTokens?: number;
+                cacheWriteTokens?: number;
                 billedCost?: number;
                 subscriptionCost?: number;
             }>;

@@ -30,6 +30,8 @@ const VIEWS: { label: string; group: UsageGroup; metric: UsageMetric }[] = [
   { label: "Spend by model", group: "model", metric: "billed" },
   { label: "Usage by client", group: "client", metric: "requests" },
   { label: "Activity over time", group: "time", metric: "requests" },
+  { label: "Cache reads by model", group: "model", metric: "cacheRead" },
+  { label: "Prompt cache savings", group: "overall", metric: "cacheSavings" },
   { label: "Token mix", group: "token", metric: "tokens" },
   { label: "Context size", group: "context", metric: "requests" },
   { label: "Costliest sessions", group: "session", metric: "billed" },
@@ -51,7 +53,8 @@ export function UsageContent(props: UsageViewProps) {
     USAGE_METRICS.find((m) => m.id === metric)?.label ?? "Billed spend";
   function select(nextGroup: UsageGroup, nextMetric: UsageMetric) {
     setGroup(nextGroup);
-    if (nextGroup !== "time")
+    if (nextMetric === "cacheSavings") setChart("table");
+    else if (nextGroup !== "time")
       setChart((current) => (current === "lines" ? "bars" : current));
     setMetric(
       supportsUsage(nextGroup, nextMetric)
@@ -177,18 +180,27 @@ export function UsageContent(props: UsageViewProps) {
             label="Show"
             className="max-sm:grow"
             value={metric}
-            options={USAGE_METRICS.map((m) => ({
-              ...m,
-              disabled: !supportsUsage(group, m.id),
-              hint: "Not available for this grouping",
-            }))}
-            onChange={(m) => select(group, m)}
+            options={USAGE_METRICS}
+            onChange={(m) =>
+              select(
+                supportsUsage(group, m)
+                  ? group
+                  : m === "cacheSavings" || m === "cacheWrite"
+                    ? "overall"
+                    : "model",
+                m,
+              )
+            }
           />
           <QueryChip
             label="by"
             className="max-sm:grow"
             value={group}
-            options={USAGE_GROUPS}
+            options={USAGE_GROUPS.map((g) => ({
+              ...g,
+              disabled: !supportsUsage(g.id, metric),
+              hint: "Not available for this metric",
+            }))}
             onChange={(g) => select(g, metric)}
           />
           <QueryChip
@@ -211,6 +223,7 @@ export function UsageContent(props: UsageViewProps) {
           />
           <div className="ml-auto">
             <ChartKindToggle
+              linesDisabled={!supportsUsage("time", metric)}
               value={chart}
               onChange={(kind) => {
                 setChart(kind);

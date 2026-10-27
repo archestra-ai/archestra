@@ -2,7 +2,7 @@
 title: Costs & Limits
 description: Track LLM spend by team, agent, model, and person, and set usage limits
 order: 3
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -15,6 +15,16 @@ Archestra records the cost of every model request from chat, agents, and the [LL
 
 
 <span id="statistics"></span>
+
+## Review Prompt Caching
+
+In the explorer’s **Show** menu, choose **Cache reads**, **Cache writes**, or **Net cache savings**. The **Cache reads by model** and **Prompt cache savings** presets open these views directly.
+
+On **Costs**, cache tokens include all billing modes. Net savings cover metered usage only and are available **by Time** across the organization.
+
+On **My Usage**, cache reads can be grouped by model, client, or time. Cache writes, net savings, and cache cost are available **by All usage** for the selected period. Savings and cost use API rates including subscription-covered usage, not subscription bill credits.
+
+Savings compare cached input with full input pricing after cache-write surcharges, so they can be negative. Figures depend on provider-reported usage and available pricing.
 
 ## Track Spending
 

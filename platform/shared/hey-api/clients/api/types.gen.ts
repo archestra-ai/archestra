@@ -14617,6 +14617,8 @@ export type GetAgentCatalogResponses = {
                 githubActionsAccess?: {
                     githubAppCredentialKey: string;
                     repositories: Array<string>;
+                    actAs?: 'author' | 'actor';
+                    resolveReviewThreads?: boolean;
                     workflows: Array<string>;
                 } | null;
                 toolExposureMode: 'full' | 'search_and_run_only';
@@ -15003,6 +15005,8 @@ export type GetAgentsResponses = {
             githubActionsAccess?: {
                 githubAppCredentialKey: string;
                 repositories: Array<string>;
+                actAs?: 'author' | 'actor';
+                resolveReviewThreads?: boolean;
                 workflows: Array<string>;
             } | null;
             toolExposureMode: 'full' | 'search_and_run_only';
@@ -15423,6 +15427,8 @@ export type CreateAgentResponses = {
         githubActionsAccess?: {
             githubAppCredentialKey: string;
             repositories: Array<string>;
+            actAs?: 'author' | 'actor';
+            resolveReviewThreads?: boolean;
             workflows: Array<string>;
         } | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -16692,6 +16698,8 @@ export type GetDefaultMcpGatewayResponses = {
         githubActionsAccess?: {
             githubAppCredentialKey: string;
             repositories: Array<string>;
+            actAs?: 'author' | 'actor';
+            resolveReviewThreads?: boolean;
             workflows: Array<string>;
         } | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -16997,6 +17005,8 @@ export type ImportAgentResponses = {
             githubActionsAccess?: {
                 githubAppCredentialKey: string;
                 repositories: Array<string>;
+                actAs?: 'author' | 'actor';
+                resolveReviewThreads?: boolean;
                 workflows: Array<string>;
             } | null;
             toolExposureMode: 'full' | 'search_and_run_only';
@@ -17311,6 +17321,8 @@ export type GetAgentResponses = {
         githubActionsAccess?: {
             githubAppCredentialKey: string;
             repositories: Array<string>;
+            actAs?: 'author' | 'actor';
+            resolveReviewThreads?: boolean;
             workflows: Array<string>;
         } | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -17445,6 +17457,8 @@ export type UpdateAgentData = {
         githubActionsAccess?: {
             githubAppCredentialKey: string;
             repositories: Array<string>;
+            actAs?: 'author' | 'actor';
+            resolveReviewThreads?: boolean;
             workflows: Array<string>;
         } | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
@@ -17620,6 +17634,8 @@ export type UpdateAgentResponses = {
         githubActionsAccess?: {
             githubAppCredentialKey: string;
             repositories: Array<string>;
+            actAs?: 'author' | 'actor';
+            resolveReviewThreads?: boolean;
             workflows: Array<string>;
         } | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -18208,6 +18224,8 @@ export type RestoreAgentVersionResponses = {
         githubActionsAccess?: {
             githubAppCredentialKey: string;
             repositories: Array<string>;
+            actAs?: 'author' | 'actor';
+            resolveReviewThreads?: boolean;
             workflows: Array<string>;
         } | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -18451,6 +18469,8 @@ export type CloneAgentResponses = {
         githubActionsAccess?: {
             githubAppCredentialKey: string;
             repositories: Array<string>;
+            actAs?: 'author' | 'actor';
+            resolveReviewThreads?: boolean;
             workflows: Array<string>;
         } | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -20933,6 +20953,8 @@ export type RestoreAgentResponses = {
         githubActionsAccess?: {
             githubAppCredentialKey: string;
             repositories: Array<string>;
+            actAs?: 'author' | 'actor';
+            resolveReviewThreads?: boolean;
             workflows: Array<string>;
         } | null;
         toolExposureMode: 'full' | 'search_and_run_only';
@@ -37468,6 +37490,8 @@ export type GetNewChatBootstrapResponses = {
                 githubActionsAccess?: {
                     githubAppCredentialKey: string;
                     repositories: Array<string>;
+                    actAs?: 'author' | 'actor';
+                    resolveReviewThreads?: boolean;
                     workflows: Array<string>;
                 } | null;
                 toolExposureMode: 'full' | 'search_and_run_only';
@@ -38020,6 +38044,8 @@ export type GetConversationBootstrapResponses = {
                     githubActionsAccess?: {
                         githubAppCredentialKey: string;
                         repositories: Array<string>;
+                        actAs?: 'author' | 'actor';
+                        resolveReviewThreads?: boolean;
                         workflows: Array<string>;
                     } | null;
                     toolExposureMode: 'full' | 'search_and_run_only';

@@ -25,7 +25,7 @@ const githubActionsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ExchangeGitHubActionsToken,
         description:
-          "Trade a GitHub Actions OIDC token from a pull_request workflow run, started by the pull request's author, for an MCP gateway token that acts as that author, plus a GitHub App installation token for that repository. The gateway must allow the repository and workflow in its GitHub Actions setting, and the author must have connected GitHub through the gateway's GitHub App.",
+          "Trade a GitHub Actions OIDC token from a pull_request workflow run for an MCP gateway token, plus a GitHub App installation token for that repository. The gateway token acts as the pull request's author, for runs the author started, or, when the gateway's GitHub Actions setting has actAs \"actor\", as whoever started the run. The gateway must allow the repository and workflow, and that person must have connected GitHub through the gateway's GitHub App.",
         tags: ["GitHub Actions"],
         body: GitHubActionsTokenRequestSchema,
         response: {

@@ -304,13 +304,16 @@ export async function executeA2AMessage(
   }
 
   // Fetch the internal agent
-  if (params.oauthExecution) {
-    await authorizeA2AOAuthExecution({
-      agentId,
-      organizationId,
-      execution: params.oauthExecution,
-    });
-  }
+  const authorizeOAuthExecution = async () => {
+    if (params.oauthExecution) {
+      await authorizeA2AOAuthExecution({
+        agentId,
+        organizationId,
+        execution: params.oauthExecution,
+      });
+    }
+  };
+  await authorizeOAuthExecution();
   const agent = await AgentModel.findById(agentId);
   if (!agent) {
     throw new Error(`Agent ${agentId} not found`);
@@ -571,6 +574,22 @@ export async function executeA2AMessage(
         openAiReasoningSummaryKey,
       ));
 
+    const stepContextGuard = createStepContextGuard({
+      model,
+      contextLength: modelRow
+        ? ModelModel.resolveEffectiveContextLength(modelRow)
+        : null,
+      systemPrompt,
+      abortSignal,
+      logContext: { agentId: agent.id, sessionId },
+      ...(usesStepPromptCache({ provider, anthropicNativeEndpoint }) && {
+        promptCache: {
+          provider,
+          model: selectedModel,
+          anthropicNativeEndpoint,
+        },
+      }),
+    });
     const baseConfig = {
       model,
       system: systemPrompt,
@@ -595,8 +614,9 @@ export async function executeA2AMessage(
         ...(abortSignal && { abortSignal }),
         // Its own interaction source, so a re-ask stays distinguishable from
         // the turn that provoked it.
-        createRepairModel: async () =>
-          (
+        createRepairModel: async () => {
+          await authorizeOAuthExecution();
+          return (
             await createLLMModelForAgent({
               organizationId,
               userId,
@@ -609,7 +629,8 @@ export async function executeA2AMessage(
               agentLlmApiKeyId: llmApiKeyId,
               appaSubagentToken: params.appaSubagent?.token,
             })
-          ).model,
+          ).model;
+        },
       }),
       // Per-transport shape for the output budget resolved above.
       // - Native Ollama discards the top-level `maxOutputTokens` and reads the
@@ -658,26 +679,12 @@ export async function executeA2AMessage(
       // the older prefix into an LLM summary when it overflows. Overrides only
       // what each step sends to the model — the loop's own state (and the
       // persisted/streamed UIMessage) keeps the full tool outputs.
-      prepareStep: createStepContextGuard({
-        model,
-        contextLength: modelRow
-          ? ModelModel.resolveEffectiveContextLength(modelRow)
-          : null,
-        systemPrompt,
-        abortSignal,
-        logContext: { agentId: agent.id, sessionId },
-        // runAgentStream marks only the initial messages. Without a breakpoint
-        // that moves with the tool loop, every later step pays the full input
-        // price for all earlier tool calls and results. Same providers as the
-        // chat route.
-        ...(usesStepPromptCache({ provider, anthropicNativeEndpoint }) && {
-          promptCache: {
-            provider,
-            model: selectedModel,
-            anthropicNativeEndpoint,
-          },
-        }),
-      }),
+      prepareStep: async (step: { messages: ModelMessage[] }) => {
+        await authorizeOAuthExecution();
+        const prepared = await stepContextGuard(step);
+        await authorizeOAuthExecution();
+        return prepared;
+      },
     };
     const currentTurn: { role: "user"; content: UserContent } | null =
       userContent !== null

@@ -18,8 +18,14 @@ import a2aV2Routes from "./v2";
 describe("OAuth A2A execution", () => {
   const external = useMswServer();
 
-  for (const version of ["v1", "v2"] as const) {
-    test(`${version} unbound OAuth executes a team-scoped agent's real MCP tool`, async ({
+  for (const { version, revocation } of (["v1", "v2"] as const).flatMap(
+    (version) =>
+      (["none", "before-tool", "after-tool"] as const).map((revocation) => ({
+        version,
+        revocation,
+      })),
+  )) {
+    test(`${version} unbound OAuth executes a team-scoped agent's real MCP tool (${revocation})`, async ({
       makeOrganization,
       makeUser,
       makeMember,
@@ -55,8 +61,11 @@ describe("OAuth A2A execution", () => {
         rawName: "echo",
         parameters: { type: "object", properties: {} },
       });
-      await makeAgentTool(agent.id, tool.id, { mcpServerId: installation.id });
+      await makeAgentTool(agent.id, tool.id, {
+        mcpServerId: installation.id,
+      });
       let invocations = 0;
+      let invalidateToken = async () => {};
       external.use(
         http.post("https://synthetic.example.com/mcp", async ({ request }) => {
           const body = (await request.json()) as {
@@ -74,7 +83,10 @@ describe("OAuth A2A execution", () => {
             };
           } else if (body.method === "tools/call") {
             invocations++;
-            result = { content: [{ type: "text", text: "synthetic tool OK" }] };
+            if (revocation === "after-tool") await invalidateToken();
+            result = {
+              content: [{ type: "text", text: "synthetic tool OK" }],
+            };
           }
           return HttpResponse.json({ jsonrpc: "2.0", id: body.id, result });
         }),
@@ -87,13 +99,21 @@ describe("OAuth A2A execution", () => {
           () => new HttpResponse(null, { status: 200 }),
         ),
       );
+      let providerCalls = 0;
       const model = new MockLanguageModelV3({
         doStream: async ({ prompt }) => {
+          providerCalls++;
           const finished = prompt.some((message) => message.role === "tool");
+          if (!finished && revocation === "before-tool")
+            await invalidateToken();
           const chunks = finished
             ? ([
                 { type: "text-start", id: "text" },
-                { type: "text-delta", id: "text", delta: "synthetic tool OK" },
+                {
+                  type: "text-delta",
+                  id: "text",
+                  delta: "synthetic tool OK",
+                },
                 { type: "text-end", id: "text" },
               ] as const)
             : ([
@@ -152,6 +172,11 @@ describe("OAuth A2A execution", () => {
         scopes: ["a2a"],
         referenceId: `${OAUTH_CLIENT_REFERENCE_PREFIX}${oauthClient.id}`,
       });
+      invalidateToken = async () => {
+        await OAuthAccessTokenModel.deleteByTokenHash(
+          OAuthAccessTokenModel.hashTokenForLookup(bearer),
+        );
+      };
       const app = createFastifyInstance();
       await app.register(a2aV1Routes);
       await app.register(a2aV2Routes);
@@ -173,6 +198,13 @@ describe("OAuth A2A execution", () => {
             },
           },
         });
+        if (revocation !== "none") {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          expect(providerCalls).toBe(1);
+          expect(invocations).toBe(revocation === "after-tool" ? 1 : 0);
+          expect(response.json().error, response.body).toBeDefined();
+          return;
+        }
         expect(response.json().error, response.body).toBeUndefined();
         expect(invocations).toBe(1);
         expect(response.body).toContain("synthetic tool OK");

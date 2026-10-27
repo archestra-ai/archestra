@@ -353,6 +353,7 @@ describe("resolveConversationLlmSelectionForAgent", () => {
         ),
     );
     vi.spyOn(ModelModel, "findById").mockResolvedValue(null);
+    vi.spyOn(LlmProviderApiKeyModel, "isGithubAppKey").mockResolvedValue(false);
   });
 
   test("resolves the agent's configured model", async () => {
@@ -376,6 +377,54 @@ describe("resolveConversationLlmSelectionForAgent", () => {
       selectedModel: "claude-3-5-sonnet",
       selectedProvider: "anthropic",
     });
+  });
+
+  test("keeps an explicitly picked GitHub App key on a Copilot model", async () => {
+    vi.spyOn(ModelModel, "findById").mockResolvedValue(
+      mockModel({
+        id: "m-copilot",
+        modelId: "gpt-4o",
+        provider: "github-copilot",
+      }),
+    );
+    vi.spyOn(LlmProviderApiKeyModel, "isGithubAppKey").mockImplementation(
+      async (id) => id === "key-copilot-app",
+    );
+
+    const result = await resolveConversationLlmSelectionForAgent({
+      agent: { llmApiKeyId: null, modelId: null },
+      organizationId: "org-1",
+      userId: "user-1",
+      explicitModelId: "m-copilot",
+      explicitApiKeyId: "key-copilot-app",
+    });
+
+    expect(result).toMatchObject({
+      modelId: "m-copilot",
+      chatApiKeyId: "key-copilot-app",
+      selectedProvider: "github-copilot",
+    });
+  });
+
+  test("still drops the key for a Copilot model picked without an App key", async () => {
+    vi.spyOn(ModelModel, "findById").mockResolvedValue(
+      mockModel({
+        id: "m-copilot",
+        modelId: "gpt-4o",
+        provider: "github-copilot",
+      }),
+    );
+    vi.spyOn(LlmProviderApiKeyModel, "isGithubAppKey").mockResolvedValue(false);
+
+    const result = await resolveConversationLlmSelectionForAgent({
+      agent: { llmApiKeyId: null, modelId: null },
+      organizationId: "org-1",
+      userId: "user-1",
+      explicitModelId: "m-copilot",
+      explicitApiKeyId: "key-someone-personal",
+    });
+
+    expect(result).toMatchObject({ modelId: "m-copilot", chatApiKeyId: null });
   });
 
   test("an explicit (model, key) pick overrides the agent model", async () => {

@@ -37281,6 +37281,7 @@ export type GetNewChatBootstrapResponses = {
             bestModelId?: string | null;
             isAgentKey?: boolean;
             subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+            isGithubAppKey?: boolean;
             labels?: Array<{
                 key: string;
                 value: string;
@@ -37322,6 +37323,7 @@ export type GetNewChatBootstrapResponses = {
             bestModelId?: string | null;
             isAgentKey?: boolean;
             subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+            isGithubAppKey?: boolean;
             labels?: Array<{
                 key: string;
                 value: string;
@@ -37832,6 +37834,7 @@ export type GetConversationBootstrapResponses = {
                 bestModelId?: string | null;
                 isAgentKey?: boolean;
                 subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+                isGithubAppKey?: boolean;
                 labels?: Array<{
                     key: string;
                     value: string;
@@ -37873,6 +37876,7 @@ export type GetConversationBootstrapResponses = {
                 bestModelId?: string | null;
                 isAgentKey?: boolean;
                 subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+                isGithubAppKey?: boolean;
                 labels?: Array<{
                     key: string;
                     value: string;
@@ -86483,6 +86487,7 @@ export type GetLlmProviderApiKeysResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        isGithubAppKey?: boolean;
         labels?: Array<{
             key: string;
             value: string;
@@ -86657,6 +86662,7 @@ export type CreateLlmProviderApiKeyResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        isGithubAppKey?: boolean;
         labels?: Array<{
             key: string;
             value: string;
@@ -86784,6 +86790,7 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        isGithubAppKey?: boolean;
         labels?: Array<{
             key: string;
             value: string;
@@ -86998,6 +87005,7 @@ export type GetLlmProviderApiKeyResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        isGithubAppKey?: boolean;
         labels?: Array<{
             key: string;
             value: string;
@@ -87147,6 +87155,7 @@ export type UpdateLlmProviderApiKeyResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        isGithubAppKey?: boolean;
         labels?: Array<{
             key: string;
             value: string;
@@ -87275,6 +87284,7 @@ export type ReconnectLlmProviderApiKeyResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        isGithubAppKey?: boolean;
         labels?: Array<{
             key: string;
             value: string;

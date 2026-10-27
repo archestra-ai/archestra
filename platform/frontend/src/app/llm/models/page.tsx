@@ -338,9 +338,12 @@ export default function ModelsPage() {
                   {isFree && <FreeModelBadge />}
                   {isLatestAlias && <LatestModelBadge />}
                   {row.original.isBest && <BestModelBadge />}
-                  {providerRequiresPerUserCredential(provider) && (
-                    <PerUserModelBadge />
-                  )}
+                  {providerRequiresPerUserCredential(provider) &&
+                    // A model linked to a shared key (an organization GitHub
+                    // App key) is not per-user.
+                    !row.original.apiKeys.some(
+                      (key) => key.scope !== "personal",
+                    ) && <PerUserModelBadge />}
                   {row.original.embeddingDimensions !== null && (
                     <EmbeddingModelBadge />
                   )}

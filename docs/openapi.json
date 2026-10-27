@@ -133941,6 +133941,9 @@
                               "x-premium"
                             ]
                           },
+                          "isGithubAppKey": {
+                            "type": "boolean"
+                          },
                           "labels": {
                             "type": "array",
                             "items": {
@@ -134172,6 +134175,9 @@
                               "microsoft-365-copilot",
                               "x-premium"
                             ]
+                          },
+                          "isGithubAppKey": {
+                            "type": "boolean"
                           },
                           "labels": {
                             "type": "array",
@@ -136963,6 +136969,9 @@
                                   "x-premium"
                                 ]
                               },
+                              "isGithubAppKey": {
+                                "type": "boolean"
+                              },
                               "labels": {
                                 "type": "array",
                                 "items": {
@@ -137194,6 +137203,9 @@
                                   "microsoft-365-copilot",
                                   "x-premium"
                                 ]
+                              },
+                              "isGithubAppKey": {
+                                "type": "boolean"
                               },
                               "labels": {
                                 "type": "array",
@@ -334182,6 +334194,9 @@
                           "x-premium"
                         ]
                       },
+                      "isGithubAppKey": {
+                        "type": "boolean"
+                      },
                       "labels": {
                         "type": "array",
                         "items": {
@@ -334937,6 +334952,9 @@
                         "x-premium"
                       ]
                     },
+                    "isGithubAppKey": {
+                      "type": "boolean"
+                    },
                     "labels": {
                       "type": "array",
                       "items": {
@@ -335468,6 +335486,9 @@
                           "x-premium"
                         ]
                       },
+                      "isGithubAppKey": {
+                        "type": "boolean"
+                      },
                       "labels": {
                         "type": "array",
                         "items": {
@@ -335964,6 +335985,9 @@
                         "microsoft-365-copilot",
                         "x-premium"
                       ]
+                    },
+                    "isGithubAppKey": {
+                      "type": "boolean"
                     },
                     "labels": {
                       "type": "array",
@@ -336548,6 +336572,9 @@
                         "microsoft-365-copilot",
                         "x-premium"
                       ]
+                    },
+                    "isGithubAppKey": {
+                      "type": "boolean"
                     },
                     "labels": {
                       "type": "array",
@@ -337339,6 +337366,9 @@
                         "microsoft-365-copilot",
                         "x-premium"
                       ]
+                    },
+                    "isGithubAppKey": {
+                      "type": "boolean"
                     },
                     "labels": {
                       "type": "array",

@@ -14,6 +14,8 @@ interface SubscriptionCheckableLlmKey {
   provider: SupportedProvider;
   name: string;
   subscriptionKind?: SubscriptionCredentialKind | null;
+  /** An organization's GitHub App credential on GitHub Copilot: shareable. */
+  isGithubAppKey?: boolean;
 }
 
 /**
@@ -23,6 +25,7 @@ interface SubscriptionCheckableLlmKey {
  * they never offer a credential the backend will reject.
  */
 export function isPersonalSubscription(key: SubscriptionCheckableLlmKey) {
+  if (key.isGithubAppKey) return false;
   return (
     subscriptionKindFromKeyMetadata(key) != null ||
     providerRequiresPerUserCredential(key.provider)

@@ -109,7 +109,11 @@ interface ChatContext {
    * not every key they can see. A key shared as read-only is listed in
    * settings but refused when a chat sends it.
    */
-  chatApiKeys: Array<{ id: string; provider: string }>;
+  chatApiKeys: Array<{
+    id: string;
+    provider: string;
+    isGithubAppKey?: boolean;
+  }>;
   organization: OrganizationInfo | null;
 }
 
@@ -163,7 +167,11 @@ export function resolveInitialModel(
     const provider = providerForModel(modelId);
     return (
       provider != null &&
-      providerRequiresPerUserCredential(provider as SupportedProvider)
+      providerRequiresPerUserCredential(provider as SupportedProvider) &&
+      // A shared GitHub App key serves Copilot models like any other key.
+      !chatApiKeys.some(
+        (key) => key.provider === provider && key.isGithubAppKey,
+      )
     );
   };
 

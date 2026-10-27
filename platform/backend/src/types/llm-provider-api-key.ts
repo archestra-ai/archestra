@@ -129,6 +129,12 @@ export const LlmProviderApiKeyWithScopeInfoSchema =
      * subscription with its row.
      */
     subscriptionKind: SubscriptionCredentialKindSchema.nullable().optional(),
+    /**
+     * True for a GitHub Copilot key that stores an organization's GitHub App
+     * credential: shareable, unlike a personal Copilot sign-in. Derived from
+     * the recorded credential kind; no secret is read or returned.
+     */
+    isGithubAppKey: z.boolean().optional(),
     labels: z.array(LabelWithDetailsSchema).optional(),
   });
 

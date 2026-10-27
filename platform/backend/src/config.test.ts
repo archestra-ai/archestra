@@ -1642,7 +1642,7 @@ describe("Agent Runtime catalog images", () => {
     const { default: cfg } = await import("./config");
 
     expect(cfg.agentRuntime.catalogImages["claude-code"]).toBe(
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-claude-code:latest",
+      "ghcr.io/archestra-ai/agent-claude-code:latest",
     );
   });
 
@@ -1651,7 +1651,7 @@ describe("Agent Runtime catalog images", () => {
     const { default: cfg } = await import("./config");
 
     expect(cfg.agentRuntime.catalogImages.codex).toBe(
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-codex:1.4.0-beta.2",
+      "ghcr.io/archestra-ai/agent-codex:1.4.0-beta.2",
     );
   });
 

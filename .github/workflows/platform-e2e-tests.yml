@@ -49,9 +49,14 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PLATFORM_IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+  # This published stable-release fallback is owned by release publication,
+  # not the CI SHA publishers. Keep it available until the release cutover;
+  # CI packages deliberately do not move a latest tag.
+  # supply-chain-policy: allow-latest published stable MCP fallback
+  RELEASED_MCP_SERVER_BASE_IMAGE: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest
+  PLATFORM_IMAGE_REGISTRY: ghcr.io/archestra-ai/ci
   PLATFORM_IMAGE_NAME: platform
-  MCP_SERVER_BASE_IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+  MCP_SERVER_BASE_IMAGE_REGISTRY: ghcr.io/archestra-ai/ci
   MCP_SERVER_BASE_IMAGE_NAME: mcp-server-base
   # Dependabot PRs use the same restricted secret context as forks even though
   # their branches live in this repository and report head.repo.fork=false.
@@ -100,7 +105,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'run-e2e') }}
     permissions:
       contents: read # Required to checkout the repository and build images for E2E jobs.
-      id-token: write # Required for Workload Identity Federation when pushing trusted images.
+      packages: write # Trusted CI publishes images and caches to GHCR.
     strategy:
       fail-fast: false
       matrix:
@@ -158,12 +163,13 @@ jobs:
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache-amd64
 
-      - name: Authenticate to Google Artifact Registry
+      - name: Log in to GHCR
         if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: ./.github/actions/docker-login
         with:
-          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       # Reuse a platform image already built for this exact image-input hash —
       # by a labeled run-e2e build, a prior merge-queue entry, or the scheduled
@@ -317,12 +323,13 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Authenticate to Google Artifact Registry
+      - name: Log in to GHCR
         if: ${{ !matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
-        uses: ./.github/actions/auth-to-gar
+        uses: ./.github/actions/docker-login
         with:
-          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       # Same input-hash reuse as the Platform image above. This image rarely
       # changes, and the lite/quickstart/K8s jobs wait for its push — so on a match, a
@@ -394,6 +401,31 @@ jobs:
           retention-days: 1
           compression-level: 0 # Already gzipped
 
+      # Share the exact slim runtime once per run. Host-side E2E consumers
+      # download this one-day artifact instead of each pulling GAR layers.
+      # Keep the registry publication for Kind/VM consumers and byte scans.
+      - name: Export trusted slim platform image
+        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
+        env:
+          PLATFORM_IMAGE: ${{ format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+        shell: bash
+        run: |
+          docker pull "${PLATFORM_IMAGE}"
+          docker save "${PLATFORM_IMAGE}" | gzip -1 > /tmp/platform-image.tar.gz
+
+      - name: Upload trusted slim platform image
+        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: platform-slim-docker-image
+          # Keep the name stable for consumer-only reruns; replace it when
+          # rerunning the producer so immutable artifact names do not collide.
+          overwrite: "true"
+          path: /tmp/platform-image.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
   # Start screenshot compute only once the queue's exact images are published.
   # This removes the second full platform build from the independent docs job.
   docs-screenshot-capture:
@@ -404,7 +436,7 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
-      actions: read # Required for private mirrors' local-image artifacts.
+      actions: read # Required for the same-run platform image artifact.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -414,7 +446,8 @@ jobs:
         id: platform-image
         uses: ./.github/actions/load-platform-image
         with:
-          source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
+          source: artifact
+          artifact-name: ${{ env.UNTRUSTED_PR == 'true' && 'platform-docker-image' || 'platform-slim-docker-image' }}
           image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           wait-timeout-seconds: "60"
       - uses: ./.github/actions/capture-docs-screenshots
@@ -836,15 +869,17 @@ jobs:
           working-directory: ./platform
 
       # The -slim variant: this environment runs with the code runtime
-      # disabled (see e2e-lite-platform.env), so the ~352MB Dagger engine tar
-      # is dead weight here. Untrusted PRs get the full image — only one
-      # variant travels as a build artifact. The build dependency guarantees
-      # publication before allocating this runner; retry only transient errors.
+      # disabled (see e2e-lite-platform.env), so the Dagger engine tar
+      # is dead weight here. Untrusted PRs use their existing full-image
+      # artifact; trusted jobs share the slim artifact published once per run.
+      # The build dependency guarantees publication before allocating this
+      # runner; retry only transient errors.
       - name: Load platform image
         id: load-platform-image
         uses: ./.github/actions/load-platform-image
         with:
-          source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
+          source: artifact
+          artifact-name: ${{ env.UNTRUSTED_PR == 'true' && 'platform-docker-image' || 'platform-slim-docker-image' }}
           image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           wait-timeout-seconds: "60"
 
@@ -879,7 +914,7 @@ jobs:
           # registry — they fall back to the script's published :latest
           # default (host-loaded images are invisible to the embedded Kind).
           # supply-chain-policy: allow-latest quickstart needs a published public fallback
-          MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && format('{0}/{1}:latest', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+          MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && env.RELEASED_MCP_SERVER_BASE_IMAGE || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
         run: ./platform/scripts/e2e-lite.sh up
 
       - name: Configure embedded Kind registry cache
@@ -1024,7 +1059,8 @@ jobs:
         id: load-openappa-image
         uses: ./.github/actions/load-platform-image
         with:
-          source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
+          source: artifact
+          artifact-name: ${{ env.UNTRUSTED_PR == 'true' && 'platform-docker-image' || 'platform-slim-docker-image' }}
           image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           wait-timeout-seconds: "60"
 
@@ -1055,7 +1091,7 @@ jobs:
           ARCHESTRA_BETA: "true"
           # Same MCP server base image choice as the lite job.
           # supply-chain-policy: allow-latest quickstart needs a published public fallback
-          MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && format('{0}/{1}:latest', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+          MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && env.RELEASED_MCP_SERVER_BASE_IMAGE || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
         run: ./platform/scripts/e2e-lite.sh up
 
       - name: Configure embedded Kind registry cache (OpenAPPA)
@@ -1201,7 +1237,7 @@ jobs:
             -p 127.0.0.1:3000:3000 \
             -e ARCHESTRA_QUICKSTART=true \
             -e ARCHESTRA_AUTH_RATE_LIMIT_DISABLED=true \
-            -e ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest \
+            -e "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${RELEASED_MCP_SERVER_BASE_IMAGE}" \
             -e ARCHESTRA_ANALYTICS=disabled \
             -e ARCHESTRA_OPENAI_BASE_URL=http://archestra-wiremock:8080/v1 \
             -e ARCHESTRA_ANTHROPIC_BASE_URL=http://archestra-wiremock:8080 \
@@ -1315,7 +1351,7 @@ jobs:
             // which is not a parseable URL and can never be a loopback dial.
             const parsed = [...(m.beforeFiles ?? []), ...(m.afterFiles ?? []), ...(m.fallback ?? [])]
               .map((r) => { try { return new URL(r.destination); } catch { return null; } })
-              .filter((u) => u && /^https?:$/.test(u.protocol));
+              .filter((u) => u && /^https?:./.test(u.protocol));
             const named = parsed.filter((u) => u.hostname === "localhost");
             console.log(`  ${parsed.length} absolute destinations, ${named.length} naming localhost`);
             if (named.length) {
@@ -1341,7 +1377,7 @@ jobs:
               const m = require("/app/frontend/.next/routes-manifest.json").rewrites;
               const origins = [...new Set([...(m.beforeFiles ?? []), ...(m.afterFiles ?? []), ...(m.fallback ?? [])]
                 .map((r) => { try { return new URL(r.destination); } catch { return null; } })
-                .filter((u) => u && /^https?:$/.test(u.protocol) && isLoopback(u.hostname))
+                .filter((u) => u && /^https?:./.test(u.protocol) && isLoopback(u.hostname))
                 .map((u) => u.origin))];
               if (!origins.length) { console.error("FAILED: no loopback proxy destination found to test"); process.exit(1); }
               Promise.all(origins.map((origin) =>

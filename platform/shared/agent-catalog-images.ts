@@ -5,8 +5,7 @@ import { DEFAULT_CLAUDE_CODE_MODEL } from "./model-constants";
 export type AgentCatalogId = keyof typeof AGENT_CATALOG_IMAGE_NAMES;
 
 /** Public registry the maintained catalog images are published to. */
-export const AGENT_CATALOG_IMAGE_REGISTRY =
-  "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public";
+export const AGENT_CATALOG_IMAGE_REGISTRY = "ghcr.io/archestra-ai";
 
 /**
  * The catalog tag that matches a platform version. The approved stable
@@ -57,7 +56,9 @@ export function followAgentCatalogImage(params: {
     const current = params.catalogImages[id];
     if (
       repository === imageRepository(current) ||
-      repository === `${AGENT_CATALOG_IMAGE_REGISTRY}/${name}`
+      repository === `${AGENT_CATALOG_IMAGE_REGISTRY}/${name}` ||
+      repository ===
+        `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/${name}`
     ) {
       return current;
     }

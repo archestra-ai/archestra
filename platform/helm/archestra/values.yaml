@@ -522,7 +522,7 @@ archestra:
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Base image for MCP server containers
-    # Default: "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.4.7" # x-release-please-version
+    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.4.7" # x-release-please-version
     baseImage: ""
 
     # Resource requests/limits applied to generated MCP server containers
@@ -728,7 +728,7 @@ archestra:
     perforceShim:
       # Image for the p4 shim pod the backend provisions for Perforce
       # permission sync. If not set, defaults to
-      # "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:<app version>"
+      # "ghcr.io/archestra-ai/p4-shim:<app version>"
       image: ""
 
   # Background worker configuration

@@ -10,6 +10,7 @@ import {
   useAutoRoutingSettings,
 } from "@/lib/auto-routing.query";
 import { formatDate } from "@/lib/utils/date-time";
+import { AddJevKeyLink } from "./_parts/add-jev-key";
 import { useFittedTierModels } from "./_parts/fitted-tier-models";
 import { PastSessions } from "./_parts/past-sessions";
 import {
@@ -49,16 +50,17 @@ export default function AutoRoutingOverviewPage() {
           required={settings.status.coldStart.required}
           hasActivePlan={settings.status.activePlan !== null}
           canUpdate={canUpdate}
+          scorer={settings.status.scorer}
         />
       )}
       <ActivePlanSummary settings={settings} />
-      <TryPrompt canUpdate={canUpdate} />
+      <TryPrompt canUpdate={canUpdate} scorer={settings.status.scorer} />
     </div>
   );
 }
 
 function PlanStatus({ settings }: { settings: AutoRoutingSettings }) {
-  const { activePlan, coldStart, lastFitError } = settings.status;
+  const { activePlan, coldStart, lastFitError, scorer } = settings.status;
   const { data: plan } = useAutoRoutingPlan(activePlan?.id ?? null);
   const history = plan ? parseFittedHistory(plan.diagnostics) : null;
   const fitError = lastFitError ? describeFitError(lastFitError) : null;
@@ -71,6 +73,7 @@ function PlanStatus({ settings }: { settings: AutoRoutingSettings }) {
             ? `Active plan from ${formatDate({ date: activePlan.createdAt })}${history ? `. ${learnedFrom(history)}` : ""}`
             : `Cold start: ${Math.min(coldStart.sessions, coldStart.required).toLocaleString("en-US")} of ${coldStart.required.toLocaleString("en-US")} scored sessions`}
         </span>
+        {!activePlan && scorer === "no_jev_key" && <AddJevKeyLink />}
       </div>
       {fitError && (
         <InlineNotice variant="error">

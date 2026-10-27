@@ -1,5 +1,6 @@
 import { z } from "zod";
 import config from "@/config";
+import type { AutoRoutingScorerState } from "@/types/auto-routing-api";
 import { DecisionsResponseSchema } from "@/types/llm-providers/jev/api";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { JEV_SESSION_SPEC, type JevSessionSpec, type ScorerSpec } from "./spec";
@@ -47,6 +48,17 @@ const SessionAnswersSchema = DecisionsResponseSchema.extend({
     }),
   }),
 });
+
+/** Whether the organization's sessions can be scored: a Jev key resolves for it. */
+export async function scorerState(
+  organizationId: string,
+): Promise<AutoRoutingScorerState> {
+  const { apiKey } = await resolveProviderApiKey({
+    organizationId,
+    provider: "jev",
+  });
+  return apiKey ? "ready" : "no_jev_key";
+}
 
 export class JevSessionSource
   implements PreRunSignalSource<typeof JEV_SESSION_SOURCE_ID, JevSessionReading>

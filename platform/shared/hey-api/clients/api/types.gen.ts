@@ -30184,6 +30184,7 @@ export type GetAutoRoutingSettingsResponses = {
                 required: number;
             };
             lastFitError: string | null;
+            scorer: 'ready' | 'no_jev_key';
         };
     };
 };
@@ -30308,6 +30309,7 @@ export type UpdateAutoRoutingSettingsResponses = {
                 required: number;
             };
             lastFitError: string | null;
+            scorer: 'ready' | 'no_jev_key';
         };
         fit: {
             status: 'active';
@@ -30666,6 +30668,7 @@ export type ReplanAutoRoutingResponses = {
                 required: number;
             };
             lastFitError: string | null;
+            scorer: 'ready' | 'no_jev_key';
         };
         fit: {
             status: 'active';

@@ -26,6 +26,12 @@ const AutoRoutingTierModelSchema = z.object({
   modelId: z.string(),
 });
 
+/** Whether the session scorer can score sessions, live or past, or why not. */
+export const AutoRoutingScorerStateSchema = z.enum(["ready", "no_jev_key"]);
+export type AutoRoutingScorerState = z.infer<
+  typeof AutoRoutingScorerStateSchema
+>;
+
 export const AutoRoutingSettingsResponseSchema = z.object({
   enabled: z.boolean(),
   budgetUsdPerDay: z.number().nullable(),
@@ -48,6 +54,7 @@ export const AutoRoutingSettingsResponseSchema = z.object({
     }),
     /** Error of the newest fit outcome, when it failed. */
     lastFitError: z.string().nullable(),
+    scorer: AutoRoutingScorerStateSchema,
   }),
 });
 export type AutoRoutingSettingsResponse = z.infer<

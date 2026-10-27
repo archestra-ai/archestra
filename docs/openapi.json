@@ -106674,12 +106674,20 @@
                         "lastFitError": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "scorer": {
+                          "type": "string",
+                          "enum": [
+                            "ready",
+                            "no_jev_key"
+                          ]
                         }
                       },
                       "required": [
                         "activePlan",
                         "coldStart",
-                        "lastFitError"
+                        "lastFitError",
+                        "scorer"
                       ],
                       "additionalProperties": false
                     }
@@ -107215,12 +107223,20 @@
                         "lastFitError": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "scorer": {
+                          "type": "string",
+                          "enum": [
+                            "ready",
+                            "no_jev_key"
+                          ]
                         }
                       },
                       "required": [
                         "activePlan",
                         "coldStart",
-                        "lastFitError"
+                        "lastFitError",
+                        "scorer"
                       ],
                       "additionalProperties": false
                     },
@@ -108603,12 +108619,20 @@
                         "lastFitError": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "scorer": {
+                          "type": "string",
+                          "enum": [
+                            "ready",
+                            "no_jev_key"
+                          ]
                         }
                       },
                       "required": [
                         "activePlan",
                         "coldStart",
-                        "lastFitError"
+                        "lastFitError",
+                        "scorer"
                       ],
                       "additionalProperties": false
                     },

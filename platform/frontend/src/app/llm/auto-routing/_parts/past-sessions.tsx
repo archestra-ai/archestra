@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   type AutoRoutingBackfillState,
+  type AutoRoutingScorerState,
   useAutoRoutingBackfill,
   useCancelAutoRoutingBackfill,
   useScanAutoRoutingBackfill,
@@ -29,6 +30,7 @@ import {
 } from "@/lib/auto-routing.query";
 import { formatDate } from "@/lib/utils/date-time";
 import { formatCurrency } from "@/lib/utils/format-currency";
+import { AddJevKeyLink } from "./add-jev-key";
 
 type Backfill = NonNullable<AutoRoutingBackfillState["backfill"]>;
 type ScoreOffer = NonNullable<AutoRoutingBackfillState["scoreOffer"]>;
@@ -48,10 +50,12 @@ export function PastSessions({
   required,
   hasActivePlan,
   canUpdate,
+  scorer,
 }: {
   required: number;
   hasActivePlan: boolean;
   canUpdate: boolean;
+  scorer: AutoRoutingScorerState;
 }) {
   const { data } = useAutoRoutingBackfill();
   const scan = useScanAutoRoutingBackfill();
@@ -70,25 +74,32 @@ export function PastSessions({
           Past traffic:{" "}
           {(backfill?.progress?.scored ?? 0).toLocaleString("en-US")} scored
         </span>
-        {canUpdate && (
+        {scorer === "no_jev_key" ? (
           <>
             <span aria-hidden>·</span>
-            <Button
-              size="xs"
-              variant="link"
-              className="h-auto p-0 text-sm"
-              disabled={scan.isPending}
-              onClick={() => (scoreOffer ? setOpened(true) : scan.mutate())}
-            >
-              {scoreOffer
-                ? scoreOffer.rescore
-                  ? "Re-score"
-                  : "Score"
-                : backfill
-                  ? "Scan again"
-                  : "Scan"}
-            </Button>
+            <AddJevKeyLink />
           </>
+        ) : (
+          canUpdate && (
+            <>
+              <span aria-hidden>·</span>
+              <Button
+                size="xs"
+                variant="link"
+                className="h-auto p-0 text-sm"
+                disabled={scan.isPending}
+                onClick={() => (scoreOffer ? setOpened(true) : scan.mutate())}
+              >
+                {scoreOffer
+                  ? scoreOffer.rescore
+                    ? "Re-score"
+                    : "Score"
+                  : backfill
+                    ? "Scan again"
+                    : "Scan"}
+              </Button>
+            </>
+          )
         )}
       </p>
     );
@@ -132,9 +143,13 @@ export function PastSessions({
           could learn from. It reads the database only and costs nothing.
         </p>
       )}
-      {backfill && scoreOffer && canUpdate && (
-        <ScoreAction offer={scoreOffer} />
-      )}
+      {backfill &&
+        scoreOffer &&
+        (scorer === "no_jev_key" ? (
+          <AddJevKeyLink />
+        ) : (
+          canUpdate && <ScoreAction offer={scoreOffer} />
+        ))}
     </section>
   );
 }

@@ -715,6 +715,21 @@ describe("auto routing backfill", () => {
     expect(prompts).toHaveLength(2);
   });
 
+  test("without a Jev key scoring is refused before it spends anything", async () => {
+    await sessions(2);
+    await scan();
+    await db
+      .delete(schema.llmProviderApiKeysTable)
+      .where(eq(schema.llmProviderApiKeysTable.organizationId, organizationId));
+
+    await expect(startScoring()).rejects.toMatchObject({ statusCode: 400 });
+    await runBackfill();
+
+    const { backfill } = await describeBackfill(organizationId);
+    expect(backfill).toMatchObject({ status: "scanned", spentCostUsd: 0 });
+    expect(prompts).toHaveLength(0);
+  });
+
   test("a fit learns from one frame: the gap-free rank prefix of the latest scan, at its population's weight", async () => {
     await sessions(4, "early");
     await scanAndScore({ maxSessions: 4 });

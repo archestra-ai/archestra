@@ -28,6 +28,7 @@ export type AutoRoutingSettings =
   archestraApiTypes.GetAutoRoutingSettingsResponses["200"];
 type AutoRoutingSettingsChange =
   archestraApiTypes.UpdateAutoRoutingSettingsResponses["200"];
+export type AutoRoutingScorerState = AutoRoutingSettings["status"]["scorer"];
 export type AutoRoutingSettingsUpdate =
   archestraApiTypes.UpdateAutoRoutingSettingsData["body"];
 export type AutoRoutingPlanSummary =

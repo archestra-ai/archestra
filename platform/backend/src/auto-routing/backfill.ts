@@ -32,7 +32,7 @@ import type {
 import { firstUserText } from "./first-user-text";
 import { fitReadiness } from "./fit";
 import { activeSourceVersion, decisionFeatures, preRunSource } from "./signals";
-import type { JevSessionReading } from "./signals/jev-session";
+import { type JevSessionReading, scorerState } from "./signals/jev-session";
 import { SignalSourceError } from "./signals/types";
 
 /**
@@ -91,6 +91,9 @@ export async function startBackfillScoring(
 ): Promise<RoutingBackfill> {
   if ((await activeSourceVersion()).id !== body.scorerVersionId) {
     throw new ApiError(409, STALE_OFFER_MESSAGE);
+  }
+  if ((await scorerState(organizationId)) === "no_jev_key") {
+    throw new ApiError(400, NO_JEV_KEY_MESSAGE);
   }
   const params = {
     organizationId,
@@ -214,6 +217,8 @@ export async function runBackfill(params?: {
 
 const BUSY_MESSAGE =
   "A backfill is already running for this organization; wait for it or cancel it.";
+const NO_JEV_KEY_MESSAGE =
+  "No Jev API key is configured for this organization; add one on the Model Providers page before scoring.";
 const STALE_OFFER_MESSAGE =
   "The past sessions or the session scorer changed since this offer was shown; review the new offer.";
 const WORKER_ID = `${hostname()}#${process.pid}`;

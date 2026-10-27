@@ -74,6 +74,7 @@ function makeSettings(
         required: 100,
       },
       lastFitError: null,
+      scorer: "ready",
     },
     ...overrides,
   };
@@ -1064,6 +1065,26 @@ describe("past sessions", () => {
         },
       ]),
     );
+  });
+
+  it("points to the Jev key instead of offering a score the scorer cannot run", async () => {
+    settings = makeSettings({
+      status: { ...makeSettings().status, scorer: "no_jev_key" },
+    });
+    serveBackfill({ backfill: scanned(), scoreOffer: offer });
+    renderPage();
+
+    const section = await screen.findByTestId("auto-routing-past-sessions");
+    expect(
+      within(section).getByTestId("auto-routing-add-jev-key"),
+    ).toHaveAttribute("href", "/llm/model-providers");
+    expect(
+      within(section).queryByRole("button", { name: /^Score/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByTestId("auto-routing-add-jev-key")).toHaveLength(3);
+    expect(
+      screen.queryByPlaceholderText("A first message of a session"),
+    ).not.toBeInTheDocument();
   });
 
   it("folds into one line beside an active plan with nothing to re-score", async () => {

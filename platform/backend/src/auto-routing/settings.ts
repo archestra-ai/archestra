@@ -27,6 +27,7 @@ import {
   readFitWindow,
 } from "./fit";
 import { activeSourceVersion } from "./signals";
+import { scorerState } from "./signals/jev-session";
 import { sharedLongContextThreshold, TIER_NAMES } from "./tiers";
 
 const TIER_FIELDS = {
@@ -259,11 +260,12 @@ async function describe(
   fitted: FitSessions | null = null,
 ): Promise<AutoRoutingSettingsResponse> {
   const tierIds = TIER_NAMES.map((tier) => settings[TIER_FIELDS[tier]]);
-  const [models, active, latest, scorerVersion] = await Promise.all([
+  const [models, active, latest, scorerVersion, scorer] = await Promise.all([
     ModelModel.findByIds(tierIds.filter((id): id is string => id !== null)),
     RoutingPlanModel.findActive(organizationId),
     RoutingPlanModel.findLatestOutcome(organizationId),
     activeSourceVersion(),
+    scorerState(organizationId),
   ]);
   const byId = new Map(models.map((model) => [model.id, model]));
   const tierModel = (id: string | null) => {
@@ -301,6 +303,7 @@ async function describe(
         required: config.autoRouting.minSessions,
       },
       lastFitError: latest?.status === "failed" ? latest.error : null,
+      scorer,
     },
   };
 }

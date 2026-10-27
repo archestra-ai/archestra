@@ -7,16 +7,35 @@ import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import {
   type AutoRoutingPreview,
+  type AutoRoutingScorerState,
   usePreviewAutoRouting,
 } from "@/lib/auto-routing.query";
 import { formatCurrency } from "@/lib/utils/format-currency";
+import { AddJevKeyLink } from "./add-jev-key";
 import { formatPercent } from "./plan-summary";
 import { TIER_NAMES } from "./tiers";
 
-export function TryPrompt({ canUpdate }: { canUpdate: boolean }) {
+export function TryPrompt({
+  canUpdate,
+  scorer,
+}: {
+  canUpdate: boolean;
+  scorer: AutoRoutingScorerState;
+}) {
   const [text, setText] = useState("");
   const preview = usePreviewAutoRouting();
 
+  if (scorer === "no_jev_key") {
+    return (
+      <section className="flex items-center gap-2 rounded-md border p-4 text-sm">
+        <span className="font-medium">Try a prompt</span>
+        <span aria-hidden className="text-muted-foreground">
+          ·
+        </span>
+        <AddJevKeyLink />
+      </section>
+    );
+  }
   return (
     <section className="space-y-3 rounded-md border p-4">
       <Label htmlFor="auto-routing-try-prompt">Try a prompt</Label>

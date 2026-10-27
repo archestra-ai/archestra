@@ -43,8 +43,23 @@ describe("GET /api/auto-routing/settings", () => {
           required: 1000,
         },
         lastFitError: null,
+        scorer: "no_jev_key",
       },
     });
+  });
+
+  test("reports the scorer ready once the organization has a Jev key", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "sk-jev" } });
+    await makeLlmProviderApiKey(ctx.organizationId, secret.id, {
+      provider: "jev",
+    });
+
+    const response = await getSettings();
+
+    expect(response.json().status.scorer).toBe("ready");
   });
 
   test("reports the trio, the active plan, the last fit error and cold-start progress", async () => {
@@ -96,6 +111,7 @@ describe("GET /api/auto-routing/settings", () => {
         activePlan: { id: plan.id, createdAt: plan.createdAt.toISOString() },
         coldStart: { scorerVersionId: running.id, sessions: 2, required: 1000 },
         lastFitError: "solver diverged",
+        scorer: "no_jev_key",
       },
     });
   });

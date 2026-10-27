@@ -126,14 +126,14 @@ describe("CopilotOrganizationConnectDialog", () => {
     const field = screen.getByLabelText("GitHub organization");
     expect(field).toHaveAttribute(
       "placeholder",
-      "my-org or https://github.com/my-org",
+      "acme or https://github.com/acme",
     );
     expect(field).toHaveAccessibleDescription(
       "Organization's GitHub handle or URL",
     );
-    expect(
-      screen.getByText("Read code, repositories, issues or members"),
-    ).toBeInTheDocument();
+    // The step holds only the field; what the App may do comes with the App.
+    expect(screen.queryByText("What this allows")).toBeNull();
+    expect(screen.queryByText(/Copilot requests/)).toBeNull();
   });
 
   it("shows the backend's organization error in place of the help line", async () => {
@@ -221,6 +221,13 @@ describe("CopilotOrganizationConnectDialog", () => {
     );
 
     expect(screen.getByText("Create the App on GitHub")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "The App only needs Copilot requests, nothing else in the organization. Requests are paid from my-org's AI credits.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Copilot requests")).toBeInTheDocument();
+    expect(screen.getByText("Read-only")).toBeInTheDocument();
     expect(screen.getByText("Install it on my-org")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create App" }));
     expect(start.mutate).toHaveBeenCalledWith(
@@ -249,6 +256,11 @@ describe("CopilotOrganizationConnectDialog", () => {
         name: "Connect an App by its ID and private key",
       }),
     );
+    expect(
+      screen.getByText(
+        "The App only needs Copilot requests, nothing else in the organization. Requests are paid from my-org's AI credits.",
+      ),
+    ).toBeInTheDocument();
     await user.type(screen.getByLabelText("App ID"), "42");
     await user.upload(
       screen.getByLabelText("Private key"),

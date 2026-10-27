@@ -1,16 +1,10 @@
 "use client";
 
 import { parseGithubAccountInput } from "@archestra/shared";
-import {
-  ArrowLeft,
-  Check,
-  CircleAlert,
-  ExternalLink,
-  Info,
-  X,
-} from "lucide-react";
+import { ArrowLeft, CircleAlert, ExternalLink, Info } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { SetupStepper } from "@/components/git/git-setup-chrome";
+import { AccessSummary } from "@/components/github-app-setup/access-summary";
 import { AccountChip } from "@/components/github-app-setup/account-chip";
 import { ConnectAppByKey } from "@/components/github-app-setup/connect-app-by-key";
 import { GithubAppChoice } from "@/components/github-app-setup/github-app-choice";
@@ -386,95 +380,103 @@ export function CopilotOrganizationConnectDialog({
       ) : null}
 
       {step === "app" && mode === "create" ? (
-        <ol className="overflow-hidden rounded-lg border bg-card">
-          <ManifestRow
-            index={1}
-            title="Create the App on GitHub"
-            hint={`Owned by ${organization}. It may only make Copilot requests.`}
-            inlineAction
-            waiting={waiting === "create"}
-            error={start.error?.message}
-            onCheckAgain={() => {
-              setWaiting(null);
-              pending.refetch();
-            }}
-            result={
-              createdApp ? (
-                <>
-                  <span className="text-sm text-muted-foreground">Created</span>
-                  <a
-                    className="truncate text-sm font-medium underline-offset-4 hover:underline"
-                    href={createdApp.htmlUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {createdApp.name}
-                  </a>
-                  <Button
-                    type="button"
-                    variant="link"
-                    size="xs"
-                    className="h-auto px-0 text-muted-foreground"
-                    disabled={discard.isPending}
-                    onClick={() =>
-                      discard.mutate(undefined, {
-                        onSuccess: () => setWaiting(null),
-                      })
-                    }
-                  >
-                    <span>Start over</span>
-                  </Button>
-                </>
-              ) : null
-            }
-            action={
-              <GitHubConnectButton
-                label="Create App"
-                pending={start.isPending}
-                onClick={createApp}
-              />
-            }
-          />
-          <ManifestRow
-            index={2}
-            title={`Install it on ${organization}`}
-            hint={`If you're not an owner of ${organization}, GitHub sends the request to an owner. This finishes once they approve.`}
-            locked={!createdApp}
-            inlineAction
-            waiting={waiting === "install" || install.isPending}
-            error={install.error?.message}
-            onCheckAgain={checkInstall}
-            result={null}
-            action={
-              <GitHubConnectButton
-                label="Install on GitHub"
-                disabled={!createdApp}
-                onClick={installApp}
-              />
-            }
-          />
-        </ol>
+        <div className="space-y-4">
+          <ol className="overflow-hidden rounded-lg border bg-card">
+            <ManifestRow
+              index={1}
+              title="Create the App on GitHub"
+              hint={`Owned by ${organization}. It may only make Copilot requests.`}
+              inlineAction
+              waiting={waiting === "create"}
+              error={start.error?.message}
+              onCheckAgain={() => {
+                setWaiting(null);
+                pending.refetch();
+              }}
+              result={
+                createdApp ? (
+                  <>
+                    <span className="text-sm text-muted-foreground">
+                      Created
+                    </span>
+                    <a
+                      className="truncate text-sm font-medium underline-offset-4 hover:underline"
+                      href={createdApp.htmlUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {createdApp.name}
+                    </a>
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="xs"
+                      className="h-auto px-0 text-muted-foreground"
+                      disabled={discard.isPending}
+                      onClick={() =>
+                        discard.mutate(undefined, {
+                          onSuccess: () => setWaiting(null),
+                        })
+                      }
+                    >
+                      <span>Start over</span>
+                    </Button>
+                  </>
+                ) : null
+              }
+              action={
+                <GitHubConnectButton
+                  label="Create App"
+                  pending={start.isPending}
+                  onClick={createApp}
+                />
+              }
+            />
+            <ManifestRow
+              index={2}
+              title={`Install it on ${organization}`}
+              hint={`If you're not an owner of ${organization}, GitHub sends the request to an owner. This finishes once they approve.`}
+              locked={!createdApp}
+              inlineAction
+              waiting={waiting === "install" || install.isPending}
+              error={install.error?.message}
+              onCheckAgain={checkInstall}
+              result={null}
+              action={
+                <GitHubConnectButton
+                  label="Install on GitHub"
+                  disabled={!createdApp}
+                  onClick={installApp}
+                />
+              }
+            />
+          </ol>
+          <CopilotAccessSummary organization={organization} />
+        </div>
       ) : null}
 
       {step === "app" && mode === "key" ? (
-        <ConnectAppByKey
-          fingerprint={validate.data?.fingerprint ?? null}
-          checking={validate.isPending}
-          connecting={byKey.isPending}
-          error={(byKey.error ?? validate.error)?.message ?? null}
-          onChange={() => {
-            validate.reset();
-            byKey.reset();
-          }}
-          onCheck={(fields) => validate.mutate({ ...fields, ...keyTarget })}
-          onConnect={(fields) =>
-            byKey.mutate(
-              { ...fields, ...keyTarget },
-              { onSuccess: (answer) => answer && connected(answer) },
-            )
-          }
-          connectLabel={replace ? "Replace credentials" : "Connect"}
-        />
+        <div className="space-y-4">
+          <ConnectAppByKey
+            fingerprint={validate.data?.fingerprint ?? null}
+            checking={validate.isPending}
+            connecting={byKey.isPending}
+            error={(byKey.error ?? validate.error)?.message ?? null}
+            onChange={() => {
+              validate.reset();
+              byKey.reset();
+            }}
+            onCheck={(fields) => validate.mutate({ ...fields, ...keyTarget })}
+            onConnect={(fields) =>
+              byKey.mutate(
+                { ...fields, ...keyTarget },
+                { onSuccess: (answer) => answer && connected(answer) },
+              )
+            }
+            connectLabel={replace ? "Replace credentials" : "Connect"}
+          />
+          <CopilotAccessSummary organization={organization} />
+        </div>
       ) : null}
 
       {step === "access" && result ? <AccessStep result={result} /> : null}
@@ -498,29 +500,23 @@ function OrganizationStep(props: {
   onChange: (value: string) => void;
   error: string | null;
 }) {
-  const label = parseGithubAccountInput(props.value)?.login;
   return (
-    <div className="space-y-4">
-      <GithubOrganizationField
-        id="copilot-org-login"
-        value={props.value}
-        onChange={props.onChange}
-        error={props.error}
-      />
-      <div className="space-y-2">
-        <p className="text-sm font-medium">What this allows</p>
-        <ul className="space-y-1.5 text-sm">
-          <li className="flex items-start gap-2">
-            <Check className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
-            <span>{`Make Copilot requests, paid from ${label ?? "the organization"}'s AI credits`}</span>
-          </li>
-          <li className="flex items-start gap-2 text-muted-foreground">
-            <X className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>Read code, repositories, issues or members</span>
-          </li>
-        </ul>
-      </div>
-    </div>
+    <GithubOrganizationField
+      id="copilot-org-login"
+      value={props.value}
+      onChange={props.onChange}
+      error={props.error}
+    />
+  );
+}
+
+/** Where Guardrails shows its App's access: under the ways to get the App. */
+function CopilotAccessSummary({ organization }: { organization: string }) {
+  return (
+    <AccessSummary
+      intro={`The App only needs Copilot requests, nothing else in the organization. Requests are paid from ${organization}'s AI credits.`}
+      permissions={[{ name: "Copilot requests", access: "Read-only" }]}
+    />
   );
 }
 

@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AccessSummary } from "./access-summary";
 import { GithubAppChoice } from "./github-app-choice";
 import { GithubAppPicker } from "./github-app-picker";
 import { GithubOrganizationField } from "./github-organization-field";
@@ -21,6 +22,10 @@ describe("GithubOrganizationField", () => {
       />,
     );
     const field = screen.getByLabelText("GitHub organization");
+    expect(field).toHaveAttribute(
+      "placeholder",
+      "acme or https://github.com/acme",
+    );
     expect(field).toHaveAccessibleDescription(
       "Organization's GitHub handle or URL",
     );
@@ -177,5 +182,28 @@ describe("ManifestRow", () => {
     );
     expect(screen.getByText("Created My Org Copilot")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Create App" })).toBeNull();
+  });
+});
+
+describe("AccessSummary", () => {
+  it("says what the App may do, one badge per permission", () => {
+    render(
+      <AccessSummary
+        intro="The App only needs the policy repository, nothing else in the organization:"
+        permissions={[
+          { name: "Contents", access: "Read & write" },
+          { name: "Pull requests", access: "Read & write" },
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "The App only needs the policy repository, nothing else in the organization:",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Contents")).toBeInTheDocument();
+    expect(screen.getByText("Pull requests")).toBeInTheDocument();
+    expect(screen.getAllByText("Read & write")).toHaveLength(2);
   });
 });

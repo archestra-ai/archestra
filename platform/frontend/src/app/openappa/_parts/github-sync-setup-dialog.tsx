@@ -18,13 +18,13 @@ import {
   LoaderCircle,
   Lock,
   Plus,
-  ShieldCheck,
 } from "lucide-react";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { GitAccessStep } from "@/components/git/git-access-step";
 import { GitProviderStep } from "@/components/git/git-provider-step";
 import { ChoiceTile, SetupStepper } from "@/components/git/git-setup-chrome";
+import { AccessSummary } from "@/components/github-app-setup/access-summary";
 import { AccountChip } from "@/components/github-app-setup/account-chip";
 import { GithubAppChoice } from "@/components/github-app-setup/github-app-choice";
 import { GithubAppPicker } from "@/components/github-app-setup/github-app-picker";
@@ -818,7 +818,16 @@ export function GithubSyncSetupDialog({
             {createdApp ? (
               <AppLogoTip settingsUrl={createdApp.settingsUrl} />
             ) : null}
-            <AccessSummary workflows={!github?.dotCom} />
+            {/* Off github.com the App also writes the validation workflow
+                into the new repository. */}
+            <AccessSummary
+              intro="The App only needs the policy repository, nothing else in the organization:"
+              permissions={[
+                "Contents",
+                "Pull requests",
+                ...(github?.dotCom ? [] : ["Workflows"]),
+              ].map((name) => ({ name, access: "Read & write" }))}
+            />
           </div>
         ) : (
           <InlineNotice variant="info">
@@ -1547,35 +1556,6 @@ function AppLogoTip({ settingsUrl }: { settingsUrl: string }) {
         <ExternalLink className="size-3" />
       </a>
     </p>
-  );
-}
-
-/** Off github.com the App also writes the validation workflow into the new repository. */
-function AccessSummary({ workflows }: { workflows: boolean }) {
-  return (
-    <div className="flex items-start gap-3 rounded-lg bg-muted/40 px-4 py-3">
-      <ShieldCheck className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-      <div className="min-w-0 space-y-2">
-        <p className="text-xs text-muted-foreground">
-          The App only needs the policy repository, nothing else in the
-          organization:
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {[
-            "Contents",
-            "Pull requests",
-            ...(workflows ? ["Workflows"] : []),
-          ].map((permission) => (
-            <Badge key={permission} variant="outline" className="bg-background">
-              <span>{permission}</span>
-              <span className="font-normal text-muted-foreground">
-                Read &amp; write
-              </span>
-            </Badge>
-          ))}
-        </div>
-      </div>
-    </div>
   );
 }
 

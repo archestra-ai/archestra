@@ -29,7 +29,7 @@ export function GithubOrganizationField({
       <Label htmlFor={id}>{label}</Label>
       <Input
         id={id}
-        placeholder="my-org or https://github.com/my-org"
+        placeholder="acme or https://github.com/acme"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         autoComplete="off"

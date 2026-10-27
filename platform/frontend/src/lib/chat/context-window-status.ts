@@ -1,4 +1,7 @@
-import { CONTEXT_COMPACTION_AUTO_THRESHOLD } from "@archestra/shared";
+import {
+  CONTEXT_COMPACTION_AUTO_THRESHOLD,
+  type ContextWindowBreakdown,
+} from "@archestra/shared";
 
 // ============================================================================
 // Public interface
@@ -26,6 +29,121 @@ export interface ContextWindowStatus {
   atAutoCompact: boolean;
   /** Close enough to auto-compaction that compacting now is worth offering. */
   nearAutoCompact: boolean;
+}
+
+/**
+ * Resolves the single authoritative `{ tokensUsed, maxTokens }` pair shared by
+ * the composer's circular indicator, its hover tooltip, and the breakdown
+ * dialog:
+ * - `tokensUsed` prefers the live session counter (which is refined by
+ *   post-step `data-token-usage` events and updated by compaction) and falls
+ *   back to the breakdown's estimate when the counter is zero.
+ * - `maxTokens` prefers the currently selected model's effective context
+ *   window (`selectedModelContextLength`) so switching models in the composer
+ *   immediately updates both the ring and the tooltip/panel in lockstep,
+ *   falling back to the breakdown's window only while the catalog loads.
+ */
+export function resolveContextWindowUsage(params: {
+  tokensUsed?: number;
+  maxTokens?: number | null;
+  breakdown?: ContextWindowBreakdown | null;
+}): {
+  tokensUsed: number;
+  maxTokens: number | null;
+} {
+  const { tokensUsed, maxTokens, breakdown } = params;
+  const resolvedUsed =
+    typeof tokensUsed === "number" && tokensUsed > 0
+      ? tokensUsed
+      : (breakdown?.usedTokens ?? 0);
+  const resolvedMax =
+    typeof maxTokens === "number" && maxTokens > 0
+      ? maxTokens
+      : (breakdown?.contextLength ?? null);
+  return {
+    tokensUsed: resolvedUsed,
+    maxTokens: resolvedMax,
+  };
+}
+
+/**
+ * Reconciles a `ContextWindowBreakdown` with the latest resolved `tokensUsed`
+ * and `maxTokens` so the breakdown panel's headline, stacked bar, free space,
+ * and auto-compaction headroom always match the composer's indicator ring and
+ * hover tooltip (e.g. after provider usage refinement or a model switch).
+ */
+export function reconcileContextWindowBreakdown(
+  breakdown: ContextWindowBreakdown,
+  params: {
+    tokensUsed?: number;
+    maxTokens?: number | null;
+  },
+): ContextWindowBreakdown {
+  const usedTokens =
+    typeof params.tokensUsed === "number" && params.tokensUsed > 0
+      ? params.tokensUsed
+      : breakdown.usedTokens;
+  const contextLength =
+    typeof params.maxTokens === "number" && params.maxTokens > 0
+      ? params.maxTokens
+      : breakdown.contextLength;
+
+  if (
+    usedTokens === breakdown.usedTokens &&
+    contextLength === breakdown.contextLength
+  ) {
+    return breakdown;
+  }
+
+  const freeTokens = contextLength !== null ? contextLength - usedTokens : null;
+  const usedPercent =
+    contextLength !== null && contextLength > 0
+      ? Math.min((usedTokens / contextLength) * 100, 100)
+      : null;
+  const estimatedInputCostUsd =
+    breakdown.estimatedInputCostUsd !== null && breakdown.usedTokens > 0
+      ? (breakdown.estimatedInputCostUsd / breakdown.usedTokens) * usedTokens
+      : breakdown.estimatedInputCostUsd;
+
+  const originalTotal = breakdown.segments.reduce(
+    (sum, s) => sum + s.tokens,
+    0,
+  );
+  let scaledSegments = breakdown.segments;
+  if (usedTokens !== breakdown.usedTokens && originalTotal > 0) {
+    scaledSegments = breakdown.segments.map((s) => ({
+      ...s,
+      tokens: Math.round((s.tokens / originalTotal) * usedTokens),
+      items: s.items?.map((item) => ({
+        ...item,
+        tokens: Math.round((item.tokens / originalTotal) * usedTokens),
+      })),
+    }));
+    const roundedTotal = scaledSegments.reduce((sum, s) => sum + s.tokens, 0);
+    const remainder = usedTokens - roundedTotal;
+    if (remainder !== 0 && scaledSegments.length > 0) {
+      let largestIndex = 0;
+      for (let i = 1; i < scaledSegments.length; i++) {
+        if (scaledSegments[i].tokens > scaledSegments[largestIndex].tokens) {
+          largestIndex = i;
+        }
+      }
+      scaledSegments[largestIndex] = {
+        ...scaledSegments[largestIndex],
+        tokens: Math.max(0, scaledSegments[largestIndex].tokens + remainder),
+      };
+    }
+  }
+
+  return {
+    ...breakdown,
+    contextLength,
+    usedTokens,
+    freeTokens,
+    usedPercent,
+    estimatedInputCostUsd,
+    segments: scaledSegments,
+  };
 }
 
 export function getContextWindowStatus(

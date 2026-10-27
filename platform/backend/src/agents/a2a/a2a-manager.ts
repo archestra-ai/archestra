@@ -712,6 +712,7 @@ export class A2AManager {
               messages: requestMessages,
               organizationId: actor.organizationId,
               userId: a2aActorUserId(actor),
+              oauthExecution: actor.oauthExecution,
               sessionId,
               source: systemParams?.source,
               // A chat posts a paused review to the requester (see ChatOps).
@@ -1805,12 +1806,20 @@ export class A2AManager {
     }
 
     const organizationId = tokenAuth.organizationId;
+    const oauthExecution = tokenAuth.oauthClientId
+      ? {
+          tokenId: tokenAuth.tokenId,
+          clientId: tokenAuth.oauthClientId,
+          serviceAccountId: tokenAuth.serviceAccountId,
+        }
+      : undefined;
 
     if (tokenAuth.serviceAccountId) {
       return {
         id: tokenAuth.serviceAccountId,
         kind: "serviceAccount",
         organizationId,
+        oauthExecution,
       };
     }
 
@@ -1834,6 +1843,7 @@ export class A2AManager {
         id: tokenAuth.oauthClientId,
         kind: "oauthClient",
         organizationId,
+        oauthExecution,
       };
     }
 

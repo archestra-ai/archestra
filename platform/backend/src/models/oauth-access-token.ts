@@ -95,6 +95,15 @@ class OAuthAccessTokenModel {
     return result;
   }
 
+  static async getTokenHashById(id: string): Promise<string | undefined> {
+    const [row] = await db
+      .select({ token: schema.oauthAccessTokensTable.token })
+      .from(schema.oauthAccessTokensTable)
+      .where(eq(schema.oauthAccessTokensTable.id, id))
+      .limit(1);
+    return row?.token;
+  }
+
   /** Delete one access token by its hashed value; true when it existed. */
   static async deleteByTokenHash(tokenHash: string): Promise<boolean> {
     const rows = await db

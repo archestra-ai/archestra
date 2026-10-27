@@ -1731,6 +1731,43 @@ async function validateResolvedUserToken(params: {
   };
 }
 
+export type A2AOAuthExecution = {
+  tokenId: string;
+  clientId: string;
+  serviceAccountId?: string;
+};
+
+export async function authorizeA2AOAuthExecution(params: {
+  agentId: string;
+  organizationId: string;
+  execution: A2AOAuthExecution;
+}): Promise<TokenAuthResult> {
+  const { execution } = params;
+  const hash = execution.tokenId.startsWith(OAUTH_TOKEN_ID_PREFIX)
+    ? await OAuthAccessTokenModel.getTokenHashById(
+        execution.tokenId.slice(OAUTH_TOKEN_ID_PREFIX.length),
+      )
+    : undefined;
+  const result = hash
+    ? await validateOAuthTokenByHash({
+        profileId: params.agentId,
+        oauthTokenHash: hash,
+        requiredOAuthScope: "a2a",
+      })
+    : null;
+  if (
+    !result ||
+    result.isUserToken ||
+    result.oauthClientId !== execution.clientId ||
+    result.serviceAccountId !== execution.serviceAccountId ||
+    result.organizationId !== params.organizationId ||
+    !(await canUseAgent(params.agentId, callerOf(result)))
+  ) {
+    throw new Error("OAuth application is no longer authorized for this agent");
+  }
+  return result;
+}
+
 /**
  * Validate an OAuth access token for a specific profile.
  * Looks up the token by its SHA-256 hash in the oauth_access_token table

@@ -60,6 +60,10 @@ import { usesStepPromptCache } from "@/routes/chat/normalization/apply-prompt-ca
 import { prepareMessagesForProvider } from "@/routes/chat/normalization/prepare-for-provider";
 import { buildOllamaNativeProviderOptions } from "@/routes/chat/ollama-native-params";
 import { createToolCallRepair } from "@/routes/chat/tool-call-repair";
+import {
+  type A2AOAuthExecution,
+  authorizeA2AOAuthExecution,
+} from "@/routes/mcp-gateway/utils";
 import { assertCallerMayStartTurn } from "@/services/agent-credential-readiness";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
@@ -141,6 +145,7 @@ interface A2AExecuteParamsBase {
 
   organizationId: string;
   userId: string;
+  oauthExecution?: A2AOAuthExecution;
   /** Session ID to group related LLM requests together in logs */
   sessionId?: string;
   /** Interaction source for tracking request origin in logs */
@@ -299,6 +304,13 @@ export async function executeA2AMessage(
   }
 
   // Fetch the internal agent
+  if (params.oauthExecution) {
+    await authorizeA2AOAuthExecution({
+      agentId,
+      organizationId,
+      execution: params.oauthExecution,
+    });
+  }
   const agent = await AgentModel.findById(agentId);
   if (!agent) {
     throw new Error(`Agent ${agentId} not found`);
@@ -371,6 +383,7 @@ export async function executeA2AMessage(
     // Fetch MCP tools for the agent (including delegation tools)
     // Pass sessionId, delegationChain, and isolationKey for browser tab isolation
     const mcpTools = await getChatMcpTools({
+      oauthExecution: params.oauthExecution,
       agentName: agent.name,
       agentId: agent.id,
       userId,

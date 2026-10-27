@@ -609,10 +609,8 @@ describe("ConnectPage guardrails chip", () => {
       name: "Supports LLM proxy guardrails",
     });
     expect(badge).toBeVisible();
-    // In the tile's top-right corner rather than inline beside the label.
-    expect(badge).toHaveClass("size-5");
-    expect(badge.parentElement).toHaveClass("absolute", "top-1.5", "right-1.5");
-    expect(badge.parentElement?.parentElement).toBe(tile);
+    // Separate from the label text so the shield does not shift the agent name.
+    expect(within(tile).getByText(label)).not.toContainElement(badge);
     await userEvent.hover(badge);
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       "Enforcement depends on your organization's settings.",
@@ -644,8 +642,8 @@ describe("ConnectPage guardrails chip", () => {
       name: "Supports LLM proxy guardrails",
     });
     const corner = guardrails.parentElement;
-    expect(corner).toHaveClass("absolute", "top-1.5", "right-1.5", "flex-col");
     expect(lastConnected.parentElement).toBe(corner);
+    expect(within(tile).getByText("Codex")).not.toContainElement(guardrails);
     expect(
       within(corner as HTMLElement)
         .getAllByRole("img")

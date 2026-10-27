@@ -193,6 +193,27 @@ describe("GitHubActionsAccessSection", () => {
     expect(onChange.mock.lastCall?.[0]?.actAs).toBeUndefined();
   });
 
+  it("gives runs Contents write only when review threads are resolved", async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderSection({
+      githubAppCredentialKey: "review-app",
+      repositories: ["acme/widgets"],
+      workflows: [WORKFLOW],
+    });
+    const toggle = screen.getByRole("switch", {
+      name: "Resolve review threads",
+    });
+    expect(toggle).not.toBeChecked();
+
+    await user.click(toggle);
+    expect(onChange.mock.lastCall?.[0]).toMatchObject({
+      resolveReviewThreads: true,
+    });
+
+    await user.click(toggle);
+    expect(onChange.mock.lastCall?.[0]?.resolveReviewThreads).toBeUndefined();
+  });
+
   it("says what is still missing before the setting can be saved", () => {
     renderSection({
       githubAppCredentialKey: "review-app",

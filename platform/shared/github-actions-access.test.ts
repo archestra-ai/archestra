@@ -92,6 +92,27 @@ describe("actAs", () => {
     ).toBe(false);
   });
 
+  test("saves resolveReviewThreads as a boolean, and reads anything else as off", () => {
+    expect(
+      GitHubActionsAccessSchema.safeParse({
+        ...access,
+        resolveReviewThreads: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      GitHubActionsAccessSchema.safeParse({
+        ...access,
+        resolveReviewThreads: "yes",
+      }).success,
+    ).toBe(false);
+    expect(
+      StoredGitHubActionsAccessSchema.parse({
+        ...access,
+        resolveReviewThreads: "yes",
+      }).resolveReviewThreads,
+    ).toBeUndefined();
+  });
+
   test("reads a stored value it does not know as the default, the author", () => {
     expect(
       StoredGitHubActionsAccessSchema.parse({ ...access, actAs: "anyone" })

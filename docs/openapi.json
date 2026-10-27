@@ -49571,6 +49571,9 @@
                                           "actor"
                                         ]
                                       },
+                                      "resolveReviewThreads": {
+                                        "type": "boolean"
+                                      },
                                       "workflows": {
                                         "type": "array",
                                         "items": {
@@ -51307,6 +51310,9 @@
                                   "author",
                                   "actor"
                                 ]
+                              },
+                              "resolveReviewThreads": {
+                                "type": "boolean"
                               },
                               "workflows": {
                                 "type": "array",
@@ -53204,6 +53210,9 @@
                             "author",
                             "actor"
                           ]
+                        },
+                        "resolveReviewThreads": {
+                          "type": "boolean"
                         },
                         "workflows": {
                           "type": "array",
@@ -58456,6 +58465,9 @@
                             "actor"
                           ]
                         },
+                        "resolveReviewThreads": {
+                          "type": "boolean"
+                        },
                         "workflows": {
                           "type": "array",
                           "items": {
@@ -59882,6 +59894,9 @@
                                 "actor"
                               ]
                             },
+                            "resolveReviewThreads": {
+                              "type": "boolean"
+                            },
                             "workflows": {
                               "type": "array",
                               "items": {
@@ -60981,6 +60996,9 @@
                             "actor"
                           ]
                         },
+                        "resolveReviewThreads": {
+                          "type": "boolean"
+                        },
                         "workflows": {
                           "type": "array",
                           "items": {
@@ -62004,6 +62022,9 @@
                           "actor"
                         ]
                       },
+                      "resolveReviewThreads": {
+                        "type": "boolean"
+                      },
                       "workflows": {
                         "minItems": 1,
                         "maxItems": 50,
@@ -62541,6 +62562,9 @@
                             "author",
                             "actor"
                           ]
+                        },
+                        "resolveReviewThreads": {
+                          "type": "boolean"
                         },
                         "workflows": {
                           "type": "array",
@@ -65272,6 +65296,9 @@
                             "actor"
                           ]
                         },
+                        "resolveReviewThreads": {
+                          "type": "boolean"
+                        },
                         "workflows": {
                           "type": "array",
                           "items": {
@@ -66487,6 +66514,9 @@
                             "author",
                             "actor"
                           ]
+                        },
+                        "resolveReviewThreads": {
+                          "type": "boolean"
                         },
                         "workflows": {
                           "type": "array",
@@ -74514,6 +74544,9 @@
                             "author",
                             "actor"
                           ]
+                        },
+                        "resolveReviewThreads": {
+                          "type": "boolean"
                         },
                         "workflows": {
                           "type": "array",
@@ -135132,6 +135165,9 @@
                                     "actor"
                                   ]
                                 },
+                                "resolveReviewThreads": {
+                                  "type": "boolean"
+                                },
                                 "workflows": {
                                   "type": "array",
                                   "items": {
@@ -138177,6 +138213,9 @@
                                         "author",
                                         "actor"
                                       ]
+                                    },
+                                    "resolveReviewThreads": {
+                                      "type": "boolean"
                                     },
                                     "workflows": {
                                       "type": "array",

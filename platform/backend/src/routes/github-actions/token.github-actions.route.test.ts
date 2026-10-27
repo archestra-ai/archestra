@@ -211,7 +211,7 @@ describe("POST /api/github-actions/token", () => {
         repository_ids: [REPOSITORY_ID],
         permissions: {
           pull_requests: "write",
-          contents: "write",
+          contents: "read",
           checks: "read",
           metadata: "read",
         },
@@ -335,7 +335,30 @@ describe("POST /api/github-actions/token", () => {
     expect(scopedTokenRequests).toHaveLength(0);
   });
 
-  test("falls back to contents: read when the App may not write contents", async () => {
+  test("asks for contents: write when the gateway resolves review threads", async ({
+    makeAgent,
+  }) => {
+    const resolving = await makeGitHubActionsGateway(makeAgent, {
+      resolveReviewThreads: true,
+    });
+
+    const response = await exchange({
+      token: await oidcToken(),
+      resource: gatewayUrl(resolving.id),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(scopedTokenRequests).toMatchObject([
+      { permissions: { contents: "write", pull_requests: "write" } },
+    ]);
+  });
+
+  test("falls back to contents: read when the App may not write contents", async ({
+    makeAgent,
+  }) => {
+    const resolving = await makeGitHubActionsGateway(makeAgent, {
+      resolveReviewThreads: true,
+    });
     server.use(
       http.post(ACCESS_TOKENS_URL, async ({ request }) => {
         const text = await request.text();
@@ -361,7 +384,10 @@ describe("POST /api/github-actions/token", () => {
       }),
     );
 
-    const response = await exchange({ token: await oidcToken() });
+    const response = await exchange({
+      token: await oidcToken(),
+      resource: gatewayUrl(resolving.id),
+    });
 
     expect(response.statusCode).toBe(200);
     expect(response.json().github_token).toBe(SCOPED_GITHUB_TOKEN);
@@ -374,7 +400,12 @@ describe("POST /api/github-actions/token", () => {
     ).toEqual(["write", "read"]);
   });
 
-  test("does not fall back to contents: read when GitHub fails for another reason", async () => {
+  test("does not fall back to contents: read when GitHub fails for another reason", async ({
+    makeAgent,
+  }) => {
+    const resolving = await makeGitHubActionsGateway(makeAgent, {
+      resolveReviewThreads: true,
+    });
     server.use(
       http.post(ACCESS_TOKENS_URL, async ({ request }) => {
         const text = await request.text();
@@ -396,7 +427,10 @@ describe("POST /api/github-actions/token", () => {
       }),
     );
 
-    const response = await exchange({ token: await oidcToken() });
+    const response = await exchange({
+      token: await oidcToken(),
+      resource: gatewayUrl(resolving.id),
+    });
 
     expect(response.statusCode).toBe(502);
     expect(response.json().error).toBe("github_error");
@@ -568,7 +602,12 @@ describe("POST /api/github-actions/token", () => {
       head: { repo: { full_name: "someone-else/widgets" } },
     };
 
-    const response = await exchange({ token: await oidcToken() });
+    // Someone else started it; by default the token would act as the author.
+    const response = await exchange({
+      token: await oidcToken({
+        claims: { actor_id: "777", actor: "a-maintainer" },
+      }),
+    });
 
     expect(response.statusCode).toBe(403);
     expect(response.json()).toMatchObject({
@@ -915,7 +954,7 @@ describe("POST /api/github-actions/token", () => {
       organizationId: string;
       agentType: "mcp_gateway";
     }) => Promise<{ id: string; slug: string | null }>,
-    access: { actAs?: "author" | "actor" } = {},
+    access: { actAs?: "author" | "actor"; resolveReviewThreads?: boolean } = {},
   ) {
     const created = await makeAgent({
       organizationId,

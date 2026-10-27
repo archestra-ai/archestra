@@ -53,6 +53,7 @@ export function GitHubActionsAccessSection({
   const switchId = useId();
   const appSelectId = useId();
   const actAsSelectId = useId();
+  const resolveThreadsId = useId();
   const credentials = useRuntimeCredentials();
   const { data: canUseEveryCredential } = useCanUseEveryCredential();
   const canAttachCredential = useCanAttachCredential();
@@ -198,6 +199,27 @@ export function GitHubActionsAccessSection({
                 <SelectItem value="actor">Whoever started the run</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <Switch
+                id={resolveThreadsId}
+                checked={value.resolveReviewThreads === true}
+                onCheckedChange={(checked) =>
+                  onChange({
+                    ...value,
+                    resolveReviewThreads: checked ? true : undefined,
+                  })
+                }
+              />
+              <Label htmlFor={resolveThreadsId}>Resolve review threads</Label>
+            </div>
+            <FieldDescription>
+              Gives each run's GitHub token Contents write, which GitHub
+              requires to resolve a review thread. The App needs Contents write
+              too; without it, runs still review.
+            </FieldDescription>
           </div>
 
           <ListEditor

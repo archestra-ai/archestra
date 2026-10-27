@@ -134,6 +134,13 @@ export async function exchangeGitHubActionsToken(params: {
       "not_trusted",
       `The GitHub App cannot read pull request #${pullNumber} in ${repository}. Install the App on that repository.`,
     );
+  // The token acts as whoever started the run. By default that must be the
+  // author: a collaborator who pushes to someone else's pull request, or
+  // labels it, starts a run too. With actAs "actor", the trusted workflow
+  // decides whose runs to start, and each person spends their own account.
+  // The caller's own workflow file is not trusted: the pull request can edit it.
+  const actsAsActor = access.actAs === "actor";
+  const login = claims.actor;
   if (
     pullRequest.head.repo?.full_name.toLowerCase() !== repository.toLowerCase()
   )
@@ -141,15 +148,9 @@ export async function exchangeGitHubActionsToken(params: {
       403,
       "not_trusted",
       "Pull requests from forks, or whose head repository no longer exists, cannot use this gateway.",
-      claims.actor,
+      actsAsActor ? login : pullRequest.user.login,
     );
-  // The token acts as whoever started the run. By default that must be the
-  // author: a collaborator who pushes to someone else's pull request, or
-  // labels it, starts a run too. With actAs "actor", the trusted workflow
-  // decides whose runs to start, and each person spends their own account.
-  // The caller's own workflow file is not trusted: the pull request can edit it.
-  const login = claims.actor;
-  if (access.actAs !== "actor" && claims.actor_id !== pullRequest.user.id)
+  if (!actsAsActor && claims.actor_id !== pullRequest.user.id)
     return refuse(
       403,
       "not_author",
@@ -228,27 +229,30 @@ export async function exchangeGitHubActionsToken(params: {
       githubToken = await createRepositoryInstallationToken({
         ...app,
         repositoryId: claims.repository_id,
-        permissions: GITHUB_TOKEN_PERMISSIONS,
+        permissions: access.resolveReviewThreads
+          ? { ...GITHUB_TOKEN_PERMISSIONS, contents: "write" }
+          : GITHUB_TOKEN_PERMISSIONS,
       });
-    } catch (writeError) {
+    } catch (firstError) {
       // An App installed without contents: write still reviews; it cannot
       // resolve review threads. Any other failure is reported as it is.
       if (
-        !(writeError instanceof ApiError) ||
-        writeError.internalCode !== GITHUB_INSTALLATION_TOKEN_REFUSED
+        !access.resolveReviewThreads ||
+        !(firstError instanceof ApiError) ||
+        firstError.internalCode !== GITHUB_INSTALLATION_TOKEN_REFUSED
       ) {
         await OAuthAccessTokenModel.deleteByTokenHash(gatewayToken.hash);
-        return githubFailure({ error: writeError, gatewayId, repository });
+        return githubFailure({ error: firstError, gatewayId, repository });
       }
       logger.info(
-        { gatewayId, repository, ...describeError(writeError) },
+        { gatewayId, repository, ...describeError(firstError) },
         "[github-actions] No repository token with contents: write; trying contents: read",
       );
       try {
         githubToken = await createRepositoryInstallationToken({
           ...app,
           repositoryId: claims.repository_id,
-          permissions: { ...GITHUB_TOKEN_PERMISSIONS, contents: "read" },
+          permissions: GITHUB_TOKEN_PERMISSIONS,
         });
       } catch (error) {
         await OAuthAccessTokenModel.deleteByTokenHash(gatewayToken.hash);
@@ -357,13 +361,13 @@ const UNTRUSTED_RUN_MESSAGE =
 const UNUSABLE_APP_MESSAGE =
   "The GitHub App credential could not be used; check its private key, App ID and installation ID.";
 /**
- * Enough to read the change, post a review and resolve its threads: GitHub
- * resolves a review thread for an installation token only with contents:
- * write besides pull_requests: write. Issue comments are not needed.
+ * Enough to read the change and post a review; issue comments are not needed.
+ * A gateway with resolveReviewThreads adds contents: write, which GitHub
+ * requires to resolve a review thread.
  */
 const GITHUB_TOKEN_PERMISSIONS = {
   pull_requests: "write",
-  contents: "write",
+  contents: "read",
   checks: "read",
   metadata: "read",
 } as const;

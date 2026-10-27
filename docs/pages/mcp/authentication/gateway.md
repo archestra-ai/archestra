@@ -91,13 +91,13 @@ A pull request workflow, such as an automated code review, can use the gateway a
 
 Before you start:
 
-- A [GitHub App credential](/docs/admin/credentials#credential-types) for GitHub.com, installed on the repositories, with **Pull requests** and **Contents** write and **Checks** read. With **Contents** read only, reviews still post, but they cannot resolve review threads.
+- A [GitHub App credential](/docs/admin/credentials#credential-types) for GitHub.com, installed on the repositories, with **Pull requests** write and **Contents** and **Checks** read. For reviews that resolve their own threads, give it **Contents** write.
 - A GitHub user credential that uses that App. Each person who starts runs connects it once: click your name in the sidebar, open **Credentials**, and click **Connect**.
 
 Then:
 
 1. On the gateway's **Settings** tab, turn on **Accept GitHub Actions tokens** under **GitHub Actions**.
-2. Pick the App and whose account runs use under **Runs act as**, add the repositories, and add each trusted workflow as GitHub names it in the token's `job_workflow_ref` claim, such as `acme/review/.github/workflows/review.yml@refs/heads/main`. A repository entry `owner/*` covers every repository of that owner, including new ones, so install the App on all of them.
+2. Pick the App and whose account runs use under **Runs act as**. Turn on **Resolve review threads** to give each run's GitHub token **Contents** write, which GitHub requires to resolve a thread. Add the repositories, and add each trusted workflow as GitHub names it in the token's `job_workflow_ref` claim, such as `acme/review/.github/workflows/review.yml@refs/heads/main`. A repository entry `owner/*` covers every repository of that owner, including new ones, so install the App on all of them.
 3. In the workflow, grant `id-token: write`, request a GitHub OIDC token whose audience is your [`ARCHESTRA_FRONTEND_URL`](/docs/admin/deployment/configuration#ARCHESTRA_FRONTEND_URL), and send it:
 
    ```http

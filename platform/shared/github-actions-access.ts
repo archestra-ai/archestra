@@ -72,6 +72,11 @@ export const GitHubActionsAccessSchema = z.object({
    * runs to start.
    */
   actAs: z.enum(["author", "actor"]).optional(),
+  /**
+   * True: the repository token also gets contents: write, which GitHub
+   * requires to resolve a review thread. Otherwise it reads contents only.
+   */
+  resolveReviewThreads: z.boolean().optional(),
   /** Trusted `job_workflow_ref` claim values; matched exactly. */
   workflows: z
     .array(
@@ -97,6 +102,7 @@ export const StoredGitHubActionsAccessSchema = z.object({
   repositories: z.array(z.string()),
   // A value this version does not know reads as the default, the author.
   actAs: z.enum(["author", "actor"]).optional().catch(undefined),
+  resolveReviewThreads: z.boolean().optional().catch(undefined),
   workflows: z.array(z.string()),
 });
 

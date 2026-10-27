@@ -266,6 +266,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "knowledgeFile.bulk_updated": "Knowledge documents bulk updated",
   "knowledgeFile.bulk_deleted": "Knowledge documents bulk deleted",
   "llmModel.bulk_updated": "LLM models bulk updated",
+  "llmModel.cost_backfill_started": "LLM model past costs recompute started",
   "mcpServer.bulk_deleted": "MCP servers bulk deleted",
   "role.bulk_deleted": "Roles bulk deleted",
   "serviceAccount.bulk_deleted": "Service accounts bulk deleted",

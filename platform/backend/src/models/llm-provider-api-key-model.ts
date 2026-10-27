@@ -48,6 +48,21 @@ class LlmProviderApiKeyModelLinkModel {
     ]);
   }
 
+  /**
+   * Whether any provider key publishes its own price for this model (a
+   * LiteLLM gateway prices per key). Recorded requests don't keep which key
+   * served them, so their cost can only be recomputed from a custom price.
+   */
+  static async hasProviderPricing(modelId: string): Promise<boolean> {
+    const links = schema.llmProviderApiKeyModelsTable;
+    const [row] = await db
+      .select({ modelId: links.modelId })
+      .from(links)
+      .where(and(eq(links.modelId, modelId), isNotNull(links.providerPricing)))
+      .limit(1);
+    return !!row;
+  }
+
   static async findProviderPricing(params: {
     apiKeyId?: string;
     modelIds: string[];

@@ -202,6 +202,7 @@ export { default as mcpToolCallsTable } from "./mcp-tool-call";
 export { default as membersTable } from "./member";
 export { default as messagesTable } from "./message";
 export { default as modelsTable } from "./model";
+export { default as modelCostBackfillsTable } from "./model-cost-backfill";
 export { default as modelLabelsTable } from "./model-label";
 export { default as modelPoolsTable } from "./model-pool";
 export { default as modelPoolMembersTable } from "./model-pool-member";

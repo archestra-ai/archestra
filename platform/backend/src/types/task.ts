@@ -50,6 +50,8 @@ export const TaskTypeSchema = z.enum([
   "agent_run_attention_notice",
   "auto_routing_dispatch",
   "auto_routing_fit",
+  "check_due_model_cost_backfills",
+  "model_cost_backfill",
 ]);
 export type TaskType = z.infer<typeof TaskTypeSchema>;
 
@@ -111,6 +113,8 @@ export const TASK_LANES = {
     "agent_run_attention_notice",
     "auto_routing_dispatch",
     "auto_routing_fit",
+    "check_due_model_cost_backfills",
+    "model_cost_backfill",
   ],
 } as const satisfies Record<string, TaskType[]>;
 

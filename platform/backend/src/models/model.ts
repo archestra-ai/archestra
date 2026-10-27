@@ -258,6 +258,20 @@ class ModelModel {
     return result || null;
   }
 
+  /** The model row, locked against concurrent edits until `tx` ends. */
+  static async findByIdForUpdate(
+    id: string,
+    tx: Transaction,
+  ): Promise<Model | null> {
+    const [result] = await tx
+      .select()
+      .from(schema.modelsTable)
+      .where(eq(schema.modelsTable.id, id))
+      .for("update");
+
+    return result || null;
+  }
+
   /**
    * The models a bulk route was asked to act on, read in one query rather than
    * one per id. Model rows are global rather than per organization, so unlike

@@ -52,31 +52,14 @@ export async function resolvePricingQuote(params: {
       provider,
       size,
     );
-    const multiplier = CACHE_PRICE_MULTIPLIERS[provider];
-    return {
+    return quotedPrices({
       model: modelId,
-      prices: {
-        input: pricing.pricePerMillionInput,
-        output: pricing.pricePerMillionOutput,
-        cacheRead: pricing.pricePerMillionCacheRead,
-        cacheWrite: pricing.pricePerMillionCacheWrite,
-        cacheWrite1h:
-          pricing.pricePerMillionCacheWrite === null
-            ? null
-            : multiplier?.write1h && multiplier.write > 0
-              ? scalePrice(
-                  pricing.pricePerMillionCacheWrite,
-                  BigInt(Math.round(multiplier.write1h * 100)),
-                  BigInt(Math.round(multiplier.write * 100)),
-                )
-              : pricing.pricePerMillionCacheWrite,
-        source: pricing.source,
-      },
-      cacheSource: pricing.cacheSource,
+      provider,
+      pricing,
       instancePriced:
         projected?.providerPricing !== undefined &&
         projected.providerPricing !== "conflicting",
-    };
+    });
   };
   return {
     model,
@@ -89,6 +72,39 @@ export async function resolvePricingQuote(params: {
         quote(item.model, promptTokens(item)),
       ]),
     ),
+  };
+}
+
+/** Resolved per-million prices as a quote; the 1h write rate derives from the 5m one. */
+export function quotedPrices(params: {
+  model: string;
+  provider: SupportedProvider;
+  pricing: ReturnType<typeof ModelModel.getEffectivePricing>;
+  instancePriced: boolean;
+}): QuotedPrices {
+  const { pricing } = params;
+  const multiplier = CACHE_PRICE_MULTIPLIERS[params.provider];
+  return {
+    model: params.model,
+    prices: {
+      input: pricing.pricePerMillionInput,
+      output: pricing.pricePerMillionOutput,
+      cacheRead: pricing.pricePerMillionCacheRead,
+      cacheWrite: pricing.pricePerMillionCacheWrite,
+      cacheWrite1h:
+        pricing.pricePerMillionCacheWrite === null
+          ? null
+          : multiplier?.write1h && multiplier.write > 0
+            ? scalePrice(
+                pricing.pricePerMillionCacheWrite,
+                BigInt(Math.round(multiplier.write1h * 100)),
+                BigInt(Math.round(multiplier.write * 100)),
+              )
+            : pricing.pricePerMillionCacheWrite,
+      source: pricing.source,
+    },
+    cacheSource: pricing.cacheSource,
+    instancePriced: params.instancePriced,
   };
 }
 

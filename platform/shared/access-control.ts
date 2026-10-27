@@ -1183,6 +1183,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetLlmModelOptions]: {},
   [RouteId.BulkUpdateModels]: {},
   [RouteId.UpdateModel]: {},
+  // Cost backfill: scoped llmModel:update checked in the handler
+  [RouteId.PreviewModelCostBackfill]: {},
+  [RouteId.StartModelCostBackfill]: {},
+  [RouteId.GetModelCostBackfill]: {},
   // Delegation routes: agent-type permission checked dynamically in handler
   [RouteId.GetAgentDelegations]: {},
   [RouteId.SyncAgentDelegations]: {},

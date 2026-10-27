@@ -1,5 +1,6 @@
 import type { SupportedProvider } from "@archestra/shared";
-import { resolvePricingQuote } from "@/services/billable-usage";
+import type ModelModel from "@/models/model";
+import { quotedPrices, resolvePricingQuote } from "@/services/billable-usage";
 import type { ProviderMessage, Tokenizer } from "@/tokenizers";
 import type { CommonMcpToolDefinition } from "@/types";
 import type { QuotedPrices } from "@/utils/billable-usage";
@@ -33,6 +34,20 @@ interface CacheTokenCounts {
   writeTokens?: number;
   /** Portion of writeTokens written at the 1-hour TTL (billed at write1h, the rest at write). */
   write1hTokens?: number;
+}
+
+/** Resolved per-million prices, as returned by `ModelModel.getEffectivePricing`. */
+type ResolvedPricing = ReturnType<typeof ModelModel.getEffectivePricing>;
+
+/** One request's token usage, in the shape the interaction row stores it. */
+interface TokenUsage {
+  /** Uncached input tokens. */
+  inputTokens: number | null | undefined;
+  outputTokens: number | null | undefined;
+  readTokens?: number | null;
+  writeTokens?: number | null;
+  /** Portion of writeTokens written at the 1-hour TTL. */
+  write1hTokens?: number | null;
 }
 
 interface CostTokens {
@@ -92,6 +107,28 @@ export async function calculateCost(
     cacheTokens?.providerApiKeyId,
   );
   return costFromQuote(quoted, tokens);
+}
+
+/** The cache cost breakdown (see {@link cacheCostFromQuote}) at the model's current prices. */
+export async function calculateCacheCost(
+  model: string,
+  provider: SupportedProvider,
+  readTokens: number,
+  writeTokens: number,
+  /** Portion of writeTokens written at the 1-hour TTL (the rest is costed at the 5m rate). */
+  write1hTokens = 0,
+  providerApiKeyId?: string,
+): Promise<CacheCostBreakdown | undefined> {
+  const tokens = {
+    inputTokens: 0,
+    outputTokens: 0,
+    readTokens,
+    writeTokens,
+    write1hTokens,
+  };
+  if (!readTokens && !writeTokens) return undefined;
+  const quoted = await quoteModel(model, provider, tokens, providerApiKeyId);
+  return cacheCostFromQuote(quoted, tokens);
 }
 
 /** The all-in cost of `tokens` at already-quoted prices. */
@@ -197,6 +234,53 @@ export function cacheCostFromQuote(
   const cacheSavings = cacheReadSavings - writeSurcharge;
 
   return { cacheCost, cacheSavings, cacheReadSavings };
+}
+
+/**
+ * The all-in cost of one request's usage at the given resolved prices. The
+ * cost backfill and its preview price through here, on the write path's
+ * arithmetic, so a recomputed cost matches what the proxy would record.
+ */
+export function priceTokenUsage(params: {
+  pricing: ResolvedPricing;
+  provider: SupportedProvider;
+  usage: TokenUsage;
+}): number | undefined {
+  return costFromQuote(quoteResolved(params), costTokens(params.usage));
+}
+
+/** The cache cost breakdown at the given resolved prices; see {@link priceTokenUsage}. */
+export function priceCacheUsage(params: {
+  pricing: ResolvedPricing;
+  provider: SupportedProvider;
+  usage: Pick<TokenUsage, "readTokens" | "writeTokens" | "write1hTokens">;
+}): CacheCostBreakdown | undefined {
+  return cacheCostFromQuote(
+    quoteResolved(params),
+    costTokens({ inputTokens: 0, outputTokens: 0, ...params.usage }),
+  );
+}
+
+function quoteResolved(params: {
+  pricing: ResolvedPricing;
+  provider: SupportedProvider;
+}): QuotedPrices {
+  return quotedPrices({
+    model: "",
+    provider: params.provider,
+    pricing: params.pricing,
+    instancePriced: false,
+  });
+}
+
+function costTokens(usage: TokenUsage): CostTokens {
+  return {
+    inputTokens: usage.inputTokens ?? 0,
+    outputTokens: usage.outputTokens ?? 0,
+    readTokens: usage.readTokens ?? 0,
+    writeTokens: usage.writeTokens ?? 0,
+    write1hTokens: usage.write1hTokens ?? 0,
+  };
 }
 
 async function quoteModel(

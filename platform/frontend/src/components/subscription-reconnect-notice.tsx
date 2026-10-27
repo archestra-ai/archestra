@@ -99,7 +99,6 @@ export function SubscriptionReconnectNotice({
           }}
           allowedProviders={[credential.provider]}
           credentialMode="subscription"
-          requiresExactSubscriptionCredential
         />
       )}
     </>

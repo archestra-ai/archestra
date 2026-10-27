@@ -272,11 +272,9 @@ function CredentialsDescription() {
       credentials share one value.{" "}
       {secretsType && (
         <span>
-          {secretsType.type === SecretsManagerType.BYOS_VAULT
-            ? "Values reference your external Vault. "
-            : secretsType.type === SecretsManagerType.Vault
-              ? "Values are stored in Vault. "
-              : "Values are encrypted in the database. "}
+          {secretsType.type === SecretsManagerType.Vault
+            ? "Values are stored in Vault. "
+            : "Values are encrypted in the database. "}
         </span>
       )}
       <ExternalDocsLink href={getDocsUrl(DocsPage.PlatformCredentials)}>

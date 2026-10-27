@@ -1,14 +1,9 @@
 "use client";
 
-import {
-  E2eTestId,
-  EnvironmentVariableSchema,
-  parseVaultReference,
-} from "@archestra/shared";
-import { CheckCircle2, Key, Lock, Plus } from "lucide-react";
+import { E2eTestId, EnvironmentVariableSchema } from "@archestra/shared";
+import { Lock, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
 import {
   FieldScopeSelect,
   type FieldScopeValue,
@@ -67,7 +62,7 @@ interface EnvironmentVariableDialogProps {
   initial: EnvVarDraft | null;
   existingKeys: string[];
   secretKeysWithStoredValue?: Set<string>;
-  useExternalSecretsManager?: boolean;
+
   disableInstallation?: boolean;
   disableInstallationReason?: string;
   targetLabel?: string;
@@ -125,7 +120,7 @@ export function EnvironmentVariableDialog({
   initial,
   existingKeys,
   secretKeysWithStoredValue,
-  useExternalSecretsManager = false,
+
   disableInstallation = false,
   disableInstallationReason,
   targetLabel = "MCP server",
@@ -147,7 +142,6 @@ export function EnvironmentVariableDialog({
   const [draft, setDraft] = useState<EnvVarDraft>(
     initial ?? makeEmptyDraft(disableInstallation, installationOnlyForSecrets),
   );
-  const [vaultDialogOpen, setVaultDialogOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -173,12 +167,6 @@ export function EnvironmentVariableDialog({
     mode === "edit" &&
     draft.type === "secret" &&
     secretKeysWithStoredValue?.has(trimmedKey) === true;
-
-  const isVaultRef =
-    useExternalSecretsManager &&
-    draft.type === "secret" &&
-    draft.scope === "static" &&
-    draft.value.length > 0;
 
   const valueRequired =
     draft.scope === "static" &&
@@ -399,11 +387,7 @@ export function EnvironmentVariableDialog({
           <StaticValueEditor
             draft={draft}
             hasStoredSecret={hasStoredSecret}
-            isVaultRef={isVaultRef}
-            useExternalSecretsManager={useExternalSecretsManager}
             valueError={valueError}
-            onOpenVault={() => setVaultDialogOpen(true)}
-            onClearVault={() => updateDraft({ value: "" })}
             onValueChange={(value) => updateDraft({ value })}
             deferSecretValue={deferStaticSecretValue}
           />
@@ -417,19 +401,6 @@ export function EnvironmentVariableDialog({
           />
         )}
       </div>
-
-      {useExternalSecretsManager && vaultDialogOpen && (
-        <ExternalSecretReferenceDialog
-          fieldLabel={trimmedKey || "field"}
-          initialValue={isVaultRef ? draft.value : undefined}
-          description="Select a secret from your team's external Vault to use for this environment variable."
-          onClose={() => setVaultDialogOpen(false)}
-          onConfirm={(ref) => {
-            updateDraft({ value: ref });
-            setVaultDialogOpen(false);
-          }}
-        />
-      )}
     </StandardFormDialog>
   );
 }
@@ -604,21 +575,17 @@ function RequiredToggleCard({
 function StaticValueEditor({
   draft,
   hasStoredSecret,
-  isVaultRef,
-  useExternalSecretsManager,
+
   valueError,
-  onOpenVault,
-  onClearVault,
+
   onValueChange,
   deferSecretValue,
 }: {
   draft: EnvVarDraft;
   hasStoredSecret: boolean;
-  isVaultRef: boolean;
-  useExternalSecretsManager: boolean;
+
   valueError: string | null;
-  onOpenVault: () => void;
-  onClearVault: () => void;
+
   onValueChange: (value: string) => void;
   deferSecretValue: boolean;
 }) {
@@ -628,48 +595,6 @@ function StaticValueEditor({
       <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
         The secret value is configured after saving and is never stored in this
         deployment definition.
-      </div>
-    );
-  }
-
-  if (useExternalSecretsManager && draft.type === "secret") {
-    return (
-      <div className="flex flex-col gap-2">
-        <Label>Vault secret</Label>
-        {isVaultRef ? (
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="font-mono text-green-600 hover:text-green-700"
-              onClick={onOpenVault}
-            >
-              <CheckCircle2 className="h-3 w-3 mr-1" />
-              <span className="truncate max-w-[200px]">
-                {parseVaultReference(draft.value).key}
-              </span>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onClearVault}
-            >
-              Clear
-            </Button>
-          </div>
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onOpenVault}
-          >
-            <Key className="h-3 w-3 mr-1" />
-            Set secret
-          </Button>
-        )}
       </div>
     );
   }

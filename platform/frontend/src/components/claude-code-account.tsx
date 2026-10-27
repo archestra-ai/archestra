@@ -10,7 +10,6 @@ import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import {
@@ -41,7 +40,7 @@ export function ClaudeCodeAccount({
 }) {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState("");
-  const [vaultReference, setVaultReference] = useState("");
+
   const [submitted, setSubmitted] = useState(false);
   const account = useClaudeCodeAccount(agentId, open);
   const connected = account.data?.state === "connected";
@@ -89,13 +88,10 @@ export function ClaudeCodeAccount({
 
   // Opening the dialog to sign in is asking to sign in, so the flow starts
   // straight away instead of behind a second "Sign in with Claude" button.
-  // A Vault reference has to be entered first, and a flow already under way
-  // is picked up where it is.
   const openAccount = () => {
     setOpen(true);
     if (
       connected ||
-      account.data?.requiresVaultReference ||
       signIn.isPending ||
       (state && ["starting", "connecting", "awaiting_code"].includes(state))
     )
@@ -185,7 +181,7 @@ export function ClaudeCodeAccount({
         variant="outline"
         onClick={() => {
           signIn.reset();
-          signIn.mutate(vaultReference ? { vaultReference } : undefined);
+          signIn.mutate(undefined);
         }}
       >
         Try again
@@ -225,48 +221,18 @@ export function ClaudeCodeAccount({
           Your connection expired. Sign in again to start new runs.
         </p>
       )}
-      {/* SPDX-SnippetBegin */}
-      {/* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */}
-      {/* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-      {account.data?.requiresVaultReference && (
-        <div className="space-y-2">
-          <Label htmlFor="claude-vault-reference">Vault reference</Label>
-          <Input
-            id="claude-vault-reference"
-            autoComplete="off"
-            placeholder="path/to/secret#key"
-            value={vaultReference}
-            onChange={(event) => setVaultReference(event.target.value)}
-          />
-          <p className="text-xs text-muted-foreground">
-            Generate a token with <code>claude setup-token</code>, store it in
-            Vault, then enter its path#key reference.
-          </p>
-        </div>
-      )}
-      {/* SPDX-SnippetEnd */}
+
       <Button
         type="button"
         variant="outline"
         size="sm"
-        disabled={
-          account.data?.requiresVaultReference && !vaultReference.trim()
-        }
         onClick={() => {
           setSubmitted(true);
-          signIn.mutate(
-            account.data?.requiresVaultReference
-              ? { vaultReference: vaultReference.trim() }
-              : undefined,
-          );
+          signIn.mutate(undefined);
         }}
       >
         <RuntimeCredentialIcon icon="logo:anthropic" className="size-4" />
-        <span>
-          {account.data?.requiresVaultReference
-            ? "Connect Vault credential"
-            : "Sign in with Claude"}
-        </span>
+        <span>Sign in with Claude</span>
       </Button>
     </div>
   );

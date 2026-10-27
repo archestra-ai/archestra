@@ -28,7 +28,6 @@ import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
-import SecretModel from "@/models/secret";
 import {
   getSecretValueForLlmProviderApiKey,
   secretManager,
@@ -312,21 +311,6 @@ class XaiSubscriptionTokenManager {
     const { newRefreshToken, predecessorRefreshToken, lineageDigests } = params;
     const keyRow = await LlmProviderApiKeyModel.findById(providerApiKeyId);
     if (!keyRow?.secretId) {
-      return;
-    }
-    // Inspect the secret ROW's storage flags before resolving the value:
-    // resolution dereferences BYOS Vault references, so a value-based
-    // isVaultReference() check on the resolved credential never fires and
-    // rotation would overwrite the stored reference with raw OAuth material.
-    const secretRow = await SecretModel.findById(keyRow.secretId);
-    if (!secretRow) {
-      return;
-    }
-    if (secretRow.isByosVault) {
-      logger.warn(
-        { providerApiKeyId },
-        "[XaiSubscription] skipping rotated refresh token persistence for vault-referenced key",
-      );
       return;
     }
     const storedValue = await getSecretValueForLlmProviderApiKey(

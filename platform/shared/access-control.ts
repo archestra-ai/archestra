@@ -913,26 +913,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RemoveTeamExternalGroup]: {
     team: ["read"],
   },
-  // Team Vault Folder Routes (BYOS - Bring Your Own Secrets)
-  // Note: Route handlers check team membership for non-admin users
-  [RouteId.GetTeamVaultFolder]: {
-    team: ["read"],
-  },
-  [RouteId.SetTeamVaultFolder]: {
-    team: ["update"],
-  },
-  [RouteId.DeleteTeamVaultFolder]: {
-    team: ["update"],
-  },
-  [RouteId.CheckTeamVaultFolderConnectivity]: {
-    team: ["update"],
-  },
-  [RouteId.ListTeamVaultFolderSecrets]: {
-    team: ["read"],
-  },
-  [RouteId.GetTeamVaultSecretKeys]: {
-    team: ["read"],
-  },
   // Resource actions and delegation authority are checked against the target.
   [RouteId.SearchInitialPermissionSubjects]: {},
   [RouteId.GetScopedCapabilities]: {},
@@ -1502,12 +1482,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CheckSecretsConnectivity]: {
     organizationSettings: ["update"],
   },
-  // Only returns Vault references (never values), for prefilling the MCP
-  // catalog form in BYOS mode. The handler requires an update grant on the
-  // registry entry whose configuration the secret is.
-  [RouteId.GetSecret]: {},
-
-  // Incoming Email Routes
   [RouteId.GetIncomingEmailStatus]: {
     organizationSettings: ["read"],
   },

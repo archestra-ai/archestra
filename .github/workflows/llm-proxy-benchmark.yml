@@ -18,6 +18,16 @@ on:
       - .github/scripts/update-proxy-benchmark-docs*
   workflow_dispatch:
     inputs:
+      compare_litellm:
+        description: Run isolated pinned LiteLLM proxy comparison instead of release benchmarks
+        required: false
+        default: false
+        type: boolean
+      compare_litellm_sensitivity:
+        description: Use bounded clean-database and 8 GiB database-memory sensitivity mode
+        required: false
+        default: false
+        type: boolean
       baseline_sha:
         description: Optional full baseline commit SHA for a paired comparison on this runner
         required: false
@@ -143,10 +153,21 @@ jobs:
           save-if: 'false'
       - run: pnpm exec biome check benchmarks/*.mjs
       - name: Validate timing and reporting
-        run: node --test benchmarks/*.test.mjs ../.github/scripts/*proxy-benchmark*.test.mjs
+        run: node --test benchmarks/*.test.mjs benchmarks/cross-proxy/*.test.mjs ../.github/scripts/*proxy-benchmark*.test.mjs
       - name: Validate server timing boundaries
         run: pnpm --dir backend exec vitest run src/server/llm-proxy-timing.unit.test.ts
+      - name: Run controlled LiteLLM comparison
+        if: github.event_name == 'workflow_dispatch' && inputs.compare_litellm
+        env:
+          SENSITIVITY: ${{ inputs.compare_litellm_sensitivity }}
+        run: |
+          if [ "$SENSITIVITY" = true ]; then
+            timeout 15m bash benchmarks/cross-proxy/run.sh --sensitivity
+          else
+            bash benchmarks/cross-proxy/run.sh
+          fi
       - name: Run mock inference benchmark
+        if: ${{ !inputs.compare_litellm }}
         # A repeatable shared-runner measurement, not an absolute latency gate.
         env:
           CPU_PROFILE: ${{ github.event_name == 'workflow_dispatch' && inputs.cpu_profile == true }}
@@ -187,6 +208,12 @@ jobs:
       - name: Publish summary
         if: always()
         run: |
+          if [ -f benchmarks/results/cross-proxy-sensitivity/summary.md ]; then
+            cat benchmarks/results/cross-proxy-sensitivity/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f benchmarks/results/cross-proxy/summary.md ]; then
+            cat benchmarks/results/cross-proxy/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
           if [ -f benchmarks/results/ci/summary.md ]; then
             cat benchmarks/results/ci/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi

@@ -51,6 +51,9 @@ on:
 
 permissions: {}
 
+env:
+  CI_IMAGE_REGISTRY: ghcr.io/archestra-ai/ci
+
 jobs:
   deploy:
     name: Deploy ${{ inputs.environment }}
@@ -125,10 +128,15 @@ jobs:
               ;;
           esac
 
+          # Development deployments select the platform and runtime companions
+          # from one CI registry; chart defaults remain for released installs.
           helm_args=(
             upgrade "$release" ./platform/helm/archestra
             --install --namespace "$namespace"
-            --set "archestra.image=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${PLATFORM_IMAGE_TAG}"
+            --set "archestra.image=${CI_IMAGE_REGISTRY}/platform:${PLATFORM_IMAGE_TAG}"
+            --set "archestra.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE=${CI_IMAGE_REGISTRY}/p4-shim:${PLATFORM_IMAGE_TAG}"
+            --set "archestra.env.ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY=${CI_IMAGE_REGISTRY}"
+            --set "archestra.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${CI_IMAGE_REGISTRY}/mcp-server-base:${PLATFORM_IMAGE_TAG}"
             --set-string "archestra.env.ARCHESTRA_AUTH_ADMIN_EMAIL=${AUTH_ADMIN_EMAIL}"
             --set-string "archestra.env.ARCHESTRA_AUTH_ADMIN_PASSWORD=${AUTH_ADMIN_PASSWORD}"
             --set "archestra.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN=${MFILES_VAF_ADD_ON_GITHUB_TOKEN}"

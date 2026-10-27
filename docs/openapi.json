@@ -49562,28 +49562,28 @@
                                     "type": "object",
                                     "properties": {
                                       "githubAppCredentialKey": {
-                                        "type": "string",
-                                        "minLength": 1,
-                                        "maxLength": 200
+                                        "type": "string"
                                       },
                                       "repositories": {
-                                        "minItems": 1,
-                                        "maxItems": 50,
                                         "type": "array",
                                         "items": {
-                                          "type": "string",
-                                          "maxLength": 140,
-                                          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                                          "type": "string"
                                         }
                                       },
+                                      "actAs": {
+                                        "type": "string",
+                                        "enum": [
+                                          "author",
+                                          "actor"
+                                        ]
+                                      },
+                                      "resolveReviewThreads": {
+                                        "type": "boolean"
+                                      },
                                       "workflows": {
-                                        "minItems": 1,
-                                        "maxItems": 50,
                                         "type": "array",
                                         "items": {
-                                          "type": "string",
-                                          "maxLength": 400,
-                                          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                                          "type": "string"
                                         }
                                       }
                                     },
@@ -51309,28 +51309,28 @@
                             "type": "object",
                             "properties": {
                               "githubAppCredentialKey": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 200
+                                "type": "string"
                               },
                               "repositories": {
-                                "minItems": 1,
-                                "maxItems": 50,
                                 "type": "array",
                                 "items": {
-                                  "type": "string",
-                                  "maxLength": 140,
-                                  "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                                  "type": "string"
                                 }
                               },
+                              "actAs": {
+                                "type": "string",
+                                "enum": [
+                                  "author",
+                                  "actor"
+                                ]
+                              },
+                              "resolveReviewThreads": {
+                                "type": "boolean"
+                              },
                               "workflows": {
-                                "minItems": 1,
-                                "maxItems": 50,
                                 "type": "array",
                                 "items": {
-                                  "type": "string",
-                                  "maxLength": 400,
-                                  "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                                  "type": "string"
                                 }
                               }
                             },
@@ -53222,28 +53222,28 @@
                       "type": "object",
                       "properties": {
                         "githubAppCredentialKey": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
+                          "type": "string"
                         },
                         "repositories": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 140,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                            "type": "string"
                           }
                         },
+                        "actAs": {
+                          "type": "string",
+                          "enum": [
+                            "author",
+                            "actor"
+                          ]
+                        },
+                        "resolveReviewThreads": {
+                          "type": "boolean"
+                        },
                         "workflows": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 400,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                            "type": "string"
                           }
                         }
                       },
@@ -58497,28 +58497,28 @@
                       "type": "object",
                       "properties": {
                         "githubAppCredentialKey": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
+                          "type": "string"
                         },
                         "repositories": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 140,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                            "type": "string"
                           }
                         },
+                        "actAs": {
+                          "type": "string",
+                          "enum": [
+                            "author",
+                            "actor"
+                          ]
+                        },
+                        "resolveReviewThreads": {
+                          "type": "boolean"
+                        },
                         "workflows": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 400,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                            "type": "string"
                           }
                         }
                       },
@@ -59933,28 +59933,28 @@
                           "type": "object",
                           "properties": {
                             "githubAppCredentialKey": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 200
+                              "type": "string"
                             },
                             "repositories": {
-                              "minItems": 1,
-                              "maxItems": 50,
                               "type": "array",
                               "items": {
-                                "type": "string",
-                                "maxLength": 140,
-                                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                                "type": "string"
                               }
                             },
+                            "actAs": {
+                              "type": "string",
+                              "enum": [
+                                "author",
+                                "actor"
+                              ]
+                            },
+                            "resolveReviewThreads": {
+                              "type": "boolean"
+                            },
                             "workflows": {
-                              "minItems": 1,
-                              "maxItems": 50,
                               "type": "array",
                               "items": {
-                                "type": "string",
-                                "maxLength": 400,
-                                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                                "type": "string"
                               }
                             }
                           },
@@ -61042,28 +61042,28 @@
                       "type": "object",
                       "properties": {
                         "githubAppCredentialKey": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
+                          "type": "string"
                         },
                         "repositories": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 140,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                            "type": "string"
                           }
                         },
+                        "actAs": {
+                          "type": "string",
+                          "enum": [
+                            "author",
+                            "actor"
+                          ]
+                        },
+                        "resolveReviewThreads": {
+                          "type": "boolean"
+                        },
                         "workflows": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 400,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                            "type": "string"
                           }
                         }
                       },
@@ -62080,8 +62080,18 @@
                         "items": {
                           "type": "string",
                           "maxLength": 140,
-                          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/(?:[A-Za-z0-9._-]{1,100}|\\*)$"
                         }
+                      },
+                      "actAs": {
+                        "type": "string",
+                        "enum": [
+                          "author",
+                          "actor"
+                        ]
+                      },
+                      "resolveReviewThreads": {
+                        "type": "boolean"
                       },
                       "workflows": {
                         "minItems": 1,
@@ -62612,28 +62622,28 @@
                       "type": "object",
                       "properties": {
                         "githubAppCredentialKey": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
+                          "type": "string"
                         },
                         "repositories": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 140,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                            "type": "string"
                           }
                         },
+                        "actAs": {
+                          "type": "string",
+                          "enum": [
+                            "author",
+                            "actor"
+                          ]
+                        },
+                        "resolveReviewThreads": {
+                          "type": "boolean"
+                        },
                         "workflows": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 400,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                            "type": "string"
                           }
                         }
                       },
@@ -65352,28 +65362,28 @@
                       "type": "object",
                       "properties": {
                         "githubAppCredentialKey": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
+                          "type": "string"
                         },
                         "repositories": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 140,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                            "type": "string"
                           }
                         },
+                        "actAs": {
+                          "type": "string",
+                          "enum": [
+                            "author",
+                            "actor"
+                          ]
+                        },
+                        "resolveReviewThreads": {
+                          "type": "boolean"
+                        },
                         "workflows": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 400,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                            "type": "string"
                           }
                         }
                       },
@@ -66578,28 +66588,28 @@
                       "type": "object",
                       "properties": {
                         "githubAppCredentialKey": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
+                          "type": "string"
                         },
                         "repositories": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 140,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                            "type": "string"
                           }
                         },
+                        "actAs": {
+                          "type": "string",
+                          "enum": [
+                            "author",
+                            "actor"
+                          ]
+                        },
+                        "resolveReviewThreads": {
+                          "type": "boolean"
+                        },
                         "workflows": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 400,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                            "type": "string"
                           }
                         }
                       },
@@ -74615,28 +74625,28 @@
                       "type": "object",
                       "properties": {
                         "githubAppCredentialKey": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
+                          "type": "string"
                         },
                         "repositories": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 140,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                            "type": "string"
                           }
                         },
+                        "actAs": {
+                          "type": "string",
+                          "enum": [
+                            "author",
+                            "actor"
+                          ]
+                        },
+                        "resolveReviewThreads": {
+                          "type": "boolean"
+                        },
                         "workflows": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 400,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                            "type": "string"
                           }
                         }
                       },
@@ -78008,9 +78018,6 @@
                         "expired"
                       ]
                     },
-                    "requiresVaultReference": {
-                      "type": "boolean"
-                    },
                     "expiresAt": {
                       "nullable": true,
                       "type": "string",
@@ -78280,24 +78287,6 @@
         "tags": [
           "Agents"
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "nullable": true,
-                "type": "object",
-                "properties": {
-                  "vaultReference": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 2048
-                  }
-                }
-              }
-            }
-          }
-        },
         "parameters": [
           {
             "schema": {
@@ -78329,9 +78318,6 @@
                         "failed",
                         "expired"
                       ]
-                    },
-                    "requiresVaultReference": {
-                      "type": "boolean"
                     },
                     "expiresAt": {
                       "nullable": true,
@@ -78633,9 +78619,6 @@
                         "failed",
                         "expired"
                       ]
-                    },
-                    "requiresVaultReference": {
-                      "type": "boolean"
                     },
                     "expiresAt": {
                       "nullable": true,
@@ -78964,9 +78947,6 @@
                         "failed",
                         "expired"
                       ]
-                    },
-                    "requiresVaultReference": {
-                      "type": "boolean"
                     },
                     "expiresAt": {
                       "nullable": true,
@@ -133224,17 +133204,6 @@
                             "apiBodyLimitBytes": {
                               "type": "number"
                             },
-                            "byosEnabled": {
-                              "type": "boolean"
-                            },
-                            "byosVaultKvVersion": {
-                              "nullable": true,
-                              "type": "string",
-                              "enum": [
-                                "1",
-                                "2"
-                              ]
-                            },
                             "azureOpenAiEntraIdEnabled": {
                               "type": "boolean"
                             },
@@ -133374,8 +133343,6 @@
                             "sandboxArtifactBytesLimit",
                             "chatAttachmentStorageBytesLimit",
                             "apiBodyLimitBytes",
-                            "byosEnabled",
-                            "byosVaultKvVersion",
                             "azureOpenAiEntraIdEnabled",
                             "anthropicWifEnabled",
                             "anthropicKeylessAuthEnabled",
@@ -134453,19 +134420,10 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "vaultSecretPath": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "vaultSecretKey": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "secretStorageType": {
                             "type": "string",
                             "enum": [
                               "vault",
-                              "external_vault",
                               "database",
                               "none"
                             ]
@@ -134686,19 +134644,10 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "vaultSecretPath": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "vaultSecretKey": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "secretStorageType": {
                             "type": "string",
                             "enum": [
                               "vault",
-                              "external_vault",
                               "database",
                               "none"
                             ]
@@ -135310,28 +135259,28 @@
                               "type": "object",
                               "properties": {
                                 "githubAppCredentialKey": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 200
+                                  "type": "string"
                                 },
                                 "repositories": {
-                                  "minItems": 1,
-                                  "maxItems": 50,
                                   "type": "array",
                                   "items": {
-                                    "type": "string",
-                                    "maxLength": 140,
-                                    "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                                    "type": "string"
                                   }
                                 },
+                                "actAs": {
+                                  "type": "string",
+                                  "enum": [
+                                    "author",
+                                    "actor"
+                                  ]
+                                },
+                                "resolveReviewThreads": {
+                                  "type": "boolean"
+                                },
                                 "workflows": {
-                                  "minItems": 1,
-                                  "maxItems": 50,
                                   "type": "array",
                                   "items": {
-                                    "type": "string",
-                                    "maxLength": 400,
-                                    "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                                    "type": "string"
                                   }
                                 }
                               },
@@ -137541,19 +137490,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
-                              "vaultSecretPath": {
-                                "nullable": true,
-                                "type": "string"
-                              },
-                              "vaultSecretKey": {
-                                "nullable": true,
-                                "type": "string"
-                              },
                               "secretStorageType": {
                                 "type": "string",
                                 "enum": [
                                   "vault",
-                                  "external_vault",
                                   "database",
                                   "none"
                                 ]
@@ -137774,19 +137714,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
-                              "vaultSecretPath": {
-                                "nullable": true,
-                                "type": "string"
-                              },
-                              "vaultSecretKey": {
-                                "nullable": true,
-                                "type": "string"
-                              },
                               "secretStorageType": {
                                 "type": "string",
                                 "enum": [
                                   "vault",
-                                  "external_vault",
                                   "database",
                                   "none"
                                 ]
@@ -138398,28 +138329,28 @@
                                   "type": "object",
                                   "properties": {
                                     "githubAppCredentialKey": {
-                                      "type": "string",
-                                      "minLength": 1,
-                                      "maxLength": 200
+                                      "type": "string"
                                     },
                                     "repositories": {
-                                      "minItems": 1,
-                                      "maxItems": 50,
                                       "type": "array",
                                       "items": {
-                                        "type": "string",
-                                        "maxLength": 140,
-                                        "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                                        "type": "string"
                                       }
                                     },
+                                    "actAs": {
+                                      "type": "string",
+                                      "enum": [
+                                        "author",
+                                        "actor"
+                                      ]
+                                    },
+                                    "resolveReviewThreads": {
+                                      "type": "boolean"
+                                    },
                                     "workflows": {
-                                      "minItems": 1,
-                                      "maxItems": 50,
                                       "type": "array",
                                       "items": {
-                                        "type": "string",
-                                        "maxLength": 400,
-                                        "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                                        "type": "string"
                                       }
                                     }
                                   },
@@ -167798,17 +167729,6 @@
                         "apiBodyLimitBytes": {
                           "type": "number"
                         },
-                        "byosEnabled": {
-                          "type": "boolean"
-                        },
-                        "byosVaultKvVersion": {
-                          "nullable": true,
-                          "type": "string",
-                          "enum": [
-                            "1",
-                            "2"
-                          ]
-                        },
                         "azureOpenAiEntraIdEnabled": {
                           "type": "boolean"
                         },
@@ -167948,8 +167868,6 @@
                         "sandboxArtifactBytesLimit",
                         "chatAttachmentStorageBytesLimit",
                         "apiBodyLimitBytes",
-                        "byosEnabled",
-                        "byosVaultKvVersion",
                         "azureOpenAiEntraIdEnabled",
                         "anthropicWifEnabled",
                         "anthropicKeylessAuthEnabled",
@@ -185811,7 +185729,7 @@
         "tags": [
           "GitHub Actions"
         ],
-        "description": "Trade a GitHub Actions OIDC token from a pull_request workflow run, started by the pull request's author, for an MCP gateway token that acts as that author, plus a GitHub App installation token for that repository. The gateway must allow the repository and workflow in its GitHub Actions setting, and the author must have connected GitHub through the gateway's GitHub App.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Trade a GitHub Actions OIDC token from a pull_request workflow run for an MCP gateway token, plus a GitHub App installation token for that repository. The gateway token acts as the pull request's author, for runs the author started, or, when the gateway's GitHub Actions setting has actAs \"actor\", as whoever started the run. The gateway must allow the repository and workflow, and that person must have connected GitHub through the gateway's GitHub App.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -288964,18 +288882,6 @@
                         "actions"
                       ]
                     }
-                  },
-                  "oauthClientSecretVaultPath": {
-                    "type": "string"
-                  },
-                  "oauthClientSecretVaultKey": {
-                    "type": "string"
-                  },
-                  "localConfigVaultPath": {
-                    "type": "string"
-                  },
-                  "localConfigVaultKey": {
-                    "type": "string"
                   }
                 },
                 "required": [
@@ -290748,7 +290654,6 @@
                             "type": "string",
                             "enum": [
                               "vault",
-                              "external_vault",
                               "database",
                               "none"
                             ]
@@ -294298,18 +294203,6 @@
                   },
                   "multitenant": {
                     "type": "boolean"
-                  },
-                  "oauthClientSecretVaultPath": {
-                    "type": "string"
-                  },
-                  "oauthClientSecretVaultKey": {
-                    "type": "string"
-                  },
-                  "localConfigVaultPath": {
-                    "type": "string"
-                  },
-                  "localConfigVaultKey": {
-                    "type": "string"
                   }
                 }
               }
@@ -314250,6 +314143,61 @@
                                           "type": "string"
                                         }
                                       },
+                                      "excludePaths": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "repositoryOverrides": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "repository": {
+                                              "type": "string",
+                                              "pattern": "^[^/\\\\\\s]+\\/[^/\\\\\\s]+$"
+                                            },
+                                            "includeIssues": {
+                                              "type": "boolean"
+                                            },
+                                            "includePullRequests": {
+                                              "type": "boolean"
+                                            },
+                                            "includeRepositoryFiles": {
+                                              "type": "boolean"
+                                            },
+                                            "labelsToSkip": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "fileTypes": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "includePaths": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "excludePaths": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "repository"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
                                       "labelsToSkip": {
                                         "type": "array",
                                         "items": {
@@ -315808,6 +315756,60 @@
                               "type": "string"
                             }
                           },
+                          "excludePaths": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "repositoryOverrides": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "repository": {
+                                  "type": "string",
+                                  "pattern": "^[^/\\\\\\s]+\\/[^/\\\\\\s]+$"
+                                },
+                                "includeIssues": {
+                                  "type": "boolean"
+                                },
+                                "includePullRequests": {
+                                  "type": "boolean"
+                                },
+                                "includeRepositoryFiles": {
+                                  "type": "boolean"
+                                },
+                                "labelsToSkip": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "fileTypes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "includePaths": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "excludePaths": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "repository"
+                              ]
+                            }
+                          },
                           "labelsToSkip": {
                             "type": "array",
                             "items": {
@@ -317087,6 +317089,61 @@
                               "type": "array",
                               "items": {
                                 "type": "string"
+                              }
+                            },
+                            "excludePaths": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "repositoryOverrides": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "repository": {
+                                    "type": "string",
+                                    "pattern": "^[^/\\\\\\s]+\\/[^/\\\\\\s]+$"
+                                  },
+                                  "includeIssues": {
+                                    "type": "boolean"
+                                  },
+                                  "includePullRequests": {
+                                    "type": "boolean"
+                                  },
+                                  "includeRepositoryFiles": {
+                                    "type": "boolean"
+                                  },
+                                  "labelsToSkip": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "fileTypes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "includePaths": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "excludePaths": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "repository"
+                                ],
+                                "additionalProperties": false
                               }
                             },
                             "labelsToSkip": {
@@ -318598,6 +318655,61 @@
                                     "type": "string"
                                   }
                                 },
+                                "excludePaths": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "repositoryOverrides": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "repository": {
+                                        "type": "string",
+                                        "pattern": "^[^/\\\\\\s]+\\/[^/\\\\\\s]+$"
+                                      },
+                                      "includeIssues": {
+                                        "type": "boolean"
+                                      },
+                                      "includePullRequests": {
+                                        "type": "boolean"
+                                      },
+                                      "includeRepositoryFiles": {
+                                        "type": "boolean"
+                                      },
+                                      "labelsToSkip": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "fileTypes": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "includePaths": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "excludePaths": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "repository"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
                                 "labelsToSkip": {
                                   "type": "array",
                                   "items": {
@@ -319982,6 +320094,60 @@
                               "type": "string"
                             }
                           },
+                          "excludePaths": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "repositoryOverrides": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "repository": {
+                                  "type": "string",
+                                  "pattern": "^[^/\\\\\\s]+\\/[^/\\\\\\s]+$"
+                                },
+                                "includeIssues": {
+                                  "type": "boolean"
+                                },
+                                "includePullRequests": {
+                                  "type": "boolean"
+                                },
+                                "includeRepositoryFiles": {
+                                  "type": "boolean"
+                                },
+                                "labelsToSkip": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "fileTypes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "includePaths": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "excludePaths": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "repository"
+                              ]
+                            }
+                          },
                           "labelsToSkip": {
                             "type": "array",
                             "items": {
@@ -321127,6 +321293,61 @@
                               "type": "array",
                               "items": {
                                 "type": "string"
+                              }
+                            },
+                            "excludePaths": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "repositoryOverrides": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "repository": {
+                                    "type": "string",
+                                    "pattern": "^[^/\\\\\\s]+\\/[^/\\\\\\s]+$"
+                                  },
+                                  "includeIssues": {
+                                    "type": "boolean"
+                                  },
+                                  "includePullRequests": {
+                                    "type": "boolean"
+                                  },
+                                  "includeRepositoryFiles": {
+                                    "type": "boolean"
+                                  },
+                                  "labelsToSkip": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "fileTypes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "includePaths": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "excludePaths": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "repository"
+                                ],
+                                "additionalProperties": false
                               }
                             },
                             "labelsToSkip": {
@@ -349025,19 +349246,10 @@
                         "nullable": true,
                         "type": "string"
                       },
-                      "vaultSecretPath": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "vaultSecretKey": {
-                        "nullable": true,
-                        "type": "string"
-                      },
                       "secretStorageType": {
                         "type": "string",
                         "enum": [
                           "vault",
-                          "external_vault",
                           "database",
                           "none"
                         ]
@@ -349431,14 +349643,6 @@
                   "isPrimary": {
                     "type": "boolean"
                   },
-                  "vaultSecretPath": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "vaultSecretKey": {
-                    "type": "string",
-                    "minLength": 1
-                  },
                   "awsAccessKeyId": {
                     "type": "string",
                     "minLength": 1
@@ -349770,19 +349974,10 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "vaultSecretPath": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "vaultSecretKey": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "secretStorageType": {
                       "type": "string",
                       "enum": [
                         "vault",
-                        "external_vault",
                         "database",
                         "none"
                       ]
@@ -350303,19 +350498,10 @@
                         "nullable": true,
                         "type": "string"
                       },
-                      "vaultSecretPath": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "vaultSecretKey": {
-                        "nullable": true,
-                        "type": "string"
-                      },
                       "secretStorageType": {
                         "type": "string",
                         "enum": [
                           "vault",
-                          "external_vault",
                           "database",
                           "none"
                         ]
@@ -350801,19 +350987,10 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "vaultSecretPath": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "vaultSecretKey": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "secretStorageType": {
                       "type": "string",
                       "enum": [
                         "vault",
-                        "external_vault",
                         "database",
                         "none"
                       ]
@@ -351171,14 +351348,6 @@
                   "isPrimary": {
                     "type": "boolean"
                   },
-                  "vaultSecretPath": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "vaultSecretKey": {
-                    "type": "string",
-                    "minLength": 1
-                  },
                   "awsAccessKeyId": {
                     "type": "string",
                     "minLength": 1
@@ -351386,19 +351555,10 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "vaultSecretPath": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "vaultSecretKey": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "secretStorageType": {
                       "type": "string",
                       "enum": [
                         "vault",
-                        "external_vault",
                         "database",
                         "none"
                       ]
@@ -352178,19 +352338,10 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "vaultSecretPath": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "vaultSecretKey": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "secretStorageType": {
                       "type": "string",
                       "enum": [
                         "vault",
-                        "external_vault",
                         "database",
                         "none"
                       ]
@@ -357961,7 +358112,6 @@
                         "type": "string",
                         "enum": [
                           "vault",
-                          "external_vault",
                           "database",
                           "none"
                         ]
@@ -358378,9 +358528,6 @@
                   },
                   "accessToken": {
                     "type": "string"
-                  },
-                  "isByosVault": {
-                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -358679,7 +358826,6 @@
                       "type": "string",
                       "enum": [
                         "vault",
-                        "external_vault",
                         "database",
                         "none"
                       ]
@@ -359264,7 +359410,6 @@
                       "type": "string",
                       "enum": [
                         "vault",
-                        "external_vault",
                         "database",
                         "none"
                       ]
@@ -359853,9 +359998,6 @@
                     "additionalProperties": {
                       "type": "string"
                     }
-                  },
-                  "isByosVault": {
-                    "type": "boolean"
                   }
                 }
               }
@@ -360162,7 +360304,6 @@
                       "type": "string",
                       "enum": [
                         "vault",
-                        "external_vault",
                         "database",
                         "none"
                       ]
@@ -361083,7 +361224,6 @@
                       "type": "string",
                       "enum": [
                         "vault",
-                        "external_vault",
                         "database",
                         "none"
                       ]
@@ -362957,9 +363097,6 @@
                       "type": "string"
                     }
                   },
-                  "isByosVault": {
-                    "type": "boolean"
-                  },
                   "hibernationMode": {
                     "type": "string",
                     "enum": [
@@ -363273,7 +363410,6 @@
                       "type": "string",
                       "enum": [
                         "vault",
-                        "external_vault",
                         "database",
                         "none"
                       ]
@@ -459541,8 +459677,7 @@
                       "type": "string",
                       "enum": [
                         "DB",
-                        "Vault",
-                        "BYOS_VAULT"
+                        "Vault"
                       ]
                     },
                     "meta": {
@@ -459799,315 +459934,6 @@
           "permissions": [
             "organizationSettings:read"
           ]
-        }
-      }
-    },
-    "/api/secrets/{id}": {
-      "get": {
-        "operationId": "getSecret",
-        "tags": [
-          "Secrets"
-        ],
-        "description": "Get a secret by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "name": {
-                      "type": "string",
-                      "maxLength": 256
-                    },
-                    "secret": {
-                      "type": "object",
-                      "additionalProperties": {}
-                    },
-                    "isVault": {
-                      "type": "boolean"
-                    },
-                    "isByosVault": {
-                      "type": "boolean"
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "name",
-                    "secret",
-                    "isVault",
-                    "isByosVault",
-                    "createdAt",
-                    "updatedAt"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
         }
       }
     },
@@ -514233,1783 +514059,6 @@
           "kind": "none",
           "note": "None (no additional RBAC permission required)",
           "permissions": []
-        }
-      }
-    },
-    "/api/teams/{teamId}/vault-folder": {
-      "get": {
-        "operationId": "getTeamVaultFolder",
-        "tags": [
-          "Teams",
-          "Vault"
-        ],
-        "description": "Get a team's Vault folder configuration\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "teamId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "nullable": true,
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "teamId": {
-                      "type": "string"
-                    },
-                    "vaultPath": {
-                      "type": "string"
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "teamId",
-                    "vaultPath",
-                    "createdAt",
-                    "updatedAt"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "team:read"
-          ]
-        }
-      },
-      "post": {
-        "operationId": "setTeamVaultFolder",
-        "tags": [
-          "Teams",
-          "Vault"
-        ],
-        "description": "Set or update a team's Vault folder path\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:update`: Modify team settings",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "vaultPath": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "vaultPath"
-                ]
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "teamId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "teamId": {
-                      "type": "string"
-                    },
-                    "vaultPath": {
-                      "type": "string"
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "teamId",
-                    "vaultPath",
-                    "createdAt",
-                    "updatedAt"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "team:update"
-          ]
-        }
-      },
-      "delete": {
-        "operationId": "deleteTeamVaultFolder",
-        "tags": [
-          "Teams",
-          "Vault"
-        ],
-        "description": "Delete a team's Vault folder mapping\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:update`: Modify team settings",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "teamId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "success"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "team:update"
-          ]
-        }
-      }
-    },
-    "/api/teams/{teamId}/vault-folder/check-connectivity": {
-      "post": {
-        "operationId": "checkTeamVaultFolderConnectivity",
-        "tags": [
-          "Teams",
-          "Vault"
-        ],
-        "description": "Check connectivity to a team's Vault folder\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:update`: Modify team settings",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "vaultPath": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "teamId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "connected": {
-                      "type": "boolean"
-                    },
-                    "secretCount": {
-                      "type": "number"
-                    },
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "connected",
-                    "secretCount"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "team:update"
-          ]
-        }
-      }
-    },
-    "/api/teams/{teamId}/vault-folder/secrets": {
-      "get": {
-        "operationId": "listTeamVaultFolderSecrets",
-        "tags": [
-          "Teams",
-          "Vault"
-        ],
-        "description": "List secrets available in a team's Vault folder\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "teamId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "type": "string"
-                      },
-                      "path": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "name",
-                      "path"
-                    ],
-                    "additionalProperties": false
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "team:read"
-          ]
-        }
-      }
-    },
-    "/api/teams/{teamId}/vault-folder/secrets/keys": {
-      "post": {
-        "operationId": "getTeamVaultSecretKeys",
-        "tags": [
-          "Teams",
-          "Vault"
-        ],
-        "description": "Get the keys of a specific secret in a team's Vault folder\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "secretPath": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "secretPath"
-                ]
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "teamId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "keys": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    }
-                  },
-                  "required": [
-                    "keys"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "team:read"
-          ]
         }
       }
     }

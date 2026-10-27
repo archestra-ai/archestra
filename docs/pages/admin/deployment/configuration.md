@@ -1,13 +1,13 @@
 ---
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
-order: 5
-lastUpdated: 2026-10-26
+order: 6
+lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra reads these environment variables at startup. Pass them with `-e` to `docker run`, or set them under `archestra.env` in the Helm values. The Docker quickstart and the Helm chart run with none set. See [Deployment](/docs/admin/deployment) for the install.
+Archestra reads these environment variables at startup. Pass them with `-e` to `docker run`, or set them under `archestra.env` in the Helm values. The Docker quickstart and the Helm chart run with none set. See [Helm](/docs/admin/deployment/helm) for Kubernetes installation.
 
 ## Database
 
@@ -23,7 +23,7 @@ Archestra reads these environment variables at startup. Pass them with `-e` to `
 - **`ARCHESTRA_DATABASE_POOL_MAX`** - Maximum PostgreSQL connections per backend process.
   - Default: `50`
   - Values: `1`–`500`
-  - In Helm, `archestra.database.connectionBudget` sizes the pool across all pods. This variable and `archestra.database.poolMax` override it. See [Database Configuration](/docs/admin/deployment#database-configuration).
+  - In Helm, `archestra.database.connectionBudget` sizes the pool across all pods. This variable and `archestra.database.poolMax` override it. See [Connection Capacity](/docs/admin/deployment/database#connection-capacity).
 
 - **`ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS`** - PostgreSQL `statement_timeout` for every pooled connection, in milliseconds.
   - Default: `30000`
@@ -60,7 +60,7 @@ Archestra reads these environment variables at startup. Pass them with `-e` to `
 - **`ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS`** - How long the API and web servers keep an idle keep-alive connection open, in milliseconds.
   - Default: `620000`
   - Values: a positive whole number of milliseconds, digits only, such as `620000`
-  - Keep it above the keep-alive timeout of every proxy and load balancer in front of Archestra. See [Keep-Alive Timeouts](/docs/admin/deployment#keep-alive-timeouts).
+  - Keep it above the keep-alive timeout of every proxy and load balancer in front of Archestra. See [Streaming Timeouts](/docs/admin/deployment/networking#streaming-timeouts).
 
 - **`ARCHESTRA_API_BODY_LIMIT`** - Maximum HTTP request body size for LLM Proxy and chat requests.
   - Default: `70MB`
@@ -85,7 +85,7 @@ Archestra reads these environment variables at startup. Pass them with `-e` to `
 - **`ARCHESTRA_QUICKSTART`** - Runs MCP servers in a small Kubernetes (KinD) cluster inside the Docker container.
   - Default: `false`
   - Values: `true`, `false`
-  - Requires the Docker socket mounted into the container. For evaluation only. See [Quickstart Deployment](/docs/admin/deployment#quickstart-deployment).
+  - Requires the Docker socket mounted into the container. For evaluation only. See [Run Archestra](/docs/get-started#run-archestra).
 
 - **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates the enterprise license.
   - Default: `false`
@@ -234,11 +234,11 @@ Archestra reads these environment variables at startup. Pass them with `-e` to `
 
 - **`ARCHESTRA_SECRETS_MANAGER`** - Where Archestra stores secrets such as API keys and tokens.
   - Default: `DB`
-  - Values: `DB`, `VAULT`, `READONLY_VAULT`. Both Vault values require an enterprise license.
+  - Values: `DB`, `VAULT`. Vault requires an enterprise license.
   - With an invalid Vault configuration or no license, Archestra logs a warning and uses `DB`. See [Credentials and Secrets](/docs/admin/credentials#secrets-storage).
 
 - **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - Address of the HashiCorp Vault server.
-  - Required when: [`ARCHESTRA_SECRETS_MANAGER=VAULT`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_MANAGER) or `READONLY_VAULT`
+  - Required when: [`ARCHESTRA_SECRETS_MANAGER=VAULT`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_MANAGER)
   - Values: a URL, for example `https://vault.example.com:8200`
 
 - **`ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD`** - How Archestra authenticates to Vault.
@@ -283,11 +283,6 @@ Archestra reads these environment variables at startup. Pass them with `-e` to `
 - **`ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH`** - Path prefix for KV v2 list and delete operations.
   - Default: [`ARCHESTRA_HASHICORP_VAULT_SECRET_PATH`](/docs/admin/deployment/configuration#ARCHESTRA_HASHICORP_VAULT_SECRET_PATH) with `/data/` replaced by `/metadata/`
   - Set it only when your paths do not follow that pattern.
-
-- **`ARCHESTRA_DATABASE_URL_VAULT_REF`** - Reads the database connection string from Vault instead of [`ARCHESTRA_DATABASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_URL).
-  - Default: unset
-  - Values: `path:key`, for example `secret/data/archestra/database:connection_string`
-  - Used only when [`ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_MANAGER).
 
 ## LLM Providers
 
@@ -566,7 +561,7 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE`** - Controls settlement of provider billing components, including advisor and compaction inference.
   - Default: `off`
   - Values: `off` (legacy accounting), `shadow` (record candidate charges while applying legacy usage), `enforce` (apply settled charges to budgets and reports)
-  - Set it on both web and worker pods. Requests retain their starting mode. See [Component Cost Accounting](/docs/admin/deployment/upgrades#component-cost-accounting).
+  - Set it on both web and worker pods. Requests retain their starting mode.
 
 - **`ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS`** - Maximum number of virtual keys per provider API key.
   - Default: `10`

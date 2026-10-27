@@ -5,7 +5,6 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ConnectionSignInDialog } from "@/components/connection-sign-in-dialog";
-import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
 import { GitHubConnectButton } from "@/components/github-connect-button";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { RuntimeCredentialDescription } from "@/components/runtime-credential-row-content";
@@ -29,7 +28,7 @@ import {
 export function RuntimeCredentialConnectionDialog({
   definition,
   scope,
-  useExternalSecretsManager = false,
+
   onClose,
   onConnected,
   silent = false,
@@ -40,7 +39,7 @@ export function RuntimeCredentialConnectionDialog({
     "key" | "name" | "kind" | "icon" | "description" | "githubClientId"
   >;
   scope: "personal" | "organization";
-  useExternalSecretsManager?: boolean;
+
   onClose: () => void;
   onConnected?: () => void;
   /** Skips the "connected" toast, for a caller that shows the result itself. */
@@ -109,17 +108,6 @@ export function RuntimeCredentialConnectionDialog({
         }
       />
     );
-
-  if (useExternalSecretsManager) {
-    return (
-      <ExternalSecretReferenceDialog
-        fieldLabel={definition.name}
-        description={`Select the Vault value for this ${scope} connection.`}
-        onClose={onClose}
-        onConfirm={save}
-      />
-    );
-  }
 
   return (
     <StandardFormDialog

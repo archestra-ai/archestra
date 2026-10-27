@@ -57,9 +57,7 @@ vi.mock("@/lib/organization.query", () => ({
   useDefaultEnvironment: () => ({ name: "Default", validationRegex: null }),
 }));
 
-vi.mock("@/lib/teams/team.query", () => ({
-  useTeamsWithVaultFolders: () => ({ data: [] }),
-}));
+vi.mock("@/lib/teams/team.query", () => ({}));
 
 // Scope and team choice is its own form section, not what is under test.
 vi.mock(

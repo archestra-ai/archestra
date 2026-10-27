@@ -373,6 +373,7 @@ jobs:
     needs:
       - release-please
     permissions:
+      packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
     with:
@@ -392,6 +393,7 @@ jobs:
     needs:
       - release-please
     permissions:
+      packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable Agent image workflow.
       id-token: write # Required for Workload Identity Federation.
     with:
@@ -413,6 +415,7 @@ jobs:
     needs:
       - release-please
     permissions:
+      packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
     with:
@@ -434,6 +437,7 @@ jobs:
     needs:
       - release-please
     permissions:
+      packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
     with:
@@ -459,6 +463,7 @@ jobs:
       - release-please
     permissions:
       contents: read # Required to invoke the reusable Docker build workflow.
+      packages: write # Required by the reusable GHCR-capable publisher.
       id-token: write # Required for Workload Identity Federation.
     with:
       image_directory: ./platform

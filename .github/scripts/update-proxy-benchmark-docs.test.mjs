@@ -345,14 +345,14 @@ test("only the marked table changes; rendering is idempotent and has no dates or
   assert.ok(result.endsWith(markdown.split("old mcp table")[1]));
   assert.match(
     result,
-    /Concurrent tool calls \| Median added latency[\s\S]*\| 50 \| 1.00 ms \| 2.00 ms \| 3.00 ms \|/,
+    /Gateway \| Requests per Second[\s\S]*\| Archestra \| 100.0 \| 1.00 ms \| 2.00 ms \| 3.00 ms \|/,
   );
   assert.match(result, /Concurrent HTTP requests \| Median added latency/);
   assert.match(
     result,
     /\| 4 vCPU \/ ~16 GiB RAM \| 50 \| 5.00 ms \| 10.00 ms \| 20.00 ms \|/,
   );
-  assert.doesNotMatch(result, /Chat|Streaming|Gateway|Client|Requests\/sec/);
+  assert.doesNotMatch(result, /Chat|Streaming|Client|Requests\/sec/);
   assert.equal(updateBenchmarkTable(result, f.summary), result);
   assert.doesNotMatch(
     result,
@@ -615,4 +615,19 @@ test("already-current tables do not create empty commits", async () => {
   });
   assert.equal(await commitBenchmarkDocs(f), "unchanged");
   assert.deepEqual(f.writes, []);
+});
+
+test("release generation updates MCP throughput without replacing the pinned two-proxy comparison", async () => {
+  const page = await readFile(
+    new URL("../../" + benchmarkDocsPath, import.meta.url),
+    "utf8",
+  );
+  const f = fixture();
+  f.summary.rows.find((r) => r.scenario === "mcp").requestsPerSecond = 123.456;
+  const result = updateBenchmarkTable(page, f.summary);
+  const start = "<!-- mcp-gateway-benchmark-results:start -->";
+  assert.equal(result.split(start)[0], page.split(start)[0]);
+  assert.match(result, /Archestra \| 123.5 \|/);
+  assert.equal(updateBenchmarkTable(result, f.summary), result);
+  assert.ok(!result.includes("<!-- proxy-benchmark-results:start -->"));
 });

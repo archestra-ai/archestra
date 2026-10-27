@@ -13,11 +13,6 @@ import type {
 } from "@/types";
 import SecretModel from "./secret";
 
-/**
- * ChatOps config secrets always use DB storage (forceDB: true) because:
- * 1. They are platform-internal config, not user-provided external secrets
- * 2. BYOS Vault (READONLY_VAULT) is read-only from the customer's Vault
- */
 const FORCE_DB = true;
 
 const MS_TEAMS_SECRET_NAME = "chatops-ms-teams";

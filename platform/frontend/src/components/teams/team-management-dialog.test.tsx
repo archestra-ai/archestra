@@ -49,28 +49,15 @@ describe("TeamManagementDialog", () => {
     >);
   });
 
-  it("hides the vault tab from team admins without team:update", () => {
+  it("shows team management sections to team admins", () => {
     renderDialog();
 
     expect(screen.getByText("Team")).toBeInTheDocument();
     expect(screen.getByText("Members")).toBeInTheDocument();
     expect(screen.getByText("External Group Sync")).toBeInTheDocument();
-    expect(screen.queryByText("Vault Folder")).not.toBeInTheDocument();
   });
 
-  it("shows the vault tab to users with team:update when vault is enabled", () => {
-    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
-      typeof useHasPermissions
-    >);
-
-    renderDialog();
-
-    expect(screen.getByText("Vault Folder")).toBeInTheDocument();
-    // Team gateway tokens moved to service accounts linked to the team.
-    expect(screen.queryByText("MCP/A2A Gateway Token")).not.toBeInTheDocument();
-  });
-
-  it("hides the vault tab when vault is disabled", () => {
+  it("shows the appropriate team sections", () => {
     vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
       typeof useHasPermissions
     >);
@@ -81,7 +68,6 @@ describe("TeamManagementDialog", () => {
     renderDialog();
 
     expect(screen.getByText("External Group Sync")).toBeInTheDocument();
-    expect(screen.queryByText("Vault Folder")).not.toBeInTheDocument();
   });
 });
 

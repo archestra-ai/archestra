@@ -228,14 +228,6 @@ export const RouteId = {
   AddTeamExternalGroup: "addTeamExternalGroup",
   RemoveTeamExternalGroup: "removeTeamExternalGroup",
 
-  // Team Vault Folder Routes (BYOS - Bring Your Own Secrets)
-  GetTeamVaultFolder: "getTeamVaultFolder",
-  SetTeamVaultFolder: "setTeamVaultFolder",
-  DeleteTeamVaultFolder: "deleteTeamVaultFolder",
-  CheckTeamVaultFolderConnectivity: "checkTeamVaultFolderConnectivity",
-  ListTeamVaultFolderSecrets: "listTeamVaultFolderSecrets",
-  GetTeamVaultSecretKeys: "getTeamVaultSecretKeys",
-
   // Role Routes
   SearchInitialPermissionSubjects: "searchInitialPermissionSubjects",
   GetScopedCapabilities: "getScopedCapabilities",
@@ -797,7 +789,6 @@ export const RouteId = {
 
   // Secrets Routes
   GetSecretsType: "getSecretsType",
-  GetSecret: "getSecret",
   CheckSecretsConnectivity: "checkSecretsConnectivity",
 
   // Incoming Email Routes

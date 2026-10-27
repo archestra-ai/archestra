@@ -41,7 +41,6 @@ Already pay for ChatGPT, GitHub Copilot, Microsoft 365 Copilot, or SuperGrok? Us
 These credentials belong to one person and cannot be shared. An agent that uses one always runs on the chatting user's own subscription. A user who has not connected sees a sign-in prompt in chat. If the vendor rejects the sign-in later, click **Connect** again; the credential keeps its model and agent selections.
 
 - **ChatGPT**: first turn on **Enable device code authorization for Codex** in ChatGPT under **Settings → Security**. It is off by default, and ChatGPT blocks the sign-in until you turn it on.
-- **SuperGrok**: unavailable when [Bring Your Own Secrets](/docs/admin) uses a read-only external Vault, because Archestra cannot store the rotating sign-in token there. Use an xAI API key instead.
 - **GitHub Copilot** and **Microsoft 365 Copilot** have their own pages: [GitHub Copilot](/docs/llm-proxy/providers/github-copilot), [Microsoft 365 Copilot](/docs/llm-proxy/providers/microsoft-365-copilot).
 
 ChatGPT and SuperGrok use bills $0 in Costs. GitHub Copilot and Microsoft 365 Copilot use counts as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost).

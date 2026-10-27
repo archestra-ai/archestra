@@ -86,6 +86,5 @@ export * from "./tool-call-normalization";
 export * from "./tool-call-refusal-reasons";
 export * from "./types";
 export * from "./utils";
-export * from "./vault";
 export * from "./visibility";
 export * from "./websocket";

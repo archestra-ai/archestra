@@ -1,16 +1,19 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { KILO_CLIENT } from "../opencode-family";
 import type { ManagedRuntimeCatalog } from "./opencode-primary-config";
+import { openCodePrimaryConfig } from "./opencode-primary-config";
 import {
   renderOpenCodeRoutingPlugin,
   renderOpenCodeRoutingPluginV2,
 } from "./opencode-routing-plugin";
 
+const exec = promisify(execFile);
 const roots: string[] = [];
 const globals = globalThis as unknown as Record<PropertyKey, unknown>;
 const fetchGuard = Symbol.for("archestra.opencode.llmProxyFetchGuard");
@@ -56,6 +59,118 @@ afterEach(async () => {
 });
 
 describe("managed catalog plugin", () => {
+  test("V1 registers Azure deployments and Copilot through one managed provider each", async () => {
+    const { root, catalog: routerCatalog } = await prepareModelRouter();
+    process.env.HOME = root;
+    process.env.XDG_DATA_HOME = path.join(root, "data");
+    const file = path.join(root, "routing-v1.mjs");
+    await writeFile(
+      file,
+      renderOpenCodeRoutingPlugin({
+        routes: {},
+        headers: {},
+        catalog: routerCatalog,
+      }),
+    );
+    const hooks = await (
+      await import(pathToFileURL(file).href)
+    ).ArchestraLlmProxy();
+    const config = {
+      model: "archestra-azure/custom/deployment",
+      provider: {
+        azure: { name: "Azure" },
+        "github-copilot": { name: "GitHub Copilot" },
+      },
+    };
+    await hooks.config(config);
+    await hooks.config(config);
+    expect(config).toMatchObject({
+      enabled_providers: ["archestra-azure", "archestra-github-copilot"],
+      model: "archestra-azure/custom/deployment",
+      provider: {
+        "archestra-azure": {
+          name: "Azure AI Foundry",
+          npm: "@ai-sdk/openai",
+          whitelist: ["custom/deployment"],
+          models: {
+            "custom/deployment": {
+              id: "azure:custom/deployment",
+              limit: { context: 128000, output: 4096 },
+            },
+          },
+        },
+        "archestra-github-copilot": {
+          name: "GitHub Copilot",
+          npm: "@ai-sdk/openai",
+          models: { "gpt-codex": { id: "github-copilot:gpt-codex" } },
+        },
+      },
+    });
+    await rm(path.join(root, ".archestra", "opencode-primary.key"));
+    await hooks.config(config);
+    expect(config).toMatchObject({ enabled_providers: [] });
+    expect(config).not.toHaveProperty("model");
+    expect(config.provider).not.toHaveProperty("archestra-azure");
+  });
+
+  test("V2 registers missing deployment models and keeps native Copilot authentication off its managed route", async () => {
+    const { root, catalog: routerCatalog } = await prepareModelRouter();
+    await mkdir(path.join(root, "revision"));
+    const file = path.join(root, "revision", "routing-v2.mjs");
+    await writeFile(
+      file,
+      renderOpenCodeRoutingPluginV2({
+        runtime: true,
+        routes: {},
+        headers: {},
+        catalog: routerCatalog,
+      }),
+    );
+    const result = await runModelRouter(file);
+    expect(result.active).toEqual([
+      "archestra-azure",
+      "archestra-github-copilot",
+    ]);
+    expect(result.adds).toEqual([
+      "archestra-azure",
+      "archestra-github-copilot",
+    ]);
+    expect(result.providers["archestra-azure"]).toMatchObject({
+      provider: {
+        name: "Azure AI Foundry",
+        package: "@opencode/ai/providers/openai",
+        settings: {
+          apiKey: "managed-secret",
+          baseURL: routerCatalog.routes["archestra-azure"],
+        },
+      },
+      models: {
+        "custom/deployment": {
+          id: "custom/deployment",
+          modelID: "azure:custom/deployment",
+          limit: { context: 128000, output: 4096 },
+        },
+      },
+    });
+    expect(result.providers["archestra-github-copilot"]).toMatchObject({
+      provider: {
+        name: "GitHub Copilot",
+        package: "@opencode/ai/providers/openai",
+      },
+      models: { "gpt-codex": { modelID: "github-copilot:gpt-codex" } },
+    });
+    expect(result.request).toMatchObject({
+      baseURL: routerCatalog.routes["archestra-github-copilot"],
+      headers: { Authorization: "Bearer managed-secret" },
+    });
+    expect(result.request.headers).not.toHaveProperty("ChatGPT-Account-Id");
+    await rm(path.join(root, ".archestra", "opencode-primary.key"));
+    const withoutKey = await runModelRouter(file);
+    expect(withoutKey.active).toEqual([]);
+    expect(withoutKey.adds).toEqual([]);
+    expect(withoutKey.requestError).toContain("not supported by the connected");
+  });
+
   test("keeps the client's providers, filters their models and sends them to the proxy with the managed key", async () => {
     const calls: Request[] = [];
     globals[directFetch] = async (
@@ -891,6 +1006,114 @@ describe("managed catalog plugin", () => {
     expect(result.hook["X-Archestra-Virtual-Key"]).toBe("passthrough-secret");
   });
 });
+
+async function prepareModelRouter() {
+  const root = await mkdtemp(path.join(tmpdir(), "catalog-model-router-"));
+  roots.push(root);
+  const keyPath = path.join(root, ".archestra", "opencode-primary.key");
+  await mkdir(path.dirname(keyPath));
+  await writeFile(keyPath, "managed-secret\n");
+  await writeFile(
+    path.join(root, "params.json"),
+    JSON.stringify({
+      headers: {},
+      managedKeyPath: keyPath,
+      origin: "https://deployment.example",
+      source: { token: "cru1_test" },
+    }),
+  );
+  const sdkPath = path.join(root, "node_modules", "@opencode", "plugin");
+  await mkdir(sdkPath, { recursive: true });
+  await writeFile(
+    path.join(sdkPath, "package.json"),
+    JSON.stringify({ type: "module", exports: "./index.js" }),
+  );
+  await writeFile(
+    path.join(sdkPath, "index.js"),
+    `export const Provider = { ID: { make: id => id }, Info: { empty: id => ({ id, settings: {}, headers: {} }) } };
+export const Model = { ID: { make: id => id }, Info: { default: (providerID, id) => ({ id, providerID, modelID: id, limit: { context: 0, output: 0 }, capabilities: { input: ["text"] } }) } };`,
+  );
+  const catalog = openCodePrimaryConfig(
+    {
+      authMode: "primary-providers",
+      provider: "azure",
+      providerLabel: "Azure",
+      baseUrl: "https://deployment.example/v1/model-context",
+      url: "https://deployment.example/v1/azure",
+      proxyName: "test",
+      model: null,
+      virtualKey: "arch_test",
+      virtualKeyName: "Primary providers",
+      passthroughVirtualKey: null,
+      primaryProviders: [
+        {
+          provider: "azure",
+          name: "Resource",
+          models: [
+            {
+              id: "custom/deployment",
+              name: "Deployment",
+              context: 128000,
+              output: 4096,
+            },
+          ],
+        },
+        {
+          provider: "github-copilot",
+          name: "Subscription",
+          models: [
+            { id: "gpt-codex", name: "Codex", context: null, output: null },
+          ],
+        },
+      ],
+    },
+    "Acme",
+  ).catalog;
+  return { root, catalog };
+}
+
+async function runModelRouter(file: string): Promise<{
+  active: string[];
+  adds: string[];
+  providers: Record<
+    string,
+    { provider: Record<string, unknown>; models: Record<string, unknown> }
+  >;
+  request: { baseURL: string; headers: Record<string, string> };
+  requestError?: string;
+}> {
+  const { stdout } = await exec(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `const plugin = (await import(${JSON.stringify(pathToFileURL(file).href)})).default;
+const providers = new Map(["azure", "github-copilot"].map(id => [id, { provider: { id, name: id, activation: "auto", settings: {}, headers: {} }, models: new Map(), sourceConnection: { id: "native-oauth" } }]));
+const adds = [], hooks = {};
+let transactionActive = false;
+const assertActive = () => { if (!transactionActive) throw new Error("Provider editor transaction is closed"); };
+const editor = {
+  list: () => { assertActive(); return [...providers.values()]; }, get: id => { assertActive(); return providers.get(id); },
+  add: ({ info, models }) => { assertActive(); adds.push(info.id); providers.set(info.id, { provider: info, models: new Map(models.map(model => [model.id, model])) }); },
+  update: (id, callback) => { assertActive(); callback(providers.get(id).provider); },
+  models: { set: (id, models) => { assertActive(); providers.get(id).models = new Map(models.map(model => [model.id, model])); } },
+};
+const transform = async callback => {
+  transactionActive = true;
+  let result;
+  try { result = callback(editor); } finally { transactionActive = false; }
+  await result;
+};
+for (let pass = 0; pass < 2; pass++) await plugin.setup({ provider: { transform }, session: { hook: (name, callback) => { hooks[name] = callback; } } });
+const request = { model: { providerID: "archestra-github-copilot" }, baseURL: "https://api.githubcopilot.com", headers: { Authorization: "Bearer native-token", "ChatGPT-Account-Id": "native-account" }, agent: "build" };
+let requestError;
+try { await hooks["model.request"](request); } catch (error) { requestError = error.message; }
+console.log(JSON.stringify({ active: [...providers].filter(([, record]) => record.provider.activation === "enabled").map(([id]) => id), adds, providers: Object.fromEntries([...providers].map(([id, record]) => [id, { provider: record.provider, models: Object.fromEntries(record.models) }])), request, requestError }));`,
+    ],
+    { encoding: "utf8" },
+  );
+  return JSON.parse(stdout);
+}
 
 /** Runs the V2 transform twice over providers the client already lists. */
 function runProviderNames(

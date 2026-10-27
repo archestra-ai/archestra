@@ -70,6 +70,10 @@ describe("Codex image entrypoint", () => {
       await writeExecutable(
         path.join(bin, "codex"),
         `#!/bin/sh
+if [ "$1" = "debug" ]; then
+  jq -n --arg model "$ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL" '{models:[{slug:$model,upgrade:{model:"next-model"}}]}'
+  exit 0
+fi
 printf '%s\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
 if [ "$ARCHESTRA_AGENT_RUNTIME_MODE" = "one_shot" ]; then
   transcript="$ARCHESTRA_AGENT_RUNTIME_DIR/codex-transcript.jsonl"
@@ -144,6 +148,9 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
       );
       expect(parsedConfig.model).toBe(env.ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL);
       expect(parsedConfig.unexpected).toBeUndefined();
+      expect(parsedConfig.notice.model_migrations).toEqual({
+        [env.ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL]: "next-model",
+      });
       expect(parsedConfig.model_providers.archestra.base_url).toBe(
         env.OPENAI_BASE_URL,
       );
@@ -371,7 +378,10 @@ printf '%s\\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
       await writeExecutable(
         path.join(bin, "codex"),
         `#!/usr/bin/env python3
-import json, os, pathlib, subprocess, time
+import json, os, pathlib, subprocess, sys, time
+if sys.argv[1:] == ["debug", "models", "--bundled"]:
+    print(json.dumps({"models": []}))
+    raise SystemExit(0)
 runtime = pathlib.Path(os.environ["ARCHESTRA_AGENT_RUNTIME_DIR"])
 hooks = json.loads((pathlib.Path(os.environ["CODEX_HOME"]) / "hooks.json").read_text())
 hook = hooks["hooks"]["SessionStart"][0]["hooks"][0]["command"]

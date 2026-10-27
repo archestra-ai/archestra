@@ -84,10 +84,11 @@ class CachePolicyTests(unittest.TestCase):
         env_block, run_block = step.split("      run: |\n", 1)
         names = re.findall(r"^        ([A-Z_]+): ", env_block, re.M)
         script = "\n".join(line[8:] for line in run_block.splitlines())
-        # "" is the build that reuses the job's builder and skips the setup step.
-        for persistent in ("true", "false", ""):
+        # A reused same-job builder skips setup; an absent output alone does
+        # not imply reuse (it can also mean the standard fallback builder).
+        for persistent, reuse in (("true", "false"), ("false", "false"), ("", "false"), ("", "true")):
             for cache_to in ("type=registry,ref=registry.test/platform:buildcache,mode=min", ""):
-                with self.subTest(persistent=persistent, cache_to=cache_to), \
+                with self.subTest(persistent=persistent, reuse=reuse, cache_to=cache_to), \
                         tempfile.TemporaryDirectory() as directory:
                     if persistent:
                         self.assertEqual(evaluate(reported, {
@@ -107,12 +108,14 @@ class CachePolicyTests(unittest.TestCase):
                             "RUNNER_TEMP": str(directory), "GITHUB_OUTPUT": str(directory / "output"),
                             "ARCHESTRA_TEST_DOCKER_CALLS": str(calls),
                             "INPUT_CONTEXT": "platform", "INPUT_PUSH": "true",
-                            "INPUT_CACHE_TO": cache_to, "PERSISTENT_BUILDER": persistent,
+                            "INPUT_CACHE_TO": cache_to, "PERSISTENT_BUILDER": persistent, "REUSE_BUILDER": reuse,
+                            "INPUT_CACHE_FROM": "type=registry,ref=registry.test/platform:buildcache",
                         },
                     )
                     self.assertEqual(result.returncode, 0, result.stderr)
                     arguments = calls.read_text().splitlines()
                     self.assertEqual(arguments[:2], ["buildx", "build"])
+                    self.assertEqual("--cache-from" in arguments, persistent != "true" and reuse != "true")
                     exported = bool(cache_to) and persistent != "true"
                     self.assertEqual("--cache-to" in arguments, exported)
                     if exported:

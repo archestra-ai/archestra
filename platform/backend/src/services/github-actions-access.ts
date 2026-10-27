@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import {
   type GitHubActionsAccess,
   type GitHubActionsTokenErrorCode,
+  gitHubRepositoryMatches,
   isGitHubActionsAppCredential,
 } from "@archestra/shared";
 import { z } from "zod";
@@ -10,6 +11,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import {
   createRepositoryInstallationToken,
+  GITHUB_INSTALLATION_TOKEN_REFUSED,
   resolveInstallationCredential,
 } from "@/integrations/github/app-auth";
 import logger from "@/logging";
@@ -45,8 +47,9 @@ import { isUuid } from "@/utils/uuid";
 
 /**
  * Trade a GitHub Actions OIDC token from a pull-request job for a token on an
- * MCP gateway that acts as the pull request's author, plus a GitHub App
- * installation token for that one repository. Every check fails closed.
+ * MCP gateway, plus a GitHub App installation token for that one repository.
+ * The gateway token acts as the pull request's author, or with `actAs:
+ * "actor"` as whoever started the run. Every check fails closed.
  */
 export async function exchangeGitHubActionsToken(params: {
   token: string;
@@ -100,8 +103,8 @@ export async function exchangeGitHubActionsToken(params: {
   if (!Number.isSafeInteger(pullNumber))
     return untrusted("ref is not a pull request merge ref", run);
   if (
-    !access.repositories.some(
-      (allowed) => allowed.toLowerCase() === repository.toLowerCase(),
+    !access.repositories.some((allowed) =>
+      gitHubRepositoryMatches(allowed, repository),
     )
   )
     return untrusted("repository is not listed", run);
@@ -131,7 +134,13 @@ export async function exchangeGitHubActionsToken(params: {
       "not_trusted",
       `The GitHub App cannot read pull request #${pullNumber} in ${repository}. Install the App on that repository.`,
     );
-  const { login } = pullRequest.user;
+  // The token acts as whoever started the run. By default that must be the
+  // author: a collaborator who pushes to someone else's pull request, or
+  // labels it, starts a run too. With actAs "actor", the trusted workflow
+  // decides whose runs to start, and each person spends their own account.
+  // The caller's own workflow file is not trusted: the pull request can edit it.
+  const actsAsActor = access.actAs === "actor";
+  const login = claims.actor;
   if (
     pullRequest.head.repo?.full_name.toLowerCase() !== repository.toLowerCase()
   )
@@ -139,23 +148,21 @@ export async function exchangeGitHubActionsToken(params: {
       403,
       "not_trusted",
       "Pull requests from forks, or whose head repository no longer exists, cannot use this gateway.",
-      login,
+      actsAsActor ? login : pullRequest.user.login,
     );
-  // A collaborator who pushes to someone else's pull request starts the run;
-  // the token must never act as an author who did not.
-  if (claims.actor_id !== String(pullRequest.user.id))
+  if (!actsAsActor && claims.actor_id !== pullRequest.user.id)
     return refuse(
       403,
       "not_author",
-      `This run was started by ${claims.actor ?? `GitHub user ${claims.actor_id}`} on a pull request by ${login}; reviews run only when the author triggers them.`,
-      login,
+      `This run was started by ${login} on a pull request by ${pullRequest.user.login}; this gateway runs only as the author, for runs the author starts.`,
+      pullRequest.user.login,
     );
 
   const connections =
     await RuntimeCredentialConnectionModel.findGitHubAppConnections({
       organizationId: gateway.organizationId,
       githubAppCredentialKey: access.githubAppCredentialKey,
-      githubId: pullRequest.user.id,
+      githubId: claims.actor_id,
     });
   const userIds = [...new Set(connections.map((entry) => entry.userId))];
   const appName = archestraMcpBranding.appName;
@@ -189,7 +196,7 @@ export async function exchangeGitHubActionsToken(params: {
       organizationId: gateway.organizationId,
       userId,
       credentialKeys: connections.map((entry) => entry.credentialKey),
-      githubId: pullRequest.user.id,
+      githubId: claims.actor_id,
     });
   } catch (error) {
     // GitHub could not say whether the connection still works.
@@ -215,16 +222,44 @@ export async function exchangeGitHubActionsToken(params: {
   let gatewayToken: { value: string; hash: string } | null = null;
   try {
     gatewayToken = await mintGatewayAccessToken({ gatewayId, userId });
+    // By id: a name can belong to another account once an owner is renamed
+    // and its old name taken, and must never reach its repository.
     let githubToken: { token: string; expiresAt: number };
+    let contents: "read" | "write" = access.resolveReviewThreads
+      ? "write"
+      : "read";
     try {
       githubToken = await createRepositoryInstallationToken({
         ...app,
-        repository: repository.slice(repository.indexOf("/") + 1),
-        permissions: GITHUB_TOKEN_PERMISSIONS,
+        repositoryId: claims.repository_id,
+        permissions: { ...GITHUB_TOKEN_PERMISSIONS, contents },
       });
-    } catch (error) {
-      await OAuthAccessTokenModel.deleteByTokenHash(gatewayToken.hash);
-      return githubFailure({ error, gatewayId, repository });
+    } catch (firstError) {
+      // An App installed without contents: write still reviews; it cannot
+      // resolve review threads. Any other failure is reported as it is.
+      if (
+        !access.resolveReviewThreads ||
+        !(firstError instanceof ApiError) ||
+        firstError.internalCode !== GITHUB_INSTALLATION_TOKEN_REFUSED
+      ) {
+        await OAuthAccessTokenModel.deleteByTokenHash(gatewayToken.hash);
+        return githubFailure({ error: firstError, gatewayId, repository });
+      }
+      logger.info(
+        { gatewayId, repository, ...describeError(firstError) },
+        "[github-actions] No repository token with contents: write; trying contents: read",
+      );
+      contents = "read";
+      try {
+        githubToken = await createRepositoryInstallationToken({
+          ...app,
+          repositoryId: claims.repository_id,
+          permissions: GITHUB_TOKEN_PERMISSIONS,
+        });
+      } catch (error) {
+        await OAuthAccessTokenModel.deleteByTokenHash(gatewayToken.hash);
+        return githubFailure({ error, gatewayId, repository });
+      }
     }
 
     logger.info(
@@ -234,9 +269,13 @@ export async function exchangeGitHubActionsToken(params: {
         repository,
         pullRequest: pullNumber,
         githubLogin: login,
+        pullRequestAuthor: pullRequest.user.login,
+        actAs: access.actAs ?? "author",
+        // write only when the run's GitHub token can resolve review threads.
+        contents,
         userId,
       },
-      "[github-actions] Issued an MCP gateway token for a pull request author",
+      "[github-actions] Issued an MCP gateway token for a GitHub Actions run",
     );
 
     return {
@@ -325,7 +364,11 @@ const UNTRUSTED_RUN_MESSAGE =
   "This MCP gateway does not accept this GitHub Actions run.";
 const UNUSABLE_APP_MESSAGE =
   "The GitHub App credential could not be used; check its private key, App ID and installation ID.";
-/** Enough to read the change and post a review; issue comments are not needed. */
+/**
+ * Enough to read the change and post a review; issue comments are not needed.
+ * A gateway with resolveReviewThreads adds contents: write, which GitHub
+ * requires to resolve a review thread.
+ */
 const GITHUB_TOKEN_PERMISSIONS = {
   pull_requests: "write",
   contents: "read",
@@ -343,10 +386,23 @@ const OidcClaimsSchema = z.object({
   event_name: z.string(),
   ref: z.string(),
   repository: z.string(),
+  /**
+   * GitHub's id of the repository, which a rename or a reused owner name
+   * cannot change; GitHub sends it as a string.
+   */
+  repository_id: z
+    .union([z.string().regex(/^[1-9]\d*$/), z.number().int().positive()])
+    .transform(Number),
   job_workflow_ref: z.string(),
-  /** Who started the run; GitHub sends the numeric id as a string. */
-  actor_id: z.union([z.string().min(1), z.number()]).transform(String),
-  actor: z.string().optional(),
+  /**
+   * Who started the run, whom the gateway token acts as; GitHub sends the
+   * numeric id as a string.
+   */
+  actor_id: z
+    .union([z.string().regex(/^[1-9]\d*$/), z.number().int().positive()])
+    .transform(Number)
+    .pipe(GitHubUserIdSchema),
+  actor: z.string().min(1),
 });
 type OidcClaims = z.infer<typeof OidcClaimsSchema>;
 
@@ -565,7 +621,7 @@ async function userCanUseGateway(params: {
 }
 
 /**
- * Whether one of the user's connections still acts as the author on GitHub.
+ * Whether one of the user's connections still acts as that GitHub account.
  * Each is resolved as a runtime launch would (refreshing it when due), then
  * shown to GitHub: a stored token that has not expired locally may still have
  * been revoked. Throws a 502 `ApiError` when GitHub cannot answer.
@@ -629,7 +685,7 @@ async function gitHubAcceptsAs(params: {
   } catch {
     throw new ApiError(
       502,
-      "GitHub could not be reached to check the author's GitHub connection. Try again.",
+      "GitHub could not be reached to check the GitHub connection. Try again.",
     );
   }
   // GitHub also answers 403 when it throttles a valid token: that is a
@@ -637,19 +693,19 @@ async function gitHubAcceptsAs(params: {
   if (response.status === 403 && (await isRateLimited(response)))
     throw new ApiError(
       502,
-      "GitHub rate-limited the check of the author's GitHub connection. Try again later.",
+      "GitHub rate-limited the check of the GitHub connection. Try again later.",
     );
   if (response.status === 401 || response.status === 403) return false;
   if (!response.ok)
     throw new ApiError(
       502,
-      `GitHub returned HTTP ${response.status} while checking the author's GitHub connection`,
+      `GitHub returned HTTP ${response.status} while checking the GitHub connection`,
     );
   const user = GitHubAccountSchema.safeParse(await response.json());
   if (!user.success)
     throw new ApiError(
       502,
-      "GitHub returned an unexpected account while checking the author's GitHub connection",
+      "GitHub returned an unexpected account while checking the GitHub connection",
     );
   return user.data.id === params.githubId;
 }

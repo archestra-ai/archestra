@@ -1993,6 +1993,7 @@ export function ChatPageContent({
   // an opened chat shows its context usage right away.
   const tokensUsed =
     contextTokensUsed ??
+    tokenUsage?.inputTokens ??
     tokenUsage?.totalTokens ??
     conversation?.contextTokensUsed ??
     undefined;

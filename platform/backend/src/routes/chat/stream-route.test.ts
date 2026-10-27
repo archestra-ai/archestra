@@ -3222,15 +3222,20 @@ describe("POST /api/chat handler composition", () => {
     expect(response.statusCode).toBe(200);
     await executionPromise;
 
-    // A tool-call step re-emits the breakdown with the provider's real input
-    // count. onStepFinish only emits once a result is committed, which the
-    // awaited execution above has done.
+    // Both tool-call steps and the final response step re-emit the breakdown
+    // with the provider's real input count. onStepFinish only emits once a
+    // result is committed, which the awaited execution above has done.
     const streamConfig = mockStreamText.mock.calls.at(-1)?.[0] as {
       onStepFinish?: (step: unknown) => Promise<void> | void;
     };
     await streamConfig.onStepFinish?.({
       usage: { inputTokens: 1200, outputTokens: 10, totalTokens: 1210 },
       finishReason: "tool-calls",
+      toolCalls: [],
+    });
+    await streamConfig.onStepFinish?.({
+      usage: { inputTokens: 2400, outputTokens: 25, totalTokens: 2425 },
+      finishReason: "stop",
       toolCalls: [],
     });
 
@@ -3240,8 +3245,12 @@ describe("POST /api/chat handler composition", () => {
         (event.value as { type?: string })?.type ===
           "data-context-window-breakdown",
     );
-    // Both the pre-stream breakdown and the post-step re-emit.
-    expect(breakdownWrites.length).toBeGreaterThan(1);
+    // Pre-stream breakdown + post-tool-step + post-final-step re-emits.
+    expect(breakdownWrites.length).toBeGreaterThanOrEqual(3);
+    expect(
+      (breakdownWrites.at(-1)?.value as { data?: { usedTokens?: number } })
+        ?.data?.usedTokens,
+    ).toBe(2400);
 
     // Every one of these carries UI state the client reads via onData. A
     // non-transient copy lands in the assistant message instead, where it is

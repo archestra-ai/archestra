@@ -170,8 +170,8 @@ Kimi Code differs from the other clients in these ways:
   proxy's signed tool-call IDs are longer, and a session's IDs share their
   first 64 characters, so shortened IDs no longer match their calls: the proxy
   withholds released results and reads applied remedies as not run. The image
-  raises the limit to 1,024 characters (`patches/kimi-long-tool-call-ids.py`);
-  the proxy restores the provider's own IDs before a request reaches the model.
+  removes the limit (`patches/kimi-long-tool-call-ids.py`); the proxy restores
+  the provider's own IDs before a request reaches the model.
 - Agent Runtime steers by typing a message and Enter. While a turn runs, Kimi
   queues that message for the next turn and offers Ctrl-S to send it now. In a
   delegated run `archestra-kimi-tui-start` presses Ctrl-S while a turn runs, so

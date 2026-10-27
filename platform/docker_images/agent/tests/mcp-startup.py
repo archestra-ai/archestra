@@ -6,7 +6,9 @@ The barrier test holds tools/list until AFTER the former startup grace, and
 asserts that no tool-using inference arrives while discovery is incomplete.
 """
 
+import base64
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -29,12 +31,17 @@ TOOLS = ["archestra__get_remedy_plans", "archestra__execute_remedy_plan", "arche
 # proxy resolves a client's renamed tool by it, so it must reach the model.
 DESCRIPTION = "[[gwa1_c3ludGhldGlj.bWFya2Vy]]\nSynthetic startup test tool" if CLIENT == "kimi" else "Synthetic startup test tool"
 STEER = "STEER_MARKER mention the steer in the reply"
-# The proxy gives each tool call a signed ID that names its session, so the
-# session's IDs share their first 64 characters and are longer than that. The
-# proxy matches a tool result to its call by that ID, so it must come back
-# unchanged.
-SIGNED_ID_PREFIX = "appat1" + "c3RhcnR1cC13b3Jrc3BhY2UAbWNwX19hcmNoZXN0cmFfX2FyY2hlc3RyYQ" * 2
 BIN = Path(os.environ.get("ARCHESTRA_TEST_WRAPPERS", "/usr/local/bin"))
+
+
+def signed_call_id(provider_call_id):
+    """A tool-call ID in the proxy's signed layout: `appat1`, the session and
+    provider ID, and a 22-character tag. It is longer than 64 characters, and
+    one session's IDs share their first 64. The proxy matches a tool result to
+    its call by this ID, so it must come back unchanged."""
+    payload = base64.urlsafe_b64encode(f"agent-run-startup-workspace\0{provider_call_id}".encode()).decode().rstrip("=")
+    tag = base64.urlsafe_b64encode(hashlib.sha256(payload.encode()).digest()).decode()[:22]
+    return "appat1" + payload + tag
 
 
 class Gateway(ThreadingHTTPServer):
@@ -155,7 +162,7 @@ class Handler(BaseHTTPRequestHandler):
         self.reply_id = str(self.server.sequence)
         self.server.requests.append({"names": names, "catalog_sent": self.server.catalog_sent})
         self.server.prompts.append(json.dumps(request.get("messages") or request.get("input") or ""))
-        self.server.returned_call_ids.update(message.get("tool_call_id") for message in request.get("messages") or [] if message.get("role") == "tool")
+        self.server.returned_call_ids.update(message.get("tool_call_id") or "<tool result without tool_call_id>" for message in request.get("messages") or [] if message.get("role") == "tool")
         if len(self.server.requests) == 1:
             print(f"{CLIENT}: first request gateway tools: {[n for n in names if 'remedy' in n or 'yell' in n]}", flush=True)
         tool = next((name for name in names if len(self.server.calls) < len(TOOLS) and name.endswith(TOOLS[len(self.server.calls)].removeprefix("archestra__"))), None)
@@ -189,7 +196,7 @@ class Handler(BaseHTTPRequestHandler):
         message = {"role": "assistant", "content": "STARTUP_OK"}
         finish = "stop"
         if tool:
-            call_id = (SIGNED_ID_PREFIX + "_" + self.reply_id) if CLIENT == "kimi" else "call_test_" + self.reply_id
+            call_id = signed_call_id(f"functions.{tool}:{self.reply_id}") if CLIENT == "kimi" else "call_test_" + self.reply_id
             self.server.issued_call_ids.append(call_id)
             message = {"role": "assistant", "content": None, "tool_calls": [{"index": 0, "id": call_id, "type": "function", "function": {"name": tool, "arguments": "{}"}}]}
             finish = "tool_calls"

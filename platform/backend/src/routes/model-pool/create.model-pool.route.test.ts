@@ -152,6 +152,42 @@ describe("POST /api/model-pools", () => {
     });
     expect(renamed.statusCode, renamed.body).toBe(200);
   });
+
+  test("reserves the auto routing alias as a pool name", async ({
+    makeLlmProviderApiKey,
+  }) => {
+    const key = await makeLlmProviderApiKey(organizationId, null);
+    const payload = {
+      name: "haiku",
+      members: [{ providerApiKeyId: key.id, modelId: "claude-haiku-4-5" }],
+    };
+
+    const named = await app.inject({
+      method: "POST",
+      url: "/api/model-pools",
+      payload: { ...payload, name: " auto " },
+    });
+    expect(named.statusCode, named.body).toBe(400);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/model-pools",
+      payload,
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const renamed = await app.inject({
+      method: "PUT",
+      url: `/api/model-pools/${created.json().id}`,
+      payload: { ...payload, name: "auto" },
+    });
+    expect(renamed.statusCode, renamed.body).toBe(400);
+
+    const listed = await app.inject({ method: "GET", url: "/api/model-pools" });
+    expect(listed.json().map((pool: { name: string }) => pool.name)).toEqual([
+      "haiku",
+    ]);
+  });
+
   test("grants virtual keys of the organization only", async ({
     makeOrganization,
     makeLlmProviderApiKey,

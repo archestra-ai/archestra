@@ -448,13 +448,6 @@ async function routeChatCompletion(
     ? await getModelRouterAgent(params.agentId)
     : await getDefaultModelRouterAgent();
   await ensureModelRouterAgentAccess({ agent, auth });
-  // A model pool's name is served by the pool's members, LiteLLM style: the
-  // proxy picks a member and its key, when the caller may use the pool.
-  const poolId = await usableModelPoolId({ auth, model: body.model });
-  if (poolId) {
-    applyModelPoolAuthOverride({ request, auth, poolId });
-    return handleLLMProxy(body, request, reply, openaiAdapterFactory);
-  }
   const auto = await resolveAutoModel({
     request,
     auth,
@@ -465,6 +458,16 @@ async function routeChatCompletion(
   });
   if (auto.kind === "usage_limited")
     return sendUsageLimitRefusal(reply, auto.violation);
+  // A model pool's name is served by the pool's members, LiteLLM style: the
+  // proxy picks a member and its key, when the caller may use the pool.
+  const poolId =
+    auto.kind === "as_requested"
+      ? await usableModelPoolId({ auth, model: body.model })
+      : null;
+  if (poolId) {
+    applyModelPoolAuthOverride({ request, auth, poolId });
+    return handleLLMProxy(body, request, reply, openaiAdapterFactory);
+  }
   const resolution = await resolveModelRoute({
     requestedModel: auto.model,
     allowedProviders: getMappedProviders(auth),

@@ -1,22 +1,11 @@
 import RoutingPlanModel from "@/models/routing-plan";
 import { ApiError } from "@/types";
-import type {
-  RoutingDecisionFeatures,
-  RoutingPlan,
-} from "@/types/auto-routing";
 import type { AutoRoutingPreviewResponse } from "@/types/auto-routing-api";
-import { decidePlanned, uniform } from "./router";
+import { selectTier, uniform } from "./router";
 import { loadAutoRoutingSettings } from "./settings";
 import { activeSourceVersion, decisionFeatures, preRunSource } from "./signals";
 import { type PreRunInput, SignalSourceError } from "./signals/types";
-import {
-  fingerprintMatches,
-  loadTrio,
-  NORMAL_TIER,
-  TIER_NAMES,
-  type TierIndex,
-  type Trio,
-} from "./tiers";
+import { loadTrio, TIER_NAMES } from "./tiers";
 
 /**
  * What the router would decide for a new session opening with `text`, against
@@ -44,59 +33,27 @@ export async function previewAutoRouting(params: {
       throw scorerFailure(error);
     });
   const version = (await activeSourceVersion()).id;
-  const outcome = decideAgainstActivePlan(
-    await RoutingPlanModel.findActive(organizationId),
-    version,
+  // No re-plan is requested for a stale plan: preview has no side effects.
+  const outcome = selectTier({
+    active: await RoutingPlanModel.findActive(organizationId),
+    scorerVersionId: version,
     trio,
-    decisionFeatures({ version, reading: scored, input }),
-  );
+    features: decisionFeatures({ version, reading: scored, input }),
+    u: uniform(),
+  });
   const model = trio[outcome.tier];
   return {
     tierNeeded: scored.tierNeeded,
     pLong: scored.pLong,
     reason: outcome.reason,
-    planId: outcome.planId,
+    planId: outcome.plan?.id ?? null,
     chosen: {
       tier: TIER_NAMES[outcome.tier],
       model: { id: model.id, provider: model.provider, modelId: model.modelId },
     },
     propensity: outcome.propensity,
-    expectedCostUsd: outcome.expectedCostUsd,
+    expectedCostUsd: outcome.decision?.expected_cost_usd ?? null,
     scorerCostUsd: scored.costUsd,
-  };
-}
-
-type Outcome = Pick<
-  AutoRoutingPreviewResponse,
-  "reason" | "planId" | "propensity" | "expectedCostUsd"
-> & { tier: TierIndex };
-
-const STALE: Outcome = {
-  reason: "plan_stale",
-  planId: null,
-  tier: NORMAL_TIER,
-  propensity: 1,
-  expectedCostUsd: null,
-};
-
-/** The router's flow without its side effects: a stale plan falls back but requests no re-plan. */
-function decideAgainstActivePlan(
-  plan: RoutingPlan | null,
-  scorerVersionId: string,
-  trio: Trio,
-  features: RoutingDecisionFeatures,
-): Outcome {
-  if (plan?.scorerVersionId !== scorerVersionId)
-    return { ...STALE, reason: "cold_start" };
-  if (!fingerprintMatches(plan.tiersFingerprint, trio)) return STALE;
-  const decision = decidePlanned(plan, features, uniform());
-  if (decision === null) return STALE;
-  return {
-    reason: "planned",
-    planId: plan.id,
-    tier: decision.tier_index,
-    propensity: decision.propensity,
-    expectedCostUsd: decision.expected_cost_usd,
   };
 }
 

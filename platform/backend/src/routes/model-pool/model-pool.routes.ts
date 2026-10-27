@@ -1,6 +1,7 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { AUTO_MODEL, isAutoModel } from "@/auto-routing/router";
 import config from "@/config";
 import {
   LlmProviderApiKeyModel,
@@ -56,6 +57,7 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       assertModelPoolsEnabled();
       await assertValidMembers({ organizationId, input: body });
       await assertValidVirtualApiKeys({ organizationId, input: body });
+      assertNameNotReserved(body);
       await assertNameHasNoOtherPool({ organizationId, input: body });
       return reply.send(
         await ModelPoolModel.create({ organizationId, input: body }),
@@ -79,6 +81,7 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       assertModelPoolsEnabled();
       await assertValidMembers({ organizationId, input: body });
       await assertValidVirtualApiKeys({ organizationId, input: body });
+      assertNameNotReserved(body);
       await assertNameHasNoOtherPool({
         organizationId,
         input: body,
@@ -121,6 +124,16 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 function assertModelPoolsEnabled(): void {
   if (!config.llmProxy.modelPoolsEnabled) {
     throw new ApiError(404, "Not found");
+  }
+}
+
+/** "auto" names the Model Router's auto routing alias, which a pool must not shadow. */
+function assertNameNotReserved(input: ModelPoolInput): void {
+  if (isAutoModel(input.name)) {
+    throw new ApiError(
+      400,
+      `"${AUTO_MODEL}" is reserved for auto routing. Pick another pool name.`,
+    );
   }
 }
 

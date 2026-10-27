@@ -20,6 +20,7 @@
  */
 import { randomInt } from "node:crypto";
 import { coreVersion, decide } from "@archestra/router-rs";
+import { SESSION_ID_HEADER } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import { z } from "zod";
 import config from "@/config";
@@ -86,11 +87,17 @@ type PlannedDecision = z.infer<typeof DecisionSchema>;
 const RouterPolicySchema = z.object({ lam_star: z.number(), q: z.number() });
 type RouterPolicy = z.infer<typeof RouterPolicySchema>;
 
-function isAutoModel(model: string): boolean {
+export function isAutoModel(model: string): boolean {
   return model.trim() === AUTO_MODEL;
 }
 
+const StoredResponseContinuationSchema = z.object({
+  previous_response_id: z.string().min(1),
+});
+
 type AutoModelResolution =
+  /** Not an "auto" request, or auto routing is off: the model as named. */
+  | { kind: "as_requested"; model: string }
   | { kind: "routed"; model: string }
   /** The caller is over a usage limit; nothing was scored. */
   | { kind: "usage_limited"; violation: LimitViolationResponse };
@@ -113,7 +120,7 @@ export async function resolveAutoModel(params: {
 }): Promise<AutoModelResolution> {
   const { request, auth, endpoint, body } = params;
   if (!config.autoRouting.enabled || !isAutoModel(params.requestedModel)) {
-    return { kind: "routed", model: params.requestedModel };
+    return { kind: "as_requested", model: params.requestedModel };
   }
   const { settings, trio } = await loadEnabledTrio(auth.organizationId);
   const tiers = requireEligible(await checkTrio({ auth, endpoint, trio }));
@@ -127,6 +134,19 @@ export async function resolveAutoModel(params: {
     source: "model_router",
     ordinarySession: metadata,
   });
+  // Without a session id the tier is keyed on the opening text, which a
+  // continuation may not carry: it could land on a provider that does not
+  // hold the response it continues.
+  if (
+    !sessionId &&
+    endpoint === "responses" &&
+    StoredResponseContinuationSchema.safeParse(body).success
+  ) {
+    throw new ApiError(
+      400,
+      `"${AUTO_MODEL}" cannot continue previous_response_id without a session id. Send the same ${SESSION_ID_HEADER} header on every turn of an auto conversation.`,
+    );
+  }
   const text = firstUserText(endpoint, body);
   const sessionKey = RoutingDecisionModel.sessionKey({
     sessionId,
@@ -214,11 +234,74 @@ export function assertNotAutoOnNativeRoute(model: string): void {
   }
 }
 
+/** The tier a scored session gets from the active plan; null `plan` unless planned. */
+type TierSelection = {
+  reason: Exclude<RoutingDecisionReason, "scorer_error">;
+  tier: TierIndex;
+  propensity: number;
+  plan: RoutingPlan | null;
+  decision: PlannedDecision | null;
+  /** The plan cannot route this trio or these features: it needs a re-fit. */
+  replan: boolean;
+};
+
+/**
+ * The plan-selection policy shared by serving and preview, without side
+ * effects: a plan of another scorer version cold-starts; one fitted for
+ * another trio, or that cannot route `features`, falls back as stale.
+ */
+export function selectTier(params: {
+  active: RoutingPlan | null;
+  scorerVersionId: string;
+  trio: Trio;
+  features: RoutingDecisionFeatures;
+  u: number;
+}): TierSelection {
+  const fallback = (reason: TierSelection["reason"], replan: boolean) => ({
+    reason,
+    tier: NORMAL_TIER,
+    propensity: 1,
+    plan: null,
+    decision: null,
+    replan,
+  });
+  const plan = servingPlan(params.active, params.scorerVersionId);
+  if (plan === null) return fallback("cold_start", false);
+  if (!fingerprintMatches(plan.tiersFingerprint, params.trio))
+    return fallback("plan_stale", true);
+  const decision = decidePlanned(plan, params.features, params.u);
+  if (decision === null) return fallback("plan_stale", true);
+  return {
+    reason: "planned",
+    tier: decision.tier_index,
+    propensity: decision.propensity,
+    plan,
+    decision,
+    replan: false,
+  };
+}
+
+/** Uniform on [0, 1) from the CSPRNG, at `randomInt`'s full 48-bit range. */
+export function uniform(): number {
+  const range = 2 ** 48 - 1;
+  return randomInt(range) / range;
+}
+
+// === Internal ===
+
+/** A plan fitted on another scorer's features cannot read these. */
+function servingPlan(
+  active: RoutingPlan | null,
+  scorerVersionId: string,
+): RoutingPlan | null {
+  return active?.scorerVersionId === scorerVersionId ? active : null;
+}
+
 /**
  * `decide` against `plan` with the plan's own policy; null when the plan
  * cannot route these features.
  */
-export function decidePlanned(
+function decidePlanned(
   plan: RoutingPlan,
   features: RoutingDecisionFeatures,
   u: number,
@@ -242,14 +325,6 @@ export function decidePlanned(
     return null;
   }
 }
-
-/** Uniform on [0, 1) from the CSPRNG, at `randomInt`'s full 48-bit range. */
-export function uniform(): number {
-  const range = 2 ** 48 - 1;
-  return randomInt(range) / range;
-}
-
-// === Internal ===
 
 /** The plan's LP optimum (λ*, q): the policy sessions route with until online pacing supplies λ_t. */
 function anchorPolicy(plan: RoutingPlan): RouterPolicy {
@@ -416,13 +491,7 @@ async function decideSession(
     );
   }
   const active = await routingPlanCache.findActive(organizationId);
-  // A plan fitted on another scorer's features cannot read these.
-  const plan =
-    active?.scorerVersionId === scored.scorerVersionId ? active : null;
   const u = uniform();
-  const usable =
-    plan !== null && fingerprintMatches(plan.tiersFingerprint, trio);
-  if (plan && !usable) await requestReplan(params.settings, organizationId);
 
   const routed = (
     reason: RoutingDecisionReason,
@@ -452,22 +521,29 @@ async function decideSession(
     expectedCostUsd: planned?.expected_cost_usd.toFixed(10) ?? null,
   });
 
-  if (plan === null) return routed("cold_start", NORMAL_TIER, 1, null);
-  // scorer_error keeps the serving plan as provenance, stale or not.
-  if (scored.kind === "failed")
+  if (scored.kind === "failed") {
+    const plan = servingPlan(active, scored.scorerVersionId);
+    if (plan === null) return routed("cold_start", NORMAL_TIER, 1, null);
+    if (!fingerprintMatches(plan.tiersFingerprint, trio))
+      await requestReplan(params.settings, organizationId);
+    // scorer_error keeps the serving plan as provenance, stale or not.
     return routed("scorer_error", NORMAL_TIER, 1, plan);
-  if (!usable) return routed("plan_stale", NORMAL_TIER, 1, null);
-  const decision = decidePlanned(plan, scored.features, u);
-  if (decision)
-    return routed(
-      "planned",
-      decision.tier_index,
-      decision.propensity,
-      plan,
-      decision,
-    );
-  await requestReplan(params.settings, organizationId);
-  return routed("plan_stale", NORMAL_TIER, 1, null);
+  }
+  const selection = selectTier({
+    active,
+    scorerVersionId: scored.scorerVersionId,
+    trio,
+    features: scored.features,
+    u,
+  });
+  if (selection.replan) await requestReplan(params.settings, organizationId);
+  return routed(
+    selection.reason,
+    selection.tier,
+    selection.propensity,
+    selection.plan,
+    selection.decision,
+  );
 }
 
 async function scoreSession(

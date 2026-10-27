@@ -22,6 +22,7 @@ import {
   LimitModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  ModelPoolModel,
   VirtualApiKeyModel,
 } from "@/models";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
@@ -451,6 +452,73 @@ describe("Model Router auto model", () => {
     expect(rows).toEqual([
       { sessionId: decision.sessionKey, sessionSource: "auto_routing" },
     ]);
+  });
+
+  test("a Responses continuation without a session id is refused before routing", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await setupOrganization({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    await publishPlan(org);
+    const continuation = {
+      ingress: "responses",
+      path: "responses",
+      extra: { previous_response_id: "resp-earlier" },
+    } as const;
+
+    const unnamed = await send(org, { ...continuation, session: null });
+    const named = await send(org, { ...continuation, session: "s-1" });
+
+    expect(unnamed.statusCode, unnamed.body).toBe(400);
+    expect(named.statusCode, named.body).toBe(200);
+    expect(upstreamModels).toEqual([org.trio[2].modelId]);
+    expect(await decisions(org.organizationId)).toHaveLength(1);
+  });
+
+  test("auto wins over a model pool of the same name", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    config.llmProxy.modelPoolsEnabled = true;
+    const org = await setupOrganization({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    await publishPlan(org);
+    // Pools named "auto" are refused on create; one may predate the alias.
+    await ModelPoolModel.create({
+      organizationId: org.organizationId,
+      input: {
+        name: "auto",
+        members: [
+          {
+            providerApiKeyId: org.providerApiKeyId,
+            modelId: "pool-member",
+            priority: 1,
+            weight: 1,
+            enabled: true,
+          },
+        ],
+        virtualApiKeyIds: [],
+      },
+    });
+
+    const response = await send(org, {
+      ingress: "chat",
+      path: "chat/completions",
+      session: "s-1",
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(upstreamModels).toEqual([org.trio[2].modelId]);
+    expect(await decisions(org.organizationId)).toHaveLength(1);
   });
 
   test("a plan fitted by the plan fit routes the next session as planned", async ({
@@ -1063,6 +1131,7 @@ async function send(
     session: string | null;
     prompt?: string;
     messages?: { role: string; content: string }[];
+    extra?: Record<string, unknown>;
   },
 ) {
   const app = createApp();
@@ -1077,10 +1146,11 @@ async function send(
       authorization: `Bearer ${org.credential}`,
       ...(params.session ? { "x-archestra-session-id": params.session } : {}),
     },
-    payload:
-      params.ingress === "chat"
-        ? { model: "auto", messages }
-        : { model: "auto", input: messages },
+    payload: {
+      model: "auto",
+      ...(params.ingress === "chat" ? { messages } : { input: messages }),
+      ...params.extra,
+    },
   });
 }
 

@@ -1,5 +1,5 @@
 ---
-title: Performance & Latency
+title: LLM Proxy and MCP Gateway
 description: Compare Archestra and LiteLLM latency and requests per second on the same hardware.
 order: 5
 lastUpdated: 2026-10-27

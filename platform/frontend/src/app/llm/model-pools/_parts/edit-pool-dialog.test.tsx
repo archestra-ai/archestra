@@ -84,11 +84,7 @@ describe("EditPoolDialog", () => {
       data: [saved],
     } as unknown as ReturnType<typeof useModelPools>);
     const { rerender } = render(
-      <EditPoolDialog
-        pool={saved}
-        onOpenChange={() => {}}
-        onConnect={() => {}}
-      />,
+      <EditPoolDialog pool={saved} onOpenChange={() => {}} />,
     );
 
     const weight = screen.getAllByRole("spinbutton", { name: /Weight/ })[0];
@@ -100,13 +96,7 @@ describe("EditPoolDialog", () => {
     vi.mocked(useModelPools).mockReturnValue({
       data: [refetched],
     } as unknown as ReturnType<typeof useModelPools>);
-    rerender(
-      <EditPoolDialog
-        pool={refetched}
-        onOpenChange={() => {}}
-        onConnect={() => {}}
-      />,
-    );
+    rerender(<EditPoolDialog pool={refetched} onOpenChange={() => {}} />);
 
     expect(
       screen.getAllByRole("spinbutton", { name: /Weight/ })[0],
@@ -125,13 +115,7 @@ describe("EditPoolDialog", () => {
     vi.mocked(useModelPools).mockReturnValue({
       data: [saved],
     } as unknown as ReturnType<typeof useModelPools>);
-    render(
-      <EditPoolDialog
-        pool={saved}
-        onOpenChange={() => {}}
-        onConnect={() => {}}
-      />,
-    );
+    render(<EditPoolDialog pool={saved} onOpenChange={() => {}} />);
     const input = screen.getAllByRole("spinbutton", {
       name: new RegExp(field),
     })[0];
@@ -148,13 +132,7 @@ describe("EditPoolDialog", () => {
       data: [saved],
     } as unknown as ReturnType<typeof useModelPools>);
     const onOpenChange = vi.fn();
-    render(
-      <EditPoolDialog
-        pool={saved}
-        onOpenChange={onOpenChange}
-        onConnect={() => {}}
-      />,
-    );
+    render(<EditPoolDialog pool={saved} onOpenChange={onOpenChange} />);
     const weight = screen.getAllByRole("spinbutton", { name: /Weight/ })[0];
     await user.clear(weight);
     await user.type(weight, "5");

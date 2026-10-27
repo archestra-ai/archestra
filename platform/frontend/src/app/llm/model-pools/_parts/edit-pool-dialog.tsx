@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Plug } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
@@ -30,11 +30,9 @@ import {
 export function EditPoolDialog({
   pool,
   onOpenChange,
-  onConnect,
 }: {
   pool: ModelPool;
   onOpenChange: (open: boolean) => void;
-  onConnect: () => void;
 }) {
   const { data: canEdit } = useHasPermissions({ llmModel: ["update"] });
   const disabled = !canEdit;
@@ -81,17 +79,6 @@ export function EditPoolDialog({
           <FailoverNote />
         </DialogBody>
         <DialogStickyFooter className="mt-0">
-          {isDirty ? null : (
-            <Button
-              type="button"
-              variant="ghost"
-              className="mr-auto"
-              onClick={onConnect}
-            >
-              <Plug />
-              <span>Connect</span>
-            </Button>
-          )}
           <DialogCancelButton>Cancel</DialogCancelButton>
           <Button
             type="submit"

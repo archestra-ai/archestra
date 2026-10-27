@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { runBulkAction } from "@/lib/bulk-action";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 const { getModelPools, createModelPool, updateModelPool, deleteModelPool } =
@@ -81,6 +82,28 @@ export function useDeleteModelPool() {
     },
     onSuccess: () => {
       toast.success("Model pool deleted");
+      queryClient.invalidateQueries({ queryKey: MODEL_POOLS_QUERY_KEY });
+    },
+  });
+}
+
+/**
+ * Deletes several pools. There is no bulk pool endpoint, so this fans out over
+ * the per-pool route and reports one outcome instead of a toast per pool.
+ */
+export function useBulkDeleteModelPools() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (pools: readonly ModelPool[]) =>
+      runBulkAction({
+        items: pools,
+        describe: (pool) => pool.name,
+        run: async (pool) => {
+          const { error } = await deleteModelPool({ path: { id: pool.id } });
+          throwOnApiError(error, { toastOnError: false });
+        },
+      }),
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: MODEL_POOLS_QUERY_KEY });
     },
   });

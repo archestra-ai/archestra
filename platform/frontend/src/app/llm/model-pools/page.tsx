@@ -5,7 +5,7 @@ import {
   isModelPoolProvider,
   type SupportedProvider,
 } from "@archestra/shared";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { Layers, Pencil, Plug, Plus, Server, Trash2 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -30,16 +30,22 @@ import {
   TableCardViewToggle,
 } from "@/components/table-card-view";
 import { TableRowActions } from "@/components/table-row-actions";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { reportBulkOutcome } from "@/lib/bulk-action";
+import { useBulkRangeSelectionController } from "@/lib/bulk-range-selection-context";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
   type ModelPool,
+  useBulkDeleteModelPools,
   useDeleteModelPool,
   useModelPools,
 } from "@/lib/model-pools.query";
@@ -99,6 +105,10 @@ function ModelPools() {
   const [deleting, setDeleting] = useState<ModelPool | null>(null);
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
   const deletePool = useDeleteModelPool();
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const bulkDelete = useBulkDeleteModelPools();
+  const clearSelection = useCallback(() => setRowSelection({}), []);
   const providerCatalog = useModelProviderCatalog();
 
   const { data: canReadProviders } = useHasPermissions({
@@ -137,6 +147,16 @@ function ModelPools() {
     ...new Set(pools.flatMap((pool) => pool.members.map((m) => m.provider))),
   ].sort();
   const editing = pools.find((pool) => pool.id === editingId) ?? null;
+  const rangeSelection = useBulkRangeSelectionController();
+  const cardSelection = useBulkCardSelection({
+    rows: visible,
+    getRowId: (pool) => pool.id,
+    rowSelection,
+    setRowSelection,
+    rangeSelection,
+  });
+  // Only what the filters show, so a delete never takes a pool out of sight.
+  const selected = visible.filter((pool) => rowSelection[pool.id]);
 
   const rowActions = (pool: ModelPool) => (
     <TableRowActions
@@ -167,6 +187,10 @@ function ModelPools() {
   );
 
   const columns: ColumnDef<ModelPool>[] = [
+    createSelectColumn<ModelPool>({
+      rowLabel: (row) => `Select ${row.name}`,
+      allLabel: "Select all pools",
+    }),
     {
       id: "name",
       accessorKey: "name",
@@ -189,7 +213,7 @@ function ModelPools() {
     {
       id: "members",
       header: "Members",
-      size: 180,
+      size: 140,
       cell: ({ row }) => (
         <span className="text-sm">{memberSummary(row.original)}</span>
       ),
@@ -203,7 +227,6 @@ function ModelPools() {
     {
       id: "actions",
       header: "Actions",
-      size: 100,
       cell: ({ row }) => rowActions(row.original),
     },
   ];
@@ -296,6 +319,23 @@ function ModelPools() {
             </FilterBar>
           </CollectionFilters>
 
+          <BulkActions
+            count={selected.length}
+            noun="pool"
+            onClear={clearSelection}
+            busy={bulkDelete.isPending}
+          >
+            <PermissionButton
+              permissions={{ llmModel: ["update"] }}
+              variant="destructive"
+              size="sm"
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Delete</span>
+            </PermissionButton>
+          </BulkActions>
+
           <TableCardViewContent
             cards={
               <TableCardList
@@ -316,6 +356,8 @@ function ModelPools() {
                     onNavigate={() => setEditingId(pool.id)}
                     actions={rowActions(pool)}
                     footer={<PoolHealth pool={pool} />}
+                    {...cardSelection(pool)}
+                    selectionLabel={`Select ${pool.name}`}
                   >
                     <dl className="grid grid-cols-[4.5rem_1fr] gap-x-3 gap-y-1 text-xs">
                       <dt className="text-muted-foreground">Members</dt>
@@ -330,8 +372,17 @@ function ModelPools() {
             table={
               <DataTable
                 columns={columns}
+                flexibleColumnIds={["name"]}
+                fixedWidthColumnIds={["members", "status"]}
+                // The name cell already lists the providers, so a narrow
+                // window drops the member count first.
+                columnDropOrder={["members"]}
                 data={visible}
                 getRowId={(row) => row.id}
+                rowSelection={rowSelection}
+                onRowSelectionChange={setRowSelection}
+                rangeSelection={rangeSelection}
+                hideSelectedCount
                 onRowClick={(row) => setEditingId(row.id)}
                 isLoading={query.isLoading}
                 hasActiveFilters={hasActiveFilters}
@@ -370,10 +421,6 @@ function ModelPools() {
           onOpenChange={(open) => {
             if (!open) setEditingId(null);
           }}
-          onConnect={() => {
-            setEditingId(null);
-            setConnecting({ pool: editing, ready: false });
-          }}
         />
       ) : null}
       {connecting ? (
@@ -404,6 +451,32 @@ function ModelPools() {
             onSuccess: () => setDeleting(null),
           });
         }}
+      />
+      <DeleteConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title="Delete model pools"
+        description={`Delete ${selected.length} ${
+          selected.length === 1 ? "pool" : "pools"
+        }? Requests for their names go back to the caller's own key.`}
+        isPending={bulkDelete.isPending}
+        onConfirm={() => {
+          bulkDelete.mutate(selected, {
+            onSuccess: (outcome) => {
+              reportBulkOutcome({
+                outcome,
+                verb: "Deleted",
+                failureVerb: "delete",
+                noun: "pool",
+              });
+              setBulkDeleteOpen(false);
+              // Pools that failed stay ticked so the delete can be retried.
+              if (outcome.failed.length === 0) clearSelection();
+            },
+          });
+        }}
+        confirmLabel="Delete pools"
+        pendingLabel="Deleting..."
       />
     </PageLayout>
   );

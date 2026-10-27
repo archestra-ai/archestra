@@ -145,10 +145,11 @@ export async function fetchOpenAiModels(
     if (!media && !isChatModelId(model.id)) {
       return [];
     }
+    const capabilities = media ?? openAiSearchCapabilities(model.id);
     return [
       {
         ...mapOpenAiModelToModelInfo(model),
-        ...(media ? { capabilities: media } : {}),
+        ...(capabilities ? { capabilities } : {}),
         ...(pricing.has(model.id)
           ? { providerPricing: pricing.get(model.id) }
           : {}),
@@ -176,6 +177,16 @@ function openAiMediaCapabilities(id: string): FetchedModelCapabilities | null {
     return mediaCapabilities(["audio"], ["text"]);
   }
   return null;
+}
+
+/**
+ * Search models answer chat turns but reject function tools ("tools is not
+ * supported in this model"), so chat sends them none.
+ */
+function openAiSearchCapabilities(id: string): FetchedModelCapabilities | null {
+  return /-search-(?:preview|api)(?:-|$)/i.test(id)
+    ? { supportsToolCalling: false }
+    : null;
 }
 
 function mediaCapabilities(

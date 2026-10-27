@@ -764,7 +764,7 @@ function inferEmbeddingDimensions(
   const id = modelId.toLowerCase();
   if (
     (provider === "openai" || provider === "azure") &&
-    id === "text-embedding-3-small"
+    (id === "text-embedding-3-small" || id === "text-embedding-ada-002")
   ) {
     return 1536;
   }

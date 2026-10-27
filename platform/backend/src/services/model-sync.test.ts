@@ -290,6 +290,8 @@ describe("ModelSyncService", () => {
             "gpt-live-transcribe",
             "gpt-realtime-2.1",
             "omni-moderation-latest",
+            "gpt-4o-search-preview",
+            "text-embedding-ada-002",
             "davinci-002",
           ].map((id) => ({
             id,
@@ -315,10 +317,12 @@ describe("ModelSyncService", () => {
     expect([...byId.keys()].sort()).toEqual([
       "gpt-4o",
       "gpt-4o-mini-tts",
+      "gpt-4o-search-preview",
       "gpt-4o-transcribe",
       "gpt-image-1",
       "gpt-live-transcribe",
       "gpt-transcribe",
+      "text-embedding-ada-002",
       "tts-1",
       "whisper-1",
     ]);
@@ -327,10 +331,14 @@ describe("ModelSyncService", () => {
     // Transcription ids pass the chat-name filter, so they used to sync as chat.
     expect(byId.get("gpt-4o-transcribe")?.inputModalities).toEqual(["audio"]);
     expect(byId.get("gpt-transcribe")?.inputModalities).toEqual(["audio"]);
+    // OpenAI rejects function tools on search models, so chat must send none.
+    expect(byId.get("gpt-4o-search-preview")?.supportsToolCalling).toBe(false);
+    expect(byId.get("text-embedding-ada-002")?.embeddingDimensions).toBe(1536);
     const chatModels = rows
       .filter(({ model }) => ModelModel.supportsTextChat(model))
-      .map(({ model }) => model.modelId);
-    expect(chatModels).toEqual(["gpt-4o"]);
+      .map(({ model }) => model.modelId)
+      .sort();
+    expect(chatModels).toEqual(["gpt-4o", "gpt-4o-search-preview"]);
 
     await expect(
       resolveModelRoute({

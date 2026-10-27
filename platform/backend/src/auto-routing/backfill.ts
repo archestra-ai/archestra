@@ -473,6 +473,15 @@ async function complete(
 ) {
   const finished = await withDbTransaction(async (tx) => {
     if (!(await RoutingBackfillModel.lockOwned(lease, tx))) return false;
+    if (backfill.scorerVersionId) {
+      await RoutingHistoryModel.failExhausted(
+        {
+          organizationId: backfill.organizationId,
+          scorerVersionId: backfill.scorerVersionId,
+        },
+        tx,
+      );
+    }
     const fitGeneration = await AutoRoutingSettingsModel.bumpGeneration(
       backfill.organizationId,
       tx,
@@ -533,10 +542,25 @@ async function scoreSession(params: {
   let reading: Reading;
   let stored: boolean;
   try {
-    const reservation = await RoutingBackfillModel.reserve({
-      lease,
-      minAmount: SCORER_CALL_RESERVATION_USD,
-      maxAttempts: params.maxAttempts,
+    const key = { historySessionId: session.id, scorerVersionId };
+    // The session's attempt is counted with the reservation, so however the
+    // reading's commit fails the session is paid a bounded number of times.
+    const reservation = await withDbTransaction(async (tx) => {
+      const reserved = await RoutingBackfillModel.reserve(
+        {
+          lease,
+          minAmount: SCORER_CALL_RESERVATION_USD,
+          maxAttempts: params.maxAttempts,
+        },
+        tx,
+      );
+      if (
+        reserved.kind === "reserved" &&
+        !(await RoutingHistoryModel.takeAttempt(key, tx))
+      ) {
+        throw new Error(`History session ${session.id} has no attempt left`);
+      }
+      return reserved;
     });
     if (reservation.kind !== "reserved") return reservation.kind;
     let reserved = reservation.amount;
@@ -570,16 +594,21 @@ async function scoreSession(params: {
       });
       reserved = spent;
     }
-    // One commit: if it fails, the next claim books the reservation as spent and the session may be paid once more.
+    // One commit: if it fails, the next claim books the reservation as spent.
     stored = await withDbTransaction(async (tx) => {
       await RoutingBackfillModel.settle({ lease, reserved, spent }, tx);
       if (!(await RoutingBackfillModel.lockOwned(lease, tx))) return false;
+      if (
+        reading.kind === "error" &&
+        reading.error.reason === "no_credentials"
+      ) {
+        await RoutingHistoryModel.refundAttempt(key, tx);
+      }
       const status = readingStatus(reading);
       if (status) {
         await RoutingHistoryModel.recordScore(
           {
-            historySessionId: session.id,
-            scorerVersionId,
+            ...key,
             status,
             features:
               reading.kind === "read"

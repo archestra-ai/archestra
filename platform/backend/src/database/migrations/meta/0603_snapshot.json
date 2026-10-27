@@ -1,5 +1,5 @@
 {
-  "id": "e16e6894-b7f2-4b90-aced-7c2ad5e9e0bd",
+  "id": "b6d51ed6-ca5d-4e58-bd0d-981cc469c2a6",
   "prevId": "4b3388ce-99a7-4717-89ab-4fb3ae64c453",
   "version": "7",
   "dialect": "postgresql",
@@ -23713,6 +23713,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "scorer_cost": {
           "name": "scorer_cost",
           "type": "numeric(13, 10)",
@@ -23770,7 +23777,7 @@
       "checkConstraints": {
         "routing_history_scores_status_check": {
           "name": "routing_history_scores_status_check",
-          "value": "\"routing_history_scores\".\"status\" IN ('scored', 'no_text', 'failed')"
+          "value": "\"routing_history_scores\".\"status\" IN ('pending', 'scored', 'no_text', 'failed')"
         },
         "routing_history_scores_features_check": {
           "name": "routing_history_scores_features_check",

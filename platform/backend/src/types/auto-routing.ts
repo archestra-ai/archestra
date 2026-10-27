@@ -246,10 +246,12 @@ export type RoutingBackfillBreakdown = z.infer<
 >;
 
 export const RoutingHistoryScoreStatusSchema = z.enum([
+  /** A paid call is under way or its reading did not land; read again until the attempts run out. */
+  "pending",
   "scored",
   /** No opening text to score: withheld, encrypted, a delta suffix, or no main turn. */
   "no_text",
-  /** The scorer answered something unusable; not retried for this version. */
+  /** The scorer answered something unusable, or every paid attempt was spent; not retried for this version. */
   "failed",
 ]);
 export type RoutingHistoryScoreStatus = z.infer<

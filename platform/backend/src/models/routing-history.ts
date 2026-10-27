@@ -2,7 +2,7 @@ import {
   CLAUDE_CODE_HEADER_SESSION_SOURCE,
   OPENCODE_FAMILY_SESSION_SOURCES,
 } from "@archestra/shared";
-import { and, asc, eq, notExists, type SQL, sql } from "drizzle-orm";
+import { and, asc, eq, type SQL, sql } from "drizzle-orm";
 import { readInteractionRow } from "@/content-encryption/audit-rows";
 import db, { schema, type Transaction } from "@/database";
 import type { SessionSource } from "@/routes/proxy/utils/headers/session-id";
@@ -42,6 +42,13 @@ const STATEMENT_TIMEOUT_MS = 20_000;
 /** Rows of a session read per page while looking for its opening main turn. */
 const OPENING_PAGE_ROWS = 20;
 const PURGE_BATCH_SIZE = 5000;
+/** Paid scorer calls a session may take per scorer version before it counts as failed. */
+const MAX_PAID_ATTEMPTS = 2;
+/** Whether the reading `alias` is still to be taken: pending, with attempts left. */
+const retryable = (alias: string) =>
+  sql.raw(
+    `(${alias}.status = 'pending' and ${alias}.attempts < ${MAX_PAID_ATTEMPTS})`,
+  );
 
 /** One eligible interaction of a scan batch, scalars only. */
 type ScanRow = {
@@ -250,9 +257,9 @@ class RoutingHistoryModel {
   }
 
   /**
-   * The sample's sessions without a reading by the scorer version, in
-   * sample order. The sample is the `maxSessions` lowest-ranked sessions of
-   * the population: the same sessions on every run and replica.
+   * The sample's sessions the scorer version has still to read, in sample
+   * order. The sample is the `maxSessions` lowest-ranked sessions of the
+   * population: the same sessions on every run and replica.
    */
   static async nextToScore(
     params: SampleParams & { limit: number },
@@ -263,17 +270,11 @@ class RoutingHistoryModel {
       .where(
         and(
           sql`${sessions.id} in (select sampled.id from (${sample(params)}) sampled)`,
-          notExists(
-            db
-              .select({ one: sql`1` })
-              .from(scores)
-              .where(
-                and(
-                  eq(scores.historySessionId, sessions.id),
-                  eq(scores.scorerVersionId, params.scorerVersionId),
-                ),
-              ),
-          ),
+          sql`not exists (
+            select 1 from routing_history_scores sc
+            where sc.history_session_id = ${sessions.id}
+              and sc.scorer_version_id = ${params.scorerVersionId}
+              and not ${retryable("sc")})`,
         ),
       )
       .orderBy(asc(sessions.sampleRank), asc(sessions.id))
@@ -293,7 +294,7 @@ class RoutingHistoryModel {
       select count(*)::int as sample,
         count(*) filter (where sc.status = 'scored')::int as scored,
         count(*) filter (where sc.status = 'no_text')::int as no_text,
-        count(*) filter (where sc.status = 'failed')::int as failed
+        count(*) filter (where sc.status = 'failed' or (sc.status = 'pending' and not ${retryable("sc")}))::int as failed
       from sample s
       left join routing_history_scores sc
         on sc.history_session_id = s.id and sc.scorer_version_id = ${params.scorerVersionId}`);
@@ -365,23 +366,68 @@ class RoutingHistoryModel {
     return { rows, last: rows.length < OPENING_PAGE_ROWS };
   }
 
+  /**
+   * Counts one paid call for the session, committed with its reservation.
+   * False when the session has no attempt left.
+   */
+  static async takeAttempt(key: ScoreKey, tx: Transaction): Promise<boolean> {
+    const rows = await tx
+      .insert(scores)
+      .values({ ...key, status: "pending", attempts: 1 })
+      .onConflictDoUpdate({
+        target: [scores.historySessionId, scores.scorerVersionId],
+        set: { attempts: sql`${scores.attempts} + 1` },
+        setWhere: sql`${scores.status} = 'pending' and ${scores.attempts} < ${MAX_PAID_ATTEMPTS}`,
+      })
+      .returning({ attempts: scores.attempts });
+    return rows.length > 0;
+  }
+
+  /** Gives back an attempt whose call was never sent. */
+  static async refundAttempt(key: ScoreKey, tx: Transaction): Promise<void> {
+    await tx
+      .update(scores)
+      .set({ attempts: sql`${scores.attempts} - 1` })
+      .where(
+        and(
+          eq(scores.historySessionId, key.historySessionId),
+          eq(scores.scorerVersionId, key.scorerVersionId),
+          eq(scores.status, "pending"),
+        ),
+      );
+  }
+
+  /** Settles a reading; a session already settled keeps its reading. */
   static async recordScore(
-    values: {
-      historySessionId: string;
-      scorerVersionId: string;
-      status: RoutingHistoryScoreStatus;
+    values: ScoreKey & {
+      status: Exclude<RoutingHistoryScoreStatus, "pending">;
       features: RoutingDecisionFeatures | null;
       scorerCost: number | null;
     },
     tx: Transaction,
   ): Promise<void> {
+    const scorerCost = values.scorerCost?.toFixed(10) ?? null;
     await tx
       .insert(scores)
-      .values({
-        ...values,
-        scorerCost: values.scorerCost?.toFixed(10) ?? null,
-      })
-      .onConflictDoNothing();
+      .values({ ...values, scorerCost })
+      .onConflictDoUpdate({
+        target: [scores.historySessionId, scores.scorerVersionId],
+        set: { status: values.status, features: values.features, scorerCost },
+        setWhere: sql`${scores.status} = 'pending'`,
+      });
+  }
+
+  /** Settles the organization's sessions whose attempts ran out as failed. */
+  static async failExhausted(
+    params: { organizationId: string; scorerVersionId: string },
+    tx: Transaction,
+  ): Promise<void> {
+    await tx.execute(sql`
+      update routing_history_scores sc set status = 'failed'
+      from routing_history_sessions s
+      where s.id = sc.history_session_id and s.organization_id = ${params.organizationId}
+        and sc.scorer_version_id = ${params.scorerVersionId}
+        and sc.status = 'pending' and not ${retryable("sc")}`);
   }
 
   /**
@@ -432,7 +478,7 @@ class RoutingHistoryModel {
       l_output: string;
     }>(sql`
       with frame as (
-        select s.id, s.sample_rank, s.started_at, s.total_tokens, sc.status, sc.features
+        select s.id, s.sample_rank, s.started_at, s.total_tokens, sc.status, sc.attempts, sc.features
         from routing_history_sessions s
         left join routing_history_scores sc
           on sc.history_session_id = s.id and sc.scorer_version_id = ${params.scorerVersionId}
@@ -444,7 +490,8 @@ class RoutingHistoryModel {
         })}
       ),
       gap as (
-        select sample_rank, id from frame where status is null
+        select sample_rank, id from frame
+        where status is null or ${retryable("frame")}
         order by sample_rank, id limit 1
       ),
       sample as (
@@ -580,6 +627,8 @@ export type PastWindow = {
   /** Scored sessions of the sample, with usage. */
   scored: number;
 };
+
+type ScoreKey = { historySessionId: string; scorerVersionId: string };
 
 type SampleParams = {
   organizationId: string;

@@ -887,8 +887,8 @@ describe("auto routing backfill", () => {
     expect(await costs()).toEqual({ spent: 0.007, reserved: 0 });
   });
 
-  test("a reading whose commit fails is paid at most once more, and its cost is never under-counted", async () => {
-    await sessions(1);
+  test("a session whose reading never commits is paid at most twice, then counts as failed", async () => {
+    const keys = await sessions(10);
     await scan();
     await startScoring();
     answerJev({ costUsd: 0.005 });
@@ -896,29 +896,49 @@ describe("auto routing backfill", () => {
       create function fail_history_score() returns trigger language plpgsql
       as $$ begin raise exception 'score commit failed'; end $$`);
     await db.execute(sql`
-      create trigger fail_history_score before insert on routing_history_scores
-      for each row execute function fail_history_score()`);
+      create trigger fail_history_score before insert or update on routing_history_scores
+      for each row when (new.status <> 'pending') execute function fail_history_score()`);
+    try {
+      await runBackfill();
+      await runBackfill();
+    } finally {
+      await db.execute(
+        sql`drop trigger fail_history_score on routing_history_scores`,
+      );
+      await db.execute(sql`drop function fail_history_score`);
+    }
+    for (let run = 0; run < 3; run++) await runBackfill();
 
-    await runBackfill();
-    const [stranded] = await db
+    const calls = new Map<string, number>();
+    for (const prompt of prompts) {
+      calls.set(prompt, (calls.get(prompt) ?? 0) + 1);
+    }
+    const byStatus = await readings();
+    const paidTwice = keys.filter(
+      (_, i) => calls.get(`Task number ${i}`) === 2,
+    );
+    expect(Math.max(...calls.values())).toBe(2);
+    expect(paidTwice.length).toBeGreaterThan(0);
+    expect(keys.filter((key) => byStatus[key] === "failed").sort()).toEqual(
+      paidTwice.sort(),
+    );
+    expect(
+      keys
+        .filter((key) => byStatus[key] !== "failed")
+        .map((key) => byStatus[key]),
+    ).toEqual(Array(keys.length - paidTwice.length).fill("scored"));
+
+    const { backfill } = await describeBackfill(organizationId);
+    expect(backfill).toMatchObject({
+      status: "done",
+      progress: { sample: 10, failed: paidTwice.length },
+    });
+    const [row] = await db
       .select()
       .from(schema.routingBackfillsTable)
       .where(eq(schema.routingBackfillsTable.organizationId, organizationId));
-    expect(
-      Number(stranded.spentCostUsd) + Number(stranded.reservedCostUsd),
-    ).toBeGreaterThanOrEqual(0.005 * prompts.length);
-
-    await db.execute(
-      sql`drop trigger fail_history_score on routing_history_scores`,
-    );
-    await runBackfill();
-
-    const { backfill } = await describeBackfill(organizationId);
-    expect(backfill).toMatchObject({ status: "done", progress: { scored: 1 } });
-    expect(prompts.length).toBeLessThanOrEqual(2);
-    expect(backfill?.spentCostUsd).toBeGreaterThanOrEqual(
-      0.005 * prompts.length,
-    );
+    expect(Number(row.reservedCostUsd)).toBe(0);
+    expect(Number(row.spentCostUsd)).toBeCloseTo(0.005 * prompts.length, 6);
   });
 
   describe("the fit a completed backfill requested always ends", () => {

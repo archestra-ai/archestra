@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  integer,
   jsonb,
   numeric,
   pgTable,
@@ -16,7 +17,11 @@ import type {
 import routingHistorySessionsTable from "./routing-history-session";
 import routingScorerVersionsTable from "./routing-scorer-version";
 
-/** A history session's reading by one scorer version; `features` only when scored. */
+/**
+ * A history session's reading by one scorer version; `features` only when
+ * scored. `attempts` counts the paid calls taken for it, each committed
+ * before its call, so a reading whose commit failed is not paid for unboundedly.
+ */
 const routingHistoryScoresTable = pgTable(
   "routing_history_scores",
   {
@@ -30,6 +35,7 @@ const routingHistoryScoresTable = pgTable(
       .references(() => routingScorerVersionsTable.id),
     status: text("status").$type<RoutingHistoryScoreStatus>().notNull(),
     features: jsonb("features").$type<RoutingDecisionFeatures>(),
+    attempts: integer("attempts").notNull().default(0),
     scorerCost: numeric("scorer_cost", { precision: 13, scale: 10 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -39,7 +45,7 @@ const routingHistoryScoresTable = pgTable(
     primaryKey({ columns: [table.historySessionId, table.scorerVersionId] }),
     check(
       "routing_history_scores_status_check",
-      sql`${table.status} IN ('scored', 'no_text', 'failed')`,
+      sql`${table.status} IN ('pending', 'scored', 'no_text', 'failed')`,
     ),
     check(
       "routing_history_scores_features_check",

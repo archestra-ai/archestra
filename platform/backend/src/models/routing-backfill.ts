@@ -282,13 +282,16 @@ class RoutingBackfillModel {
    * attempt. Refused once the call could take spend past the ceiling, or
    * attempts past `maxAttempts`.
    */
-  static async reserve(params: {
-    lease: BackfillLease;
-    minAmount: number;
-    maxAttempts: number;
-  }): Promise<ReserveOutcome> {
+  static async reserve(
+    params: {
+      lease: BackfillLease;
+      minAmount: number;
+      maxAttempts: number;
+    },
+    tx?: Transaction,
+  ): Promise<ReserveOutcome> {
     const amount = sql`greatest(${t.callCostUsd}, ${params.minAmount.toFixed(6)}::numeric)`;
-    const [row] = await db
+    const [row] = await (tx ?? db)
       .update(t)
       .set({
         reservedCostUsd: sql`${t.reservedCostUsd} + ${amount}`,
@@ -303,7 +306,7 @@ class RoutingBackfillModel {
       )
       .returning({ amount: sql<string>`${amount}` });
     if (row) return { kind: "reserved", amount: Number(row.amount) };
-    const [current] = await db
+    const [current] = await (tx ?? db)
       .select({ attempts: t.attempts })
       .from(t)
       .where(ownedBy(params.lease));

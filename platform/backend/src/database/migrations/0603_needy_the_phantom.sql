@@ -66,10 +66,11 @@ CREATE TABLE "routing_history_scores" (
 	"scorer_version_id" uuid NOT NULL,
 	"status" text NOT NULL,
 	"features" jsonb,
+	"attempts" integer DEFAULT 0 NOT NULL,
 	"scorer_cost" numeric(13, 10),
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "routing_history_scores_history_session_id_scorer_version_id_pk" PRIMARY KEY("history_session_id","scorer_version_id"),
-	CONSTRAINT "routing_history_scores_status_check" CHECK ("routing_history_scores"."status" IN ('scored', 'no_text', 'failed')),
+	CONSTRAINT "routing_history_scores_status_check" CHECK ("routing_history_scores"."status" IN ('pending', 'scored', 'no_text', 'failed')),
 	CONSTRAINT "routing_history_scores_features_check" CHECK (("routing_history_scores"."features" IS NOT NULL) = ("routing_history_scores"."status" = 'scored'))
 );
 --> statement-breakpoint

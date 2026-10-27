@@ -167,7 +167,7 @@
     {"source": "/docs/contributing/adding-llm-providers", "destination": "/docs/contributing/extending-archestra#adding-llm-providers", "permanent": true},
     {"source": "/docs/contributing/adding-knowledge-connectors", "destination": "/docs/contributing/extending-archestra#adding-knowledge-connectors", "permanent": true},
     {"source": "/docs/contributing/adding-knowledge-retrieval-backends", "destination": "/docs/contributing/extending-archestra#adding-knowledge-retrieval-backends", "permanent": true},
-    {"source": "/docs/admin/usage-accounting", "destination": "/docs/admin/deployment/upgrades", "permanent": true},
+    {"source": "/docs/admin/usage-accounting", "destination": "/docs/admin/deployment/helm#upgrade", "permanent": true},
     {"source": "/docs/admin/security/credentials", "destination": "/docs/admin/credentials", "permanent": true},
     {"source": "/docs/admin/security/content-encryption", "destination": "/docs/admin/content-encryption", "permanent": true},
     {"source": "/docs/admin/security", "destination": "/docs/admin", "permanent": true},
@@ -175,6 +175,7 @@
     {"source": "/docs/agents/managed-agents", "destination": "/docs/agents/runtime", "permanent": true},
     {"source": "/docs/agents/managed-agents/setup", "destination": "/docs/agents/runtime/setup", "permanent": true},
     {"source": "/docs/agents/managed-agents/handoff", "destination": "/docs/agents/runtime/handoff", "permanent": true},
-    {"source": "/docs/agents/managed-agents/custom-images", "destination": "/docs/agents/runtime/custom-images", "permanent": true}
+    {"source": "/docs/agents/managed-agents/custom-images", "destination": "/docs/agents/runtime/custom-images", "permanent": true},
+    {"source": "/docs/admin/deployment/upgrades", "destination": "/docs/admin/deployment/helm#upgrade", "permanent": true}
   ]
 }

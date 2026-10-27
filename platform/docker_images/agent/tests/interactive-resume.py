@@ -29,7 +29,12 @@ class InteractiveResumeTest(unittest.TestCase):
             if session_file:
                 (runtime / session_file).write_text("saved-session")
             fake = root / executable
-            fake.write_text("#!/usr/bin/env python3\nimport json,sys\nprint(json.dumps(sys.argv[1:]))\n")
+            fake.write_text(
+                "#!/usr/bin/env python3\nimport json,sys\n"
+                'if sys.argv[1:] == ["debug", "models", "--bundled"]:\n'
+                '    print(json.dumps({"models": []}))\n'
+                "else:\n    print(json.dumps(sys.argv[1:]))\n"
+            )
             fake.chmod(0o755)
             env = {
                 **os.environ,

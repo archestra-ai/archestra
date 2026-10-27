@@ -55,6 +55,7 @@ class Gateway(ThreadingHTTPServer):
         self.requests = []
         self.calls = []
         self.catalog_sent = False
+        self.response_tools = {}
         self.discovery_failed = threading.Event()
         self.binding_headers = []
         self.prompts = []
@@ -139,7 +140,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def llm(self, request):
         names = []
-        for tool in request.get("tools", []):
+        # Codex declares tools in Responses input items on newer releases.
+        tools = list(request.get("tools", []))
+        additional_tools = list(request.get("additional_tools", []))
+        for item in request.get("input", []):
+            if isinstance(item, dict) and item.get("type") == "additional_tools":
+                additional_tools.extend(item.get("tools", []))
+        # Responses can send only updated namespaces after the first request;
+        # the provider retains the preceding declarations in its conversation.
+        for tool in additional_tools:
+            self.server.response_tools[tool["name"]] = tool
+        tools.extend(self.server.response_tools.values())
+        for tool in tools:
             if tool.get("type") == "namespace":
                 names.extend(tool["name"] + "." + item["name"] for item in tool.get("tools", []))
             else:

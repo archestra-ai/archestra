@@ -2,7 +2,7 @@
 title: Costs
 description: Break down organization-wide API spend, subscription usage, tokens, and requests by key, team, agent, model, person, app, skill, or label
 order: 1
-lastUpdated: 2026-10-26
+lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,13 +23,23 @@ Pick a time range in the top-right corner (**Today**, **Last 7 days**, **Last 30
 - **Tokens:** newly processed input and output tokens (including cache writes; reused cached input is shown separately and does not add to the total).
 - **Active people:** distinct users who ran a model call in the period.
 
+## Review Prompt Caching
+
+In the explorer’s **Show** menu, choose **Cache reads**, **Cache writes**, or **Net cache savings**. The **Cache reads by model** and **Prompt cache savings** presets open these views directly.
+
+On **Costs**, cache tokens include all billing modes. Net savings cover metered usage only and are available **by Time** across the organization.
+
+On **My Usage**, cache tokens can be grouped by model, client, or time. Net savings and cache cost are available **by All usage**, valued at API rates including subscription-covered usage; they have no timeline or per-model savings breakdown. These estimates are not subscription bill credits.
+
+Savings compare cached input with full input pricing after cache-write surcharges, so they can be negative. Figures depend on provider-reported usage and available pricing.
+
 ## Slice Usage in the Cost Explorer
 
 <span id="proxy-cost-attribution"></span><span id="per-user-usage"></span><span id="per-app-cost"></span><span id="per-skill-cost"></span>
 
 Below the headline cards, use the cost explorer to break down usage by any dimension or start from a preset **View**:
 
-1. Choose **Show** to pick the metric: **API spend**, **Subscription estimate**, **Requests**, **Tokens**, **Cost / 1k requests**, **Tokens / request**, **Cache hit rate**, **Active people**, **App runs**, or **Skill activations**.
+1. Choose **Show** to pick the metric: **Billed spend**, **Subscription estimate**, **Requests**, **Tokens**, **Cache reads**, **Cache writes**, **Net cache savings**, **Tool calls**, **App runs**, or **Skill activations**.
 2. Choose **by** to group rows by **Virtual key**, **Team**, **Agent**, **Model**, **Provider**, **Person**, **App**, **Skill**, **MCP server**, **MCP tool**, or **Label**.
 3. Optionally choose **split by** to break each row down by a second dimension, such as **Team** split by **Model** or **Label** split by **Team**.
 

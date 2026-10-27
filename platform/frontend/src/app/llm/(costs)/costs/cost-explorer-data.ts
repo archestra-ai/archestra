@@ -41,6 +41,9 @@ export const METRIC_IDS = [
   "subscription",
   "requests",
   "tokens",
+  "cacheRead",
+  "cacheWrite",
+  "cacheSavings",
   "toolCalls",
   "appRuns",
   "skillActivations",
@@ -48,6 +51,7 @@ export const METRIC_IDS = [
 export type MetricId = (typeof METRIC_IDS)[number];
 
 export const DIM_IDS = [
+  "time",
   "team",
   "agent",
   "model",
@@ -99,6 +103,21 @@ export const METRICS: Record<
     money: false,
     note: "Counts newly processed input and output. Reused cached input is shown separately and is not included. Requests in flight may not appear yet.",
   },
+  cacheRead: {
+    label: "Cache reads",
+    money: false,
+    note: "Input tokens reused from the provider cache, across all billing modes. Based on provider-reported usage.",
+  },
+  cacheWrite: {
+    label: "Cache writes",
+    money: false,
+    note: "Input tokens written to the provider cache, across all billing modes. Based on provider-reported usage.",
+  },
+  cacheSavings: {
+    label: "Net cache savings",
+    money: true,
+    note: "Estimated savings on metered API usage versus full input pricing, after cache-write surcharges. Can be negative. Depends on recorded usage and available prices; subscription usage is excluded. Savings are available organization-wide over time, not by model or person.",
+  },
   toolCalls: {
     label: "Tool calls",
     money: false,
@@ -117,6 +136,7 @@ export const METRICS: Record<
 };
 
 export const DIMS: Record<DimId, { label: string; plural: string }> = {
+  time: { label: "Time", plural: "periods" },
   team: { label: "Team", plural: "teams" },
   agent: { label: "Agent", plural: "agents" },
   model: { label: "Model", plural: "models" },
@@ -137,13 +157,16 @@ const LLM_METRICS: MetricId[] = [
   "subscription",
   "requests",
   "tokens",
+  "cacheRead",
+  "cacheWrite",
 ];
 
 const SUPPORT: Record<DimId, MetricId[]> = {
+  time: [...LLM_METRICS, "cacheSavings"],
   team: LLM_METRICS,
   agent: [...LLM_METRICS, "toolCalls"],
   model: LLM_METRICS,
-  person: [...METRIC_IDS],
+  person: METRIC_IDS.filter((metric) => metric !== "cacheSavings"),
   app: ["billed", "requests", "tokens", "toolCalls", "appRuns"],
   skill: ["tokens", "skillActivations"],
   server: ["toolCalls"],
@@ -159,6 +182,7 @@ export const supports = (group: DimId, metric: MetricId) =>
   SUPPORT[group].includes(metric);
 
 export function splitOptions(metric: MetricId, group: DimId): DimId[] {
+  if (group === "time") return [];
   if (metric === "toolCalls" && group !== "app") {
     const all: DimId[] = ["server", "tool", "person", "agent"];
     return all.filter(
@@ -190,6 +214,7 @@ export function normalize(q: PivotQuery): PivotQuery {
 }
 
 const PREFERRED_GROUP: Partial<Record<MetricId, DimId>> = {
+  cacheSavings: "time",
   toolCalls: "server",
   appRuns: "app",
   skillActivations: "skill",
@@ -200,6 +225,16 @@ export const SAVED_VIEWS: { id: string; label: string; q: PivotQuery }[] = [
     id: "spend-model",
     label: "Spend by model",
     q: { metric: "billed", group: "model", split: "none", chart: "bars" },
+  },
+  {
+    id: "cache-model",
+    label: "Cache reads by model",
+    q: { metric: "cacheRead", group: "model", split: "none", chart: "bars" },
+  },
+  {
+    id: "cache-savings",
+    label: "Prompt cache savings",
+    q: { metric: "cacheSavings", group: "time", split: "none", chart: "lines" },
   },
   {
     id: "spend-label",
@@ -261,6 +296,7 @@ export function formatValue(metric: MetricId, v: number) {
 }
 
 export function formatCell(metric: MetricId, v: number) {
+  if (metric === "cacheSavings") return formatCost(v);
   if (v === 0) return "·";
   if (METRICS[metric].money) {
     if (v >= 1000) return formatCost(v);
@@ -415,7 +451,10 @@ export function usePivotCube(
   });
   const teamQ = useTeamStatistics({ timeframe, enabled: on("team") });
   const agentQ = useProfileStatistics({ timeframe, enabled: on("agent") });
-  const modelQ = useCostStatistics({ timeframe, enabled: on("model") });
+  const modelQ = useCostStatistics({
+    timeframe,
+    enabled: on("model") || on("time"),
+  });
   const userQ = useUsersForPivot({
     timeframe,
     withModels: src.kind === "user" && src.models,
@@ -494,7 +533,7 @@ export function usePivotCube(
               ? teamQ
               : src.kind === "agent"
                 ? agentQ
-                : src.kind === "model"
+                : src.kind === "model" || src.kind === "time"
                   ? modelQ
                   : src.kind === "user"
                     ? userQ
@@ -522,6 +561,50 @@ export function usePivotCube(
       },
     };
     switch (src.kind) {
+      case "time": {
+        const data = modelQ.data;
+        const cacheSavings = q.metric === "cacheSavings";
+        const points = cacheSavings
+          ? (data?.costSavings.timeSeries ?? []).map((point) => ({
+              timestamp: point.timestamp,
+              value: point.cacheSavings,
+            }))
+          : (data?.models ?? []).flatMap((model) =>
+              model.timeSeries.map((point) => ({
+                timestamp: point.timestamp,
+                value: pointValue(metric, point),
+              })),
+            );
+        const facts = points.map((point) => ({
+          g: "all",
+          gLabel: "All usage",
+          b: point.timestamp,
+          v: point.value,
+        }));
+        const total = cacheSavings
+          ? (data?.costSavings.totalCacheSavings ?? 0)
+          : (data?.models ?? []).reduce(
+              (sum, model) =>
+                sum +
+                (metric === "billed"
+                  ? model.cost
+                  : metric === "subscription"
+                    ? model.timeSeries.reduce(
+                        (n, point) => n + pointValue(metric, point),
+                        0,
+                      )
+                    : pointValue(metric, model)),
+              0,
+            );
+        return {
+          ...assemble(facts, {
+            totals: new Map([["all", total]]),
+            meta: new Map([["all", { g: "all", gLabel: "All usage" }]]),
+          }),
+          ...base,
+          isLoading: modelQ.isLoading,
+        };
+      }
       case "tool": {
         const rows = toolQ.data?.data ?? [];
         const facts: Fact[] = rows.map((r) => {
@@ -907,6 +990,7 @@ type Source =
   | { kind: "tool"; dims: ToolCallUsageDimension[] }
   | { kind: "app"; dims: AppUsageDimension[] }
   | { kind: "skill"; dims: SkillUsageDimension[] }
+  | { kind: "time" }
   | { kind: "team" }
   | { kind: "agent" }
   | { kind: "model" }
@@ -915,6 +999,7 @@ type Source =
 
 function resolveSource(q: PivotQuery): Source {
   const split = q.split === "none" ? null : q.split;
+  if (q.group === "time") return { kind: "time" };
   if (q.metric === "toolCalls" && q.group !== "app") {
     const dims = new Set<ToolCallUsageDimension>(["day"]);
     for (const d of [q.group, split]) {
@@ -960,6 +1045,8 @@ function resolveSource(q: PivotQuery): Source {
 
 function apiFor(src: Source, tf: string, q: PivotQuery) {
   switch (src.kind) {
+    case "time":
+      return `GET /api/statistics/costs?timeframe=${tf}`;
     case "tool":
       return `GET /api/statistics/mcp-tool-calls?groupBy=${src.dims.join(",")}&timeframe=${tf}`;
     case "app":
@@ -1005,6 +1092,7 @@ type SeriesPointLike = {
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   billedCost?: number;
   subscriptionCost?: number;
 };
@@ -1017,6 +1105,10 @@ function pointValue(metric: MetricId, p: SeriesPointLike) {
       return p.subscriptionCost ?? 0;
     case "requests":
       return p.requests ?? 0;
+    case "cacheRead":
+      return p.cacheReadTokens ?? 0;
+    case "cacheWrite":
+      return p.cacheWriteTokens ?? 0;
     case "tokens":
       return p.totalTokens ?? 0;
     default:

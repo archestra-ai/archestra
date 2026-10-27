@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@archestra/shared";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   canReachMember,
@@ -46,13 +47,32 @@ describe("which members a client's wire reaches", () => {
   });
 
   test("reaches the same wire and the pairs a translator connects", () => {
-    expect(canReachMember("openai-chat", "zhipuai")).toBe(true);
-    expect(canReachMember("openai-chat", "anthropic")).toBe(true);
-    expect(canReachMember("openai-chat", "bedrock")).toBe(true);
-    expect(canReachMember("anthropic", "zhipuai")).toBe(true);
-    expect(canReachMember("anthropic", "bedrock")).toBe(false);
-    expect(canReachMember("bedrock-converse", "zhipuai")).toBe(false);
-    expect(canReachMember("openai-chat", "gemini")).toBe(false);
+    const on = (provider: SupportedProvider, modelId = "some-model") => ({
+      provider,
+      modelId,
+    });
+    expect(canReachMember("openai-chat", on("zhipuai"))).toBe(true);
+    expect(canReachMember("openai-chat", on("anthropic"))).toBe(true);
+    expect(canReachMember("openai-chat", on("bedrock"))).toBe(true);
+    expect(canReachMember("anthropic", on("zhipuai"))).toBe(true);
+    expect(canReachMember("anthropic", on("bedrock", "us.zai.glm-5"))).toBe(
+      false,
+    );
+    expect(canReachMember("bedrock-converse", on("zhipuai"))).toBe(false);
+    expect(canReachMember("openai-chat", on("gemini"))).toBe(false);
+  });
+
+  test("reaches Claude on Bedrock from an Anthropic client", () => {
+    for (const modelId of [
+      "anthropic.claude-haiku-4-5-20251001-v1:0",
+      "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "global.anthropic.claude-opus-4-8",
+      "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    ]) {
+      expect(
+        canReachMember("anthropic", { provider: "bedrock", modelId }),
+      ).toBe(true);
+    }
   });
 });
 
@@ -135,6 +155,55 @@ describe("memberTransport", () => {
       }),
       { type: "message_stop" },
     ]);
+  });
+
+  test("sends a Claude Code request to Claude on Bedrock as is", async () => {
+    const reply = {
+      id: "msg_1",
+      type: "message",
+      role: "assistant",
+      model: "us.anthropic.claude-haiku-4-5",
+      content: [{ type: "text", text: "Hi" }],
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: { input_tokens: 3, output_tokens: 1 },
+    };
+    const events = [{ type: "message_start" }, { type: "message_stop" }];
+    const client = {
+      invoke: vi.fn().mockResolvedValue(reply),
+      invokeStream: vi.fn().mockResolvedValue(from(events)),
+    };
+    const transport = memberTransport({
+      inbound: "anthropic",
+      provider: "bedrock",
+      modelId: "us.anthropic.claude-haiku-4-5",
+      client,
+    });
+    const request = {
+      model: "claude-haiku",
+      max_tokens: 100,
+      stream: true,
+      messages: [{ role: "user", content: "hello" }],
+    };
+
+    await expect(transport.execute(request)).resolves.toEqual(reply);
+    expect(await collect(await transport.executeStream(request))).toEqual(
+      events,
+    );
+    // The model goes in the URL; the body carries Bedrock's protocol version.
+    const body = {
+      anthropic_version: "bedrock-2023-05-31",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hello" }],
+    };
+    expect(client.invoke).toHaveBeenCalledWith(
+      "us.anthropic.claude-haiku-4-5",
+      body,
+    );
+    expect(client.invokeStream).toHaveBeenCalledWith(
+      "us.anthropic.claude-haiku-4-5",
+      body,
+    );
   });
 
   test("answers an OpenAI request from an Anthropic member, usage last", async () => {

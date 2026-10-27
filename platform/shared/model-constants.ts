@@ -137,6 +137,16 @@ export function isModelPoolProvider(
 }
 
 /**
+ * Whether a Bedrock model id names a Claude model, which Bedrock also serves
+ * in Anthropic's own Messages format. Covers plain ids, cross-region profiles
+ * (`us.anthropic.claude-…`) and their ARNs; an application inference profile
+ * ARN does not say which model it wraps.
+ */
+export function isClaudeOnBedrock(modelId: string): boolean {
+  return /(^|[./])anthropic\.claude/.test(modelId.trim());
+}
+
+/**
  * The wire formats a single provider can serve one model catalog over, spelled
  * as the provider spells them. Only GitHub Copilot publishes this per model
  * today (`supported_endpoints` on its `/models` entries), and it is the only

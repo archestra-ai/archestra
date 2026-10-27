@@ -9,6 +9,7 @@
  * translator. Members a client's wire cannot reach are left out of its plan.
  */
 import {
+  isClaudeOnBedrock,
   isModelPoolProvider,
   type ModelPoolProvider,
   type SupportedProvider,
@@ -20,6 +21,7 @@ import {
   anthropicAdapterFactory,
   azureAdapterFactory,
   bedrockAdapterFactory,
+  bedrockInvokeAdapterFactory,
   cerebrasAdapterFactory,
   deepseekAdapterFactory,
   groqAdapterFactory,
@@ -78,12 +80,13 @@ export function inboundPoolWire(
   return null;
 }
 
-/** Whether a client on `inbound` can be answered by a member on `provider`. */
+/** Whether a client on `inbound` can be answered by a member. */
 export function canReachMember(
   inbound: PoolWire,
-  provider: SupportedProvider,
+  member: { provider: SupportedProvider; modelId: string },
 ): boolean {
-  const target = wireOf(provider);
+  if (claudeOnBedrock(inbound, member)) return true;
+  const target = wireOf(member.provider);
   if (!target) return false;
   return target === inbound || TRANSLATED.has(`${inbound}>${target}`);
 }
@@ -99,6 +102,20 @@ export function memberTransport(params: {
   client: unknown;
 }): MemberTransport {
   const { inbound, provider, modelId, client } = params;
+  if (claudeOnBedrock(inbound, params)) {
+    // Bedrock serves Claude in Anthropic's own format (InvokeModel), as it
+    // does for Claude Code with CLAUDE_CODE_USE_BEDROCK: no translation.
+    const withModel = (request: unknown) => ({
+      ...(request as Anthropic.Types.MessagesRequest),
+      model: modelId,
+    });
+    return {
+      execute: (request) =>
+        bedrockInvokeAdapterFactory.execute(client, withModel(request)),
+      executeStream: (request) =>
+        bedrockInvokeAdapterFactory.executeStream(client, withModel(request)),
+    };
+  }
   const adapter = memberAdapter(provider);
   const target = wireOf(provider);
   if (!adapter || !target) {
@@ -281,6 +298,18 @@ const TRANSLATED = new Set([
   "openai-chat>bedrock-converse",
   "anthropic>openai-chat",
 ]);
+
+/** A Claude member on Bedrock, which an Anthropic client reaches as is. */
+function claudeOnBedrock(
+  inbound: PoolWire,
+  member: { provider: SupportedProvider; modelId: string },
+): boolean {
+  return (
+    inbound === "anthropic" &&
+    member.provider === "bedrock" &&
+    isClaudeOnBedrock(member.modelId)
+  );
+}
 
 function wireOf(provider: SupportedProvider): PoolWire | null {
   if (!isModelPoolProvider(provider)) return null;

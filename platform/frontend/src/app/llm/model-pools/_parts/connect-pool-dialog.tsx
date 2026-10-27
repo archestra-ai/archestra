@@ -1,6 +1,6 @@
 "use client";
 
-import type { SupportedProvider } from "@archestra/shared";
+import { isClaudeOnBedrock, type SupportedProvider } from "@archestra/shared";
 import {
   Info,
   KeyRound,
@@ -33,7 +33,10 @@ import { cn } from "@/lib/utils/tailwind";
 
 /** What the view needs of a pool, which a pool just created also has. */
 export type ConnectablePool = Pick<ModelPool, "id" | "name"> & {
-  members: Pick<ModelPool["members"][number], "provider" | "enabled">[];
+  members: Pick<
+    ModelPool["members"][number],
+    "provider" | "modelId" | "enabled"
+  >[];
 };
 
 type Endpoint = "model-router" | "anthropic" | "openai";
@@ -148,21 +151,22 @@ export function ConnectPoolDialog({
 }
 
 /**
- * The Anthropic route can't send to Bedrock members yet, and Claude Code
- * assumes a 200k context window for a model name it doesn't know.
+ * The Anthropic route reaches Claude on Bedrock but no other Bedrock model,
+ * and Claude Code assumes a 200k context window for a name it doesn't know.
  */
 function AnthropicNotice({ pool }: { pool: ConnectablePool }) {
   const catalog = useModelProviderCatalog();
+  const enabled = pool.members.filter((member) => member.enabled);
+  const skipped = (member: ConnectablePool["members"][number]) =>
+    member.provider === "bedrock" && !isClaudeOnBedrock(member.modelId);
   const reached = [
     ...new Set(
-      pool.members
-        .filter((member) => member.enabled && member.provider !== "bedrock")
+      enabled
+        .filter((member) => !skipped(member))
         .map((member) => catalog.label(member.provider as SupportedProvider)),
     ),
   ];
-  const skipsBedrock = pool.members.some(
-    (member) => member.enabled && member.provider === "bedrock",
-  );
+  const skipsBedrock = enabled.some(skipped);
   const claudeName = pool.name.toLowerCase().startsWith("claude");
   if (!skipsBedrock && claudeName) return null;
   return (
@@ -170,7 +174,7 @@ function AnthropicNotice({ pool }: { pool: ConnectablePool }) {
       <Info />
       <span className="font-medium">
         {skipsBedrock
-          ? "Bedrock members are skipped on this endpoint"
+          ? "Bedrock members other than Claude are skipped here"
           : "Set Claude Code's context window"}
       </span>
       <InlineNoticeText>
@@ -178,7 +182,7 @@ function AnthropicNotice({ pool }: { pool: ConnectablePool }) {
           <span>
             {reached.length > 0
               ? `Claude Code reaches the ${reached.join(" and ")} members only. `
-              : "Every member is on Bedrock, so the pool doesn't answer here yet. "}
+              : "Every member is a non-Claude model on Bedrock, so the pool doesn't answer here yet. "}
           </span>
         ) : null}
         {claudeName ? null : (

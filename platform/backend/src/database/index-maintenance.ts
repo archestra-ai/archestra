@@ -143,9 +143,15 @@ export async function createMcpServerIndexes(
  * keys a user authored through it; without it, every Connect page load scans
  * the window's interactions. It also serves the ON DELETE SET NULL lookup when
  * a virtual key is deleted. Partial, as most calls carry no passthrough key.
+ *
+ * And the partial index of calls whose media cost is unavailable:
+ * `interactions (created_at, id) WHERE response->'__mediaUsage'->>
+ * 'costAvailable' = 'false'`. The default user limit's organization-wide spend
+ * read (`LimitModel.getDefaultUserLimitUsageByUser`) finds those calls through
+ * it instead of detoasting every response in the window. Such calls are rare.
  * interactions is the LLM proxy's hot write path, so a migration's blocking
  * build is never an option (see the archestra-dev-interactions-migrations
- * rules): both indexes are built concurrently, on a dedicated connection,
+ * rules): these indexes are built concurrently, on a dedicated connection,
  * under one advisory lock, checked rather than trusted, and retried on the
  * next boot after a failure.
  */
@@ -332,6 +338,13 @@ const INTERACTIONS_INDEXES: readonly MaintainedIndex[] = [
     name: "interactions_passthrough_virtual_key_id_idx",
     columns: ["passthrough_virtual_key_id"],
     predicate: "(passthrough_virtual_key_id IS NOT NULL)",
+  },
+  {
+    table: "interactions",
+    name: "interactions_media_cost_unavailable_idx",
+    columns: ["created_at", "id"],
+    predicate:
+      "(((response -> '__mediaUsage'::text) ->> 'costAvailable'::text) = 'false'::text)",
   },
   MODEL_HISTORY_INDEX,
 ];

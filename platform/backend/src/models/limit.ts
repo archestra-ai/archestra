@@ -11,6 +11,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
@@ -378,7 +379,24 @@ class LimitModel {
     environmentId?: string | null;
   }): Promise<Map<string, { cost: number; incomplete: boolean }>> {
     const interactions = schema.interactionsTable;
-    const costUnavailable = sql`coalesce(${interactions.response}->'__mediaUsage'->>'costAvailable' = 'false', false)`;
+    // Rows whose media cost is unavailable, found through the partial
+    // interactions_media_cost_unavailable_idx instead of reading every row's
+    // response: detoasting the window's payloads dominated this read.
+    const flagged = alias(interactions, "media_cost_flagged");
+    const mediaCostUnavailable = db
+      .select({ id: flagged.id })
+      .from(flagged)
+      .where(
+        and(
+          sql`${flagged.response}->'__mediaUsage'->>'costAvailable' = 'false'`,
+          buildUsagePeriodStartCondition(
+            params.cleanupInterval,
+            flagged.createdAt,
+          ),
+        ),
+      )
+      .as("media_cost_unavailable");
+    const costUnavailable = sql`(${mediaCostUnavailable.id} IS NOT NULL)`;
     const conditions: SQL[] = [
       isNotNull(interactions.userId),
       eq(interactions.billingMode, "metered"),
@@ -410,6 +428,10 @@ class LimitModel {
       ? await db
           .select(selection)
           .from(interactions)
+          .leftJoin(
+            mediaCostUnavailable,
+            eq(mediaCostUnavailable.id, interactions.id),
+          )
           .where(
             and(
               ...conditions,
@@ -423,6 +445,10 @@ class LimitModel {
           .innerJoin(
             schema.agentsTable,
             eq(interactions.profileId, schema.agentsTable.id),
+          )
+          .leftJoin(
+            mediaCostUnavailable,
+            eq(mediaCostUnavailable.id, interactions.id),
           )
           .where(
             and(
@@ -2385,10 +2411,7 @@ function buildCleanupDueCondition(): SQL {
 
 function buildUsagePeriodStartCondition(
   cleanupInterval: LimitCleanupInterval,
-  createdAt:
-    | typeof schema.interactionsTable.createdAt
-    | typeof schema.interactionBillingTable.createdAt = schema.interactionsTable
-    .createdAt,
+  createdAt: AnyPgColumn = schema.interactionsTable.createdAt,
 ): SQL {
   const rollingInterval =
     LimitModel.rollingCleanupIntervalSqlLiterals[

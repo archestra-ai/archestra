@@ -1,14 +1,13 @@
 /**
  * Bedrock Converse proxy routes — OpenAPPA calls left in a client's history.
  *
- * The proxy never restores a notice on the Converse wire, so the history a
- * client sends back keeps what an OpenAPPA session handed it: the notice call
- * that took a blocked call's place, with the proxy's record and leftover
- * offer fields, and the model's remedy call, with the receipt and the legacy
- * offer fields the proxy used to stamp. Those fields are strip-only. They are
- * not checked. With no OpenAPPA plugin registered no session path runs, and
- * the provider still gets those calls back holding only what the model saw
- * and wrote.
+ * The history a client sends back keeps what an OpenAPPA session handed it:
+ * the notice call that took a blocked call's place, with the proxy's record
+ * and leftover offer fields, and the model's remedy call, with the receipt and
+ * the legacy offer fields the proxy used to stamp. With no OpenAPPA plugin
+ * registered no session path runs, yet the provider still gets the blocked
+ * call back as the model wrote it, and the remedy call holding only what the
+ * model wrote.
  */
 
 import { vi } from "vitest";
@@ -42,7 +41,7 @@ function toolSpec(name: string) {
 describe("Bedrock Converse proxy — OpenAPPA history", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  test("forwards a Converse history without the notice's signed offers or the remedy call's receipt", async ({
+  test("forwards a Converse history with the blocked call restored and no remedy receipt", async ({
     makeAgent,
     makeMember,
     makeUser,
@@ -187,12 +186,17 @@ describe("Bedrock Converse proxy — OpenAPPA history", () => {
       {
         toolUse: {
           toolUseId: "tooluse_weather",
-          name: NOTICE_TOOL,
-          input: {
-            tool: "get_weather",
-            arguments: { location: "San Francisco" },
-            ruling: RULING,
-          },
+          name: "get_weather",
+          input: { location: "San Francisco" },
+        },
+      },
+    ]);
+    expect(messages[2].content).toEqual([
+      {
+        toolResult: {
+          toolUseId: "tooluse_weather",
+          content: [{ text: RULING }],
+          status: "error",
         },
       },
     ]);

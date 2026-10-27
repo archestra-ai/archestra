@@ -277,6 +277,14 @@ jobs:
           selection: ${{ runner.temp }}/release-candidate-selection.json
           token: ${{ steps.generate-token.outputs.token }}
 
+      - name: Relay scanned agent-kimi archives
+        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
+        uses: $/.github/actions/relay-release-candidate
+        with:
+          image_name: agent-kimi
+          selection: ${{ runner.temp }}/release-candidate-selection.json
+          token: ${{ steps.generate-token.outputs.token }}
+
       - name: Retain verified candidate selection for publishers
         if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
         uses: $/.github/actions/github-upload-artifact

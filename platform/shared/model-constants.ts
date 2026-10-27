@@ -104,6 +104,37 @@ export const OCR_PDF_INPUT_PROVIDERS: readonly SupportedProvider[] = [
 export type SupportedProvider = z.infer<typeof SupportedProvidersSchema>;
 
 /**
+ * Providers whose shared keys can be model pool members. Per-user providers
+ * (Copilot) and subscription-only ones are left out: their credential belongs
+ * to one user. Gemini and Cohere have no translator to or from the wires
+ * pooled clients speak.
+ */
+export const MODEL_POOL_PROVIDERS = [
+  "anthropic",
+  "bedrock",
+  "openai",
+  "azure",
+  "cerebras",
+  "deepseek",
+  "groq",
+  "minimax",
+  "mistral",
+  "ollama",
+  "openrouter",
+  "perplexity",
+  "vllm",
+  "xai",
+  "zhipuai",
+] as const satisfies readonly SupportedProvider[];
+export type ModelPoolProvider = (typeof MODEL_POOL_PROVIDERS)[number];
+
+export function isModelPoolProvider(
+  provider: SupportedProvider,
+): provider is ModelPoolProvider {
+  return (MODEL_POOL_PROVIDERS as readonly string[]).includes(provider);
+}
+
+/**
  * The wire formats a single provider can serve one model catalog over, spelled
  * as the provider spells them. Only GitHub Copilot publishes this per model
  * today (`supported_endpoints` on its `/models` entries), and it is the only
@@ -487,6 +518,7 @@ export const MODEL_ROUTER_SUPPORTED_PROVIDERS = [
   "cerebras",
   "deepseek",
   "groq",
+  "kimi",
   "minimax",
   "mistral",
   "ollama",
@@ -515,6 +547,27 @@ export function isModelRouterSupportedProvider(
   );
 }
 
+/**
+ * Router providers served over Chat Completions only. Their thinking models
+ * return `reasoning_content` that must be sent back on every tool-call turn,
+ * and the router's Responses translation keeps neither the reasoning in the
+ * output nor the field on the replayed assistant message, so a tool loop
+ * breaks on its second turn. The router refuses them on `/responses`, and the
+ * runtime compatibility checks below refuse them for Responses images, so the
+ * picker, the launch preflight and the router agree.
+ */
+export const CHAT_COMPLETIONS_ONLY_ROUTER_PROVIDERS = [
+  "kimi",
+] as const satisfies ReadonlyArray<SupportedProvider>;
+
+export function isChatCompletionsOnlyRouterProvider(
+  provider: SupportedProvider,
+): boolean {
+  return (CHAT_COMPLETIONS_ONLY_ROUTER_PROVIDERS as readonly string[]).includes(
+    provider,
+  );
+}
+
 /** Protocols supported by the maintained runtime entrypoint, or all for custom images. */
 export function getAgentRuntimeAllowedProtocols(
   runtimeCommand?: readonly string[] | null,
@@ -524,8 +577,10 @@ export function getAgentRuntimeAllowedProtocols(
       return ["anthropic"];
     case "archestra-codex":
       return ["openai_responses", "openai_chat"];
-    // Grok Build supports only Chat Completions on a custom model endpoint.
+    // Grok Build and Kimi Code support only Chat Completions on a custom
+    // model endpoint.
     case "archestra-grok":
+    case "archestra-kimi":
       return ["openai_chat"];
     default:
       return ["openai_responses", "openai_chat", "anthropic"];
@@ -586,6 +641,15 @@ export function getAgentRuntimeProviderCompatibility(params: {
     return {
       compatible: false,
       message: `${providerDisplayNames[params.provider]} models are not available through the OpenAI-compatible model router used by this Agent Runtime image.`,
+    };
+  }
+  if (
+    params.inferenceProtocol === "openai_responses" &&
+    isChatCompletionsOnlyRouterProvider(params.provider)
+  ) {
+    return {
+      compatible: false,
+      message: `${providerDisplayNames[params.provider]} models are available through the model router's Chat Completions endpoint only. Choose an Agent Runtime image that uses OpenAI Chat Completions.`,
     };
   }
   return { compatible: true };
@@ -1183,6 +1247,11 @@ export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
     llama: "openai",
     deepseek: "deepseek",
     moonshotai: "kimi",
+    // Kimi for Coding membership keys serve the same provider from the Kimi
+    // Code endpoints with plan model ids (k3.1-pro, kimi-for-coding, ...)
+    // priced at $0; both regions list the same ids.
+    "kimi-code-plan-global": "kimi",
+    "kimi-code-plan-cn": "kimi",
     groq: "groq",
     "fireworks-ai": "openai",
     togetherai: "openai",

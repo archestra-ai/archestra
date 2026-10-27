@@ -377,6 +377,7 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
   baselineModel: true,
   billingMode: true,
   inputTokens: true,
+  inputTokensEstimated: true,
   outputTokens: true,
   cacheReadTokens: true,
   cacheWriteTokens: true,
@@ -384,6 +385,11 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
   baselineCost: true,
   durationMs: true,
   createdAt: true,
+  providerApiKeyId: true,
+  modelPoolId: true,
+  attempt: true,
+  attemptOutcome: true,
+  failureReason: true,
 }).extend({
   attributionLabels: AttributionLabelsSchema.nullish(),
   type: SupportedProvidersDiscriminatorSchema,
@@ -935,6 +941,11 @@ export const SessionSummarySchema = z.object({
   sources: z.array(InteractionSourceSchema),
   interactionId: z.string().nullable(), // Only set for single interactions (null session)
   requestCount: z.number(),
+  failedOverCount: z
+    .number()
+    .describe(
+      "Requests a model pool retried on another member. Each is also counted in requestCount. Only one cut off by a timeout carries tokens or cost: an estimate of the input it read.",
+    ),
   totalInputTokens: z.number(),
   totalOutputTokens: z.number(),
   totalCacheReadTokens: z.number(),

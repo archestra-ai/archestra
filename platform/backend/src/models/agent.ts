@@ -3430,6 +3430,33 @@ class AgentModel {
   }
 
   /**
+   * A live gateway's access context and its GitHub Actions setting, for the
+   * GitHub Actions token exchange.
+   */
+  static async findGitHubActionsGateway(
+    id: string,
+  ): Promise<
+    (AgentAccessContext & Pick<Agent, "name" | "githubActionsAccess">) | null
+  > {
+    const [agent] = await db
+      .select({
+        id: schema.agentsTable.id,
+        organizationId: schema.agentsTable.organizationId,
+        scope: schema.agentsTable.scope,
+        authorId: schema.agentsTable.authorId,
+        createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
+        agentType: schema.agentsTable.agentType,
+        name: schema.agentsTable.name,
+        githubActionsAccess: schema.agentsTable.githubActionsAccess,
+      })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return agent ?? null;
+  }
+
+  /**
    * Batch fetch minimal agent data needed for permission checks.
    * Returns a Map of agentId -> { agentType, scope, authorId, teamIds }.
    * Much lighter than findById (no tool/label/knowledgeBase/connector joins).
@@ -5445,6 +5472,8 @@ class AgentModel {
       // safe to capture verbatim.
       passthroughHeaders: [...(row.passthroughHeaders ?? [])].sort(),
       identityProviderId: row.identityProviderId ?? null,
+      // Names only: the App's key, repositories and workflow refs.
+      githubActionsAccess: row.githubActionsAccess ?? null,
       environmentId: row.environmentId ?? null,
       incomingEmailEnabled: row.incomingEmailEnabled,
       incomingEmailSecurityMode: row.incomingEmailSecurityMode,

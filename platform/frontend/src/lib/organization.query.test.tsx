@@ -190,6 +190,44 @@ describe("useActiveMemberRole", () => {
 });
 
 describe("useOrganization", () => {
+  it("keeps cached chat settings on mount but refreshes them on focus", async () => {
+    vi.mocked(authClient.getSession).mockResolvedValue(sessionWith("org-1"));
+    const fetchOrganization = vi.fn(() =>
+      HttpResponse.json({ playwrightMcpEnabled: false }),
+    );
+    server.use(http.get(`${API_ORIGIN}/api/organization`, fetchOrganization));
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(
+      authQueryKeys.session(),
+      sessionWith("org-1").data,
+    );
+    queryClient.setQueryData(organizationKeys.details(), {
+      playwrightMcpEnabled: true,
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(
+      () =>
+        useOrganization(true, {
+          refetchInterval: 5000,
+          refetchOnWindowFocus: "always",
+        }),
+      { wrapper },
+    );
+
+    expect(result.current.data?.playwrightMcpEnabled).toBe(true);
+    expect(fetchOrganization).not.toHaveBeenCalled();
+
+    act(() => focusManager.setFocused(false));
+    act(() => focusManager.setFocused(true));
+    await waitFor(() => {
+      expect(result.current.data?.playwrightMcpEnabled).toBe(false);
+    });
+  });
+
   it("refetches Connect settings on mount despite a persisted fresh cache entry", async () => {
     vi.mocked(authClient.getSession).mockResolvedValue(sessionWith("org-1"));
     server.use(

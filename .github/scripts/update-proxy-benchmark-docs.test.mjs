@@ -1,11 +1,228 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
+import {
+  benchmarkMarker,
+  benchmarkPayload,
+} from "./proxy-benchmark-baseline.mjs";
 import {
   benchmarkDocsCommit,
   benchmarkDocsPath,
   commitBenchmarkDocs,
   updateBenchmarkTable,
+  verifyBenchmarkDocs,
 } from "./update-proxy-benchmark-docs.mjs";
+
+function validationFixture() {
+  const f = fixture();
+  f.comments = [
+    {
+      user: { login: "github-actions[bot]" },
+      body: `${benchmarkMarker}\n${benchmarkPayload(f.summary, f.summary.gitCommit)}`,
+    },
+  ];
+  f.markdown = updateBenchmarkTable(markdown, f.summary);
+  f.changes = { status: "ahead", files: [{ filename: benchmarkDocsPath }] };
+  f.github.rest.issues = { listComments: () => {} };
+  f.github.paginate = async () => f.comments;
+  f.github.rest.repos.compareCommits = async () => ({ data: f.changes });
+  f.github.rest.repos.getContent = async () => ({
+    data: {
+      type: "file",
+      encoding: "base64",
+      size: Buffer.byteLength(f.markdown),
+      content: Buffer.from(f.markdown).toString("base64"),
+    },
+  });
+  return f;
+}
+
+test("release validation stays pending until both generated tables match the saved benchmark", async () => {
+  const f = validationFixture();
+  f.markdown = markdown;
+  assert.equal((await verifyBenchmarkDocs(f)).ready, false);
+  f.markdown = updateBenchmarkTable(markdown, f.summary);
+  f.markdown = f.markdown.replace(
+    "| 4 vCPU / ~16 GiB RAM | 50 | 5.00 ms",
+    "| 4 vCPU / ~16 GiB RAM | 50 | 500.00 ms",
+  );
+  assert.equal((await verifyBenchmarkDocs(f)).ready, false);
+  f.markdown = updateBenchmarkTable(markdown, f.summary);
+  assert.equal((await verifyBenchmarkDocs(f)).ready, true);
+  const mcpStart = f.markdown.indexOf(
+    "<!-- mcp-gateway-benchmark-results:start -->",
+  );
+  f.markdown =
+    f.markdown.slice(0, mcpStart) +
+    f.markdown.slice(mcpStart).replace("5.00 ms", "500.00 ms");
+  assert.equal((await verifyBenchmarkDocs(f)).ready, false);
+  assert.deepEqual(f.writes, []);
+});
+
+test("generated tables and screenshots may follow the measurement without another benchmark", async () => {
+  const f = validationFixture();
+  f.context.payload.pull_request.head.sha = "f".repeat(40);
+  f.changes.files.push({ filename: "docs/assets/screenshot.webp" });
+  assert.equal((await verifyBenchmarkDocs(f)).ready, true);
+  assert.deepEqual(f.writes, []);
+});
+
+test("changed code, benchmark configuration, renamed inputs and uncertain ancestry require a new measurement", async () => {
+  for (const changes of [
+    {
+      status: "ahead",
+      files: [{ filename: "platform/backend/src/server.ts" }],
+    },
+    {
+      status: "ahead",
+      files: [{ filename: ".github/workflows/llm-proxy-benchmark.yml" }],
+    },
+    {
+      status: "ahead",
+      files: [
+        {
+          filename: benchmarkDocsPath,
+          previous_filename: "platform/input.json",
+        },
+      ],
+    },
+    { status: "diverged", files: [{ filename: benchmarkDocsPath }] },
+    { status: "ahead", files: [] },
+    {
+      status: "ahead",
+      files: Array.from({ length: 300 }, () => ({
+        filename: benchmarkDocsPath,
+      })),
+    },
+  ]) {
+    const f = validationFixture();
+    f.context.payload.pull_request.head.sha = "f".repeat(40);
+    f.changes = changes;
+    assert.equal((await verifyBenchmarkDocs(f)).ready, false);
+  }
+});
+
+test("missing, failed, malformed, diagnostic and untrusted records cannot pass the release gate", async () => {
+  for (const change of [
+    (f) => {
+      f.comments = [];
+    },
+    (f) => {
+      f.comments[0].user.login = "human";
+    },
+    (f) => {
+      f.comments[0].user.login = "another[bot]";
+    },
+    (f) => {
+      f.comments[0].body = `${benchmarkMarker}\n<!-- archestra-llm-proxy-benchmark-data:v1:AAAA -->`;
+    },
+    (f) => {
+      f.summary.complete = false;
+    },
+    (f) => {
+      f.summary.diagnostic = "cpu-profile";
+    },
+    (f) => {
+      f.summary.webWorkers = 4;
+    },
+    (f) => {
+      f.summary.gitCommit = "e".repeat(40);
+    },
+    (f) => {
+      f.summary.platformTree = "invalid";
+    },
+    (f) => {
+      f.summary.rows[0].overheadMs = null;
+    },
+    (f) => {
+      f.github.rest.git.getTree = async () => ({ data: { tree: [] } });
+    },
+  ]) {
+    const f = validationFixture();
+    change(f);
+    if (
+      f.comments[0]?.body.startsWith(
+        `${benchmarkMarker}\n<!-- archestra-llm-proxy-benchmark-data:v1:ey`,
+      )
+    )
+      f.comments[0].body = `${benchmarkMarker}\n${benchmarkPayload(f.summary, "a".repeat(40))}`;
+    assert.equal((await verifyBenchmarkDocs(f)).ready, false);
+    assert.deepEqual(f.writes, []);
+  }
+});
+
+test("ordinary PRs, fork branches and manual or merge-group runs do not wait for release codegen", async () => {
+  for (const change of [
+    (f) => {
+      delete f.context.payload.pull_request;
+    },
+    (f) => {
+      f.context.payload.pull_request.user.login = "human";
+    },
+    (f) => {
+      f.context.payload.pull_request.head.ref = "feature/work";
+    },
+    (f) => {
+      f.context.payload.pull_request.head.repo.full_name = "fork/gateway";
+    },
+  ]) {
+    const f = validationFixture();
+    change(f);
+    f.github.paginate = async () => {
+      throw new Error("Must not read comments");
+    };
+    assert.equal((await verifyBenchmarkDocs(f)).ready, true);
+  }
+});
+
+test("the required workflow waits for publication and fails closed after its bounded wait", async () => {
+  const workflow = await readFile(
+    new URL("../workflows/docs.yml", import.meta.url),
+    "utf8",
+  );
+  const script = workflow
+    .split("const { verifyBenchmarkDocs } = await import(")[1]
+    .split("\n")
+    .slice(1)
+    .join("\n")
+    .split("\n  # Standalone")[0]
+    .split("\n")
+    .map((line) => line.slice(12))
+    .join("\n");
+  const execute = new (Object.getPrototypeOf(async () => {}).constructor)(
+    "verifyBenchmarkDocs",
+    "verifyGeneration",
+    "github",
+    "context",
+    "core",
+    "setTimeout",
+    script,
+  );
+  for (const becomesReady of [true, false]) {
+    let attempts = 0;
+    let failed = false;
+    let waits = 0;
+    await execute(
+      async () => ({ ready: ++attempts === 2 && becomesReady, reason: "test" }),
+      async () => ({ ready: true }),
+      {},
+      {},
+      {
+        info: () => {},
+        setFailed: () => {
+          failed = true;
+        },
+      },
+      (callback) => {
+        waits++;
+        callback();
+      },
+    );
+    assert.equal(failed, !becomesReady);
+    assert.equal(attempts, becomesReady ? 2 : 140);
+    assert.equal(waits, attempts - 1);
+  }
+});
 
 const markdown = `---\ntitle: Performance & Latency\n---
 <!-- Keep run dates in artifacts. -->
@@ -128,7 +345,7 @@ test("only the marked table changes; rendering is idempotent and has no dates or
   assert.ok(result.endsWith(markdown.split("old mcp table")[1]));
   assert.match(
     result,
-    /Concurrent tool calls \| Median added latency[^]*\| 50 \| 1.00 ms \| 2.00 ms \| 3.00 ms \|/,
+    /Concurrent tool calls \| Median added latency[\s\S]*\| 50 \| 1.00 ms \| 2.00 ms \| 3.00 ms \|/,
   );
   assert.match(result, /Concurrent HTTP requests \| Median added latency/);
   assert.match(
@@ -159,7 +376,10 @@ test("runner resources refresh from each measured host", () => {
 test("diagnostic CPU profiles cannot replace release docs", async () => {
   const f = fixture();
   f.summary.diagnostic = "cpu-profile";
-  assert.throws(() => updateBenchmarkTable(markdown, f.summary), /Only complete/);
+  assert.throws(
+    () => updateBenchmarkTable(markdown, f.summary),
+    /Only complete/,
+  );
   assert.equal(await commitBenchmarkDocs(f), "ineligible");
   assert.equal(f.writes.length, 0);
 });
@@ -167,7 +387,10 @@ test("diagnostic CPU profiles cannot replace release docs", async () => {
 test("manual worker scaling cannot replace the single-process release table", async () => {
   const f = fixture();
   f.summary.webWorkers = 4;
-  assert.throws(() => updateBenchmarkTable(markdown, f.summary), /Only complete/);
+  assert.throws(
+    () => updateBenchmarkTable(markdown, f.summary),
+    /Only complete/,
+  );
   assert.equal(await commitBenchmarkDocs(f), "ineligible");
   assert.equal(f.writes.length, 0);
 });
@@ -335,13 +558,19 @@ test("queue entry during publication retains the validated head without retrying
   f.github.rest.git.updateRef = async ({ force }) => {
     attempts++;
     assert.equal(force, false);
-    throw Object.assign(new Error(
-      "A pull request for this branch has been added to a merge queue. Branches that\n" +
-      "are queued for merging cannot be updated. To modify this branch, dequeue the\n" +
-      "associated pull request.",
-    ), { status: 422 });
+    throw Object.assign(
+      new Error(
+        "A pull request for this branch has been added to a merge queue. Branches that\n" +
+          "are queued for merging cannot be updated. To modify this branch, dequeue the\n" +
+          "associated pull request.",
+      ),
+      { status: 422 },
+    );
   };
-  assert.equal(await commitBenchmarkDocs(f), "queued; retaining validated benchmark artifacts and the queued head");
+  assert.equal(
+    await commitBenchmarkDocs(f),
+    "queued; retaining validated benchmark artifacts and the queued head",
+  );
   assert.equal(attempts, 1);
   assert.equal(f.current.head.sha, f.summary.gitCommit);
 });

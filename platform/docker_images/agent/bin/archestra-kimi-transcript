@@ -1,0 +1,298 @@
+#!/usr/bin/env python3
+"""Export a Kimi Code session as the readable transcript (version 1).
+
+Kimi records each session's main agent in `agents/main/wire.jsonl`, the same
+log a resumed session replays. Prompts, steers, assistant text and tool
+activity are kept; thinking, system reminders and usage are not. MCP tool names
+are shown as the gateway named them, not as Kimi's model saw them.
+
+With --answer FILE, the last turn's closing assistant text is also written to
+FILE as the turn's final answer. With --outcome, the last turn's outcome is
+printed: `completed <finish-reason>`, `failed <error-code> <http-status|->`,
+`cancelled`, `open <finish-reason|->` while Kimi has not yet recorded the turn's
+end, or `unknown`.
+
+With --failure stop|end, the archestra-kimi-turn-failure reason for the last
+turn is printed, or `none` when it succeeded. `stop` is for Kimi's Stop hook,
+which runs before Kimi records `turn.ended`: the turn ended normally, and only
+its last step's finish reason can still fail it. `end` needs the recorded end
+and prints `pending` until Kimi has written it.
+
+Usage: archestra-kimi-transcript <session-id> [--answer FILE] [--outcome]
+                                 [--failure stop|end]
+"""
+
+import json
+import os
+import re
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+# Kimi's own limits for a qualified MCP tool name (mcpCore/tool-naming.ts).
+MCP_PREFIX = "mcp__"
+MCP_SEPARATOR = "__"
+MAX_QUALIFIED_LENGTH = 64
+# Kimi's session ids are `session_<uuid>`; anything else is not looked up.
+SESSION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$")
+# Provider failures worth retrying (Kimi's own `retryable` codes, less
+# context.overflow, which a retry of the same task would hit again).
+TRANSIENT_CODES = {"provider.connection_error", "provider.overloaded", "provider.rate_limit"}
+REJECTED_CODES = {"provider.auth_error", "provider.not_found", "provider.oauth_managed"}
+
+
+def main() -> int:
+    arguments = sys.argv[1:]
+    if not arguments or not arguments[0] or arguments[0].startswith("--"):
+        print("usage: archestra-kimi-transcript <session-id> [--answer FILE] [--outcome]", file=sys.stderr)
+        return 64
+    session_id, options = arguments[0], arguments[1:]
+    answer_file = None
+    show_outcome = False
+    failure_mode = None
+    while options:
+        option = options.pop(0)
+        if option == "--answer" and options:
+            answer_file = options.pop(0)
+        elif option == "--outcome":
+            show_outcome = True
+        elif option == "--failure" and options and options[0] in ("stop", "end"):
+            failure_mode = options.pop(0)
+        else:
+            print(f"archestra-kimi-transcript: unknown option {option}", file=sys.stderr)
+            return 64
+    if not SESSION_ID.fullmatch(session_id):
+        print("archestra-kimi-transcript: not a Kimi session id", file=sys.stderr)
+        return 65
+    home = Path(os.environ.get("KIMI_CODE_HOME", Path.home() / ".kimi-code"))
+    runtime_dir = Path(os.environ.get("ARCHESTRA_AGENT_RUNTIME_DIR", "/var/run/archestra"))
+    wire = session_wire(home / "sessions", session_id)
+    if wire is None:
+        if show_outcome:
+            print("unknown")
+        if failure_mode:
+            print("pending" if failure_mode == "end" else "none")
+        return 0
+    records = read_records(wire)
+    entries, last_answer, outcome = transcript(records)
+    output = runtime_dir / "readable-transcript.json"
+    temporary = output.with_name(f"{output.name}.{os.getpid()}.tmp")
+    temporary.write_text(
+        json.dumps({"version": 1, "provider": "kimi", "entries": entries}) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary, output)
+    if answer_file:
+        # The print-mode driver publishes the same placeholder for this case.
+        answer = last_answer.strip() or "The session ended without producing a final message."
+        Path(answer_file).write_text(f"{answer}\n", encoding="utf-8")
+    if show_outcome:
+        print(outcome)
+    if failure_mode:
+        print(failure_reason(outcome, failure_mode))
+    return 0
+
+
+def session_wire(sessions: Path, session_id: str) -> Path | None:
+    """The main agent's record of a session, under any project's directory."""
+    try:
+        projects = sorted(entry for entry in sessions.iterdir() if entry.is_dir())
+    except OSError:
+        return None
+    for project in projects:
+        wire = project / session_id / "agents" / "main" / "wire.jsonl"
+        if wire.is_file():
+            return wire
+    return None
+
+
+def failure_reason(outcome: str, mode: str) -> str:
+    kind, _, rest = outcome.partition(" ")
+    if mode == "stop" and kind in ("open", "completed"):
+        # Kimi ends a turn cut off by the output limit as completed.
+        return "max_tokens" if rest == "max_tokens" else "none"
+    if kind == "completed":
+        return "max_tokens" if rest == "max_tokens" else "none"
+    if kind == "cancelled":
+        return "cancelled"
+    if kind != "failed":
+        return "pending"
+    code, _, status = rest.partition(" ")
+    if code == "provider.filtered":
+        return "refusal"
+    if code == "context.overflow":
+        return "context_overflow"
+    if code == "loop.max_steps_exceeded":
+        return "max_steps"
+    if code in TRANSIENT_CODES:
+        return "unavailable"
+    if code == "provider.api_error":
+        # Kimi retries a 5xx itself before giving up; a 4xx is the request's.
+        return "provider_rejected" if status.isdigit() and 400 <= int(status) < 500 else "unavailable"
+    if code in REJECTED_CODES:
+        return "provider_rejected"
+    return code or "unknown"
+
+
+def read_records(wire: Path) -> list[dict]:
+    records = []
+    for line in wire.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict):
+            records.append(record)
+    return records
+
+
+def transcript(records: list[dict]) -> tuple[list[dict], str, str]:
+    names = gateway_names(records)
+    entries: list[dict] = []
+    results: dict[str, int] = {}
+    answer = ""
+    outcome = "unknown"
+    finish = None
+    for record in records:
+        kind = record.get("type")
+        timed = timestamp(record.get("time"))
+        if kind in ("turn.prompt", "turn.steer"):
+            origin = record.get("origin") if isinstance(record.get("origin"), dict) else {}
+            if origin.get("kind", "user") != "user":
+                continue
+            text = parts_text(record.get("input"))
+            if text:
+                entries.append({"type": "message", "role": "user", "text": text, **timed})
+            if kind == "turn.prompt":
+                # A new turn: its own closing text and outcome replace the last.
+                answer, outcome, finish = "", "open -", None
+        elif kind == "context.append_loop_event":
+            event = record.get("event") if isinstance(record.get("event"), dict) else {}
+            event_type = event.get("type")
+            if event_type == "content.part":
+                part = event.get("part") if isinstance(event.get("part"), dict) else {}
+                text = part.get("text") if part.get("type") == "text" else None
+                if not isinstance(text, str) or not text:
+                    continue
+                last = entries[-1] if entries else None
+                # Streaming splits one message into parts; a tool call ends it.
+                if last and last["type"] == "message" and last["role"] == "assistant":
+                    last["text"] += text
+                    answer += text
+                else:
+                    entries.append({"type": "message", "role": "assistant", "text": text, **timed})
+                    answer = text
+            elif event_type == "tool.call":
+                answer = ""
+                entry = {"type": "tool_call", "name": names.get(event.get("name"), event.get("name") or "tool"), **timed}
+                call_id = event.get("toolCallId")
+                if isinstance(call_id, str):
+                    entry["toolCallId"] = call_id
+                if "args" in event:
+                    entry["input"] = serialized(event["args"])
+                entries.append(entry)
+            elif event_type == "tool.result":
+                result = event.get("result") if isinstance(event.get("result"), dict) else {}
+                output = result.get("output")
+                text = serialized(output) if output not in (None, "") else ""
+                entry = {"type": "tool_result", "text": text or "[Non-text result omitted]", **timed}
+                call_id = event.get("toolCallId")
+                if isinstance(call_id, str):
+                    entry["toolCallId"] = call_id
+                if result.get("isError") is True:
+                    entry["isError"] = True
+                if isinstance(call_id, str) and call_id in results:
+                    # A later result for the same call replaces the first.
+                    entries[results[call_id]] = entry
+                    continue
+                if isinstance(call_id, str):
+                    results[call_id] = len(entries)
+                entries.append(entry)
+            elif event_type == "step.end" and isinstance(event.get("finishReason"), str):
+                finish = event["finishReason"]
+                if outcome.startswith("open"):
+                    outcome = f"open {finish}"
+        elif kind == "turn.ended":
+            reason = record.get("reason")
+            error = record.get("error") if isinstance(record.get("error"), dict) else {}
+            if reason == "completed":
+                outcome = f"completed {finish or 'end_turn'}"
+            elif reason == "cancelled":
+                outcome = "cancelled"
+            elif reason == "failed":
+                code = error.get("code")
+                details = error.get("details") if isinstance(error.get("details"), dict) else {}
+                status = details.get("statusCode")
+                outcome = f"failed {code if isinstance(code, str) and code else 'unknown'} {status if isinstance(status, int) else '-'}"
+    return entries, answer, outcome
+
+
+def gateway_names(records: list[dict]) -> dict[str, str]:
+    """Kimi's model-facing tool names, mapped back to the names servers gave."""
+    names: dict[str, str] = {}
+    for record in records:
+        if record.get("type") != "mcp.tools_discovered":
+            continue
+        server = record.get("serverName")
+        tools = record.get("tools")
+        if not isinstance(server, str) or not isinstance(tools, list):
+            continue
+        for tool in tools:
+            name = tool.get("name") if isinstance(tool, dict) else None
+            if isinstance(name, str):
+                names[qualified_name(server, name)] = name
+    return names
+
+
+def qualified_name(server: str, tool: str) -> str:
+    full = f"{MCP_PREFIX}{name_part(server)}{MCP_SEPARATOR}{name_part(tool)}"
+    if len(full) <= MAX_QUALIFIED_LENGTH:
+        return full
+    digest = stable_hash(full)
+    return f"{full[: MAX_QUALIFIED_LENGTH - len(digest) - 1]}_{digest}"
+
+
+def name_part(part: str) -> str:
+    return re.sub(r"_+", "_", re.sub(r"[^a-zA-Z0-9_-]", "_", part))
+
+
+def stable_hash(text: str) -> str:
+    """FNV-1a over code points in signed 32-bit arithmetic, as Kimi computes it."""
+    value = 2166136261 - (1 << 32)
+    for character in text:
+        value = int32(value ^ ord(character))
+        value = int32(value * 16777619)
+    hexadecimal = format(value, "x") if value >= 0 else "-" + format(-value, "x")
+    return hexadecimal.rjust(8, "0")
+
+
+def int32(value: int) -> int:
+    value &= 0xFFFFFFFF
+    return value - (1 << 32) if value & 0x80000000 else value
+
+
+def parts_text(parts: object) -> str:
+    if not isinstance(parts, list):
+        return ""
+    return "".join(
+        part["text"] for part in parts if isinstance(part, dict) and part.get("type") == "text" and isinstance(part.get("text"), str)
+    )
+
+
+def serialized(value: object) -> str:
+    return value if isinstance(value, str) else json.dumps(value, separators=(",", ":"))
+
+
+def timestamp(milliseconds: object) -> dict:
+    if not isinstance(milliseconds, (int, float)) or isinstance(milliseconds, bool):
+        return {}
+    # A value out of range drops the timestamp, not the transcript.
+    try:
+        moment = datetime.fromtimestamp(milliseconds / 1000, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return {}
+    return {"timestamp": moment.isoformat(timespec="milliseconds").replace("+00:00", "Z")}
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

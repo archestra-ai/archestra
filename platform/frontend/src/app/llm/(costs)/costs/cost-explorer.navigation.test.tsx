@@ -6,6 +6,10 @@ import CostExplorer from "./cost-explorer";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
+vi.mock("@/lib/config/config.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/config/config.query")>()),
+  useFeature: () => false,
+}));
 vi.mock("@/lib/proxy-label-costs.query", () => ({
   useProxyLabelKeys: () => ({ data: [] }),
 }));
@@ -102,7 +106,7 @@ it("distinguishes API and billed spend from subscription estimates and explains 
     key: "Enter",
   });
   fireEvent.click(screen.getByRole("menuitem", { name: /^Tokens$/ }));
-  expect(screen.getByText(/Counts recorded token usage/)).toHaveTextContent(
-    "Requests in flight may not appear yet.",
+  expect(screen.getByText(/Counts newly processed input/)).toHaveTextContent(
+    "Reused cached input is shown separately and is not included.",
   );
 });

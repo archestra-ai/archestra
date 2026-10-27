@@ -383,6 +383,8 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "route", value: "/api/projects/:id/pin" },
   { kind: "route", value: "/api/projects/:id/instructions" },
   { kind: "route", value: "/api/apps/:appId/diagnostics" },
+  // Read-only: prices a recompute without changing anything.
+  { kind: "route", value: "/api/llm-models/:id/cost-backfill/preview" },
   { kind: "route", value: "/api/apps/:appId/screenshot" },
   { kind: "route", value: "/api/apps/:appId/open-in-chat" },
   { kind: "route", value: "/api/apps/external/:mcpServerId/open-in-chat" },
@@ -549,7 +551,7 @@ const AUDIT_RESOURCE_NAME_MAX_LENGTH = 512;
  * (deletes), then to the snapshot's `email` for entities addressed by email
  * rather than name (invitations). Keep the key/snapshot precedence in sync
  * with the frontend's legacy-row fallback `resourceDisplayName`
- * (frontend/src/app/audit/logs/_components/audit-log-action-labels.ts).
+ * (frontend/src/app/audit/logs/_parts/audit-log-action-labels.ts).
  * @public — shared with the Archestra MCP tool dispatch's audit writer so
  * names resolve identically on both surfaces.
  */

@@ -21,10 +21,14 @@ RUN apt-get update -qq \
 FROM node:24-bookworm-slim AS agent-base
 ARG TARGETARCH
 
+# CVE-2026-84782: require the fixed OpenSSL packages and refresh cached apt layers.
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
       build-essential ca-certificates curl ffmpeg fonts-dejavu-core git jq less libssl-dev libssl3 \
-      openssh-client pkg-config procps python3 python3-venv ripgrep tmux \
+      openssh-client openssl pkg-config procps python3 python3-venv ripgrep tmux \
+ && for package in openssl libssl3 libssl-dev; do \
+      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '3.0.22-1~deb12u2' || exit 1; \
+    done \
  && rm -rf /var/lib/apt/lists/*
 
 # A local PostgreSQL with pgvector for projects that need a database. Debian's
@@ -245,6 +249,7 @@ ENV HERMES_NODE=/usr/local/bin/node
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
     /opt/hermes/.venv/bin/python /tmp/agent-image-patches/hermes-tui-mcp-discovery.py \
+ && /opt/hermes/.venv/bin/python /tmp/agent-image-patches/hermes-mcp-sdk-import.py \
  && /opt/hermes/.venv/bin/python /tmp/agent-image-patches/hermes-no-first-contact-note.py
 USER 1000:1000
 RUN --network=none \
@@ -303,3 +308,33 @@ USER 1000:1000
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/mcp-startup.py grok
+
+# The npm package's postinstall only renames a previous Python kimi shim on
+# global installs. Install the checksummed tarball without lifecycle scripts.
+# Kimi finds ripgrep and fd on PATH instead of downloading its own copies.
+FROM agent-base AS agent-kimi
+USER root
+# Set before the version check below so no Kimi process looks for updates.
+ENV KIMI_CODE_NO_AUTO_UPDATE=1 KIMI_CLI_NO_AUTO_UPDATE=1 KIMI_DISABLE_TELEMETRY=1
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends fd-find \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /tmp/kimi \
+ && cd /tmp/kimi \
+ && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.3.3)" kimi-code.tgz \
+ && echo "dd5f1bc9cb9c7fd2a03d11f6ed2f037b6bb48a9f38fd1cb7169367ea08b9cfd266a041edf6fc626071d9aa231dc837f99cf9b86eff98286c0a1102f8a18a514f  kimi-code.tgz" | sha512sum -c - \
+ && npm install --global --prefix /opt/kimi --ignore-scripts --no-audit --no-fund ./kimi-code.tgz \
+ && ln -s /opt/kimi/bin/kimi /usr/local/bin/kimi \
+ && cd / && rm -rf /tmp/kimi /root/.npm \
+ && HOME=/tmp/kimi-version KIMI_CODE_HOME=/tmp/kimi-version kimi --version \
+ && rm -rf /tmp/kimi-version \
+ && chown -R 1000:1000 /home/node
+RUN --network=none \
+    --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
+    python3 /tmp/agent-image-patches/kimi-user-mcp-only.py \
+ && python3 /tmp/agent-image-patches/kimi-long-tool-call-ids.py
+USER 1000:1000
+
+RUN --network=none \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
+    python3 /tmp/agent-image-tests/mcp-startup.py kimi

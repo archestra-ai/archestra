@@ -256,7 +256,7 @@ vi.mock("@/lib/mcp/mcp-registry.query", () => ({
     )?.find((item) => item.id === id) ?? null,
 }));
 
-vi.mock("@/lib/mcp/mcp-install-orchestrator.hook", () => ({
+vi.mock("@/lib/mcp/use-mcp-install-orchestrator", () => ({
   useMcpInstallOrchestrator: (options?: unknown) =>
     mockUseMcpInstallOrchestrator(options),
 }));

@@ -87,6 +87,7 @@ import {
   assertCanAssignEnvironment,
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
+import { assertGitHubActionsAccessChange } from "@/services/github-actions-access";
 import { estimateMcpToolTokens } from "@/services/mcp-tool-token-estimate";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -2190,6 +2191,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         action: "update",
         checker,
         agentType: existingAgent.agentType,
+      });
+      await assertGitHubActionsAccessChange({
+        organizationId,
+        userId: user.id,
+        agentType: existingAgent.agentType,
+        previous: existingAgent.githubActionsAccess ?? null,
+        next: body.githubActionsAccess,
       });
 
       // Validate knowledgeBaseIds if provided

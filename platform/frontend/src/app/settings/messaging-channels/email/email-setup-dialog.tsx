@@ -13,7 +13,7 @@ import {
 } from "@/lib/chatops/incoming-email.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { ExternalDocsLink } from "../_components/external-docs-link";
+import { ExternalDocsLink } from "../_parts/external-docs-link";
 import {
   formatIncomingEmailExpiry,
   getIncomingEmailTimeUntilExpiry,

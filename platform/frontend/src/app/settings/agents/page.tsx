@@ -8,7 +8,7 @@ import {
   PopularAgentIdSchema,
   providerSupportsChat,
 } from "@archestra/shared";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { siKubernetes } from "simple-icons";
@@ -41,18 +41,18 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
+import { Switch } from "@/components/ui/switch";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
+  useIsGlobalAdmin,
   useOrganization,
   useUpdateAgentSettings,
   useUpdateSecuritySettings,
@@ -64,8 +64,6 @@ import {
   detectChanges,
   resolveInitialState,
 } from "./agent-settings-utils";
-
-type FileUploadsEnabled = "enabled" | "disabled";
 
 const MESSAGING_CHANNEL_LABELS_KEYS = Object.keys(
   MESSAGING_CHANNEL_LABELS,
@@ -85,7 +83,10 @@ export default function AgentSettingsPage() {
   const [defaultModel, setDefaultModel] = useState<string>("");
   const [tiers, setTiers] = useState<ModelTierSelection>(EMPTY_MODEL_TIERS);
   const [defaultAgentId, setDefaultAgentId] = useState<string>("");
-  const [fileUploads, setFileUploads] = useState<FileUploadsEnabled>("enabled");
+  const [fileUploads, setFileUploads] = useState(true);
+  const [playwrightEnabled, setPlaywrightEnabled] = useState(true);
+  const savedPlaywrightRef = useRef(true);
+  const { isGlobalAdmin } = useIsGlobalAdmin();
   const initializedRef = useRef(false);
   const savedStateRef = useRef<AgentSettingsState>({
     selectedApiKeyId: "",
@@ -93,7 +94,7 @@ export default function AgentSettingsPage() {
     tiers: EMPTY_MODEL_TIERS,
     defaultAgentId: "",
   });
-  const savedFileUploadsRef = useRef<FileUploadsEnabled>("enabled");
+  const savedFileUploadsRef = useRef(true);
   const runtimeBackend = useFeature("agentRuntimeBackend");
   const runtimeEnabled = useFeature("agentRuntime");
 
@@ -133,8 +134,9 @@ export default function AgentSettingsPage() {
     setDefaultModel(state.defaultModel);
     setTiers(state.tiers);
     setDefaultAgentId(state.defaultAgentId);
-    const savedFileUploads: FileUploadsEnabled =
-      (organization.allowChatFileUploads ?? true) ? "enabled" : "disabled";
+    const savedFileUploads = organization.allowChatFileUploads ?? true;
+    setPlaywrightEnabled(organization.playwrightMcpEnabled);
+    savedPlaywrightRef.current = organization.playwrightMcpEnabled;
     setFileUploads(savedFileUploads);
     savedStateRef.current = state;
     savedFileUploadsRef.current = savedFileUploads;
@@ -156,7 +158,9 @@ export default function AgentSettingsPage() {
   };
 
   const changes = detectChanges(localState, savedStateRef.current);
-  const securityHasChanges = fileUploads !== savedFileUploadsRef.current;
+  const securityHasChanges =
+    fileUploads !== savedFileUploadsRef.current ||
+    playwrightEnabled !== savedPlaywrightRef.current;
 
   const handleSave = async () => {
     if (!apiKeys) return;
@@ -169,9 +173,13 @@ export default function AgentSettingsPage() {
 
     if (securityHasChanges) {
       await updateSecurityMutation.mutateAsync({
-        allowChatFileUploads: fileUploads === "enabled",
+        allowChatFileUploads: fileUploads,
+        ...(isGlobalAdmin && playwrightEnabled !== savedPlaywrightRef.current
+          ? { playwrightMcpEnabled: playwrightEnabled }
+          : {}),
       });
       savedFileUploadsRef.current = fileUploads;
+      savedPlaywrightRef.current = playwrightEnabled;
     }
 
     initializedRef.current = false;
@@ -184,6 +192,7 @@ export default function AgentSettingsPage() {
     setTiers(saved.tiers);
     setDefaultAgentId(saved.defaultAgentId);
     setFileUploads(savedFileUploadsRef.current);
+    setPlaywrightEnabled(savedPlaywrightRef.current);
   };
 
   const modelItems = useMemo(() => {
@@ -366,40 +375,71 @@ export default function AgentSettingsPage() {
           </WithPermissions>
         }
       />
-      <SettingsBlock
-        title="Chat File Uploads"
-        description={`Allow users to upload files in the ${appName} chat UI.`}
-        control={
+      <section className="space-y-3" aria-labelledby="chat-file-uploads-title">
+        <h2
+          id="chat-file-uploads-title"
+          className="text-sm font-medium leading-5"
+        >
+          Chat File Uploads
+        </h2>
+        <InlineNotice variant="warning">
+          <AlertTriangle />
+          <InlineNoticeBody>
+            <span className="font-medium">
+              Uploads may contain sensitive information.
+            </span>
+            <InlineNoticeText>
+              Files and extracted content may be sent to the chat's AI provider.
+              Enable uploads only if your organization's data policies allow it.
+            </InlineNoticeText>
+          </InlineNoticeBody>
+        </InlineNotice>
+        <div className="flex items-center justify-between gap-4">
+          <p
+            id="chat-file-uploads-description"
+            className="text-sm leading-5 text-muted-foreground"
+          >{`Allow users to upload files in the ${appName} chat UI.`}</p>
           <WithPermissions
             permissions={{ organizationSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
-              <Select
-                value={fileUploads}
-                onValueChange={(value: FileUploadsEnabled) =>
-                  setFileUploads(value)
-                }
+              <Switch
+                aria-label="Chat File Uploads"
+                aria-describedby="chat-file-uploads-description"
+                checked={fileUploads}
+                onCheckedChange={setFileUploads}
                 disabled={isSaving || !hasPermission}
-              >
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="enabled">Enabled</SelectItem>
-                  <SelectItem value="disabled">Disabled</SelectItem>
-                </SelectContent>
-              </Select>
+              />
             )}
           </WithPermissions>
-        }
-        notice={
-          <span className="text-red-600 dark:text-red-400">
-            Security policies only apply to text content. File uploads (images,
-            PDFs) bypass policy checks. File-based policies coming soon.
-          </span>
-        }
-      />
+        </div>
+      </section>
+      <section className="space-y-3" aria-labelledby="built-in-browser-title">
+        <h2
+          id="built-in-browser-title"
+          className="text-sm font-medium leading-5"
+        >
+          Built-in Browser (Playwright MCP)
+        </h2>
+        <div className="flex items-center justify-between gap-4">
+          <p
+            id="built-in-browser-description"
+            className="text-sm leading-5 text-muted-foreground"
+          >
+            Allow agents to use the built-in browser. Disabling stops browser
+            MCP runtimes in every environment and hides the Browser panel in
+            chat.
+          </p>
+          <Switch
+            aria-label="Built-in Browser (Playwright MCP)"
+            aria-describedby="built-in-browser-description"
+            checked={playwrightEnabled}
+            onCheckedChange={setPlaywrightEnabled}
+            disabled={isSaving || !isGlobalAdmin}
+          />
+        </div>
+      </section>
 
       <SettingsSaveBar
         hasChanges={changes.hasChanges || securityHasChanges}

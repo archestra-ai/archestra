@@ -542,6 +542,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ListRuntimeCredentials]: { credential: ["read"] },
   [RouteId.StartGitHubUserConnection]: {},
   [RouteId.CompleteGitHubUserConnection]: { credential: ["read"] },
+  // Public: a GitHub Actions OIDC token is the proof, checked in the handler
+  // against the gateway's GitHub Actions setting. The authnz layer exempts it.
+  [RouteId.ExchangeGitHubActionsToken]: {},
   // A credential just for you is self-service; the route requires
   // credential:create for organization and shared ones.
   [RouteId.CreateRuntimeCredential]: {},
@@ -1039,6 +1042,10 @@ export const requiredEndpointPermissionsMap: Partial<
     chat: ["read"],
   },
   [RouteId.GetLlmModels]: {},
+  [RouteId.GetModelPools]: { llmModel: ["read"] },
+  [RouteId.CreateModelPool]: { llmModel: ["update"] },
+  [RouteId.UpdateModelPool]: { llmModel: ["update"] },
+  [RouteId.DeleteModelPool]: { llmModel: ["update"] },
   [RouteId.GetLlmProviderModelLabelKeys]: { llmModel: ["read"] },
   [RouteId.GetLlmProviderModelLabelValues]: { llmModel: ["read"] },
   [RouteId.SyncLlmModels]: {
@@ -1179,6 +1186,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetLlmModelOptions]: {},
   [RouteId.BulkUpdateModels]: {},
   [RouteId.UpdateModel]: {},
+  // Cost backfill: scoped llmModel:update checked in the handler
+  [RouteId.PreviewModelCostBackfill]: {},
+  [RouteId.StartModelCostBackfill]: {},
+  [RouteId.GetModelCostBackfill]: {},
   // Delegation routes: agent-type permission checked dynamically in handler
   [RouteId.GetAgentDelegations]: {},
   [RouteId.SyncAgentDelegations]: {},
@@ -1214,6 +1225,12 @@ export const requiredEndpointPermissionsMap: Partial<
     llmLimit: ["create"],
   },
   [RouteId.UpdateDefaultUserLimit]: {
+    llmLimit: ["update"],
+  },
+  [RouteId.ListUserLimitUsage]: {
+    llmLimit: ["read"],
+  },
+  [RouteId.ResetUserLimitUsage]: {
     llmLimit: ["update"],
   },
   [RouteId.DeleteDefaultUserLimit]: {
@@ -2089,6 +2106,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/proxy/virtual-keys": { llmVirtualKey: ["read"] },
   "/llm/model-providers": { llmProviderApiKey: ["read"] },
   "/llm/models": { llmModel: ["read"] },
+  "/llm/model-pools": { llmModel: ["read"] },
   // Intentionally ungated: this page is fixed to the caller's own usage.
   "/llm/usage": {},
   "/llm/costs": { llmCost: ["read"] },

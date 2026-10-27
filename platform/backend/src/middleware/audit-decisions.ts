@@ -24,6 +24,7 @@ import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
+import ModelPoolModel from "@/models/model-pool";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
@@ -40,6 +41,7 @@ import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
+import UserLimitUsageResetModel from "@/models/user-limit-usage-reset";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 
@@ -157,10 +159,15 @@ export const AUDIT_DECISIONS = {
     model: KnowledgeBaseConnectorModel,
   },
   limitsTable: { audited: true, model: LimitModel },
+  userLimitUsageResetsTable: {
+    audited: true,
+    model: UserLimitUsageResetModel,
+  },
   llmProviderApiKeysTable: { audited: true, model: LlmProviderApiKeyModel },
   mcpServersTable: { audited: true, model: McpServerModel },
   membersTable: { audited: true, model: MemberModel },
   modelsTable: { audited: true, model: ModelModel },
+  modelPoolsTable: { audited: true, model: ModelPoolModel },
   // oauthClientsTable stores LLM OAuth clients (/api/llm-oauth-clients) and MCP
   // OAuth clients (/api/mcp-oauth-clients). Admin CRUD for both is audited at the
   // route level via AUDITABLE_ROUTES; this table-level model is the LLM snapshot.
@@ -867,6 +874,14 @@ export const AUDIT_DECISIONS = {
     reason:
       "admin member mapping mutated only via /api/connectors/:id/member-overrides, audited at the route level as connector.updated; the connector audit snapshot carries the mapping list so upsert/delete diffs",
   },
+  modelPoolMembersTable: {
+    audited: false,
+    reason: "child: pool × provider key; parent (model pool) audited",
+  },
+  modelPoolVirtualApiKeysTable: {
+    audited: false,
+    reason: "join: pool × virtual key; parent (model pool) audited",
+  },
   llmProviderApiKeyModelsTable: {
     audited: false,
     reason: "join: provider key × model; parent audited",
@@ -882,6 +897,11 @@ export const AUDIT_DECISIONS = {
   connectorRunsTable: {
     audited: false,
     reason: "connector run execution log",
+  },
+  modelCostBackfillsTable: {
+    audited: false,
+    reason:
+      "background job state; starting a backfill is audited at its route, and the worker's progress writes are not admin actions",
   },
   scheduleTriggerRunsTable: {
     audited: false,

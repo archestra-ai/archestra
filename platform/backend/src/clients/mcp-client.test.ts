@@ -445,6 +445,65 @@ describe("McpClient", () => {
     expect(mockConnect).toHaveBeenCalledTimes(2);
   });
 
+  test("disabled browser policy rejects assigned tools, discovery, and direct inspection before opening a connection", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    const catalog = await InternalMcpCatalogModel.create({
+      id: PLAYWRIGHT_MCP_CATALOG_ID,
+      name: "playwright",
+      serverType: "remote",
+      serverUrl: "https://browser.example/mcp",
+    });
+    await PlaywrightRuntimeModel.reconcileAll();
+    const server = mustExist(
+      await PlaywrightRuntimeModel.findForEnvironment(null),
+    );
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "playwright__browser_navigate",
+      description: "Navigate",
+      parameters: {},
+      catalogId: catalog.id,
+    });
+    await AgentToolModel.create(agentId, tool.id, { mcpServerId: server.id });
+    await OrganizationModel.patch(organization.id, {
+      playwrightMcpEnabled: false,
+    });
+    mockConnect.mockClear();
+    mockCallTool.mockClear();
+    const result = await mcpClient.executeToolCallForOwner(
+      { id: "disabled-call", name: tool.name, arguments: {} },
+      agentOwner(agentId),
+      {
+        tokenId: "browser-test-token",
+        userId: user.id,
+        teamId: null,
+        isOrganizationToken: false,
+      },
+    );
+    expect(result.isError).toBe(true);
+    await expect(
+      mcpClient.connectAndGetTools({
+        catalogItem: catalog,
+        mcpServerId: server.id,
+        secrets: {},
+      }),
+    ).rejects.toThrow("disabled");
+    await expect(
+      mcpClient.inspectServer({
+        catalogItem: catalog,
+        mcpServerId: server.id,
+        secrets: {},
+        method: "tools/call",
+        toolName: "browser_navigate",
+      }),
+    ).rejects.toThrow("disabled");
+    expect(mockConnect).not.toHaveBeenCalled();
+    expect(mockCallTool).not.toHaveBeenCalled();
+  });
+
   test("isolates a shared Playwright connection per caller and reuses it for that caller", async ({
     makeUser,
     makeApp,

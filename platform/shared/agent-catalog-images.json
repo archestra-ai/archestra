@@ -4,5 +4,6 @@
   "opencode": "agent-opencode",
   "hermes": "agent-hermes",
   "openclaw": "agent-openclaw",
-  "grok": "agent-grok"
+  "grok": "agent-grok",
+  "kimi": "agent-kimi"
 }

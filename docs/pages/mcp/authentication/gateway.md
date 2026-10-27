@@ -1,9 +1,9 @@
 ---
 title: MCP Gateway Authentication
 sidebarTitle: Gateway Authentication
-description: Authenticate a client to an MCP Gateway with OAuth, a platform token, or your identity provider's JWT
+description: Authenticate a client to an MCP Gateway with OAuth, a platform token, your identity provider's JWT, or a GitHub Actions token
 order: 1
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -15,6 +15,7 @@ Each client proves who it is before the gateway shows any tools. Pick the method
 | Claude Code, Cursor, or another MCP client | [OAuth](#oauth-21): the client opens a browser for you | The person who signs in |
 | A script or CI job | [Platform token](#bearer-token): one header | You, a team, or the organization |
 | A client that already holds a token from your identity provider | [Identity provider JWT](#identity-provider-jwks): pass that token | The person in the token |
+| A GitHub Actions workflow on a pull request | [GitHub Actions](#github-actions): trade the job's GitHub token | The pull request's author |
 | Your own app or service | [OAuth client](/docs/mcp/authentication/applications): the app gets its own identity | The app, or the person using it |
 
 Not sure? Use OAuth. It works with any MCP client. By default, you register nothing in Archestra first.
@@ -83,6 +84,51 @@ Archestra accepts the token only when:
 - It names a known person. Its email matches an Archestra user who can use the gateway. If your provider puts the email in a custom claim, set **Email Claim** under the provider's **Attribute Mapping**.
 
 Token rejected? Open the provider and go to **Token Debugger**. It shows the claims of your own latest sign-in, so you can see which claim holds the email.
+
+## GitHub Actions
+
+A pull request workflow, such as an automated code review, can use the gateway as the person who opened the pull request. Its runs and costs count as theirs, and its review posts as your GitHub App. Nobody stores a token in GitHub: the job trades its own GitHub token for a gateway token.
+
+Before you start:
+
+- A [GitHub App credential](/docs/admin/credentials#credential-types) for GitHub.com, installed on the repositories, with **Pull requests** write and **Contents** and **Checks** read.
+- A GitHub user credential that uses that App. Each author connects it once: click your name in the sidebar, open **Credentials**, and click **Connect**.
+
+Then:
+
+1. On the gateway's **Settings** tab, turn on **Accept GitHub Actions tokens** under **GitHub Actions**.
+2. Pick the App, add the repositories, and add each trusted workflow as GitHub names it in the token's `job_workflow_ref` claim, such as `acme/review/.github/workflows/review.yml@refs/heads/main`.
+3. In the workflow, grant `id-token: write`, request a GitHub OIDC token whose audience is your [`ARCHESTRA_FRONTEND_URL`](/docs/admin/deployment/configuration#ARCHESTRA_FRONTEND_URL), and send it:
+
+   ```http
+   POST <Archestra URL>/api/github-actions/token
+   Content-Type: application/json
+
+   {"token": "<GitHub OIDC token>", "resource": "<Archestra URL>/v1/mcp/<gateway id or slug>"}
+   ```
+
+4. Check that the response holds an `access_token` for the gateway and a `github_token` for the repository.
+
+What to know:
+
+- The job that asks must come from a reusable workflow called at a branch, a tag, or a commit SHA. A workflow file in the pull request is never trusted, because the pull request can change it.
+- Only `pull_request` runs from the repository itself, started by the pull request's author, qualify. A run that a collaborator starts by pushing to someone else's pull request is refused, and so is a pull request from a fork.
+- The gateway token lasts three hours. The GitHub token is limited to that one repository and lasts up to one hour.
+
+A refusal names its reason in `error`:
+
+| `error` | Cause | Fix |
+| --- | --- | --- |
+| `not_author` | Someone other than the author started the run | The author starts a new run, for example by pushing a commit. A re-run keeps who started it |
+| `not_linked` | The author has not connected GitHub through the App, or that connection expired or was revoked | The author connects it under **Credentials**, then re-runs the job |
+| `ambiguous_link` | Several accounts connected the same GitHub user | Disconnect it from all but one account |
+| `forbidden` | The author's account cannot use the gateway | Share the gateway with the author |
+| `not_trusted` | The repository, workflow, or event is not allowed, the pull request is from a fork, or the App cannot read it | Check the gateway's **GitHub Actions** settings and the App's installation |
+| `invalid_request` | The body lacks `token` or `resource`, or `resource` is not a gateway URL of this Archestra | Send both, with `resource` built from your Archestra URL |
+| `invalid_token` | Wrong audience, expired, or already exchanged | Request a new token with the right audience |
+| `rate_limited` | Too many requests from one address | Wait for the time in the `Retry-After` header, then try again |
+| `github_error` | GitHub refused a request, for example because the App lacks one of the permissions above, or the App's private key cannot be used | Check the App's permissions, installation, and private key |
+| `server_error` | The exchange failed unexpectedly | Request a fresh OIDC token and try again |
 
 <span id="identity-assertion-jwt-authorization-grant-id-jag"></span>
 

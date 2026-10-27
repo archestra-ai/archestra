@@ -2488,6 +2488,12 @@ class McpClient {
     serverLookup?: ListingServerLookup;
   }): Promise<TargetInstall | { refusal: TargetInstallRefusal }> {
     const fallbackName = tool.catalogName || "unknown";
+    if (
+      PlaywrightRuntimeModel.isManagedCatalogConfig(catalogItem) &&
+      !(await PlaywrightRuntimeModel.isEnabled())
+    ) {
+      return { refusal: "browser_runtime_unavailable" };
+    }
 
     if (isPlaywrightCatalogItem(catalogItem.id)) {
       const server = await PlaywrightRuntimeModel.findForOwner(owner);
@@ -2798,6 +2804,13 @@ class McpClient {
     },
   ): Promise<Transport> {
     await assertMayConnect(catalogItem.id, caller);
+    // Also covers queued calls and retry paths that bypass getTransport().
+    if (
+      PlaywrightRuntimeModel.isManagedCatalogConfig(catalogItem) &&
+      !(await PlaywrightRuntimeModel.isEnabled())
+    ) {
+      throw new Error("The built-in browser MCP is disabled");
+    }
     if (transportKind === "http") {
       if (catalogItem.serverType === "local") {
         const url =
@@ -3148,6 +3161,12 @@ class McpClient {
       headerValue: string;
     },
   ): Promise<Transport> {
+    if (
+      PlaywrightRuntimeModel.isManagedCatalogConfig(catalogItem) &&
+      !(await PlaywrightRuntimeModel.isEnabled())
+    ) {
+      throw new Error("The built-in browser MCP is disabled");
+    }
     const resolvedSecrets = await this.resolveSecretsForTransport({
       catalogItem,
       secrets,
@@ -4216,6 +4235,12 @@ class McpClient {
       enterpriseTransportCredential,
     } = params;
 
+    if (
+      PlaywrightRuntimeModel.isManagedCatalogConfig(catalogItem) &&
+      !(await PlaywrightRuntimeModel.isEnabled())
+    ) {
+      throw new Error("The built-in browser MCP is disabled");
+    }
     // Local stdio servers can report a ready pod before the MCP process accepts
     // JSON-RPC, especially while the runtime is still pulling or starting Node.
     const maxRetries = catalogItem.serverType === "local" ? 6 : 1;

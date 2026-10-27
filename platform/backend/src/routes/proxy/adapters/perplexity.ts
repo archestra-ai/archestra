@@ -47,6 +47,7 @@ import type {
   UsageView,
 } from "@/types";
 import { extractCommonMessageText } from "@/types";
+import { streamChatCompletionChunks } from "./chat-completions-stream";
 import { toOpenAiStreamUsage } from "./openai-sse-chunk";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
@@ -625,16 +626,9 @@ export const perplexityAdapterFactory: LLMProvider<
       stream: true,
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
-    const stream =
-      await perplexityClient.chat.completions.create(perplexityRequest);
-
-    return {
-      [Symbol.asyncIterator]: async function* () {
-        for await (const chunk of stream) {
-          yield chunk as PerplexityStreamChunk;
-        }
-      },
-    };
+    return streamChatCompletionChunks<PerplexityStreamChunk>(
+      perplexityClient.chat.completions.create(perplexityRequest),
+    );
   },
 
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {

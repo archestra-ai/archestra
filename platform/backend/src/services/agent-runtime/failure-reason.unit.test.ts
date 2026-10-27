@@ -66,6 +66,7 @@ describe("turn failure classification", () => {
     // Maintained images: transient provider, proxy and startup problems.
     ["claude_rate_limit", "image.claude_rate_limit", true],
     ["claude_unavailable", "image.claude_unavailable", true],
+    ["kimi_unavailable", "image.kimi_unavailable", true],
     ["proxy_unavailable", "image.proxy_unavailable", true],
     ["mcp_startup", "image.mcp_startup", true],
     ["task_submission", "image.task_submission", true],
@@ -80,6 +81,8 @@ describe("turn failure classification", () => {
     ["codex_startup", "image.codex_startup", false],
     ["codex_turn_failed", "image.codex_turn_failed", false],
     ["opencode_session_error", "image.opencode_session_error", false],
+    ["kimi_turn_failed", "image.kimi_turn_failed", false],
+    ["kimi_protocol", "image.kimi_protocol", false],
     // Custom images own their vocabulary; unknown codes are not retriable.
     ["my_agent.input_missing", "image.my_agent.input_missing", false],
   ])("classifies envelope %s as %s", (envelopeCode, code, retriable) => {

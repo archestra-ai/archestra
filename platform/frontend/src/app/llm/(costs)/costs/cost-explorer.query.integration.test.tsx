@@ -166,7 +166,7 @@ it("distinguishes app opens from inference and includes all groups", async () =>
   });
 });
 
-it("uses the reported app token total including cache instead of adding raw input and output", async () => {
+it("uses the reported app token total without cache reads instead of adding raw input and output", async () => {
   server.use(
     http.get(`${origin}/api/statistics/app-usage`, () =>
       HttpResponse.json({
@@ -285,7 +285,7 @@ it.each([
   expect(result.current.isLoading).toBe(false);
 });
 
-it("aligns reported token totals including cache writes without recounting estimated input", async () => {
+it("aligns reported token totals with cache writes and without cache reads or estimated input", async () => {
   server.use(
     http.get(`${origin}/api/statistics/costs`, () =>
       HttpResponse.json({
@@ -303,19 +303,19 @@ it("aligns reported token totals including cache writes without recounting estim
             outputTokens: 9,
             cacheReadTokens: 20,
             cacheWriteTokens: 5,
-            totalTokens: 124,
+            totalTokens: 104,
             timeSeries: [
               {
                 timestamp: "2026-01-01T00:00:00Z",
                 requests: 4,
                 inputTokens: 40,
-                totalTokens: 56,
+                totalTokens: 36,
               },
               {
                 timestamp: "2026-01-02T00:00:00Z",
                 requests: 5,
                 inputTokens: 50,
-                totalTokens: 68,
+                totalTokens: 48,
               },
             ],
           },
@@ -326,13 +326,13 @@ it("aligns reported token totals including cache writes without recounting estim
             outputTokens: 3,
             cacheReadTokens: 7,
             cacheWriteTokens: 11,
-            totalTokens: 21,
+            totalTokens: 14,
             timeSeries: [
               {
                 timestamp: "2026-01-02T00:00:00Z",
                 requests: 3,
                 inputTokens: 100,
-                totalTokens: 21,
+                totalTokens: 14,
               },
             ],
           },
@@ -347,7 +347,7 @@ it("aligns reported token totals including cache writes without recounting estim
   await waitFor(() => expect(result.current.isUsagePending).toBe(false));
   expect(result.current.people.value).toBe(53);
   expect(result.current.requests).toEqual({ value: 12, series: [4, 8] });
-  expect(result.current.tokens).toEqual({ value: 145, series: [56, 89] });
+  expect(result.current.tokens).toEqual({ value: 118, series: [36, 62] });
 });
 
 it("deduplicates overview and model chart requests without eagerly fetching user details", async () => {
@@ -390,4 +390,119 @@ it("deduplicates overview and model chart requests without eagerly fetching user
   await waitFor(() => expect(result.current.cube.total).toBe(2));
   expect(result.current.kpis.people.value).toBe(5);
   expect(requests).toBe(1);
+});
+
+it("groups proxy usage by provider key and pool and shows failed-over attempts", async () => {
+  const usage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    subscriptionCost: 0,
+  };
+  const queries: URLSearchParams[] = [];
+  server.use(
+    http.get(`${origin}/api/statistics/llm-proxy`, ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      queries.push(query);
+      const totals = {
+        ...usage,
+        requests: 4,
+        billedCost: 7,
+        failedOverAttempts: 1,
+      };
+      return HttpResponse.json({
+        totals,
+        timeSeries: [],
+        methods: [],
+        credentials: [],
+        pagination: { limit: 50, offset: 0, total: 0 },
+        providerKeys: query.has("includeProviderKeys")
+          ? [
+              {
+                ...usage,
+                providerApiKeyId: "11111111-1111-4111-8111-111111111111",
+                providerApiKeyName: "Dedicated",
+                provider: "openai",
+                requests: 3,
+                billedCost: 5,
+                failedOverAttempts: 1,
+              },
+              {
+                ...usage,
+                providerApiKeyId: null,
+                providerApiKeyName: null,
+                provider: null,
+                requests: 1,
+                billedCost: 2,
+                failedOverAttempts: 0,
+              },
+            ]
+          : undefined,
+        modelPools: query.has("includeModelPools")
+          ? [
+              {
+                ...usage,
+                modelPoolId: "22222222-2222-4222-8222-222222222222",
+                modelPoolName: "gpt-pool",
+                requests: 3,
+                billedCost: 3,
+                failedOverAttempts: 1,
+              },
+            ]
+          : undefined,
+      });
+    }),
+  );
+  const byKey = renderHook(
+    () =>
+      usePivotCube(
+        {
+          metric: "requests",
+          group: "providerKey",
+          split: "none",
+          chart: "table",
+        },
+        "30d",
+        true,
+      ),
+    { wrapper },
+  );
+  await waitFor(() => expect(byKey.result.current.total).toBe(4));
+  expect(
+    byKey.result.current.rows.map((row) => [
+      row.label,
+      row.total,
+      row.extras.failedOver,
+    ]),
+  ).toEqual([
+    ["Dedicated", 3, 1],
+    ["No provider key", 1, 0],
+  ]);
+  expect(byKey.result.current.extraCols.map((col) => col.label)).toEqual([
+    "Failed over",
+  ]);
+  // The keyed row is trended through its own filter; the null row can't be.
+  await waitFor(() =>
+    expect(
+      queries.some(
+        (query) =>
+          query.get("providerApiKeyId") ===
+          "11111111-1111-4111-8111-111111111111",
+      ),
+    ).toBe(true),
+  );
+
+  const byPool = renderHook(
+    () =>
+      usePivotCube(
+        { metric: "billed", group: "pool", split: "none", chart: "table" },
+        "30d",
+        true,
+      ),
+    { wrapper },
+  );
+  await waitFor(() => expect(byPool.result.current.total).toBe(3));
+  expect(byPool.result.current.rows[0].label).toBe("gpt-pool");
+  // The failed-over column is a request count, so Spend leaves it out.
+  expect(byPool.result.current.extraCols).toEqual([]);
 });

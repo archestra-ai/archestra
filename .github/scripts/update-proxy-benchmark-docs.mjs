@@ -1,5 +1,9 @@
 import { renderSummary } from "../../platform/benchmarks/report.mjs";
-import { isPlatformReleasePr } from "./proxy-benchmark-baseline.mjs";
+import {
+  benchmarkMarker,
+  isPlatformReleasePr,
+  readBenchmarkPayload,
+} from "./proxy-benchmark-baseline.mjs";
 
 export const benchmarkDocsPath =
   "docs/pages/admin/observability/performance-benchmarks.md";
@@ -18,6 +22,97 @@ const blocks = {
 };
 const workloads = ["chat", "tools", "stream", "mcp"];
 const sha = /^[a-f0-9]{40}$/;
+
+/** Required docs validation holds release PRs out of the queue until codegen lands. */
+export async function verifyBenchmarkDocs({ github, context }) {
+  const source = context.payload.pull_request;
+  if (
+    source?.user?.login !== "archestra-ci[bot]" ||
+    !isPlatformReleasePr(source, `${context.repo.owner}/${context.repo.repo}`)
+  )
+    return { ready: true, reason: "Not a platform release PR" };
+
+  const pending = (reason) => ({ ready: false, reason });
+  const comments = await github.paginate(github.rest.issues.listComments, {
+    ...context.repo,
+    issue_number: source.number,
+    per_page: 100,
+  });
+  const saved = comments.find(
+    (comment) =>
+      comment.user?.login === "github-actions[bot]" &&
+      comment.body?.startsWith(benchmarkMarker),
+  );
+  let payload;
+  try {
+    payload = readBenchmarkPayload(saved?.body);
+  } catch {
+    return pending("Benchmark record is invalid");
+  }
+  const summary = payload?.summary;
+  if (
+    !sha.test(payload?.gitCommit ?? "") ||
+    summary?.gitCommit !== payload.gitCommit ||
+    !sha.test(summary?.platformTree ?? "")
+  )
+    return pending("Waiting for a successful benchmark for this release");
+
+  if (payload.gitCommit !== source.head.sha) {
+    const { data: changes } = await github.rest.repos.compareCommits({
+      ...context.repo,
+      base: payload.gitCommit,
+      head: source.head.sha,
+    });
+    // Tables and screenshots may follow the measured commit. No execution
+    // inputs may change, and a truncated comparison cannot establish that.
+    if (
+      changes.status !== "ahead" ||
+      !changes.files?.length ||
+      changes.files.length >= 300 ||
+      changes.files.some(
+        (file) =>
+          !file.filename.startsWith("docs/") ||
+          (file.previous_filename &&
+            !file.previous_filename.startsWith("docs/")),
+      )
+    )
+      return pending(
+        "Benchmark predates changes to the release's measured code",
+      );
+  }
+  const { data: measured } = await github.rest.repos.getCommit({
+    ...context.repo,
+    ref: payload.gitCommit,
+  });
+  const { data: tree } = await github.rest.git.getTree({
+    ...context.repo,
+    tree_sha: measured.commit.tree.sha,
+  });
+  if (
+    tree.tree.find(
+      (entry) => entry.path === "platform" && entry.type === "tree",
+    )?.sha !== summary.platformTree
+  )
+    return pending(
+      "Benchmark source tree does not match its measured revision",
+    );
+
+  const { data: file } = await github.rest.repos.getContent({
+    ...context.repo,
+    path: benchmarkDocsPath,
+    ref: source.head.sha,
+  });
+  if (file.type !== "file" || file.encoding !== "base64" || file.size > 256000)
+    throw new Error("Benchmark docs are not a bounded Markdown file");
+  const markdown = Buffer.from(file.content, "base64").toString("utf8");
+  try {
+    if (updateBenchmarkTable(markdown, summary) !== markdown)
+      return pending("Waiting for the generated LLM proxy and MCP tables");
+  } catch {
+    return pending("Benchmark record or generated tables are invalid");
+  }
+  return { ready: true, reason: `Tables match benchmark ${payload.gitCommit}` };
+}
 
 export function updateBenchmarkTable(markdown, summary) {
   renderSummary(summary);
@@ -62,7 +157,9 @@ export function updateBenchmarkTable(markdown, summary) {
       updated.indexOf(start) > updated.indexOf(end)
     )
       throw new Error("Benchmark docs must contain exactly one results block");
-    const row = summary.rows.find((candidate) => candidate.scenario === scenario);
+    const row = summary.rows.find(
+      (candidate) => candidate.scenario === scenario,
+    );
     const table = [
       `| Runner resources | ${requests} | Median added latency | P95 added latency | P99 added latency |`,
       "| --- | ---: | ---: | ---: | ---: |",

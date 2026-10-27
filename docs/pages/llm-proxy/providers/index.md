@@ -86,7 +86,7 @@ Each provider has its own proxy URL, `https://<archestra-host>/v1/<path>`, with 
 | [Google Gemini](/docs/llm-proxy/providers/gemini) | `gemini` | Generate Content, Embeddings | Yes | Google AI Studio or Vertex AI |
 | Groq | `groq` | Chat Completions | Yes | |
 | Jev | `jev` | Decisions | No | Scores content, such as a tool call. It does not chat. See [Jev](#jev). |
-| Kimi (Moonshot AI) | `kimi` | Chat Completions | No | China endpoint: set [`ARCHESTRA_KIMI_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_KIMI_BASE_URL) to `https://api.moonshot.cn/v1` |
+| Kimi (Moonshot AI) | `kimi` | Chat Completions | Yes, Chat Completions only | China endpoint: set [`ARCHESTRA_KIMI_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_KIMI_BASE_URL) to `https://api.moonshot.cn/v1`. A Kimi for Coding membership key needs the Kimi Code endpoint: set the key's Base URL to `https://api.kimi.com/coding/v1` (kimi.com accounts) or `https://api.kimi.ai/coding/v1` (kimi.ai accounts) |
 | [Microsoft 365 Copilot](/docs/llm-proxy/providers/microsoft-365-copilot) | `microsoft-365-copilot` | Chat Completions | No | Personal sign-in only, no tools |
 | MiniMax | `minimax` | Chat Completions | Yes | Text only |
 | Mistral AI | `mistral` | Chat Completions, Embeddings | Yes | |

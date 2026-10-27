@@ -44,21 +44,34 @@ if ! source_digest=$(get_digest "$source_image"); then
   exit 0
 fi
 
-# Docker-image describe returns a Container Analysis summary, not the uploadTime
-# field. Read the immutable package version instead. Its createTime survives
-# retagging, so a weekly rebuild still picks up base-image and OS package updates.
-if [[ ! "$IMAGE" =~ ^([a-z0-9-]+)-docker\.pkg\.dev/([^/]+)/([^/]+)/(.+)$ ]]; then
-  echo "Not a supported GAR image reference; building $IMAGE normally."
+# Registry version creation time survives retagging. Fail closed when metadata
+# cannot establish freshness, so unchanged inputs still rebuild at least weekly.
+# Only the maintained flat CI namespace is eligible for GHCR reuse. Other
+# packages fall through to a normal build rather than broadening token access.
+if [[ "$IMAGE" =~ ^ghcr\.io/archestra-ai/(ci/[a-z0-9-]+)$ ]]; then
+  package="${BASH_REMATCH[1]//\//%2F}"
+  uploaded=""
+  # Bound metadata work. An older/missing version simply takes the normal build.
+  for page in {1..10}; do
+    if ! versions=$(gh api "orgs/archestra-ai/packages/container/${package}/versions?per_page=100&page=${page}" 2>/dev/null); then
+      break
+    fi
+    uploaded=$(jq -er --arg digest "$source_digest" '.[] | select(.name == $digest) | .created_at' <<< "$versions") || true
+    if [ -n "$uploaded" ] || [ "$(jq 'length' <<< "$versions")" -lt 100 ]; then break; fi
+  done
+elif [[ "$IMAGE" =~ ^([a-z0-9-]+)-docker\.pkg\.dev/([^/]+)/([^/]+)/(.+)$ ]]; then
+  location="${BASH_REMATCH[1]}"
+  project="${BASH_REMATCH[2]}"
+  repository="${BASH_REMATCH[3]}"
+  package="${BASH_REMATCH[4]}"
+  uploaded=$(gcloud artifacts versions describe "$source_digest" \
+    --project="$project" --location="$location" --repository="$repository" \
+    --package="$package" --format='value(createTime)' 2>/dev/null) || uploaded=""
+else
+  echo "Not a supported registry image reference; building $IMAGE normally."
   exit 0
 fi
-location="${BASH_REMATCH[1]}"
-project="${BASH_REMATCH[2]}"
-repository="${BASH_REMATCH[3]}"
-package="${BASH_REMATCH[4]}"
-if ! uploaded=$(gcloud artifacts versions describe "$source_digest" \
-  --project="$project" --location="$location" --repository="$repository" \
-  --package="$package" --format='value(createTime)' 2>/dev/null) ||
-  ! uploaded_epoch=$(python3 -c '
+if ! uploaded_epoch=$(python3 -c '
 import datetime, sys
 timestamp = datetime.datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00"))
 assert timestamp.tzinfo is not None
@@ -73,7 +86,14 @@ if ((age_seconds < 0 || age_seconds > MAX_AGE_DAYS * 86400)); then
   exit 0
 fi
 
-if ! gcloud artifacts docker tags add "$source_image" "$target_image" --quiet; then
+retag() {
+  if [[ "$IMAGE" == ghcr.io/* ]]; then
+    docker buildx imagetools create --tag "$target_image" "${IMAGE}@${source_digest}"
+  else
+    gcloud artifacts docker tags add "$source_image" "$target_image" --quiet
+  fi
+}
+if ! retag; then
   echo "Could not retag source image; building $IMAGE normally."
   exit 0
 fi

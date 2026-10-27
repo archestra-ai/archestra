@@ -24,7 +24,7 @@ on:
         required: true
         type: boolean
       auth_provider:
-        description: "Registry auth provider: gar, dockerhub, or none"
+        description: "Registry auth provider: gar, ghcr, dockerhub, or none"
         required: true
         type: string
       dockerfile:
@@ -53,7 +53,7 @@ on:
         type: string
         default: ""
       reuse_from_version:
-        description: "Existing GAR tag to reuse when image inputs have not changed"
+        description: "Existing registry tag to reuse when image inputs have not changed"
         required: false
         type: string
         default: ""
@@ -117,11 +117,12 @@ concurrency:
 jobs:
   reuse-image:
     name: Reuse unchanged ${{ inputs.image_name }} image
-    if: ${{ inputs.push_image && inputs.auth_provider == 'gar' && inputs.reuse_from_version != '' && !startsWith(inputs.checkout_ref, 'platform-v') }}
+    if: ${{ inputs.push_image && (inputs.auth_provider == 'gar' || inputs.auth_provider == 'ghcr') && inputs.reuse_from_version != '' && !startsWith(inputs.checkout_ref, 'platform-v') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read # Required to compare the image's source and build recipe.
-      id-token: write # Required to authenticate to GAR and tag the existing image.
+      packages: write # Publish images and caches using the repository token.
+      id-token: write # Required for GAR authentication; unused by GHCR callers.
     outputs:
       reused: ${{ steps.reuse.outputs.reused }}
     steps:
@@ -132,7 +133,16 @@ jobs:
           fetch-depth: 2
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
+      - name: Log in to GHCR
+        if: ${{ inputs.push_image && inputs.auth_provider == 'ghcr' }}
+        uses: $/.github/actions/docker-login
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
       - name: Authenticate to Google Artifact Registry
+        if: ${{ inputs.auth_provider == 'gar' }}
         uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
@@ -147,8 +157,9 @@ jobs:
           SOURCE_VERSION: ${{ inputs.reuse_from_version }}
           VERSION: ${{ inputs.version }}
           REUSE_PATHS: ${{ inputs.reuse_paths }}
+          GH_TOKEN: ${{ github.token }}
           MAX_AGE_DAYS: 7
-        run: bash .github/scripts/reuse-unchanged-gar-image.sh
+        run: bash .github/scripts/reuse-unchanged-image.sh
 
   build-image:
     name: Build ${{ inputs.image_name }} (${{ matrix.os_and_arch }})
@@ -163,6 +174,7 @@ jobs:
         os_and_arch: ${{ inputs.amd64_only && fromJSON('["linux/amd64"]') || fromJSON('["linux/amd64", "linux/arm64"]') }}
     permissions:
       contents: read # Required to checkout the repository and build the image.
+      packages: write # Publish images and caches using the repository token.
       id-token: write # Required for Workload Identity Federation when pushing images.
     steps:
       - name: Checkout repository
@@ -171,6 +183,14 @@ jobs:
           persist-credentials: false
           fetch-depth: ${{ startsWith(inputs.checkout_ref, 'platform-v') && '0' || inputs.checkout_fetch_depth }}
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
+
+      - name: Log in to GHCR
+        if: ${{ inputs.push_image && inputs.auth_provider == 'ghcr' }}
+        uses: $/.github/actions/docker-login
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.push_image && inputs.auth_provider == 'gar' }}
@@ -293,6 +313,7 @@ jobs:
       - build-image
     permissions:
       contents: read # Required to download per-arch digests and publish the merged manifest.
+      packages: write # Publish images and caches using the repository token.
       id-token: write # Required for Workload Identity Federation when pushing the manifest.
     steps:
       - name: Checkout repository
@@ -311,6 +332,14 @@ jobs:
 
       # No builder setup needed: `docker buildx imagetools` is a pure registry
       # manifest operation and runs on the preinstalled buildx CLI.
+      - name: Log in to GHCR
+        if: ${{ inputs.push_image && inputs.auth_provider == 'ghcr' }}
+        uses: $/.github/actions/docker-login
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.auth_provider == 'gar' }}
         uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0

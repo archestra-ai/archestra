@@ -398,9 +398,12 @@ function getIsCreateFormValid(params: {
     return Boolean(values.awsAccessKeyId && values.awsSecretAccessKey);
   }
 
+  // The API-key dialog offers no personal Copilot sign-in (that lives in the
+  // subscription dialog), so a Copilot key here is a GitHub App key even when
+  // no tab was picked.
   if (
     values.provider === "github-copilot" &&
-    values.copilotAuthMethod === "github-app"
+    values.copilotAuthMethod !== "personal"
   ) {
     return Boolean(
       values.githubAppId?.trim() &&

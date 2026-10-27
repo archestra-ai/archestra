@@ -8,7 +8,6 @@ import {
   useFieldArray,
 } from "react-hook-form";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
   CollapsibleContent,
@@ -62,24 +61,23 @@ const BOOLEAN_SETTINGS = [
 const LIST_SETTINGS = [
   {
     name: "labelsToSkip",
-    label: "Labels to Skip",
+    label: "Labels to Skip (optional)",
     placeholder: "wontfix, duplicate",
-    description:
-      "Comma-separated labels to skip on issues and pull requests. Blank skips no labels.",
+    description: "Comma-separated list of labels to exclude.",
   },
   {
     name: "fileTypes",
-    label: "File Types",
+    label: "File Types (optional)",
     placeholder: ".md, .yaml, Dockerfile",
     description:
-      "Comma-separated extensions or file names. Use * for all text files. Blank uses Markdown and YAML.",
+      "Comma-separated extensions or file names to index when repository files are enabled, such as .md or Dockerfile. Use * for every text file. Defaults to Markdown and YAML.",
   },
   {
     name: "includePaths",
-    label: "Include paths",
+    label: "Folders (optional)",
     placeholder: "docs, packages/api/src",
     description:
-      "Comma-separated files or folders, relative to the repository root, not globs. Blank includes the whole repository.",
+      "Comma-separated folders to index, relative to the repository root. Leave blank to index the whole repository.",
   },
   {
     name: "excludePaths",
@@ -231,7 +229,7 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
     repositories(form.getValues(`${prefix}.repos`)).length ? "selected" : "all",
   );
   const [openKey, setOpenKey] = useState<string | null>(null);
-  const [defaultsOpen, setDefaultsOpen] = useState(false);
+
   useEffect(() => {
     setMode(repositories(initialRepos).length ? "selected" : "all");
   }, [initialRepos]);
@@ -284,15 +282,16 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
       ({ name, label, fallback }) =>
         `${label.replace("Include ", "")}: ${(override?.[name] ?? defaults[name] ?? fallback) ? "on" : "off"}`,
     ).join(" · ");
-  const resetRepository = (index: number) => {
+  const removeSavedSettings = (index: number, includeAliases = false) => {
     const repository = overrides[index].repository;
-    const indices = repository.trim()
-      ? overrides.flatMap((entry, entryIndex) =>
-          identity(entry.repository) === identity(repository)
-            ? [entryIndex]
-            : [],
-        )
-      : [index];
+    const indices =
+      includeAliases && repository.trim()
+        ? overrides.flatMap((entry, entryIndex) =>
+            identity(entry.repository) === identity(repository)
+              ? [entryIndex]
+              : [],
+          )
+        : [index];
     remove(indices);
     for (const [entryIndex, entry] of (entries ?? []).entries()) {
       const nextIndex = indices.includes(entry.overrideIndex)
@@ -335,7 +334,7 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
           identity(override.repository) === identity(value),
       )
     )
-      return "This repository already has saved overrides. Reset them before renaming this entry.";
+      return "This repository already has saved settings. Remove them before renaming this entry.";
     return true;
   };
   const applyName = (value: string, entryIndex: number) => {
@@ -398,60 +397,97 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
       { shouldDirty: true },
     );
   };
+
+  const effective = (override?: RepositoryOverrideDraft) => ({
+    ...Object.fromEntries(
+      BOOLEAN_SETTINGS.map(({ name, fallback }) => [
+        name,
+        override?.[name] ?? defaults[name] ?? fallback,
+      ]),
+    ),
+    ...Object.fromEntries(
+      LIST_SETTINGS.map(({ name }) => [
+        name,
+        override?.[name] ?? defaults[name] ?? [],
+      ]),
+    ),
+  });
+  const writeEntrySetting = (
+    entryIndex: number,
+    name: string,
+    value: unknown,
+  ) => {
+    const entry = form.getValues(
+      `${entryPath}.${entryIndex}`,
+    ) as RepositoryEntryDraft;
+    if (entry.overrideIndex >= 0 && overrides[entry.overrideIndex]) {
+      form.setValue(
+        `${prefix}.repositoryOverrides.${entry.overrideIndex}.${name}`,
+        value,
+        { shouldDirty: true },
+      );
+    } else {
+      const index = overrides.length;
+      append(
+        githubRepositoryOverrideDraft({
+          repository: entry.repository.trim(),
+          [name]: value,
+        }),
+      );
+      form.setValue(`${entryPath}.${entryIndex}.overrideIndex`, index, {
+        shouldDirty: true,
+      });
+      form.setValue(`${entryPath}.${entryIndex}.ownsOverride`, true);
+      form.setValue(
+        `${entryPath}.${entryIndex}.sourceRepository`,
+        entry.repository,
+      );
+    }
+  };
   const entryRow = (
     entry: RepositoryEntryDraft,
     entryIndex: number,
     key: string,
   ) => {
-    const customized =
-      entry.overrideIndex >= 0 && Boolean(overrides[entry.overrideIndex]);
+    const matched =
+      entry.overrideIndex >= 0 ? overrides[entry.overrideIndex] : undefined;
     const name = entry.repository.trim() || "New repository";
     const path = `${entryPath}.${entryIndex}.repository`;
     const error = Boolean(defaultValue(form.formState.errors, path));
-    const open =
-      openKey === key ||
-      error ||
-      (openKey === "new-entry" && entryIndex === (entries?.length ?? 0) - 1);
     return (
       <fieldset key={key} aria-label={`Repository ${name}`}>
         <Disclosure
           title={name}
-          summary={`${summary(customized ? overrides[entry.overrideIndex] : undefined)} · ${customized ? "Custom settings" : "Uses repository defaults"}`}
-          open={open}
+          summary={summary(matched)}
+          open={
+            openKey === key ||
+            error ||
+            (openKey === "new-entry" &&
+              entryIndex === (entries?.length ?? 0) - 1)
+          }
           onOpenChange={(next) => setOpenKey(next ? key : null)}
           actions={
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                aria-label={`Edit repository ${name}`}
-                onClick={() => setOpenKey(key)}
-              >
-                Edit
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                aria-label={`Remove repository ${name}`}
-                onClick={() => {
-                  const shared = (
-                    form.getValues(entryPath) as RepositoryEntryDraft[]
-                  ).some(
-                    (other, index) =>
-                      index !== entryIndex &&
-                      other.overrideIndex === entry.overrideIndex,
-                  );
-                  if (customized && entry.ownsOverride && !shared)
-                    resetRepository(entry.overrideIndex);
-                  removeEntry(entryIndex);
-                  setOpenKey(null);
-                }}
-              >
-                Remove
-              </Button>
-            </>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label={`Remove repository ${name}`}
+              onClick={() => {
+                const shared = (
+                  form.getValues(entryPath) as RepositoryEntryDraft[]
+                ).some(
+                  (other, index) =>
+                    index !== entryIndex &&
+                    other.overrideIndex === entry.overrideIndex,
+                );
+                if (matched && entry.ownsOverride && !shared)
+                  removeSavedSettings(entry.overrideIndex, true);
+                removeEntry(entryIndex);
+                setOpenKey(null);
+              }}
+            >
+              Remove
+            </Button>
           }
         >
           <FormField
@@ -465,7 +501,7 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
                 <FormLabel>Repository</FormLabel>
                 <FormDescription>
                   A repository name or owner/repo. Renaming keeps this entry's
-                  custom settings.
+                  settings.
                 </FormDescription>
                 <FormControl>
                   <Input
@@ -485,94 +521,23 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
               </FormItem>
             )}
           />
-          {customized ? (
-            <>
-              <div className="flex justify-end">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  aria-label={`Reset ${name} to defaults`}
-                  onClick={() => resetRepository(entry.overrideIndex)}
-                >
-                  Reset to defaults
-                </Button>
-              </div>
-              <OverrideFields
-                form={form}
-                prefix={prefix}
-                index={entry.overrideIndex}
-                defaults={defaults}
-                editableRepository={false}
-              />
-            </>
-          ) : (
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">
-                All settings inherit the repository defaults.
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                aria-label={`Customize ${name}`}
-                disabled={!entry.repository.trim()}
-                onClick={() => {
-                  const index = overrides.length;
-                  append(
-                    githubRepositoryOverrideDraft({
-                      repository: entry.repository.trim(),
-                    }),
-                  );
-                  form.setValue(
-                    `${entryPath}.${entryIndex}.overrideIndex`,
-                    index,
-                    { shouldDirty: true },
-                  );
-                  form.setValue(
-                    `${entryPath}.${entryIndex}.ownsOverride`,
-                    true,
-                    { shouldDirty: true },
-                  );
-                  form.setValue(
-                    `${entryPath}.${entryIndex}.sourceRepository`,
-                    entry.repository,
-                    { shouldDirty: true },
-                  );
-                }}
-              >
-                Customize
-              </Button>
-            </div>
-          )}
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={async () => {
-                if (await form.trigger(path)) {
-                  claimEntry(entryIndex);
-                  setOpenKey(null);
-                }
-              }}
-            >
-              Done
-            </Button>
-          </div>
+          <RepositoryControls
+            form={form}
+            prefix={`${entryPath}.${entryIndex}.settings`}
+            values={effective(matched)}
+            disabled={validateName(entry.repository, entryIndex) !== true}
+            onChange={(setting, value) =>
+              writeEntrySetting(entryIndex, setting, value)
+            }
+          />
         </Disclosure>
       </fieldset>
     );
   };
   const overrideRow = (index: number, key: string) => {
-    const repository = overrides[index]?.repository ?? "";
-    const name = repository || "New repository override";
-    const error = Boolean(
-      defaultValue(
-        form.formState.errors,
-        `${prefix}.repositoryOverrides.${index}.repository`,
-      ),
-    );
+    const name = overrides[index]?.repository || "New repository";
+    const path = `${prefix}.repositoryOverrides.${index}.repository`;
+    const error = Boolean(defaultValue(form.formState.errors, path));
     return (
       <fieldset
         key={key}
@@ -580,7 +545,7 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
       >
         <Disclosure
           title={name}
-          summary={`${summary(overrides[index])} · Custom settings${mode === "selected" ? " · Inactive" : ""}`}
+          summary={`${summary(overrides[index])}${mode === "selected" ? " · Inactive" : ""}`}
           open={
             openKey === key ||
             error ||
@@ -590,21 +555,54 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
           actions={
             <Button
               type="button"
-              size="sm"
               variant="ghost"
-              aria-label={`Reset ${name} to defaults${mode === "selected" ? " (inactive)" : ""}`}
-              onClick={() => resetRepository(index)}
+              size="sm"
+              aria-label={`Remove saved settings for ${name}`}
+              onClick={() => removeSavedSettings(index)}
             >
-              Reset to defaults
+              Remove
             </Button>
           }
         >
-          <OverrideFields
+          <FormField
+            control={form.control}
+            name={path}
+            rules={{
+              required: "Repository is required",
+              validate: {
+                format: (value: string) =>
+                  /^[^/\\\s,]+(?:\/[^/\\\s,]+)?$/.test(value.trim()) ||
+                  "Use a repository name or owner/repo",
+                unique: (value: string) =>
+                  (
+                    form.getValues(
+                      `${prefix}.repositoryOverrides`,
+                    ) as RepositoryOverrideDraft[]
+                  ).filter(
+                    (entry) =>
+                      entry.repository.trim().toLowerCase() ===
+                      value.trim().toLowerCase(),
+                  ).length === 1 || "Repository settings must be unique",
+              },
+            }}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Repository</FormLabel>
+                <FormDescription>
+                  A bare name uses the configured owner. A matching owner/repo
+                  takes precedence.
+                </FormDescription>
+                <FormControl>
+                  <Input placeholder="owner/repo" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <RepositoryControls
             form={form}
-            prefix={prefix}
-            index={index}
-            defaults={defaults}
-            editableRepository
+            prefix={`${prefix}.repositoryOverrides.${index}`}
+            values={effective(overrides[index])}
           />
         </Disclosure>
       </fieldset>
@@ -612,13 +610,6 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
   };
   return (
     <div className="space-y-4">
-      <div className="space-y-1">
-        <h3 className="text-sm font-semibold">Repository settings</h3>
-        <p className="text-sm text-muted-foreground">
-          Choose repositories and customize their settings. Other repositories
-          keep the defaults.
-        </p>
-      </div>
       <div className="space-y-2">
         <Label htmlFor={selectionId}>Repository selection</Label>
         <Select
@@ -632,8 +623,7 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
               form.setValue(`${prefix}.repos`, [], { shouldDirty: true });
               form.clearErrors([`${prefix}.repos`, entryPath]);
             } else {
-              // Rules can be renamed in discovery mode while selected rows are hidden.
-              const currentOverrides = form.getValues(
+              const current = form.getValues(
                 `${prefix}.repositoryOverrides`,
               ) as RepositoryOverrideDraft[];
               for (const [index, entry] of (
@@ -642,7 +632,7 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
                   | undefined) ?? []
               ).entries()) {
                 const overrideIndex = findOverride(
-                  currentOverrides,
+                  current,
                   entry.repository,
                   owner,
                 );
@@ -688,23 +678,21 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
         )}
       />
       {mode === "all" && (
-        <InlineNotice variant="neutral">
-          <Info />
-          <InlineNoticeText>
-            All repositories available to the configured credential are
-            discovered. Newly discovered repositories use the defaults unless an
-            override matches.
-          </InlineNoticeText>
-        </InlineNotice>
+        <fieldset aria-label="All repositories">
+          <Disclosure
+            title="All repositories"
+            summary={summary()}
+            open={openKey === "all"}
+            onOpenChange={(open) => setOpenKey(open ? "all" : null)}
+          >
+            <RepositoryControls
+              form={form}
+              prefix={prefix}
+              values={effective()}
+            />
+          </Disclosure>
+        </fieldset>
       )}
-      <Disclosure
-        title="Repository defaults"
-        summary={summary()}
-        open={defaultsOpen}
-        onOpenChange={setDefaultsOpen}
-      >
-        <SettingsFields form={form} prefix={prefix} />
-      </Disclosure>
       <div hidden={mode === "all"} className="space-y-2">
         {entryFields.map((field, index) =>
           entries?.[index] ? entryRow(entries[index], index, field.id) : null,
@@ -733,9 +721,8 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
             <InlineNotice variant="neutral">
               <Info />
               <InlineNoticeText>
-                Other overrides are inactive when their repository is not
-                selected or a qualified override takes precedence. They are kept
-                if needed again.
+                Saved settings for unselected repositories or shadowed bare
+                names are inactive and kept if needed again.
               </InlineNoticeText>
             </InlineNotice>
           )}
@@ -755,274 +742,80 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
           }}
         >
           <Plus />
-          <span>Add repository override</span>
+          <span>Add repository</span>
         </Button>
       )}
     </div>
   );
 }
 
-function SettingsFields({ form, prefix }: Props) {
-  const files = form.watch(`${prefix}.includeRepositoryFiles`) === true;
+function RepositoryControls({
+  form,
+  prefix,
+  values,
+  onChange,
+  disabled = false,
+}: Props & {
+  values: Record<string, unknown>;
+  onChange?: (name: string, value: unknown) => void;
+  disabled?: boolean;
+}) {
   return (
     <>
-      <h4 className="text-sm font-medium">Issues and pull requests</h4>
-      {BOOLEAN_SETTINGS.slice(0, 2).map((setting) => (
-        <DefaultBoolean
+      {BOOLEAN_SETTINGS.map((setting) => (
+        <FormField
           key={setting.name}
-          form={form}
-          prefix={prefix}
-          setting={setting}
+          control={form.control}
+          name={`${prefix}.${setting.name}`}
+          render={({ field }) => (
+            <FormItem className="flex items-center justify-between rounded-lg border p-3">
+              <div className="space-y-0.5">
+                <FormLabel>{setting.label}</FormLabel>
+                <FormDescription>{setting.description}</FormDescription>
+              </div>
+              <FormControl>
+                <Switch
+                  checked={Boolean(values[setting.name])}
+                  disabled={disabled}
+                  onCheckedChange={(value) => {
+                    field.onChange(value);
+                    onChange?.(setting.name, value);
+                  }}
+                />
+              </FormControl>
+            </FormItem>
+          )}
         />
       ))}
-      <DefaultList form={form} prefix={prefix} setting={LIST_SETTINGS[0]} />
-      <h4 className="text-sm font-medium">Repository files</h4>
-      <DefaultBoolean
-        form={form}
-        prefix={prefix}
-        setting={BOOLEAN_SETTINGS[2]}
-      />
-      {files &&
-        LIST_SETTINGS.slice(1).map((setting) => (
-          <DefaultList
-            key={setting.name}
-            form={form}
-            prefix={prefix}
-            setting={setting}
-          />
-        ))}
-    </>
-  );
-}
-
-function DefaultBoolean({
-  form,
-  prefix,
-  setting,
-}: Props & { setting: BooleanSetting }) {
-  return (
-    <FormField
-      control={form.control}
-      name={`${prefix}.${setting.name}`}
-      render={({ field }) => (
-        <FormItem className="flex items-center justify-between gap-3">
-          <div>
-            <FormLabel>{setting.label}</FormLabel>
-            <FormDescription>{setting.description}</FormDescription>
-          </div>
-          <FormControl>
-            <Switch
-              checked={field.value ?? setting.fallback}
-              onCheckedChange={field.onChange}
-            />
-          </FormControl>
-        </FormItem>
-      )}
-    />
-  );
-}
-
-function DefaultList({
-  form,
-  prefix,
-  setting,
-}: Props & { setting: ListSetting }) {
-  return (
-    <FormField
-      control={form.control}
-      name={`${prefix}.${setting.name}`}
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel>{setting.label}</FormLabel>
-          <FormDescription>{setting.description}</FormDescription>
-          <FormControl>
-            <Input
-              placeholder={setting.placeholder}
-              {...field}
-              value={joinIfArray(field.value)}
-            />
-          </FormControl>
-        </FormItem>
-      )}
-    />
-  );
-}
-
-function OverrideFields({
-  form,
-  prefix,
-  index,
-  defaults,
-  editableRepository,
-}: Props & {
-  index: number;
-  defaults: Record<string, unknown>;
-  editableRepository: boolean;
-}) {
-  const path = `${prefix}.repositoryOverrides.${index}`;
-  const override = form.watch(path) as RepositoryOverrideDraft;
-  const files =
-    override?.includeRepositoryFiles ??
-    defaults.includeRepositoryFiles ??
-    false;
-  return (
-    <>
-      {editableRepository && (
+      {LIST_SETTINGS.filter(
+        (setting) =>
+          setting.name === "labelsToSkip" || values.includeRepositoryFiles,
+      ).map((setting) => (
         <FormField
+          key={setting.name}
           control={form.control}
-          name={`${path}.repository`}
-          rules={{
-            required: "Repository is required",
-            validate: {
-              format: (value: string) =>
-                /^[^/\\\s]+(?:\/[^/\\\s]+)?$/.test(value.trim()) ||
-                "Use a repository name or owner/repo",
-              unique: (value: string) =>
-                (
-                  form.getValues(
-                    `${prefix}.repositoryOverrides`,
-                  ) as RepositoryOverrideDraft[]
-                ).filter(
-                  (entry) =>
-                    entry.repository.trim().toLowerCase() ===
-                    value.trim().toLowerCase(),
-                ).length === 1 || "Repository overrides must be unique",
-            },
-          }}
+          name={`${prefix}.${setting.name}`}
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Repository</FormLabel>
-              <FormDescription>
-                A bare name uses the configured owner. A matching owner/repo
-                override takes precedence.
-              </FormDescription>
+              <FormLabel>{setting.label}</FormLabel>
+              <FormDescription>{setting.description}</FormDescription>
               <FormControl>
-                <Input placeholder="owner/repo" {...field} />
+                <Input
+                  placeholder={setting.placeholder}
+                  {...field}
+                  value={joinIfArray(values[setting.name])}
+                  disabled={disabled}
+                  onChange={(event) => {
+                    field.onChange(event.target.value);
+                    onChange?.(setting.name, event.target.value);
+                  }}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-      )}
-      <h4 className="text-sm font-medium">Issues and pull requests</h4>
-      {BOOLEAN_SETTINGS.slice(0, 2).map((setting) => (
-        <OverrideBoolean
-          key={setting.name}
-          form={form}
-          prefix={path}
-          setting={setting}
-          inherited={Boolean(defaults[setting.name] ?? setting.fallback)}
-        />
       ))}
-      <OverrideList
-        form={form}
-        prefix={path}
-        setting={LIST_SETTINGS[0]}
-        inherited={defaults.labelsToSkip}
-      />
-      <h4 className="text-sm font-medium">Repository files</h4>
-      <OverrideBoolean
-        form={form}
-        prefix={path}
-        setting={BOOLEAN_SETTINGS[2]}
-        inherited={Boolean(defaults.includeRepositoryFiles ?? false)}
-      />
-      {files === true &&
-        LIST_SETTINGS.slice(1).map((setting) => (
-          <OverrideList
-            key={setting.name}
-            form={form}
-            prefix={path}
-            setting={setting}
-            inherited={defaults[setting.name]}
-          />
-        ))}
     </>
-  );
-}
-
-function OverrideBoolean({
-  form,
-  prefix,
-  setting,
-  inherited,
-}: Props & { setting: BooleanSetting; inherited: boolean }) {
-  return (
-    <FormField
-      control={form.control}
-      name={`${prefix}.${setting.name}`}
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel>{setting.label}</FormLabel>
-          <Select
-            value={
-              field.value === undefined || field.value === null
-                ? "inherit"
-                : field.value
-                  ? "true"
-                  : "false"
-            }
-            onValueChange={(value) =>
-              field.onChange(value === "inherit" ? null : value === "true")
-            }
-          >
-            <FormControl>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-            </FormControl>
-            <SelectContent>
-              <SelectItem value="inherit">
-                <span>{`Use default (${inherited ? "on" : "off"})`}</span>
-              </SelectItem>
-              <SelectItem value="true">On</SelectItem>
-              <SelectItem value="false">Off</SelectItem>
-            </SelectContent>
-          </Select>
-          <FormDescription>{setting.description}</FormDescription>
-        </FormItem>
-      )}
-    />
-  );
-}
-
-function OverrideList({
-  form,
-  prefix,
-  setting,
-  inherited,
-}: Props & { setting: ListSetting; inherited: unknown }) {
-  const id = `${prefix}.${setting.name}.inherit`;
-  return (
-    <FormField
-      control={form.control}
-      name={`${prefix}.${setting.name}`}
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel>{setting.label}</FormLabel>
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id={id}
-              checked={field.value === undefined || field.value === null}
-              onCheckedChange={(checked) =>
-                field.onChange(checked ? null : joinIfArray(inherited))
-              }
-            />
-            <Label htmlFor={id}>
-              Use default {setting.label.toLowerCase()}
-            </Label>
-          </div>
-          <FormDescription>{setting.description}</FormDescription>
-          <FormControl>
-            <Input
-              placeholder={setting.placeholder}
-              {...field}
-              value={joinIfArray(field.value ?? inherited)}
-              disabled={field.value === undefined || field.value === null}
-            />
-          </FormControl>
-        </FormItem>
-      )}
-    />
   );
 }

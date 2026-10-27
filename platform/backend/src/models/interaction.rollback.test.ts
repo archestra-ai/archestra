@@ -5251,6 +5251,221 @@ describe("InteractionModel", () => {
       expect(requestTypeOf(main.id)).toBe("main");
     });
 
+    test("classifies Claude subagent turns carrying metadata.agent_id as subagent and links parallel Claude Desktop title generation to the main session", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({
+        name: "Claude Desktop Agent",
+      });
+      const mainSessionId = "desktop-main-session-123";
+      const openingPrompt =
+        "Read https://example.com/welcome.md and summarize capabilities.";
+
+      // 1. Parallel completeOneShot title generation arrives FIRST without a sessionId
+      //    (or with a separate 1-request fallback CLI sessionId) and includes a
+      //    thinking block before the <title>...</title> text block.
+      const titleGenBefore = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "fallback-cli-title-session",
+        sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
+        externalAgentId: CLAUDE_DESKTOP_CLIENT_ID,
+        type: "anthropic:messages",
+        request: {
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 200,
+          system: [
+            {
+              type: "text",
+              text: "You write short session titles. Reply with only the tagged fields the prompt asks for.",
+            },
+          ],
+          messages: [
+            {
+              role: "user",
+              content: `You are coming up with a succinct title for an agent chat session based on the initial task description. The user's task description is wrapped in <description> tags below.\n<description>${openingPrompt}</description>`,
+            },
+          ],
+        } as unknown as InsertInteraction["request"],
+        response: {
+          ...ANTHROPIC_RESPONSE,
+          content: [
+            {
+              type: "thinking",
+              thinking: "Let me pick a short title.",
+            },
+            {
+              type: "text",
+              text: "<title>Capabilities summary</title>",
+            },
+          ],
+        } as unknown as InsertInteraction["response"],
+      });
+
+      // 2. Main session Turn 1 arrives with the same openingPrompt.
+      const mainTurn = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: mainSessionId,
+        sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
+        externalAgentId: CLAUDE_DESKTOP_CLIENT_ID,
+        type: "anthropic:messages",
+        request: {
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1024,
+          system: [
+            {
+              type: "text",
+              text: "x-anthropic-billing-header: cc_version=2.1.109.786; cc_entrypoint=local-agent; cch=00000;",
+            },
+            {
+              type: "text",
+              text: "You are Claude, an AI assistant created by Anthropic.",
+            },
+          ],
+          tools: [{ name: "Agent", description: "spawn", input_schema: {} }],
+          messages: [{ role: "user", content: openingPrompt }],
+        } as unknown as InsertInteraction["request"],
+        response:
+          ANTHROPIC_RESPONSE as unknown as InsertInteraction["response"],
+      });
+
+      // 3. In-process Agent subagent turn shares mainSessionId and carries metadata.agent_id
+      //    plus multiple turns (tool_use + tool_result).
+      const subagentTurn = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: mainSessionId,
+        sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
+        externalAgentId: CLAUDE_DESKTOP_CLIENT_ID,
+        type: "anthropic:messages",
+        request: {
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1024,
+          metadata: {
+            agent_id: "subagent-uuid-1",
+          },
+          system: [
+            {
+              type: "text",
+              text: "x-anthropic-billing-header: cc_version=2.1.109.786; cc_entrypoint=local-agent; cch=00000;",
+            },
+          ],
+          tools: [{ name: "Read", description: "read", input_schema: {} }],
+          messages: [
+            { role: "user", content: "Inspect repository files" },
+            { role: "assistant", content: "Reading..." },
+            { role: "user", content: "Done reading" },
+          ],
+        } as unknown as InsertInteraction["request"],
+        response:
+          ANTHROPIC_RESPONSE as unknown as InsertInteraction["response"],
+      });
+
+      // 4. Built-in Claude Code security monitor sidecar turn shares mainSessionId
+      const securityMonitorTurn = await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: mainSessionId,
+        sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
+        externalAgentId: CLAUDE_DESKTOP_CLIENT_ID,
+        type: "anthropic:messages",
+        request: {
+          model: "claude-sonnet-5",
+          max_tokens: 1024,
+          system: [
+            {
+              type: "text",
+              text: "x-anthropic-billing-header: cc_version=2.1.308.96b; cc_entrypoint=claude-desktop-3p;",
+            },
+            {
+              type: "text",
+              text: "You are a security monitor for autonomous AI coding agents.",
+            },
+          ],
+          messages: [{ role: "user", content: "<transcript>\n..." }],
+        } as unknown as InsertInteraction["request"],
+        response:
+          ANTHROPIC_RESPONSE as unknown as InsertInteraction["response"],
+      });
+
+      // 5. Forked session carrying prior assistant turns must NOT steal mainSessionId's title row
+      const forkSessionId = "88888888-9999-4aaa-8bbb-cccccccccccc";
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: forkSessionId,
+        sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
+        externalAgentId: CLAUDE_DESKTOP_CLIENT_ID,
+        type: "anthropic:messages",
+        request: {
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1024,
+          system: [
+            {
+              type: "text",
+              text: "x-anthropic-billing-header: cc_version=2.1.308.369; cc_entrypoint=claude-desktop-3p;",
+            },
+          ],
+          messages: [
+            { role: "user", content: openingPrompt },
+            { role: "assistant", content: "Prior parent response" },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "<system-reminder>\n[SYSTEM NOTIFICATION - NOT USER INPUT]\n</system-reminder>\n",
+                },
+                {
+                  type: "text",
+                  text: "This is a forked branch. Run echo hello",
+                },
+              ],
+            },
+          ],
+        } as unknown as InsertInteraction["request"],
+        response:
+          ANTHROPIC_RESPONSE as unknown as InsertInteraction["response"],
+      });
+
+      const paginated = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { sessionId: mainSessionId },
+      );
+
+      const byId = new Map(
+        paginated.data.map((row) => [
+          row.id,
+          row as { sessionId?: string | null; requestType?: string },
+        ]),
+      );
+      expect(byId.get(titleGenBefore.id)?.sessionId).toBe(mainSessionId);
+      expect(byId.get(titleGenBefore.id)?.requestType).toBe("subagent");
+      expect(byId.get(mainTurn.id)?.requestType).toBe("main");
+      expect(byId.get(subagentTurn.id)?.requestType).toBe("subagent");
+      expect(byId.get(securityMonitorTurn.id)?.requestType).toBe("subagent");
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { profileId: agent.id },
+      );
+      expect(sessions.data).toHaveLength(2);
+      const bySessionId = new Map(sessions.data.map((s) => [s.sessionId, s]));
+      expect(bySessionId.get(mainSessionId)?.claudeCodeTitle).toBe(
+        "Capabilities summary",
+      );
+      expect(bySessionId.get(mainSessionId)?.lastUserMessagePreview).toBe(
+        openingPrompt,
+      );
+      expect(bySessionId.get(forkSessionId)?.claudeCodeTitle).toBeNull();
+      expect(bySessionId.get(forkSessionId)?.lastUserMessagePreview).toBe(
+        "This is a forked branch. Run echo hello",
+      );
+    });
+
     test("getSessions derives the preview from the fully reconstructed chain, even when ancestors are outside the 20-row window", async ({
       makeAdmin,
       makeAgent,

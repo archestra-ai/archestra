@@ -475,6 +475,19 @@ export async function handleLLMProxy<
     string | string[] | undefined
   >;
   const bodyForExtraction = body as RequestBodyForExtraction;
+  const claudeCodeAgentId =
+    utils.headers.metaHeader
+      .getHeaderValue(headersForExtraction, "x-claude-code-agent-id")
+      ?.trim() ||
+    (typeof asRecord(asRecord(body)?.metadata)?.agent_id === "string"
+      ? String(asRecord(asRecord(body)?.metadata)?.agent_id).trim()
+      : "") ||
+    utils.headers.sessionId.parseClaudeMetadataParentSessionId(
+      bodyForExtraction?.metadata?.user_id,
+    ) ||
+    appaIngress.delegationMarkers?.[0]?.spawnCallId ||
+    appaIngress.delegationMarkers?.[0]?.parentId ||
+    undefined;
   // Client-app attribution: the caller-supplied X-Archestra-Agent-Id header (or
   // X-Archestra-Meta segment 0) wins; otherwise auto-discover a known client
   // app from the request and record it (Claude clients → "anthropic_claude"
@@ -1797,6 +1810,10 @@ export async function handleLLMProxy<
       },
       requestContext.attributionRows,
     );
+    const loggedOriginalRequest = withClaudeSubagentMetadata(
+      requestAdapter.getOriginalRequest(),
+      claudeCodeAgentId,
+    );
     const ctx: LLMProxyContext<TRequest> = {
       attributionLabels,
       throughput: new LlmThroughput({
@@ -1818,7 +1835,7 @@ export async function handleLLMProxy<
       ...(governedThread ? { governedThread } : {}),
       ...(pluginContext ? { pluginRegistry, pluginContext } : {}),
       agent: resolvedAgent,
-      originalRequest: requestAdapter.getOriginalRequest(),
+      originalRequest: loggedOriginalRequest,
       actualModel,
       enabledToolNames,
       toolIdentity,
@@ -1938,7 +1955,10 @@ export async function handleLLMProxy<
         authenticatedAppName: authenticatedApp?.name,
         billingTeamId,
         type: provider.interactionType,
-        request: requestAdapter.getOriginalRequest() as InteractionRequest,
+        request: withClaudeSubagentMetadata(
+          requestAdapter.getOriginalRequest(),
+          claudeCodeAgentId,
+        ) as InteractionRequest,
         processedRequest: null,
         response: (provider.unavailableUsageAccounting
           ? withMediaUsageAvailability(
@@ -4326,4 +4346,24 @@ async function readProxyRequestState(
   return configCache.read(`context:${JSON.stringify(params)}`, () =>
     ProxyRequestContextModel.readForProxy(params),
   );
+}
+
+function withClaudeSubagentMetadata<TRequest>(
+  request: TRequest,
+  agentId: string | undefined,
+): TRequest {
+  if (!agentId) return request;
+  const record = asRecord(request);
+  if (!record) return request;
+  const metadata = asRecord(record.metadata);
+  if (typeof metadata?.agent_id === "string" && metadata.agent_id.trim()) {
+    return request;
+  }
+  return {
+    ...record,
+    metadata: {
+      ...(metadata ?? {}),
+      agent_id: agentId,
+    },
+  } as TRequest;
 }

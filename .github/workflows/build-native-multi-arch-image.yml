@@ -122,7 +122,7 @@ jobs:
     permissions:
       contents: read # Required to compare the image's source and build recipe.
       packages: write # Publish images and caches using the repository token.
-      id-token: write # Required to authenticate to GAR and tag the existing image.
+      id-token: write # Required for GAR authentication; unused by GHCR callers.
     outputs:
       reused: ${{ steps.reuse.outputs.reused }}
     steps:
@@ -159,7 +159,7 @@ jobs:
           REUSE_PATHS: ${{ inputs.reuse_paths }}
           GH_TOKEN: ${{ github.token }}
           MAX_AGE_DAYS: 7
-        run: bash .github/scripts/reuse-unchanged-gar-image.sh
+        run: bash .github/scripts/reuse-unchanged-image.sh
 
   build-image:
     name: Build ${{ inputs.image_name }} (${{ matrix.os_and_arch }})

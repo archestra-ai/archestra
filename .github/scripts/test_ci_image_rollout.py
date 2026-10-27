@@ -110,7 +110,7 @@ class ImageReuseTests(unittest.TestCase):
             "FAKE_GCLOUD_CALLS": str(self.gcloud_calls),
         } | overrides
         return subprocess.run(
-            ["bash", str(SCRIPTS / "reuse-unchanged-gar-image.sh")],
+            ["bash", str(SCRIPTS / "reuse-unchanged-image.sh")],
             cwd=self.repo,
             env=env,
             text=True,

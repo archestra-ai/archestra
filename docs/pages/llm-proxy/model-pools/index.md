@@ -8,11 +8,11 @@ beta: "Set [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED=true`](/docs/admin/deployment/con
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Keep a model answering when one provider key hits its rate limit or goes down. A model pool serves one model name, such as `claude-sonnet-4-6`, from several provider keys: Anthropic first, and Bedrock when Anthropic fails. Clients keep asking for `claude-sonnet-4-6` with the key they already have, and Archestra moves to the next key before they see an error.
+Keep a model answering when one provider key hits its rate limit or goes down. A model pool serves one model name, such as `claude-sonnet-5-5`, from several provider keys: Anthropic first, and Bedrock when Anthropic fails. Clients keep asking for `claude-sonnet-5-5` with the key they already have, and Archestra moves to the next key before they see an error.
 
 ```mermaid
 flowchart LR
-    Client["Claude Code · Your apps"] -->|"claude-sonnet-4-6"| Pool["Model pool"]
+    Client["Claude Code · Your apps"] -->|"claude-sonnet-5-5"| Pool["Model pool"]
     Pool --> Order1["Order 1: Anthropic key"]
     Pool -.->|"If order 1 is unavailable"| Order2["Order 2: Bedrock key"]
     class Pool accent
@@ -20,7 +20,7 @@ flowchart LR
 
 ## Create a Pool
 
-A pool is a model name and its members. Each member is a shared provider key and the model ID that key uses, since providers spell the same model differently: Bedrock calls `claude-sonnet-4-6` `us.anthropic.claude-sonnet-4-6`.
+A pool is a model name and its members. Each member is a shared provider key and the model ID that key uses, since providers spell the same model differently: Bedrock calls `claude-sonnet-5-5` `us.anthropic.claude-sonnet-5-5`.
 
 Before you start, add a shared key for each provider on [Model Providers](/docs/llm-proxy/providers). Personal and subscription keys can't be members. Creating a pool needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
 
@@ -30,9 +30,9 @@ Before you start, add a shared key for each provider on [Model Providers](/docs/
 4. Click **Add member** inside the same order to share its traffic. Click **Add order** to add a fallback.
 5. Click **Create pool**.
 
-The dialog then shows that the pool is ready, with a request you can copy. Send it, and the answer carries `x-archestra-pool: claude-sonnet-4-6` and `x-archestra-attempts: 1` headers.
+The dialog then shows that the pool is ready, with a request you can copy. Send it, and the answer carries `x-archestra-pool: claude-sonnet-5-5` and `x-archestra-attempts: 1` headers.
 
-- A pool named after a model ID takes over that model: every request for `claude-sonnet-4-6` from a caller who can use the pool goes to the pool. Deleting the pool sends those requests back to the caller's own key.
+- A pool named after a model ID takes over that model: every request for `claude-sonnet-5-5` from a caller who can use the pool goes to the pool. Deleting the pool sends those requests back to the caller's own key.
 - Switch a member off to stop sending it traffic and keep it in the pool.
 
 ## Order and Weight
@@ -42,7 +42,7 @@ Order sets which members a request tries first, and weight splits traffic betwee
 - **Order:** requests go to order 1. They go to order 2 only when every member of order 1 has failed or is cooling down. Drag a member into another order to move it, or between two orders to give it an order of its own.
 - **Weight:** members of one order share its traffic by weight.
 
-For example, a `gpt-5.4` pool with an OpenAI key of weight 3 and an Azure AI Foundry key of weight 1 in order 1 sends 75% of requests to OpenAI and 25% to Azure. Add an Azure key in another region as order 2, and it answers only while both are unavailable.
+For example, a `gpt-6.1-sol` pool with an OpenAI key of weight 3 and an Azure AI Foundry key of weight 1 in order 1 sends 75% of requests to OpenAI and 25% to Azure. Add an Azure key in another region as order 2, and it answers only while both are unavailable.
 
 ## When a Member Fails
 
@@ -83,7 +83,7 @@ Point a client at any of these endpoints and ask for the pool's name as the mode
 | **Anthropic API** | `https://<archestra-host>/v1/anthropic` | Claude Code and the Anthropic SDK |
 | **OpenAI API** | `https://<archestra-host>/v1/openai` | The OpenAI SDK, on Chat Completions |
 
-Claude Code needs nothing for a pool named after a Claude model. For any other pool, pick it as the model, for example `claude --model gpt-5.4`.
+Claude Code needs nothing for a pool named after a Claude model. For any other pool, pick it as the model, for example `claude --model gpt-6.1-sol`.
 
 - **Context window:** Claude Code assumes a 200k context window for a model name it doesn't know. Set `CLAUDE_CODE_MAX_CONTEXT_TOKENS` to the smallest context window among the pool's members.
 - **Members on another API:** Claude Code and OpenAI clients reach every member, whatever API its provider speaks. Archestra translates the request. Anthropic-only features, such as prompt caching hints and thinking blocks, are dropped on the way to a member that doesn't speak Anthropic's API. Claude models on Bedrock keep them.

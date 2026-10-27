@@ -164,7 +164,10 @@ import type {
   RuntimeLaunchFailureReason,
   RuntimeLaunchOutcome,
 } from "@/types/openappa-runtime-launch";
-import { claudeCodeNativeChildIds } from "./adapters/claude-code";
+import {
+  claudeCodeNativeChildIds,
+  isClaudeCodeFamilyAdapter,
+} from "./adapters/claude-code";
 import {
   appendPeerMessageMarker,
   escapeRelayMarkup,
@@ -1846,7 +1849,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       return;
     }
     if (
-      binding.adapter?.id === "claude-code" &&
+      isClaudeCodeFamilyAdapter(binding.adapter?.id) &&
       (binding.request.declaredTools?.some(
         (tool) =>
           !tool.namespace &&
@@ -2382,7 +2385,7 @@ async function correlatedClaudeTeammateId(
   const adapter = params.adapters.find((candidate) =>
     candidate.matches(matchContext),
   );
-  if (adapter?.id !== "claude-code") return undefined;
+  if (!adapter || !isClaudeCodeFamilyAdapter(adapter.id)) return undefined;
   const native = claudeCodeNativeChildIds(matchContext);
   const parentNativeId = nativeId(native.parentNativeId);
   const childNativeId = nativeId(native.childNativeId);
@@ -5716,7 +5719,8 @@ function inspectsNatively(
     !!native?.fromAskUser &&
     native.isAvailable?.(binding.requestHeaders) !== false &&
     declaresNativeQuestion(binding, native.toolName) &&
-    ((binding.adapter?.id === "claude-code" && canShowToolCallReview) ||
+    ((isClaudeCodeFamilyAdapter(binding.adapter?.id) &&
+      canShowToolCallReview) ||
       ((binding.adapter?.id === "opencode" || binding.adapter?.id === "kilo") &&
         binding.requestHeaders["x-archestra-question-cards"] === "1"))
   );

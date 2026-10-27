@@ -52,6 +52,8 @@ export type AppaSessionIdentity = {
     | "appa-header"
     | "claude-code-header"
     | "claude-code-metadata"
+    | "claude-desktop-header"
+    | "claude-desktop-metadata"
     | "claude-metadata"
     | "opencode-session"
     | "codex-turn-metadata"

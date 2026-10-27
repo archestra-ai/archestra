@@ -420,6 +420,10 @@ requires = { audience = { contains = ["self"] } }
       // OpenCode's read spells the path `filePath`.
       "opencode-read-env": `host/archestra/read {\n  filePath: "/repo/.env"\n}\nexpect allow\n${probe}`,
       "git-push": `host/archestra/Bash {\n  command: "git push origin main"\n}\nexpect allow\n`,
+      // Claude Desktop Cowork's workspace shell and web_fetch tools.
+      "cowork-credentials": `host/archestra/mcp__workspace__bash {\n  command: "cat ~/.aws/credentials"\n}\nexpect allow\n${probe}`,
+      "cowork-git-push": `host/archestra/mcp__workspace__bash {\n  command: "git push origin main"\n}\nexpect allow\n`,
+      "cowork-fetch-docs": `host/archestra/mcp__workspace__web_fetch {\n  url: "https://archestra.ai/docs"\n}\nexpect allow\n${probe}`,
       "unruled-client-tool": "host/archestra/FutureBuiltIn {}\nexpect allow\n",
       // A subagent's return is checked when it hands back, so starting one
       // needs no model, even from a narrowed session. A workflow's fan-out is
@@ -451,6 +455,9 @@ requires = { audience = { contains = ["self"] } }
       "codex-git-push": ["claude-code.bash-repository-requirements"],
       "opencode-read-env": ["allow", "authority human-approval"],
       "git-push": ["claude-code.bash-repository-requirements"],
+      "cowork-credentials": ["allow", "authority human-approval"],
+      "cowork-git-push": ["claude-code.bash-repository-requirements"],
+      "cowork-fetch-docs": ["allow", "allow"],
       "unruled-client-tool": [UNDECLARED_TOOL_ANNOTATOR],
       "spawn-after-read-env": ["allow", "allow", "allow"],
       workflow: [UNDECLARED_TOOL_ANNOTATOR],

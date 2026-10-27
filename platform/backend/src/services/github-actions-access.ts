@@ -351,7 +351,7 @@ const OidcClaimsSchema = z.object({
    * cannot change; GitHub sends it as a string.
    */
   repository_id: z
-    .union([z.string().regex(/^\d+$/), z.number().int().positive()])
+    .union([z.string().regex(/^[1-9]\d*$/), z.number().int().positive()])
     .transform(Number),
   job_workflow_ref: z.string(),
   /** Who started the run; GitHub sends the numeric id as a string. */

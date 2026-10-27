@@ -408,13 +408,15 @@ describe("POST /api/github-actions/token", () => {
     ]);
   });
 
-  test("refuses an OIDC token without a repository id", async () => {
-    const response = await exchange({
-      token: await oidcToken({ claims: { repository_id: undefined } }),
-    });
+  test("refuses an OIDC token without a valid repository id", async () => {
+    for (const repositoryId of [undefined, "0", "widgets"]) {
+      const response = await exchange({
+        token: await oidcToken({ claims: { repository_id: repositoryId } }),
+      });
 
-    expect(response.statusCode).toBe(401);
-    expect(response.json().error).toBe("invalid_token");
+      expect(response.statusCode).toBe(401);
+      expect(response.json().error).toBe("invalid_token");
+    }
     expect(scopedTokenRequests).toHaveLength(0);
   });
 

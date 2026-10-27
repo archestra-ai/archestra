@@ -4,8 +4,9 @@ import { GITHUB_COM_API_URL } from "./github";
 /**
  * Who may trade a GitHub Actions OIDC token for access to an MCP gateway.
  * A pull-request job from one of `repositories`, running one of `workflows`,
- * acts as the pull request's author when that author connected the GitHub App
- * named by `githubAppCredentialKey` to their own account.
+ * acts as the pull request's author, or with `actAs: "actor"` as the GitHub
+ * user who started the run, when that person connected the GitHub App named
+ * by `githubAppCredentialKey` to their own account.
  */
 export const GITHUB_ACTIONS_ACCESS_MAX_ENTRIES = 50;
 
@@ -63,6 +64,14 @@ export const GitHubActionsAccessSchema = z.object({
       },
       { message: "An owner/* entry already covers that owner's repositories" },
     ),
+  /**
+   * Whose account a run uses. `author` (the default): the pull request's
+   * author, and only for a run the author started. `actor`: whoever started
+   * the run, so someone who asks for a review on another person's pull
+   * request uses their own account; the trusted workflow then decides whose
+   * runs to start.
+   */
+  actAs: z.enum(["author", "actor"]).optional(),
   /** Trusted `job_workflow_ref` claim values; matched exactly. */
   workflows: z
     .array(
@@ -86,6 +95,8 @@ export type GitHubActionsAccess = z.infer<typeof GitHubActionsAccessSchema>;
 export const StoredGitHubActionsAccessSchema = z.object({
   githubAppCredentialKey: z.string(),
   repositories: z.array(z.string()),
+  // A value this version does not know reads as the default, the author.
+  actAs: z.enum(["author", "actor"]).optional().catch(undefined),
   workflows: z.array(z.string()),
 });
 
@@ -144,11 +155,13 @@ export function isGitHubActionsAppCredential<
  *   expired, or already exchanged.
  * - `not_trusted`: the gateway does not accept this run, the pull request comes
  *   from a fork, or the GitHub App cannot read it.
- * - `not_author`: someone other than the pull request's author started the run.
- * - `not_linked`: the author has no working GitHub connection through the
- *   gateway's GitHub App.
+ * - `not_author`: the gateway acts only as the pull request's author, and
+ *   someone else started the run.
+ * - `not_linked`: the person the token would act as has no working GitHub
+ *   connection through the gateway's GitHub App.
  * - `ambiguous_link`: more than one account connected that GitHub user.
- * - `forbidden`: the author's account may not use the gateway.
+ * - `forbidden`: the account of the person the token would act as may not use
+ *   the gateway.
  * - `rate_limited`: too many requests from this address.
  * - `github_error`: GitHub refused or failed a request, or the App credential
  *   could not be used.

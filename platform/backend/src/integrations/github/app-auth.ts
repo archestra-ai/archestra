@@ -100,6 +100,14 @@ export async function createRepositoryInstallationToken(
 export const GITHUB_APP_NOT_FOUND = "github_app_not_found";
 
 /**
+ * `internalCode` of the error when GitHub refuses the requested token (HTTP
+ * 422): a permission the installation lacks, or a repository it does not
+ * cover.
+ */
+export const GITHUB_INSTALLATION_TOKEN_REFUSED =
+  "github_installation_token_refused";
+
+/**
  * Call an App-level GitHub endpoint (`/app/...`) authenticated as the App
  * itself rather than one of its installations, e.g. to find where it is installed.
  */
@@ -229,6 +237,7 @@ async function mintInstallationToken(params: {
       ]
         .filter(Boolean)
         .join(": "),
+      response.status === 422 ? GITHUB_INSTALLATION_TOKEN_REFUSED : undefined,
     );
   }
 

@@ -71,6 +71,39 @@ describe("GitHubActionsAccessSchema", () => {
   });
 });
 
+describe("actAs", () => {
+  const access = {
+    githubAppCredentialKey: "review-app",
+    repositories: ["acme/*"],
+    workflows: [
+      "acme/.github/.github/workflows/review.yml@0123456789abcdef0123456789abcdef01234567",
+    ],
+  };
+
+  test("saves author, actor or nothing, and nothing else", () => {
+    for (const actAs of [undefined, "author", "actor"]) {
+      expect(
+        GitHubActionsAccessSchema.safeParse({ ...access, actAs }).success,
+      ).toBe(true);
+    }
+    expect(
+      GitHubActionsAccessSchema.safeParse({ ...access, actAs: "anyone" })
+        .success,
+    ).toBe(false);
+  });
+
+  test("reads a stored value it does not know as the default, the author", () => {
+    expect(
+      StoredGitHubActionsAccessSchema.parse({ ...access, actAs: "anyone" })
+        .actAs,
+    ).toBeUndefined();
+    expect(
+      StoredGitHubActionsAccessSchema.parse({ ...access, actAs: "actor" })
+        .actAs,
+    ).toBe("actor");
+  });
+});
+
 describe("StoredGitHubActionsAccessSchema", () => {
   test("reads a stored entry that the entry rules refuse", () => {
     const stored = {

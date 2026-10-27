@@ -86,7 +86,9 @@ describe("GitHubActionsAccessSection", () => {
 
     await user.click(toggle);
 
-    expect(screen.getByRole("combobox")).toHaveTextContent("Code Review App");
+    expect(
+      screen.getByRole("combobox", { name: "GitHub App" }),
+    ).toHaveTextContent("Code Review App");
     expect(onChange).toHaveBeenLastCalledWith({
       githubAppCredentialKey: "review-app",
       repositories: [],
@@ -161,6 +163,34 @@ describe("GitHubActionsAccessSection", () => {
 
     expect(onChange.mock.lastCall?.[0]?.repositories).toEqual(["acme/*"]);
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("acts as the author unless whoever started the run is picked", async () => {
+    // Radix Select needs these, which jsdom lacks.
+    Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+    Element.prototype.scrollIntoView = vi.fn();
+    const user = userEvent.setup();
+    const { onChange } = renderSection({
+      githubAppCredentialKey: "review-app",
+      repositories: ["acme/widgets"],
+      workflows: [WORKFLOW],
+    });
+    const actAs = screen.getByRole("combobox", { name: "Runs act as" });
+    expect(actAs).toHaveTextContent("The pull request's author");
+
+    await user.click(actAs);
+    await user.click(
+      screen.getByRole("option", { name: "Whoever started the run" }),
+    );
+    const saved = onChange.mock.lastCall?.[0] ?? null;
+    expect(saved).toMatchObject({ actAs: "actor" });
+    expect(GitHubActionsAccessSchema.safeParse(saved).success).toBe(true);
+
+    await user.click(screen.getByRole("combobox", { name: "Runs act as" }));
+    await user.click(
+      screen.getByRole("option", { name: "The pull request's author" }),
+    );
+    expect(onChange.mock.lastCall?.[0]?.actAs).toBeUndefined();
   });
 
   it("says what is still missing before the setting can be saved", () => {

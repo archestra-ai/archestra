@@ -186,7 +186,7 @@ describe("POST /api/github-actions/token", () => {
     await app.close();
   });
 
-  test("issues a gateway token acting as the pull request's author and a GitHub token for that repository", async ({
+  test("issues a gateway token acting as whoever started the run and a GitHub token for that repository", async ({
     makeAgent,
   }) => {
     const oidc = await oidcToken();
@@ -211,7 +211,7 @@ describe("POST /api/github-actions/token", () => {
         repository_ids: [REPOSITORY_ID],
         permissions: {
           pull_requests: "write",
-          contents: "read",
+          contents: "write",
           checks: "read",
           metadata: "read",
         },
@@ -270,7 +270,7 @@ describe("POST /api/github-actions/token", () => {
     ).toMatchObject({ userId: author.id });
   });
 
-  test("refuses a run someone other than the author started", async () => {
+  test("refuses, by default, a run someone other than the author started", async () => {
     const response = await exchange({
       token: await oidcToken({
         claims: { actor_id: "777", actor: "a-maintainer" },
@@ -282,6 +282,128 @@ describe("POST /api/github-actions/token", () => {
     expect(body).toMatchObject({ error: "not_author", login: AUTHOR.login });
     expect(body.message).toContain("a-maintainer");
     expect(scopedTokenRequests).toHaveLength(0);
+  });
+
+  test("acts as whoever started the run when the gateway says so, also on someone else's pull request", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const maintainer = await makeUser();
+    await makeMember(maintainer.id, organizationId);
+    await connectGitHub(maintainer.id, { id: 777, login: "a-maintainer" });
+    const actorGateway = await makeGitHubActionsGateway(makeAgent, {
+      actAs: "actor",
+    });
+
+    const response = await exchange({
+      token: await oidcToken({
+        claims: { actor_id: "777", actor: "a-maintainer" },
+      }),
+      resource: gatewayUrl(actorGateway.id),
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body).toMatchObject({
+      github_login: "a-maintainer",
+      user_id: maintainer.id,
+    });
+    // Never the author's account: the author did not start this run.
+    expect(body.user_id).not.toBe(author.id);
+  });
+
+  test("names whoever started the run when they have not connected GitHub", async ({
+    makeAgent,
+  }) => {
+    const actorGateway = await makeGitHubActionsGateway(makeAgent, {
+      actAs: "actor",
+    });
+
+    const response = await exchange({
+      token: await oidcToken({
+        claims: { actor_id: "777", actor: "a-maintainer" },
+      }),
+      resource: gatewayUrl(actorGateway.id),
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({
+      error: "not_linked",
+      login: "a-maintainer",
+    });
+    expect(scopedTokenRequests).toHaveLength(0);
+  });
+
+  test("falls back to contents: read when the App may not write contents", async () => {
+    server.use(
+      http.post(ACCESS_TOKENS_URL, async ({ request }) => {
+        const text = await request.text();
+        const body = text ? JSON.parse(text) : {};
+        if (body.repository_ids) scopedTokenRequests.push(body);
+        if (body.permissions?.contents === "write")
+          return HttpResponse.json(
+            {
+              message:
+                "The permissions requested are not granted to this installation.",
+            },
+            { status: 422 },
+          );
+        return HttpResponse.json(
+          {
+            token: body.repository_ids
+              ? SCOPED_GITHUB_TOKEN
+              : "ghs_installation_wide",
+            expires_at: new Date(Date.now() + HOUR).toISOString(),
+          },
+          { status: 201 },
+        );
+      }),
+    );
+
+    const response = await exchange({ token: await oidcToken() });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().github_token).toBe(SCOPED_GITHUB_TOKEN);
+    expect(
+      scopedTokenRequests.map(
+        (request) =>
+          (request as { permissions: { contents: string } }).permissions
+            .contents,
+      ),
+    ).toEqual(["write", "read"]);
+  });
+
+  test("does not fall back to contents: read when GitHub fails for another reason", async () => {
+    server.use(
+      http.post(ACCESS_TOKENS_URL, async ({ request }) => {
+        const text = await request.text();
+        const body = text ? JSON.parse(text) : {};
+        if (body.repository_ids) {
+          scopedTokenRequests.push(body);
+          return HttpResponse.json(
+            { message: "Server Error" },
+            { status: 500 },
+          );
+        }
+        return HttpResponse.json(
+          {
+            token: "ghs_installation_wide",
+            expires_at: new Date(Date.now() + HOUR).toISOString(),
+          },
+          { status: 201 },
+        );
+      }),
+    );
+
+    const response = await exchange({ token: await oidcToken() });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json().error).toBe("github_error");
+    expect(scopedTokenRequests).toHaveLength(1);
+    expect(
+      await OAuthClientModel.listWithUserTokens({ userId: author.id }),
+    ).toEqual([]);
   });
 
   test("refuses a token that was already exchanged", async () => {
@@ -793,13 +915,14 @@ describe("POST /api/github-actions/token", () => {
       organizationId: string;
       agentType: "mcp_gateway";
     }) => Promise<{ id: string; slug: string | null }>,
+    access: { actAs?: "author" | "actor" } = {},
   ) {
     const created = await makeAgent({
       organizationId,
       agentType: "mcp_gateway",
     });
     await AgentModel.update(created.id, {
-      githubActionsAccess: githubActionsAccess(),
+      githubActionsAccess: { ...githubActionsAccess(), ...access },
     });
     return created;
   }

@@ -54,7 +54,10 @@ import { ResourceListActions } from "@/components/resource-list-actions";
 import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { SettingsLink } from "@/components/settings-link";
-import { StandardFormDialog } from "@/components/standard-dialog";
+import {
+  StandardDialog,
+  StandardFormDialog,
+} from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
@@ -99,6 +102,8 @@ import {
 import { useOauthClients } from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
+import { CopilotOrganizationConnectDialog } from "./_parts/copilot-organization-connect-dialog";
+import { OrganizationSubscriptionCards } from "./_parts/organization-subscription-cards";
 import {
   buildSubscriptionOffers,
   type SubscriptionOffer,
@@ -441,15 +446,28 @@ export default function ApiKeysPage() {
     updateQueryParams,
   ]);
 
+  /** The organization's GitHub Copilot subscriptions (GitHub App keys). */
+  const organizationSubscriptions = useMemo(
+    () => allApiKeys.filter((key) => key.isGithubAppKey),
+    [allApiKeys],
+  );
+  const [copilotConnect, setCopilotConnect] = useState<{
+    replace: { id: string; organization: string | null } | null;
+  } | null>(null);
+  const [accessKey, setAccessKey] = useState<LlmProviderApiKeyResponse | null>(
+    null,
+  );
+
   /** Keys the cards already stand for, so the table never repeats them. */
   const connectedSubscriptionIds = useMemo(
     () =>
-      new Set(
-        subscriptionOffers.flatMap(({ credential }) =>
+      new Set([
+        ...subscriptionOffers.flatMap(({ credential }) =>
           credential ? [credential.id] : [],
         ),
-      ),
-    [subscriptionOffers],
+        ...organizationSubscriptions.map((key) => key.id),
+      ]),
+    [subscriptionOffers, organizationSubscriptions],
   );
 
   const rows = useMemo(
@@ -709,6 +727,48 @@ export default function ApiKeysPage() {
               : null;
           }}
         />
+
+        <OrganizationSubscriptionCards
+          credentials={organizationSubscriptions}
+          isLoading={
+            permissionsPending || (apiKeyQueriesEnabled && allApiKeysPending)
+          }
+          onConnect={() => setCopilotConnect({ replace: null })}
+          onManageAccess={setAccessKey}
+          onReplace={(credential) =>
+            setCopilotConnect({
+              replace: {
+                id: credential.id,
+                organization: credential.githubOrganization ?? null,
+              },
+            })
+          }
+          onDisconnect={openDeleteDialog}
+        />
+        {copilotConnect !== null && (
+          <CopilotOrganizationConnectDialog
+            open
+            onOpenChange={(open) => {
+              if (!open) setCopilotConnect(null);
+            }}
+            replace={copilotConnect.replace}
+          />
+        )}
+        <StandardDialog
+          open={accessKey !== null}
+          onOpenChange={(open) => {
+            if (!open) setAccessKey(null);
+          }}
+          title={`Who can use GitHub Copilot · ${accessKey?.githubOrganization ?? ""}`}
+          size="medium"
+        >
+          {accessKey && (
+            <ResourceAccessSection
+              resource="llmProviderApiKey"
+              id={accessKey.id}
+            />
+          )}
+        </StandardDialog>
 
         <div className="space-y-1 pt-1">
           <h2 className="text-sm font-medium">Provider API keys</h2>

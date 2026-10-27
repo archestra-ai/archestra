@@ -35,6 +35,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { describeKey } from "@/components/virtual-key-badge";
 import { useInteraction } from "@/lib/interactions/interaction.query";
+import { copilotCredentialSourceLabel } from "@/lib/organization-subscription";
 import { formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { GhostThread, OverviewCell } from "./overview-parts";
@@ -300,6 +301,11 @@ function RequestView({ record }: { record: InteractionRecord }) {
               </span>
             </OverviewCell>
           ))}
+          {record.copilotCredentialSource ? (
+            <OverviewCell label="GitHub Copilot">
+              {copilotCredentialSourceLabel(record.copilotCredentialSource)}
+            </OverviewCell>
+          ) : null}
           {record.authenticatedAppName ? (
             <OverviewCell label="OAuth client">
               <span

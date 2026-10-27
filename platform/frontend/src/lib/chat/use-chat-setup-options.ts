@@ -36,6 +36,10 @@ import {
   type LlmProviderApiKey,
   useAvailableLlmProviderApiKeys,
 } from "@/lib/llm-provider-api-keys.query";
+import {
+  isOrganizationSubscription,
+  organizationSubscriptionSubtitle,
+} from "@/lib/organization-subscription";
 
 export type ChatSetupAgent = NonNullable<
   ReturnType<typeof useChatAgents>["data"]
@@ -321,6 +325,8 @@ export function useChatSetupOptions(params: {
 // ============================================================================
 
 function keyScopeLabel(key: LlmProviderApiKey) {
+  if (isOrganizationSubscription(key))
+    return organizationSubscriptionSubtitle(key);
   if (isPersonalSubscription(key)) return "Your subscription";
   if (key.scope === "personal") return "Personal key";
   if (key.scope === "team") return key.teamName ?? "Team key";

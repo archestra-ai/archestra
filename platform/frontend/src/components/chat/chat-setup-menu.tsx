@@ -68,6 +68,12 @@ import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import type { LlmModel } from "@/lib/llm-models.query";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 import { formatPricePerMillion } from "@/lib/model-price-format";
+import {
+  isOrganizationSubscription,
+  ORGANIZATION_SUBSCRIPTIONS_HEADING,
+  organizationSubscriptionName,
+  organizationSubscriptionSubtitle,
+} from "@/lib/organization-subscription";
 import { logoNameForProvider } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -150,10 +156,17 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
       data.keySections
         .map((section) => ({
           ...section,
-          keys: section.keys.filter((key) => !isPersonalSubscription(key)),
+          keys: section.keys.filter(
+            (key) =>
+              !isPersonalSubscription(key) && !isOrganizationSubscription(key),
+          ),
         }))
         .filter((section) => section.keys.length > 0),
     [data.keySections],
+  );
+  const organizationSubscriptions = useMemo(
+    () => data.keys.filter(isOrganizationSubscription),
+    [data.keys],
   );
   const [active, setActive] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -240,7 +253,11 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     },
     key: {
       icon: <KeyRoundIcon className="size-4" />,
-      text: currentKey?.name ?? "Default key",
+      text: currentKey
+        ? isOrganizationSubscription(currentKey)
+          ? organizationSubscriptionName(currentKey)
+          : currentKey.name
+        : "Default key",
       aria: currentKey
         ? `Key: ${currentKey.name} (${data.keyScopeLabel(currentKey)})`
         : "Key: Default key",
@@ -634,6 +651,27 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
                     ctx.close();
                   }
                 }}
+              />
+            ))}
+          </CommandGroup>
+        )}
+        {scope === "key" && organizationSubscriptions.length > 0 && (
+          <CommandGroup
+            heading={ORGANIZATION_SUBSCRIPTIONS_HEADING}
+            className={GROUP}
+          >
+            {organizationSubscriptions.map((k) => (
+              <KeyRow
+                key={k.id}
+                apiKey={{ ...k, name: organizationSubscriptionName(k) }}
+                keywords={keyKeywords(
+                  k,
+                  data.providerLabel,
+                  data.keyScopeLabel,
+                )}
+                scopeLabel={organizationSubscriptionSubtitle(k)}
+                selected={k.id === currentKey?.id}
+                onSelect={() => pickKey(k)}
               />
             ))}
           </CommandGroup>

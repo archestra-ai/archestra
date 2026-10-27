@@ -1,6 +1,13 @@
 "use client";
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { E2eTestId } from "@archestra/shared";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockUseLlmProviderApiKeys = vi.fn();
@@ -374,7 +381,7 @@ describe("ApiKeysPage", () => {
 
     render(<ApiKeysPage />);
 
-    expect(screen.getAllByText("Connect")).toHaveLength(4);
+    expect(personalCards().getAllByText("Connect")).toHaveLength(4);
   });
 
   it("clears an active label filter with the other table filters", () => {
@@ -425,8 +432,8 @@ describe("ApiKeysPage", () => {
     expect(cards).toHaveTextContent("GitHub Copilot");
     expect(cards).toHaveTextContent("Microsoft 365 Copilot");
     expect(cards).toHaveTextContent("SuperGrok");
-    expect(screen.getAllByText("Connect")).toHaveLength(4);
-    expect(screen.getAllByText("Not connected")).toHaveLength(4);
+    expect(personalCards().getAllByText("Connect")).toHaveLength(4);
+    expect(personalCards().getAllByText("Not connected")).toHaveLength(4);
   });
 
   it("hides a subscription whose provider the organization turned off", () => {
@@ -443,7 +450,7 @@ describe("ApiKeysPage", () => {
     expect(
       screen.getByTestId("subscription-provider-cards"),
     ).not.toHaveTextContent("SuperGrok");
-    expect(screen.getAllByText("Connect")).toHaveLength(3);
+    expect(personalCards().getAllByText("Connect")).toHaveLength(3);
   });
 
   it("keeps a turned-off provider's connected subscription key in the table", () => {
@@ -529,7 +536,7 @@ describe("ApiKeysPage", () => {
       screen.queryByText("Existing ChatGPT credential"),
     ).not.toBeInTheDocument();
     expect(screen.getByText("Connected")).toBeInTheDocument();
-    expect(screen.getAllByText("Connect")).toHaveLength(3);
+    expect(personalCards().getAllByText("Connect")).toHaveLength(3);
     expect(
       screen.getByRole("button", { name: "Disconnect" }),
     ).toBeInTheDocument();
@@ -557,7 +564,7 @@ describe("ApiKeysPage", () => {
     // The subscription card remains unconnected and the same-named ordinary key
     // remains its own credential row.
     expect(screen.getAllByText("SuperGrok")).toHaveLength(2);
-    expect(screen.getAllByText("Connect")).toHaveLength(4);
+    expect(personalCards().getAllByText("Connect")).toHaveLength(4);
   });
 
   it("reopens a SuperGrok key from the edit URL param in subscription mode", async () => {
@@ -817,3 +824,8 @@ describe("ApiKeysPage", () => {
     );
   });
 });
+
+/** The personal subscription cards, apart from the organization section. */
+function personalCards() {
+  return within(screen.getByTestId(E2eTestId.SubscriptionProviderCards));
+}

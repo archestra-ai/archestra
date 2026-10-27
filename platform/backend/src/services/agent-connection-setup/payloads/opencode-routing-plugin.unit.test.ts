@@ -11,6 +11,76 @@ import {
 } from "./opencode-routing-plugin";
 
 describe("OpenCode routing plugin", () => {
+  test("serves a Kimi Code China catalog pin through the global plan with a KIMI_API_KEY sign-in", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "opencode-plugin-kimi-"));
+    const file = path.join(root, "archestra-llm-proxy.mjs");
+    const route = "https://example.com/v1/kimi-code";
+    const globals = globalThis as unknown as Record<PropertyKey, unknown>;
+    const guards = [
+      Symbol.for("archestra.opencode.llmProxyFetchGuard"),
+      Symbol.for("archestra.opencode.directFetch"),
+    ];
+    const originalGuards = guards.map((guard) => globals[guard]);
+    const originalFetch = globalThis.fetch;
+    const originalDataHome = process.env.XDG_DATA_HOME;
+    const originalKimiKey = process.env.KIMI_API_KEY;
+    try {
+      // No auth.json: the client's own Kimi Code sign-in is the env variable.
+      process.env.XDG_DATA_HOME = path.join(root, "data");
+      process.env.KIMI_API_KEY = "sk-kimi-example";
+      await writeFile(
+        file,
+        renderOpenCodeRoutingPlugin({
+          routes: {},
+          headers: { "X-Archestra-Virtual-Key": "arch_passthroughcafe" },
+          catalog: {
+            routes: { "kimi-code-plan-global": route },
+            managed: {},
+            passthrough: ["kimi-code-plan-global"],
+            legacy: { "kimi-code-plan-cn": "kimi-code-plan-global" },
+          },
+        }),
+      );
+      const module = await import(
+        `${pathToFileURL(file).href}?t=${Date.now()}`
+      );
+      const hooks = await module.ArchestraLlmProxy();
+      const config: {
+        model?: string;
+        agent: Record<string, { model?: string }>;
+        enabled_providers?: string[];
+      } = {
+        model: "kimi-code-plan-cn/k3.1-pro",
+        agent: { compaction: { model: "kimi-code-plan-cn/kimi-for-coding" } },
+      };
+      await hooks.config(config);
+      expect(config.enabled_providers).toEqual(["kimi-code-plan-global"]);
+      expect(config.model).toBe("kimi-code-plan-global/k3.1-pro");
+      expect(config.agent.compaction.model).toBe(
+        "kimi-code-plan-global/kimi-for-coding",
+      );
+      await expect(
+        hooks["chat.params"]({
+          provider: {
+            id: "kimi-code-plan-global",
+            options: { baseURL: route },
+          },
+        }),
+      ).resolves.toBeUndefined();
+    } finally {
+      globalThis.fetch = originalFetch;
+      guards.forEach((guard, index) => {
+        if (originalGuards[index] === undefined) delete globals[guard];
+        else globals[guard] = originalGuards[index];
+      });
+      if (originalDataHome === undefined) delete process.env.XDG_DATA_HOME;
+      else process.env.XDG_DATA_HOME = originalDataHome;
+      if (originalKimiKey === undefined) delete process.env.KIMI_API_KEY;
+      else process.env.KIMI_API_KEY = originalKimiKey;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("reapplies managed routes and fails closed for unsupported or overridden providers", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "opencode-plugin-"));
     const file = path.join(root, "archestra-llm-proxy.mjs");

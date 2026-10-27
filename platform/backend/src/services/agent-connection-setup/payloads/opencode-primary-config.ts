@@ -70,13 +70,13 @@ function openCodeCatalog(params: {
       params.passthroughProviders?.includes(route.provider) ?? false;
     if (!entry && !passthrough) continue;
     catalog.routes[id] = params.routeUrl(route);
+    for (const alias of route.aliasProviderIds ?? []) {
+      catalog.legacy[alias] = id;
+    }
     if (entry) {
       shown.add(entry.provider);
       catalog.managed[id] = entry.models.map((model) => model.id);
       catalog.legacy[`archestra-${route.provider}`] = id;
-      for (const alias of route.aliasProviderIds ?? []) {
-        catalog.legacy[alias] = id;
-      }
     }
     if (passthrough) catalog.passthrough.push(id);
   }

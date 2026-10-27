@@ -137,6 +137,13 @@ test("serves a Kimi Code pin on the China catalog from the routed global catalog
     "archestra-kimi-code": "kimi-code-plan-global",
     "kimi-code-plan-cn": "kimi-code-plan-global",
   });
+  // The user's own Kimi Code sign-in gets the same alias.
+  expect(
+    openCodePrimaryConfig(
+      { ...PROXY, passthroughProviders: ["kimi-code"], primaryProviders: [] },
+      "Acme",
+    ).catalog.legacy,
+  ).toEqual({ "kimi-code-plan-cn": "kimi-code-plan-global" });
 });
 
 test("the runtime catalog addresses the installation's agent on ordinary proxy routes", () => {

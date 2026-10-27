@@ -1351,7 +1351,7 @@ jobs:
             // which is not a parseable URL and can never be a loopback dial.
             const parsed = [...(m.beforeFiles ?? []), ...(m.afterFiles ?? []), ...(m.fallback ?? [])]
               .map((r) => { try { return new URL(r.destination); } catch { return null; } })
-              .filter((u) => u && /^https?:./.test(u.protocol));
+              .filter((u) => u && /^https?:$/.test(u.protocol));
             const named = parsed.filter((u) => u.hostname === "localhost");
             console.log(`  ${parsed.length} absolute destinations, ${named.length} naming localhost`);
             if (named.length) {
@@ -1377,7 +1377,7 @@ jobs:
               const m = require("/app/frontend/.next/routes-manifest.json").rewrites;
               const origins = [...new Set([...(m.beforeFiles ?? []), ...(m.afterFiles ?? []), ...(m.fallback ?? [])]
                 .map((r) => { try { return new URL(r.destination); } catch { return null; } })
-                .filter((u) => u && /^https?:./.test(u.protocol) && isLoopback(u.hostname))
+                .filter((u) => u && /^https?:$/.test(u.protocol) && isLoopback(u.hostname))
                 .map((u) => u.origin))];
               if (!origins.length) { console.error("FAILED: no loopback proxy destination found to test"); process.exit(1); }
               Promise.all(origins.map((origin) =>

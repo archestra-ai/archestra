@@ -338,7 +338,10 @@ class StartupTest(unittest.TestCase):
                     self.fail("Idle resume submitted inference without a prompt")
                 if (failure or submission_failure) and server.requests:
                     self.fail("Inference ran after required gateway discovery failed: " + repr(server.requests[:1]))
-                if failure and server.discovery_failed.is_set() and time.monotonic() - started > (40 if failure in ("timeout", "empty") else 12):
+                # Native startup consumes part of the test's total budget. Wait
+                # for the reported failure, rather than cutting a slow client's
+                # discovery timeout short before it can write its markers.
+                if failure and server.discovery_failed.is_set() and Path(turn_prefix + ".failure").exists() and (runtime / "turn-complete.failed").exists():
                     break
                 if server.list_started.is_set() and not server.release.is_set():
                     held_since = held_since or time.monotonic()

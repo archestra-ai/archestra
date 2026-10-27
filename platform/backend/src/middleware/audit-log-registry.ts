@@ -845,6 +845,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       LlmProviderApiKeyModel.findByIdForAudit(id, orgId),
   },
+  "/api/github-copilot-app/keys/:id/private-key": {
+    resourceType: "llmProviderApiKey",
+    action: "llmProviderApiKey.updated",
+    fetchById: (id, orgId) =>
+      LlmProviderApiKeyModel.findByIdForAudit(id, orgId),
+  },
   "/api/github-copilot-app/manifest": {
     resourceType: "llmProviderApiKey",
     action: "llmProviderApiKey.created",

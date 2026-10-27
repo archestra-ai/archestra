@@ -52067,6 +52067,191 @@ export type ConnectExistingCopilotGithubAppResponses = {
 
 export type ConnectExistingCopilotGithubAppResponse = ConnectExistingCopilotGithubAppResponses[keyof ConnectExistingCopilotGithubAppResponses];
 
+export type GetCopilotGithubAppKeySummaryData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/github-copilot-app/keys/{id}';
+};
+
+export type GetCopilotGithubAppKeySummaryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetCopilotGithubAppKeySummaryError = GetCopilotGithubAppKeySummaryErrors[keyof GetCopilotGithubAppKeySummaryErrors];
+
+export type GetCopilotGithubAppKeySummaryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        organization: string | null;
+        appId: string;
+        appName: string | null;
+        fingerprint: string;
+        modelCount: number;
+    };
+};
+
+export type GetCopilotGithubAppKeySummaryResponse = GetCopilotGithubAppKeySummaryResponses[keyof GetCopilotGithubAppKeySummaryResponses];
+
+export type ReplaceCopilotGithubAppPrivateKeyData = {
+    body: {
+        privateKey: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/github-copilot-app/keys/{id}/private-key';
+};
+
+export type ReplaceCopilotGithubAppPrivateKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ReplaceCopilotGithubAppPrivateKeyError = ReplaceCopilotGithubAppPrivateKeyErrors[keyof ReplaceCopilotGithubAppPrivateKeyErrors];
+
+export type ReplaceCopilotGithubAppPrivateKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'installed';
+        id: string;
+        organization: string;
+        modelIds: Array<string>;
+    };
+};
+
+export type ReplaceCopilotGithubAppPrivateKeyResponse = ReplaceCopilotGithubAppPrivateKeyResponses[keyof ReplaceCopilotGithubAppPrivateKeyResponses];
+
 export type GithubCopilotDeviceAuthStartData = {
     body?: never;
     path?: never;

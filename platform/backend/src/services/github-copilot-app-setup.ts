@@ -17,10 +17,17 @@ import {
   OrganizationModel,
   VerificationModel,
 } from "@/models";
-import { secretManager } from "@/secrets-manager";
 import {
+  getSecretValueForLlmProviderApiKey,
+  secretManager,
+} from "@/secrets-manager";
+import {
+  decodeGithubAppCredential,
   encodeGithubAppCredential,
   type GithubAppCredential,
+  githubAppApiBase,
+  githubAppKeyFingerprint,
+  githubAppOrganization,
   validateGithubAppPrivateKey,
 } from "@/services/github-app-copilot-token";
 import { modelSyncService } from "@/services/model-sync";
@@ -268,6 +275,53 @@ class CopilotGithubAppSetup {
   }
 
   /**
+   * What the edit dialog shows for an organization subscription: its
+   * organization, App, key fingerprint and model count. Nothing secret.
+   */
+  async summary(params: Owner & { keyId: string }) {
+    const credential = await this.storedCredential(params, "read");
+    const organization = await githubAppOrganization(credential);
+    const app = await fetchAsGithubApp<{ name?: string; slug?: string }>({
+      githubUrl: githubAppApiBase(credential),
+      appId: credential.appId,
+      privateKey: credential.privateKey,
+      path: "/app",
+    }).catch(() => null);
+    const models = await LlmProviderApiKeyModelLinkModel.getModelsForApiKey(
+      params.keyId,
+    );
+    return {
+      organization,
+      appId: credential.appId,
+      appName: app?.name ?? null,
+      fingerprint: githubAppKeyFingerprint(credential.privateKey),
+      modelCount: models.length,
+    };
+  }
+
+  /** Replace the private key of an organization subscription's App. */
+  async replacePrivateKey(
+    params: Owner & { keyId: string; privateKey: string },
+  ) {
+    const credential = await this.storedCredential(params, "update");
+    const organization =
+      (await githubAppOrganization(credential)) ?? credential.organization;
+    if (!organization)
+      throw new ApiError(
+        400,
+        "The App's organization is unknown. Use Reconnect to enter the App again.",
+      );
+    return this.connectExisting({
+      ...params,
+      githubUrl: credential.githubUrl ?? "https://github.com",
+      appId: credential.appId,
+      organization,
+      privateKey: params.privateKey,
+      replaceKeyId: params.keyId,
+    });
+  }
+
+  /**
    * Check that Copilot answers the App, then store it: a new shared key, or
    * the replaced credentials of an existing one.
    */
@@ -325,8 +379,10 @@ class CopilotGithubAppSetup {
         id: existing.id,
         apiKeyValue: apiKey,
       });
-      await LlmProviderApiKeyModel.update(existing.id, {
-        name: keyName(credential),
+      // New credentials that Copilot accepted: the key works again.
+      await LlmProviderApiKeyModel.setRequiresReauthentication({
+        id: existing.id,
+        requiresReauthentication: false,
       });
       keyId = existing.id;
     } else {
@@ -398,6 +454,38 @@ class CopilotGithubAppSetup {
         ? linked.map((model) => model.modelId).sort()
         : models,
     };
+  }
+
+  /** The App credential of an organization subscription the user may access. */
+  private async storedCredential(
+    params: Owner & { keyId: string },
+    action: "read" | "update",
+  ): Promise<GithubAppCredential> {
+    const key = await LlmProviderApiKeyModel.findById(params.keyId);
+    if (
+      !key?.secretId ||
+      key.organizationId !== params.organizationId ||
+      !(await LlmProviderApiKeyModel.isGithubAppKey(key.id))
+    )
+      throw new ApiError(404, "Organization subscription not found");
+    await ResourcePermissions.require({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      resource: "llmProviderApiKey",
+      scope: key.id,
+      action,
+    });
+    const credential = decodeGithubAppCredential(
+      (await getSecretValueForLlmProviderApiKey(key.secretId)) as
+        | string
+        | undefined,
+    );
+    if (!credential)
+      throw new ApiError(
+        400,
+        "The stored GitHub App credential is unreadable.",
+      );
+    return credential;
   }
 
   private fetchAsPending<T>(pending: StoredPendingApp, path: `/app${string}`) {

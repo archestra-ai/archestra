@@ -931,6 +931,8 @@ export const RouteId = {
   InstallCopilotGithubApp: "installCopilotGithubApp",
   ValidateExistingCopilotGithubApp: "validateExistingCopilotGithubApp",
   ConnectExistingCopilotGithubApp: "connectExistingCopilotGithubApp",
+  GetCopilotGithubAppKeySummary: "getCopilotGithubAppKeySummary",
+  ReplaceCopilotGithubAppPrivateKey: "replaceCopilotGithubAppPrivateKey",
   CompleteAppaGithubApp: "completeAppaGithubApp",
   GetPendingAppaGithubApp: "getPendingAppaGithubApp",
   DiscardAppaGithubApp: "discardAppaGithubApp",

@@ -116,7 +116,7 @@ export function githubAppKeyFingerprint(privateKey: string): string {
 }
 
 /** The REST API base for a credential's GitHub. */
-function githubAppApiBase(credential: GithubAppCredential): string {
+export function githubAppApiBase(credential: GithubAppCredential): string {
   return getGithubApiBaseUrl(credential.githubUrl ?? DEFAULT_GITHUB_URL);
 }
 

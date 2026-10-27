@@ -86,3 +86,18 @@ export const ConnectExistingCopilotGithubAppSchema =
     /** Replace the App credentials of this key instead of adding a key. */
     replaceKeyId: z.string().uuid().optional(),
   });
+
+export const CopilotGithubAppKeySummarySchema = z.object({
+  /** The GitHub organization the App is installed on, and billed to. */
+  organization: z.string().nullable(),
+  appId: z.string(),
+  appName: z.string().nullable(),
+  /** The private key's fingerprint, as GitHub shows it on the App page. */
+  fingerprint: z.string(),
+  modelCount: z.number().int(),
+});
+
+export const ReplaceCopilotGithubAppPrivateKeySchema = z.object({
+  /** The App's new private key (PEM). Never returned or logged. */
+  privateKey: z.string().min(1).max(20_000),
+});

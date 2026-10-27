@@ -197,6 +197,15 @@ export function createGithubCopilotFetch(params: {
         input,
         init,
         baseFetch,
+        // The App can no longer sign in or Copilot refuses it: the key needs
+        // its App credentials again, like a personal sign-in needs a reconnect.
+        onRejected: providerApiKeyId
+          ? () =>
+              recordAppKeyRejected({
+                providerApiKeyId,
+                encodedCredential: githubToken,
+              })
+          : undefined,
       });
     }
 
@@ -336,8 +345,9 @@ async function githubAppCopilotFetch(params: {
   input: string | URL | Request;
   init?: RequestInit;
   baseFetch: FetchLike;
+  onRejected?: () => Promise<void>;
 }): Promise<Response> {
-  const { credential, input, init, baseFetch } = params;
+  const { credential, input, init, baseFetch, onRejected } = params;
   const send = (token: string) => {
     const headers = new Headers(
       init?.headers ?? (input instanceof Request ? input.headers : undefined),
@@ -346,15 +356,27 @@ async function githubAppCopilotFetch(params: {
     headers.set("authorization", `Bearer ${token}`);
     return baseFetch(input, { ...init, headers });
   };
+  let token: string;
   try {
-    let response = await send(await getGithubAppInstallationToken(credential));
+    token = await getGithubAppInstallationToken(credential);
+  } catch (error) {
+    return appSignInFailure(error, onRejected);
+  }
+  try {
+    let response = await send(token);
     const bodyIsReplayable =
       init?.body === undefined || typeof init.body === "string";
     if (response.status === 401 && bodyIsReplayable) {
       await response.body?.cancel();
-      response = await send(
-        await getGithubAppInstallationToken(credential, { forceRefresh: true }),
-      );
+      try {
+        token = await getGithubAppInstallationToken(credential, {
+          forceRefresh: true,
+        });
+      } catch (error) {
+        return appSignInFailure(error, onRejected);
+      }
+      response = await send(token);
+      if (response.status === 401) await onRejected?.();
     }
     if (response.status !== 400 && response.status !== 403) return response;
     const text = await response.text();
@@ -375,6 +397,7 @@ async function githubAppCopilotFetch(params: {
       { status: response.status, message: githubMessage.slice(0, 300) },
       "[GithubAppCopilot] Copilot rejected the installation token",
     );
+    await onRejected?.();
     return Response.json(
       {
         error: {
@@ -410,4 +433,48 @@ function githubMessageOf(text: string): string {
     // Not JSON.
   }
   return text.trim().slice(0, 300);
+}
+
+/**
+ * The App could not mint an installation token. GitHub refusing the App (it
+ * was uninstalled or its private key revoked) needs new App credentials and
+ * answers 401; a GitHub outage stays a 502 and changes nothing.
+ */
+async function appSignInFailure(
+  error: unknown,
+  onRejected: (() => Promise<void>) | undefined,
+): Promise<Response> {
+  const message = error instanceof Error ? error.message : String(error);
+  const refused =
+    error instanceof ApiError &&
+    (error.statusCode === 400 || /: (401|403|404)\b/.test(message));
+  logger.info(
+    { refused, message: message.slice(0, 300) },
+    "[GithubAppCopilot] installation token mint failed",
+  );
+  if (!refused) return exchangeErrorResponse(error);
+  await onRejected?.();
+  return Response.json(
+    {
+      error: {
+        message: `GitHub refused the App. Reconnect it with current App credentials. GitHub said: "${message}"`,
+        type: "authentication_error",
+      },
+    },
+    { status: 401 },
+  );
+}
+
+async function recordAppKeyRejected(params: {
+  providerApiKeyId: string;
+  encodedCredential: string;
+}) {
+  const { recordSubscriptionAuthenticationFailure } = await import(
+    "./subscription-authentication-status"
+  );
+  await recordSubscriptionAuthenticationFailure({
+    providerApiKeyId: params.providerApiKeyId,
+    provider: "github-copilot",
+    matchesCredential: (stored) => stored === params.encodedCredential,
+  });
 }

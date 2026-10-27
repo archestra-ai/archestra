@@ -8,6 +8,7 @@ import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { LlmProviderApiKeyModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { createGithubCopilotFetch } from "@/services/github-copilot-token";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -69,7 +70,8 @@ function githubFake(options: {
         },
         { status: 201 },
       );
-    if (url.endsWith("/app")) return Response.json({ id: options.appId });
+    if (url.endsWith("/app"))
+      return Response.json({ id: options.appId, name: "Archestra Copilot" });
     if (url.endsWith("api.githubcopilot.com/models"))
       return (
         options.copilotModels?.clone() ??
@@ -332,5 +334,74 @@ describe("GitHub Copilot organization subscription setup", () => {
     // App key is still the App key.
     expect((await resolve())?.id).toBe(personal.id);
     expect((await resolve(appKeyId))?.id).toBe(appKeyId);
+  });
+
+  test("summarizes, replaces the private key, and needs a reconnect once GitHub refuses the App", async () => {
+    vi.stubGlobal("fetch", githubFake({ appId }));
+    const connected = await post("/api/github-copilot-app/existing", {
+      appId,
+      organization: "acme",
+      privateKey,
+    });
+    const keyId = connected.json().id;
+
+    const summary = await app.inject({
+      method: "GET",
+      url: `/api/github-copilot-app/keys/${keyId}`,
+    });
+    expect(summary.json()).toEqual({
+      organization: "acme",
+      appId,
+      appName: "Archestra Copilot",
+      fingerprint: expect.stringMatching(/^SHA256:/),
+      modelCount: expect.any(Number),
+    });
+    expect(summary.body).not.toContain("PRIVATE KEY");
+
+    // GitHub no longer knows the installation: the key needs a reconnect.
+    const key = await LlmProviderApiKeyModel.findById(keyId);
+    const stored = (await getSecretValueForLlmProviderApiKey(
+      key?.secretId ?? "",
+    )) as string;
+    // Uninstalled: Copilot refuses the cached token and minting a new one
+    // finds no installation.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown) =>
+        String(input).endsWith("/access_tokens")
+          ? Response.json({ message: "Not Found" }, { status: 404 })
+          : Response.json({ message: "Bad credentials" }, { status: 401 }),
+      ),
+    );
+    const refused = await createGithubCopilotFetch({
+      githubToken: stored,
+      providerApiKeyId: keyId,
+    })("https://api.githubcopilot.com/models");
+    expect(refused.status).toBe(401);
+    expect(
+      (await LlmProviderApiKeyModel.findById(keyId))?.requiresReauthentication,
+    ).toBe(true);
+
+    // A new private key that GitHub accepts clears it.
+    vi.stubGlobal("fetch", githubFake({ appId }));
+    const replaced = await post(
+      `/api/github-copilot-app/keys/${keyId}/private-key`,
+      { privateKey },
+    );
+    expect(replaced.statusCode, replaced.body).toBe(200);
+    expect(
+      (await LlmProviderApiKeyModel.findById(keyId))?.requiresReauthentication,
+    ).toBe(false);
+    const audit = await db
+      .select()
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.resourceId, keyId),
+          eq(schema.auditLogsTable.action, "llmProviderApiKey.updated"),
+        ),
+      );
+    expect(audit).toHaveLength(1);
+    expect(JSON.stringify(audit[0])).not.toContain("PRIVATE KEY");
   });
 });

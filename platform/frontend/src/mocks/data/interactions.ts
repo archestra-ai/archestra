@@ -88,6 +88,7 @@ export function makeInteraction(
     serviceAccountId: null,
     virtualKeyId: null,
     passthroughVirtualKeyId: null,
+    llmProviderApiKeyId: null,
     environmentId: null,
     sessionId: "test-session-id",
     sessionSource: null,

@@ -1,5 +1,6 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
 import { copilotGithubAppSetup } from "@/services/github-copilot-app-setup";
 import { constructResponseSchema, DeleteObjectResponseSchema } from "@/types";
 import {
@@ -7,10 +8,12 @@ import {
   ConnectExistingCopilotGithubAppSchema,
   CopilotGithubAppConnectedSchema,
   CopilotGithubAppInstallResultSchema,
+  CopilotGithubAppKeySummarySchema,
   CopilotGithubAppManifestSchema,
   ExistingCopilotGithubAppValidationSchema,
   InstallCopilotGithubAppSchema,
   PendingCopilotGithubAppSchema,
+  ReplaceCopilotGithubAppPrivateKeySchema,
   StartCopilotGithubAppSchema,
   ValidateExistingCopilotGithubAppSchema,
 } from "@/types/github-copilot-app-setup";
@@ -173,6 +176,50 @@ const githubCopilotAppRoutes: FastifyPluginAsyncZod = async (app) => {
       if (!request.body.replaceKeyId) request.auditBefore = null;
       return reply.send(result);
     },
+  );
+  app.get(
+    "/api/github-copilot-app/keys/:id",
+    {
+      schema: {
+        operationId: RouteId.GetCopilotGithubAppKeySummary,
+        description:
+          "The organization, App, key fingerprint and model count of an organization's GitHub Copilot subscription",
+        tags: ["LLM Provider API Keys"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(CopilotGithubAppKeySummarySchema),
+      },
+    },
+    async (request, reply) =>
+      reply.send(
+        await copilotGithubAppSetup.summary({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          keyId: request.params.id,
+        }),
+      ),
+  );
+  app.post(
+    "/api/github-copilot-app/keys/:id/private-key",
+    {
+      schema: {
+        operationId: RouteId.ReplaceCopilotGithubAppPrivateKey,
+        description:
+          "Replace the private key of an organization's GitHub Copilot subscription App",
+        tags: ["LLM Provider API Keys"],
+        params: z.object({ id: z.string().uuid() }),
+        body: ReplaceCopilotGithubAppPrivateKeySchema,
+        response: constructResponseSchema(CopilotGithubAppConnectedSchema),
+      },
+    },
+    async (request, reply) =>
+      reply.send(
+        await copilotGithubAppSetup.replacePrivateKey({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          keyId: request.params.id,
+          privateKey: request.body.privateKey,
+        }),
+      ),
   );
 };
 

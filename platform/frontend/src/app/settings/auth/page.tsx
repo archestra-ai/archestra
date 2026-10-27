@@ -36,9 +36,9 @@ import {
   getSelectedOauthLifetimeSeconds,
   getSelectedSessionLifetimeSeconds,
   getServerOauthLifetimeSeconds,
-} from "./_components/auth-settings-form";
-import { OAuthTokenLifetimeSection } from "./_components/oauth-token-lifetime-section";
-import { SessionLifetimeSection } from "./_components/session-lifetime-section";
+} from "./_parts/auth-settings-form";
+import { OAuthTokenLifetimeSection } from "./_parts/oauth-token-lifetime-section";
+import { SessionLifetimeSection } from "./_parts/session-lifetime-section";
 
 export default function AuthSettingsPage() {
   const { data: organization, isPending: isOrganizationPending } =

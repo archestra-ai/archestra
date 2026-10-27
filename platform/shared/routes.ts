@@ -571,6 +571,7 @@ export const RouteId = {
   ListRuntimeCredentials: "listRuntimeCredentials",
   StartGitHubUserConnection: "startGitHubUserConnection",
   CompleteGitHubUserConnection: "completeGitHubUserConnection",
+  ExchangeGitHubActionsToken: "exchangeGitHubActionsToken",
   CreateRuntimeCredential: "createRuntimeCredential",
   GetRuntimeCredentialUsage: "getRuntimeCredentialUsage",
   UpdateRuntimeCredential: "updateRuntimeCredential",

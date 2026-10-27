@@ -24,7 +24,7 @@ import {
   useSiteNotification,
   useUpdateSiteNotification,
 } from "@/lib/site-notification.query";
-import { applyThemeOnUI } from "@/lib/theme.hook";
+import { applyThemeOnUI } from "@/lib/use-org-theme";
 import { useSetSettingsPageHeader } from "../../layout";
 import { AppearanceEditor } from "./appearance-editor";
 import {

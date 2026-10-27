@@ -75,12 +75,24 @@ describe("GET /api/openappa/remedies/activity", () => {
     expect(response.statusCode).toBe(404);
   });
 
-  test("rejects a time zone Postgres would not know", async () => {
-    const response = await ctx.app.inject({
-      method: "GET",
-      url: "/api/openappa/remedies/activity?timeZone=Mars/Olympus",
-    });
-    expect(response.statusCode).toBe(400);
+  test("rejects a time zone Postgres would not know, and offsets", async () => {
+    for (const timeZone of ["Mars/Olympus", "+05:30"]) {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/openappa/remedies/activity?timeZone=${encodeURIComponent(timeZone)}`,
+      });
+      expect(response.statusCode, timeZone).toBe(400);
+    }
+  });
+
+  test("accepts the current zone names browsers report", async () => {
+    // Missing from Intl.supportedValuesOf, which lists Asia/Calcutta and
+    // Europe/Kiev instead.
+    for (const timeZone of ["Asia/Kolkata", "Europe/Kyiv", "Etc/UTC"]) {
+      const body = await activity(`?timeZone=${encodeURIComponent(timeZone)}`);
+      expect(body.timeZone).toBe(timeZone);
+      expect(body.days).toHaveLength(7);
+    }
   });
 
   test("returns seven empty days, oldest first, when nothing was denied", async () => {

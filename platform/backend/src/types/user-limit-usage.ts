@@ -100,6 +100,8 @@ export const UserLimitUsageSummarySchema = z.object({
   flaggedCustom: z.number().int(),
   /** Dollars spent by everyone counted in `total`. */
   spent: z.number(),
+  /** Users in `total` who spent anything this window. */
+  spenders: z.number().int(),
   /** Next reset of the organization default, for calendar intervals. */
   resetsAt: z.string().nullable(),
   /**

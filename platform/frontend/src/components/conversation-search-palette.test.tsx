@@ -65,7 +65,7 @@ vi.mock("@/lib/hooks/use-platform", () => ({
   usePlatform: () => ({ modKey: "⌘", altKey: "⌥", isMac: true }),
 }));
 
-vi.mock("@/lib/auth/auth.hook", () => ({
+vi.mock("@/lib/auth/use-is-authenticated", () => ({
   useIsAuthenticated: () => true,
 }));
 

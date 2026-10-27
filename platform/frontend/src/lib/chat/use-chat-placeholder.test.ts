@@ -1,6 +1,6 @@
 import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { useChatPlaceholder } from "./chat-placeholder.hook";
+import { useChatPlaceholder } from "./use-chat-placeholder";
 
 const { mockUseTypingAnimation } = vi.hoisted(() => ({
   mockUseTypingAnimation: vi.fn(),

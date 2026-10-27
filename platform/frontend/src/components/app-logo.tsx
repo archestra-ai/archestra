@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useTheme } from "next-themes";
 import config from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useOrgTheme } from "@/lib/theme.hook";
+import { useOrgTheme } from "@/lib/use-org-theme";
 
 // white-label-ok: default brand mark, shown only when no white-label logo is configured
 const APP_DISPLAY_NAME = "Archestra.AI";

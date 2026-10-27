@@ -15,9 +15,9 @@ import config from "@/lib/config/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils/tailwind";
-import { ModeTile } from "../_components/mode-tile";
-import { NgrokStatus } from "../_components/ngrok-status";
-import { useReachabilityMode } from "../_components/use-reachability-mode";
+import { ModeTile } from "../_parts/mode-tile";
+import { NgrokStatus } from "../_parts/ngrok-status";
+import { useReachabilityMode } from "../_parts/use-reachability-mode";
 import { SlackAgentBotsSection } from "./slack-agent-bots-section";
 
 type SlackConnectionMode = NonNullable<

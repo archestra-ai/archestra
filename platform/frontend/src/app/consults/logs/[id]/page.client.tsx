@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { toConsultView } from "@/app/consults/logs/_components/consult-details";
-import { ConsultOutcomeBadge } from "@/app/consults/logs/_components/consult-outcome-badge";
+import { toConsultView } from "@/app/consults/logs/_parts/consult-details";
+import { ConsultOutcomeBadge } from "@/app/consults/logs/_parts/consult-outcome-badge";
 import { ConsultDetails } from "@/app/llm/logs/[id]/_parts/consult-details";
 import {
   Fact,

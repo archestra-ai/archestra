@@ -3,10 +3,7 @@
 import { archestraApiSdk } from "@archestra/shared";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import {
-  AccountRow,
-  AccountRowMuted,
-} from "@/app/account/_components/account-rows";
+import { AccountRow, AccountRowMuted } from "@/app/account/_parts/account-rows";
 import { TokenManagerDialog } from "@/components/teams/token-manager-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";

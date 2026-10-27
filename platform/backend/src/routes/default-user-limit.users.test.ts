@@ -203,6 +203,53 @@ describe("user limit usage routes", () => {
     ]);
   });
 
+  test("pages from users with spend into everyone else by name", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const spender = await member({ makeUser, makeMember }, "Zed");
+    await makeInteraction(agentId, { userId: spender.id, cost: "2" });
+    const custom = await member({ makeUser, makeMember }, "Yara");
+    await LimitModel.create({
+      entityType: "user",
+      entityId: custom.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      cleanupInterval: "calendar_month",
+    });
+    for (const name of ["Ben", "Ana"]) {
+      await member({ makeUser, makeMember }, name);
+    }
+
+    const pages = [
+      await list("?limit=2&offset=0"),
+      await list("?limit=2&offset=2"),
+      await list("?limit=2&offset=4"),
+    ];
+
+    expect(pages.flatMap((page) => page.data.map((row) => row.name))).toEqual([
+      "Yara",
+      "Zed",
+      "Admin",
+      "Ana",
+      "Ben",
+    ]);
+    expect(pages[0].pagination).toMatchObject({ total: 5, hasNext: true });
+    expect(pages[2].pagination).toMatchObject({ total: 5, hasNext: false });
+    expect(pages[0].summary).toMatchObject({ total: 5, none: 4, custom: 1 });
+
+    // Members on a custom limit are not "no limit", spend or not.
+    const none = await list("?status=none&limit=10&offset=0");
+    expect(none.data.map((row) => row.name)).toEqual([
+      "Zed",
+      "Admin",
+      "Ana",
+      "Ben",
+    ]);
+    expect(none.pagination).toMatchObject({ total: 4 });
+  });
+
   test("a reset lets a blocked user through again and is audited", async ({
     makeUser,
     makeMember,

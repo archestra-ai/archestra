@@ -24,6 +24,7 @@ export { default as defaultUserLimitRoutes } from "./default-user-limit";
 export { default as devFeedbackRoutes } from "./dev-feedback/dev-feedback.routes";
 export { default as environmentRoutes } from "./environment";
 export { default as gitCredentialRoutes } from "./git-credential/git-credential.routes";
+export { default as githubActionsRoutes } from "./github-actions/github-actions.routes";
 export { default as githubAppConfigRoutes } from "./github-app-config";
 export { default as githubCopilotAuthRoutes } from "./github-copilot-auth/github-copilot-auth.routes";
 export { default as githubPatRoutes } from "./github-pat/github-pat.routes";

@@ -2,9 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { AccessSection } from "@/app/account/_components/access-section";
-import { ProfileSection } from "@/app/account/_components/profile-section";
-import { SecuritySection } from "@/app/account/_components/security-section";
+import { AccessSection } from "@/app/account/_parts/access-section";
+import { ProfileSection } from "@/app/account/_parts/profile-section";
+import { SecuritySection } from "@/app/account/_parts/security-section";
 import { SettingsSectionGroup } from "@/components/settings-section";
 
 /**

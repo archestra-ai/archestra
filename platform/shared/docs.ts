@@ -41,6 +41,7 @@ export const COMMUNITY_DOCS_URL = getDocsUrl("get-started");
 export const DocsPage = {
   Contributing: "contributing",
   McpAuthentication: "mcp/authentication",
+  McpGatewayAuthentication: "mcp/authentication/gateway",
   Security: "contributing",
   // Platform
   PlatformAccessControl: "admin/access-control",

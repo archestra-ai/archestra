@@ -5,10 +5,7 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import {
-  AccountRow,
-  AccountRowMuted,
-} from "@/app/account/_components/account-rows";
+import { AccountRow, AccountRowMuted } from "@/app/account/_parts/account-rows";
 import {
   StandardDialog,
   StandardFormDialog,

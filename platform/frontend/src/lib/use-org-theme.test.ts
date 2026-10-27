@@ -1,7 +1,7 @@
 import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useAppearanceSettings } from "./organization.query";
-import { useOrgTheme } from "./theme.hook";
+import { useOrgTheme } from "./use-org-theme";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/chat" }));
 vi.mock("./organization.query", () => ({

@@ -331,7 +331,8 @@ RUN apt-get update \
  && chown -R 1000:1000 /home/node
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
-    python3 /tmp/agent-image-patches/kimi-user-mcp-only.py
+    python3 /tmp/agent-image-patches/kimi-user-mcp-only.py \
+ && python3 /tmp/agent-image-patches/kimi-long-tool-call-ids.py
 USER 1000:1000
 
 RUN --network=none \

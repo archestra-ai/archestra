@@ -1,4 +1,4 @@
-import { AppearanceSettings } from "./_components/appearance-settings";
+import { AppearanceSettings } from "./_parts/appearance-settings";
 
 export default function AppearanceLayout({
   children,

@@ -5,7 +5,7 @@ import {
   TRANSPORT_STALL_THRESHOLD_SECONDS,
   UPSTREAM_IDLE_THRESHOLD_SECONDS,
   useStreamStall,
-} from "./stream-stall.hook";
+} from "./use-stream-stall";
 
 /** Matches the backend's `data-heartbeat` cadence while a run is open. */
 const HEARTBEAT_SECONDS = 5;

@@ -23,7 +23,7 @@ vi.mock("next-themes", () => ({
   useTheme: () => mockUseTheme(),
 }));
 
-vi.mock("@/lib/theme.hook", () => ({
+vi.mock("@/lib/use-org-theme", () => ({
   useOrgTheme: () => mockUseOrgTheme(),
 }));
 

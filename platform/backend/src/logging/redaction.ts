@@ -22,6 +22,8 @@ export const REDACTED_LOG_PATHS = [
   "access_token",
   "refresh_token",
   "id_token",
+  "github_token",
+  "githubToken",
   "clientSecret",
   "client_secret",
   "secret",

@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { GuardrailTerm } from "@/app/consults/logs/_components/guardrail-terms";
+import { GuardrailTerm } from "@/app/consults/logs/_parts/guardrail-terms";
 import { useYellInvestigation } from "@/app/openappa/_parts/use-yell-investigation";
 import { yellHref } from "@/app/openappa/_parts/yells-table";
 import {

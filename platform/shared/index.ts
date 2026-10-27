@@ -23,6 +23,7 @@ export * from "./environment-defaults";
 export * from "./gemini-models";
 export * from "./git-hosts";
 export * from "./github";
+export * from "./github-actions-access";
 export * from "./handlebars-expressions";
 export { client as archestraApiClient } from "./hey-api/clients/api/client.gen";
 export * as archestraApiSdk from "./hey-api/clients/api/sdk.gen";

@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.5.0-rc.11](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.10...platform-v1.5.0-rc.11) (2026-10-27)
+
+
+### Features
+
+* **agent-runtime:** add the Kimi Code catalog harness ([#9684](https://github.com/archestra-ai/archestra/issues/9684)) ([59eb6d9](https://github.com/archestra-ai/archestra/commit/59eb6d9460f479daf2063c200035fce707ba72cc))
+* **agents:** add controls for chat uploads and the built-in browser ([#9687](https://github.com/archestra-ai/archestra/issues/9687)) ([4817742](https://github.com/archestra-ai/archestra/commit/481774255a11c1cf58146fe63fc3a643a0669e09))
+* **chat:** interrupt responses to send queued messages ([#9692](https://github.com/archestra-ai/archestra/issues/9692)) ([11b618c](https://github.com/archestra-ai/archestra/commit/11b618c3e2d6095f92c3fe45870d547f927e3543))
+* **chat:** keep dictation active until explicit stop or send ([#9694](https://github.com/archestra-ai/archestra/issues/9694)) ([f53d5db](https://github.com/archestra-ai/archestra/commit/f53d5db5a65e3c324939d1fb8455c32bb4f52d59))
+* **kimi:** route Kimi through the model router and price Kimi for Coding plans ([#9678](https://github.com/archestra-ai/archestra/issues/9678)) ([0c684c2](https://github.com/archestra-ai/archestra/commit/0c684c256a85223cb54ef46ce58a347624d6716a))
+* **limits:** manage per-user limits from the limits page ([#9689](https://github.com/archestra-ai/archestra/issues/9689)) ([8ff11a8](https://github.com/archestra-ai/archestra/commit/8ff11a84eefaf87832570ca89c9fff57f042204d))
+* **llm-models:** recompute past costs after a token price change ([#9699](https://github.com/archestra-ai/archestra/issues/9699)) ([51c2188](https://github.com/archestra-ai/archestra/commit/51c218875f20fe5a7fa33f7439cd621f277b6c8d))
+* **llm-proxy:** balance and fail over one model name across provider keys with model pools ([#9681](https://github.com/archestra-ai/archestra/issues/9681)) ([bbb3c02](https://github.com/archestra-ai/archestra/commit/bbb3c021d6167023e115db31d172164000da056b))
+
+
+### Bug Fixes
+
+* **agent:** import the MCP SDK before Hermes starts discovery ([#9700](https://github.com/archestra-ai/archestra/issues/9700)) ([1d6cf7f](https://github.com/archestra-ai/archestra/commit/1d6cf7ff2d4e5b7fff6bbe4265dfd5bbbc2c79c7))
+* **connections:** register skills under the marketplace name the user cloned ([#9704](https://github.com/archestra-ai/archestra/issues/9704)) ([a98376e](https://github.com/archestra-ai/archestra/commit/a98376ee3be2dc8e57623f98526c3ac783614aae))
+* **connect:** show the connected card only for the agent that connected ([#9697](https://github.com/archestra-ai/archestra/issues/9697)) ([8d916d8](https://github.com/archestra-ai/archestra/commit/8d916d8e579e08f2ac66ea504c391f88680c5e61))
+* **llm-proxy:** fix Bedrock Converse no-input tool calls and OpenAPPA notice restore ([#9668](https://github.com/archestra-ai/archestra/issues/9668)) ([fb8d98a](https://github.com/archestra-ai/archestra/commit/fb8d98ac93cececd7308ea2e1a9bb1bccf7d2989))
+* **opencode:** preserve UTF-8 runtime payloads in Windows setup ([#9685](https://github.com/archestra-ai/archestra/issues/9685)) ([b8b67a4](https://github.com/archestra-ai/archestra/commit/b8b67a4d66a490b415af15b90e4cded7267d89fd))
+* **schedule:** fail runs when human review is unavailable ([#9680](https://github.com/archestra-ai/archestra/issues/9680)) ([f4cfc66](https://github.com/archestra-ai/archestra/commit/f4cfc66361c276cd0fb3bd5a02a7f616f1e7e891))
+* **settings:** polish LLM virtual-key access setting ([#9691](https://github.com/archestra-ai/archestra/issues/9691)) ([21e5cbb](https://github.com/archestra-ai/archestra/commit/21e5cbb5878c90245057245a896f6841e57fa5a2))
+
+
+### Miscellaneous Chores
+
+* update upstream Playwright MCP and automate updates ([#9686](https://github.com/archestra-ai/archestra/issues/9686)) ([6dd222f](https://github.com/archestra-ai/archestra/commit/6dd222f2d9eeb4a5837a42d024ea0f5c8a7c1f95))
+
 ## [1.5.0-rc.10](https://github.com/archestra-ai/archestra/compare/platform-v1.5.0-rc.9...platform-v1.5.0-rc.10) (2026-10-26)
 
 

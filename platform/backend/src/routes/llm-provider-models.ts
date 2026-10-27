@@ -50,6 +50,7 @@ import {
   CostBackfillPricesSchema,
   ModelCostBackfillResponseSchema,
 } from "@/types/model-cost-backfill";
+import { NamedTimeZoneSchema } from "@/types/time-zone";
 import { BulkIdsSchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 import { registerEntityLabelRoutes } from "./entity-labels";
 
@@ -621,7 +622,7 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({ id: UuidIdSchema }),
         body: z.object({
           /** IANA time zone the days are bucketed in. */
-          timeZone: TimeZoneSchema,
+          timeZone: NamedTimeZoneSchema,
           since: z.coerce.date().nullable().optional(),
           prices: CostBackfillPricesSchema.optional(),
         }),
@@ -1096,24 +1097,4 @@ async function requireEditableModel(params: {
     throw new ApiError(404, "Model not found");
   }
   return model;
-}
-
-// A named IANA zone the runtime knows. `Intl.supportedValuesOf` lists only
-// canonical names and misses current ones browsers report (Asia/Kolkata,
-// Europe/Kyiv); offsets are refused because Postgres reads their sign inverted.
-const TimeZoneSchema = z
-  .string()
-  .max(64)
-  .refine(isNamedTimeZone, "Unknown time zone");
-
-function isNamedTimeZone(value: string): boolean {
-  if (!/^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+)*$/.test(value)) {
-    return false;
-  }
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
 }

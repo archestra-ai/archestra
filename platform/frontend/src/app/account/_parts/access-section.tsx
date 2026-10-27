@@ -9,7 +9,7 @@ import {
   AccountRow,
   AccountRowMuted,
   AccountRows,
-} from "@/app/account/_components/account-rows";
+} from "@/app/account/_parts/account-rows";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RoleOptionLabel } from "@/components/role-type-icon";
 import { PermissionsCard } from "@/components/settings/permissions-card";

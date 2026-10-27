@@ -13,6 +13,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 const TABS = [
   { label: "Overview", href: "/llm/auto-routing" },
   { label: "Plans", href: "/llm/auto-routing/plans" },
+  { label: "Diagnostics", href: "/llm/auto-routing/diagnostics" },
 ];
 
 export default function AutoRoutingLayout({

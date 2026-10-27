@@ -68,6 +68,15 @@ const planInput = {
     assert.ok(decision.expected_cost_usd > 0);
   }
 
+  const [assessed] = JSON.parse(
+    routerRs.assess(planJson, JSON.stringify([features])),
+  );
+  assert.equal(assessed.usd_per_token.length, 3);
+  assert.ok(assessed.predicted_tokens > 0);
+  assert.throws(() => routerRs.assess(planJson, JSON.stringify(features)), {
+    code: "ARCHESTRA_ROUTER_INVALID_INPUT",
+  });
+
   await assert.rejects(
     routerRs.plan(JSON.stringify({ ...planInput, budget: -1 })),
     { code: "ARCHESTRA_ROUTER_INVALID_INPUT" },

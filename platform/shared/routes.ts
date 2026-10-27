@@ -60,6 +60,7 @@ export const RouteId = {
   ReplanAutoRouting: "replanAutoRouting",
   PreviewAutoRouting: "previewAutoRouting",
   SimulateAutoRouting: "simulateAutoRouting",
+  GetAutoRoutingDiagnostics: "getAutoRoutingDiagnostics",
   GetAutoRoutingBackfill: "getAutoRoutingBackfill",
   ScanAutoRoutingBackfill: "scanAutoRoutingBackfill",
   ScoreAutoRoutingBackfill: "scoreAutoRoutingBackfill",

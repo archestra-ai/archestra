@@ -21,6 +21,8 @@ pub use domain::{
 pub use estimate::{LongShareModel, SizeModel, SourceEffect, TokenMixes};
 pub use plan::{Diagnostics, Holdout, PLAN_FORMAT_VERSION, Plan, Summary, Versions};
 
+use serde::Serialize;
+
 use crate::allocate::{Draw, Hull, WeightedSession, solve};
 use crate::estimate::{
     BlockPrices, Estimator, MAX_NEWTON_ITERATIONS, fit_long_share, fit_mixes, fit_size,
@@ -196,6 +198,42 @@ pub fn decide(
         lambda: policy.lam_star,
         expected_cost_usd,
     })
+}
+
+/// One session as `plan` sees it under its own policy: the estimator's prediction and the
+/// route, with the tied upgrade (taken with probability q) kept apart from the base tier.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct SessionAssessment {
+    pub predicted_tokens: f64,
+    pub usd_per_token: [f64; TIER_COUNT],
+    pub base_tier: usize,
+    pub tie_tier: Option<usize>,
+}
+
+/// Read-only diagnostics over many sessions; routes exactly as `decide` with `plan.policy`.
+pub fn assess(
+    plan: &Plan,
+    features: &[SessionFeatures],
+) -> Result<Vec<SessionAssessment>, RouterError> {
+    plan.validate()?;
+    let estimator = Estimator {
+        size_model: &plan.size_model,
+        long_share: &plan.long_share,
+        prices: BlockPrices::new(&plan.tiers_fingerprint, &plan.token_mix),
+    };
+    Ok(features
+        .iter()
+        .map(|f| {
+            let estimate = estimator.estimate(f);
+            let route = Hull::new(estimate.price, estimate.adequacy).route(&plan.policy);
+            SessionAssessment {
+                predicted_tokens: estimate.size,
+                usd_per_token: estimate.price,
+                base_tier: route.base,
+                tie_tier: route.tie,
+            }
+        })
+        .collect())
 }
 
 #[cfg(test)]
@@ -568,5 +606,21 @@ mod tests {
             TierSet::new([short_only, normal, smart], Some(100_000)),
             Err(RouterError::LongContextThresholdMismatch)
         );
+    }
+
+    #[test]
+    fn assess_routes_as_decide() {
+        let plan = plan(input(4.0)).unwrap();
+        let sessions = [features("main"), features("other")];
+        let assessed = assess(&plan, &sessions).unwrap();
+        for (f, a) in sessions.iter().zip(&assessed) {
+            let tie = decide(&plan, &plan.policy, f, 0.0).unwrap();
+            let base = decide(&plan, &plan.policy, f, 0.999_999).unwrap();
+            assert_eq!(a.base_tier, base.tier_index);
+            assert_eq!(a.tie_tier.unwrap_or(a.base_tier), tie.tier_index);
+            let cost = a.predicted_tokens * a.usd_per_token[a.base_tier];
+            assert!((cost - base.expected_cost_usd).abs() <= 1e-12 * cost);
+        }
+        assert!(assessed[0].tie_tier.is_some());
     }
 }

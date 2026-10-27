@@ -12,5 +12,6 @@ const nativeBinding = loadNativeBinding({
 // named ESM export (consumers do `import { plan, decide } from ...`)
 module.exports.plan = wrapAsync(nativeBinding, "plan");
 module.exports.decide = wrapSync(nativeBinding, "decide");
+module.exports.assess = wrapSync(nativeBinding, "assess");
 module.exports.coreVersion = wrapSync(nativeBinding, "coreVersion");
 module.exports.planFormatVersion = wrapSync(nativeBinding, "planFormatVersion");

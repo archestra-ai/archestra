@@ -30912,6 +30912,146 @@ export type SimulateAutoRoutingResponses = {
 
 export type SimulateAutoRoutingResponse = SimulateAutoRoutingResponses[keyof SimulateAutoRoutingResponses];
 
+export type GetAutoRoutingDiagnosticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        budgetUsdPerDay?: number;
+    };
+    url: '/api/auto-routing/diagnostics';
+};
+
+export type GetAutoRoutingDiagnosticsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: 'api_rate_limit_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAutoRoutingDiagnosticsError = GetAutoRoutingDiagnosticsErrors[keyof GetAutoRoutingDiagnosticsErrors];
+
+export type GetAutoRoutingDiagnosticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'ready';
+        budgetUsdPerDay: number;
+        savedBudgetUsdPerDay: number;
+        lamStar: number;
+        q: number;
+        usdPerToken: [
+            number,
+            number,
+            number
+        ];
+        tierSessionShare: [
+            number,
+            number,
+            number
+        ];
+        sizeFit: {
+            testSessions: number;
+            spearman: number | null;
+            medianRealizedOverPredicted: number | null;
+        };
+        sessions: Array<{
+            tierNeeded: [
+                number,
+                number,
+                number
+            ];
+            pLong: number;
+            realizedTokens: number;
+            predictedTokens: number | null;
+            usdPerToken: [
+                number,
+                number,
+                number
+            ];
+            tier: 'fast' | 'normal' | 'smart';
+        }>;
+    } | {
+        status: 'infeasible';
+        budgetUsdPerDay: number;
+        savedBudgetUsdPerDay: number;
+        minBudgetUsdPerDay: number;
+    } | {
+        status: 'cold_start';
+    };
+};
+
+export type GetAutoRoutingDiagnosticsResponse = GetAutoRoutingDiagnosticsResponses[keyof GetAutoRoutingDiagnosticsResponses];
+
 export type CancelAutoRoutingBackfillData = {
     body?: never;
     path?: never;

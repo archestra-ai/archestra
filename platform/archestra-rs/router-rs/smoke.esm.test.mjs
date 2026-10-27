@@ -4,10 +4,11 @@
 // exports must be exposed to ESM (via cjs-module-lexer) and callable.
 import assert from "node:assert/strict";
 
-const { plan, decide, coreVersion, planFormatVersion } = await import("./index.cjs");
+const { plan, decide, assess, coreVersion, planFormatVersion } = await import("./index.cjs");
 
 assert.equal(typeof plan, "function");
 assert.equal(typeof decide, "function");
+assert.equal(typeof assess, "function");
 assert.match(coreVersion(), /^\d+\.\d+\.\d+/);
 assert.ok(Number.isInteger(planFormatVersion()));
 

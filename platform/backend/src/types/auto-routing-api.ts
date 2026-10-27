@@ -182,6 +182,61 @@ export type AutoRoutingSimulateResponse = z.infer<
   typeof AutoRoutingSimulateResponseSchema
 >;
 
+export const AutoRoutingDiagnosticsQuerySchema = z.object({
+  /** Defaults to the active plan's budget. */
+  budgetUsdPerDay: z.coerce.number().min(0.01).max(9_999_999_999.99).optional(),
+});
+
+const TierTripleSchema = z.tuple([z.number(), z.number(), z.number()]);
+
+/**
+ * The active plan's fit sample re-solved at `budgetUsdPerDay` without
+ * publishing. Each session carries its Jev reading, realized tokens, the size
+ * predicted by a fit on each client's earliest 70% of sessions (null for those
+ * training sessions), its per-token tier prices and the tier the re-solved
+ * policy routes it to (a tie drawn with probability q).
+ */
+export const AutoRoutingDiagnosticsResponseSchema = z.discriminatedUnion(
+  "status",
+  [
+    z.object({
+      status: z.literal("ready"),
+      budgetUsdPerDay: z.number(),
+      savedBudgetUsdPerDay: z.number(),
+      lamStar: z.number(),
+      q: z.number(),
+      /** Median USD per token of each tier over the sample. */
+      usdPerToken: TierTripleSchema,
+      tierSessionShare: TierTripleSchema,
+      sizeFit: z.object({
+        testSessions: z.number().int().nonnegative(),
+        spearman: z.number().nullable(),
+        medianRealizedOverPredicted: z.number().nullable(),
+      }),
+      sessions: z.array(
+        z.object({
+          tierNeeded: TierTripleSchema,
+          pLong: z.number(),
+          realizedTokens: z.number(),
+          predictedTokens: z.number().nullable(),
+          usdPerToken: TierTripleSchema,
+          tier: AutoRoutingTierNameSchema,
+        }),
+      ),
+    }),
+    z.object({
+      status: z.literal("infeasible"),
+      budgetUsdPerDay: z.number(),
+      savedBudgetUsdPerDay: z.number(),
+      minBudgetUsdPerDay: z.number(),
+    }),
+    z.object({ status: z.literal("cold_start") }),
+  ],
+);
+export type AutoRoutingDiagnostics = z.infer<
+  typeof AutoRoutingDiagnosticsResponseSchema
+>;
+
 export const AutoRoutingPreviewResponseSchema = z.object({
   tierNeeded: z.tuple([z.number(), z.number(), z.number()]),
   pLong: z.number(),

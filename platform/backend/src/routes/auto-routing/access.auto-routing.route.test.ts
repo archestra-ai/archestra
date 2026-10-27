@@ -17,6 +17,7 @@ const READS = [
     payload: { budgetUsdPerDay: 50, volumeMultiplier: 2 },
   },
   { method: "GET", url: "/api/auto-routing/backfill" },
+  { method: "GET", url: "/api/auto-routing/diagnostics" },
 ] as const;
 const WRITES = [
   {
@@ -61,7 +62,7 @@ describe("auto routing API access", () => {
     await app.close();
   });
 
-  async function tokenFor(role: "admin" | "member") {
+  async function tokenFor(role: string) {
     const account = await ServiceAccountModel.create({
       organizationId,
       name: `auto-routing-${role}`,
@@ -114,6 +115,23 @@ describe("auto routing API access", () => {
       enabled: true,
       generation: 1,
     });
+  });
+
+  test("a role without LLM proxy read access cannot read", async ({
+    makeCustomRole,
+  }) => {
+    const role = await makeCustomRole(organizationId, {
+      permission: { agent: ["read"] },
+    });
+    const authorization = await tokenFor(role.role);
+
+    for (const request of READS) {
+      const response = await app.inject({
+        ...request,
+        headers: { authorization },
+      });
+      expect(response.statusCode, `${request.method} ${request.url}`).toBe(403);
+    }
   });
 
   test("an admin passes the permission check on every write", async () => {

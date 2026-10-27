@@ -95,6 +95,16 @@ fn decide_json(
     serde_json::to_string(&decision).map_err(|e| BoundaryError::internal(e.to_string()))
 }
 
+fn assess_json(plan_json: &str, features_json: &str) -> Result<String, BoundaryError> {
+    let plan: Plan = serde_json::from_str(plan_json)
+        .map_err(|e| BoundaryError::parse("ARCHESTRA_ROUTER_INVALID_PLAN", "plan", e))?;
+    let features: Vec<SessionFeatures> = serde_json::from_str(features_json).map_err(|e| {
+        BoundaryError::parse("ARCHESTRA_ROUTER_INVALID_INPUT", "session features", e)
+    })?;
+    let assessed = router_core::assess(&plan, &features)?;
+    serde_json::to_string(&assessed).map_err(|e| BoundaryError::internal(e.to_string()))
+}
+
 /// Fits and solves one plan on the libuv threadpool; the input string is owned, so
 /// `compute` touches no JS handle.
 pub struct PlanTask {
@@ -132,6 +142,14 @@ pub fn decide(
     u: f64,
 ) -> napi::Result<String> {
     guarded(|| decide_json(&plan_json, &policy_json, &features_json, u))
+}
+
+/// Diagnostics for many sessions (`SessionFeatures[]` JSON) under a `Plan` JSON and its own
+/// policy: per session `{ predicted_tokens, usd_per_token, base_tier, tie_tier }` JSON, routed
+/// exactly as `decide` (the tie tier is taken when u < q).
+#[napi]
+pub fn assess(plan_json: String, features_json: String) -> napi::Result<String> {
+    guarded(|| assess_json(&plan_json, &features_json))
 }
 
 /// The `router_core` version that `plan` stamps on plans.

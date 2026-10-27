@@ -8,6 +8,7 @@ import {
   startBackfillScan,
   startBackfillScoring,
 } from "@/auto-routing/backfill";
+import { diagnoseAutoRouting } from "@/auto-routing/diagnostics";
 import { simulateFit } from "@/auto-routing/fit";
 import { previewAutoRouting } from "@/auto-routing/preview";
 import {
@@ -27,6 +28,8 @@ import {
 } from "@/types";
 import {
   AutoRoutingBackfillResponseSchema,
+  AutoRoutingDiagnosticsQuerySchema,
+  AutoRoutingDiagnosticsResponseSchema,
   AutoRoutingPlanDetailSchema,
   AutoRoutingPlanSummarySchema,
   AutoRoutingPlansQuerySchema,
@@ -176,6 +179,27 @@ const autoRoutingRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, body }, reply) =>
       reply.send(await simulateFit(organizationId, body)),
+  );
+
+  fastify.get(
+    "/api/auto-routing/diagnostics",
+    {
+      schema: {
+        operationId: RouteId.GetAutoRoutingDiagnostics,
+        description:
+          "Re-solve the active plan's fit sample at a budget and return per-session estimates and routes, without publishing",
+        tags: TAGS,
+        querystring: AutoRoutingDiagnosticsQuerySchema,
+        response: {
+          ...constructResponseSchema(AutoRoutingDiagnosticsResponseSchema),
+          429: generateErrorResponseSchema("api_rate_limit_error"),
+        },
+      },
+    },
+    async ({ organizationId, query }, reply) =>
+      reply.send(
+        await diagnoseAutoRouting(organizationId, query.budgetUsdPerDay),
+      ),
   );
 
   fastify.get(

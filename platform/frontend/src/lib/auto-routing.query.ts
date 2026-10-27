@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import {
+  keepPreviousData,
   type QueryClient,
   useMutation,
   useQuery,
@@ -16,6 +17,7 @@ const {
   replanAutoRouting,
   previewAutoRouting,
   simulateAutoRouting,
+  getAutoRoutingDiagnostics,
   getAutoRoutingBackfill,
   scanAutoRoutingBackfill,
   scoreAutoRoutingBackfill,
@@ -40,6 +42,8 @@ type AutoRoutingSimulateBody =
   archestraApiTypes.SimulateAutoRoutingData["body"];
 export type AutoRoutingSimulation =
   archestraApiTypes.SimulateAutoRoutingResponses["200"];
+export type AutoRoutingDiagnostics =
+  archestraApiTypes.GetAutoRoutingDiagnosticsResponses["200"];
 export type AutoRoutingBackfillState =
   archestraApiTypes.GetAutoRoutingBackfillResponses["200"];
 type AutoRoutingScoreBackfillBody =
@@ -59,6 +63,8 @@ const autoRoutingKeys = {
   simulation: (body: AutoRoutingSimulateBody | null) =>
     [...autoRoutingKeys.simulations(), body] as const,
   backfill: () => [...autoRoutingKeys.all, "backfill"] as const,
+  diagnostics: (budgetUsdPerDay: number | null) =>
+    [...autoRoutingKeys.all, "diagnostics", budgetUsdPerDay] as const,
 };
 
 export function useAutoRoutingSettings() {
@@ -178,6 +184,29 @@ export function useSimulateAutoRouting(body: AutoRoutingSimulateBody | null) {
       return data ?? null;
     },
     enabled: body !== null,
+    retry: (failures, error) =>
+      failures < SIMULATION_RETRIES &&
+      getApiErrorType(error.cause) === "api_rate_limit_error",
+    retryDelay: SIMULATION_RETRY_DELAY_MS,
+  });
+}
+
+/**
+ * The active plan's sample re-solved at `budgetUsdPerDay` (its saved budget
+ * when null). Admitted like a simulation, so a refused call is retried; the
+ * previous budget's answer stays on screen meanwhile.
+ */
+export function useAutoRoutingDiagnostics(budgetUsdPerDay: number | null) {
+  return useQuery({
+    queryKey: autoRoutingKeys.diagnostics(budgetUsdPerDay),
+    queryFn: async () => {
+      const { data, error } = await getAutoRoutingDiagnostics({
+        query: budgetUsdPerDay === null ? {} : { budgetUsdPerDay },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    placeholderData: keepPreviousData,
     retry: (failures, error) =>
       failures < SIMULATION_RETRIES &&
       getApiErrorType(error.cause) === "api_rate_limit_error",

@@ -146,10 +146,24 @@ export async function infeasibleBudget(
  * and fits the whole usage window, so an organization runs one at a time and
  * the process at most `MAX_SIMULATIONS`; excess calls are refused with a 429.
  */
-export async function simulateFit(
+export function simulateFit(
   organizationId: string,
   params: { budgetUsdPerDay: number; volumeMultiplier: number },
 ): Promise<AutoRoutingSimulateResponse> {
+  return withFitAdmission(organizationId, () =>
+    simulate(organizationId, params),
+  );
+}
+
+/**
+ * Runs `work`, an unpublished fit over the whole usage window, under the
+ * simulation admission: one per organization and `MAX_SIMULATIONS` per
+ * process; excess calls are refused with a 429.
+ */
+export async function withFitAdmission<T>(
+  organizationId: string,
+  work: () => Promise<T>,
+): Promise<T> {
   if (simulationsInFlight.has(organizationId)) {
     throw new ApiError(
       429,
@@ -161,7 +175,7 @@ export async function simulateFit(
   }
   simulationsInFlight.add(organizationId);
   try {
-    return await simulate(organizationId, params);
+    return await work();
   } finally {
     simulationsInFlight.delete(organizationId);
   }
@@ -459,7 +473,7 @@ function volumeDocument(window: FitWindowSummary): RouterDocument {
  * Live auto sessions and scored past sessions, each weighted by how many
  * sessions of its window it stands for.
  */
-async function readFitHistory(
+export async function readFitHistory(
   params: {
     organizationId: string;
     scorerVersionId: string;
@@ -524,7 +538,7 @@ const INFEASIBLE_ERROR =
   /^ARCHESTRA_ROUTER_INFEASIBLE: cheapest routing costs (\S+) USD\/day/;
 
 /** The cheapest routing's USD/day when `error` is an infeasible-budget fit failure. */
-function cheapestBudget(error: string): number | null {
+export function cheapestBudget(error: string): number | null {
   const cheapest = INFEASIBLE_ERROR.exec(error)?.[1];
   return cheapest === undefined ? null : Number(cheapest);
 }
@@ -605,7 +619,7 @@ function fitTiers(trio: Trio): FitTiers {
 }
 
 type FitHistoryRow = HistoryFitRow;
-type FitHistory = FitWindowSummary & { sample: FitHistoryRow[] };
+export type FitHistory = FitWindowSummary & { sample: FitHistoryRow[] };
 
 const EMPTY_HISTORY: FitHistory = {
   sample: [],
@@ -650,7 +664,10 @@ const RouterFailureSchema = z.object({
   ]),
   message: z.string(),
 });
-const CodedErrorSchema = z.object({ code: z.string(), message: z.string() });
+export const CodedErrorSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+});
 
 async function fit(
   inputs: FitInputs,
@@ -691,7 +708,14 @@ async function fit(
     const plan = RouterPlanSchema.parse(
       JSON.parse(
         await fitPlan(
-          JSON.stringify(planInput(inputs, tiers, volumeMultiplier)),
+          JSON.stringify(
+            planInput(
+              inputs.history,
+              tiers,
+              Number(inputs.budgetUsdPerDay),
+              volumeMultiplier,
+            ),
+          ),
         ),
       ),
     );
@@ -745,12 +769,13 @@ function dailyVolume(volume: FitVolume): SimulatedTraffic {
  * router-core `PlanInput`: the per-session models fit on the sample, while
  * volume is flat at the whole window's arrival rate times `volumeMultiplier`.
  */
-function planInput(
-  inputs: FitInputs,
+export function planInput(
+  history: Pick<FitHistory, "sample" | "volume">,
   tiers: RouterTierSet,
-  volumeMultiplier: number,
+  budgetUsdPerDay: number,
+  volumeMultiplier = 1,
 ) {
-  const { sample, volume } = inputs.history;
+  const { sample, volume } = history;
   const { sessionsPerDay, tokensPerDay } = dailyVolume(volume);
   return {
     history: sample.map((row) => ({
@@ -761,7 +786,7 @@ function planInput(
       weight: row.weight,
     })),
     tiers,
-    budget: Number(inputs.budgetUsdPerDay),
+    budget: budgetUsdPerDay,
     volume: {
       kind: "flat",
       sessions_per_day: sessionsPerDay * volumeMultiplier,

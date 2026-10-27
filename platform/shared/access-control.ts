@@ -704,6 +704,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // Preview spends on the scorer, so it needs the same right as changing settings.
   [RouteId.PreviewAutoRouting]: { llmProxy: ["update"] },
   [RouteId.SimulateAutoRouting]: { llmProxy: ["read"] },
+  [RouteId.GetAutoRoutingDiagnostics]: { llmProxy: ["read"] },
   [RouteId.GetAutoRoutingBackfill]: { llmProxy: ["read"] },
   [RouteId.ScanAutoRoutingBackfill]: { llmProxy: ["update"] },
   // Scoring sends past prompts to the scorer and spends on it.
@@ -2119,6 +2120,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/limits": { llmLimit: ["read"] },
   "/llm/auto-routing": { llmProxy: ["read"] },
   "/llm/auto-routing/plans": { llmProxy: ["read"] },
+  "/llm/auto-routing/diagnostics": { llmProxy: ["read"] },
 
   // MCP
   "/mcp/registry": { mcpRegistry: ["read"] },

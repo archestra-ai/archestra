@@ -471,7 +471,7 @@ export class AppaClaudeDesktopAdapter extends AppaClaudeCodeAdapter {
 }
 
 const CLAUDE_DESKTOP_BILLING_ENTRYPOINT_RE =
-  /cc_entrypoint=(?:cowork|claude-desktop)(?=[;\s]|$)/i;
+  /cc_entrypoint=(?:cowork|claude-desktop(?:-3p)?|local[-_]agent|remote[-_](?:cowork(?:_trigger)?|desktop)|claude-coworker(?:-terminal)?)(?=[;\s]|$)/i;
 
 function hasClaudeDesktopBillingEntrypoint(requestBody: unknown): boolean {
   const system = asRecord(requestBody)?.system;

@@ -249,6 +249,20 @@ describe("client trajectory identity", () => {
         system:
           "x-anthropic-billing-header: cc_version=2.1.195; cc_entrypoint=claude-desktop;",
       },
+      {
+        label: "local-agent billing entrypoint",
+        system: [
+          {
+            type: "text",
+            text: "x-anthropic-billing-header: cc_version=2.1.195.887; cc_entrypoint=local-agent; cch=00000;",
+          },
+        ],
+      },
+      {
+        label: "claude-desktop-3p billing entrypoint",
+        system:
+          "x-anthropic-billing-header: cc_version=2.1.195; cc_entrypoint=claude-desktop-3p;",
+      },
     ])("recognizes Claude Desktop from its $label and metadata.user_id", ({
       system,
     }) => {

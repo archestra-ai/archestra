@@ -90,6 +90,8 @@ describe("Disconnect agent instructions", () => {
     expect(instructions).toContain(
       "configLibrary/aa157426-f6a9-5ac5-8471-3b30b42bbe8f.json",
     );
+    expect(instructions).toContain("claude-appa-permissions.json");
+    expect(instructions).toContain("mcp__SERVER_NAME__");
     expect(instructions).toContain("do not change anything there");
     expect(instructions).toContain("Do not force it to close.");
   });

@@ -293,13 +293,26 @@ Desktop folder: ~/Library/Application Support/Claude-3p on macOS,
   carries the gateway, the shared marketplace and the proxy settings for ${target.host}.
 - configLibrary/_meta.json: its entry, and appliedId when that profile is active.
 - claude_desktop_config.json: deploymentMode, which the setup set. Files ending in
-  .before-archestra hold the state from before the first setup.`,
+  .before-archestra hold the state from before the first setup.
+- ~/.claude/settings.json (or $CLAUDE_CONFIG_DIR/settings.json) and
+  ~/.archestra/claude-appa-permissions.json: permissions.allow rules for the gateway's
+  SERVER_NAME from managedMcpServers.
+- local-agent-mode-sessions/*/*/cowork_plugins/marketplaces/local-desktop-app-uploads/archestra-appa-permissions:
+  local Cowork plugin auto-allowing internal guardrails tools, registered in
+  cowork_plugins/installed_plugins.json and cowork_settings.json.`,
     remove: `- Ask the user to finish active tasks and quit Claude Desktop. Do not force it to close.
 - Delete configLibrary/${CLAUDE_DESKTOP_PROFILE_ID}.json.
 - In configLibrary/_meta.json, remove the entry with that id, and remove appliedId if it is that id.
 - In claude_desktop_config.json, set deploymentMode to its value in
   claude_desktop_config.json.before-archestra, or remove the key if the backup has none
   or does not exist.
+- In ~/.claude/settings.json (or $CLAUDE_CONFIG_DIR/settings.json) permissions.allow,
+  remove the rules that start with mcp__SERVER_NAME__, and remove SERVER_NAME from
+  ~/.archestra/claude-appa-permissions.json.
+- Under local-agent-mode-sessions/*/*, delete
+  cowork_plugins/marketplaces/local-desktop-app-uploads/archestra-appa-permissions and
+  remove archestra-appa-permissions@local-desktop-app-uploads from
+  cowork_plugins/installed_plugins.json and cowork_settings.json.
 - Then the user reopens Claude Desktop.`,
     finish:
       "Ask the user to check Settings > Connectors and Settings > Plugins, and to remove the gateway or the shared marketplace there if either is still listed.",

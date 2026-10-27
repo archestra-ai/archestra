@@ -12,6 +12,10 @@ describe("command-normalization", () => {
       expect(isCommandExecutionTool("builtin:bash")).toBe(true);
       expect(isCommandExecutionTool("builtin:Bash")).toBe(true);
       expect(isCommandExecutionTool("host/archestra/bash")).toBe(true);
+      expect(
+        isCommandExecutionTool("host/archestra/mcp__workspace__bash"),
+      ).toBe(true);
+      expect(isCommandExecutionTool("mcp__workspace__bash")).toBe(true);
       expect(isCommandExecutionTool("host/claude-code/Bash")).toBe(true);
       expect(isCommandExecutionTool("exec_command")).toBe(true);
       expect(isCommandExecutionTool("builtin:exec_command")).toBe(true);

@@ -351,18 +351,22 @@ ${ARCHESTRA_BATTERY} = ["${archestraMcpBranding.serverName}"]
 [aliases.host]
 ${CLAUDE_CODE_BATTERY} = ["archestra"]
 
-# The coding battery's tools under Codex's and OpenCode's spellings.
+# The coding battery's tools under Codex's, OpenCode's, and Claude Desktop Cowork's spellings.
 [aliases.tool.${CODING_BATTERY}]
 shell = [
   { name = "host/archestra/exec_command", args = { command = "cmd" } },
   { name = "host/archestra/shell", args = { command = "command" } },
   { name = "host/archestra/bash", args = { command = "command" } },
+  { name = "host/archestra/mcp__workspace__bash", args = { command = "command" }, confined = true },
 ]
 read_file = [{ name = "host/archestra/read", args = { file_path = "filePath" } }]
 search_files = [{ name = "host/archestra/grep", args = { path = "path" } }]
 write_file = [{ name = "host/archestra/write", args = { file_path = "filePath" } }]
 edit_file = [{ name = "host/archestra/edit", args = { file_path = "filePath" } }]
-fetch_url = [{ name = "host/archestra/webfetch", args = { url = "url" } }]
+fetch_url = [
+  { name = "host/archestra/webfetch", args = { url = "url" } },
+  { name = "host/archestra/mcp__workspace__web_fetch", args = { url = "url" } },
+]
 
 [policy]
 version = 2

@@ -1830,7 +1830,7 @@ function headerFor(params: {
       };
     return {
       title: "Create a GitHub App",
-      description: "GitHub creates the App for you. No IDs or keys to copy.",
+      description: `${params.appName} uses it to read your policy repository and to open pull requests for policy changes made here. GitHub creates it for you, with no IDs or keys to copy.`,
     };
   }
   if (params.editing && (params.step === "repo" || params.step === "connect"))

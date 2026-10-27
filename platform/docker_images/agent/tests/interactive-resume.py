@@ -19,6 +19,25 @@ CLIENTS = {
 }
 
 
+def finish_tmux_session(tmux):
+    # The fake CLI is waiting for terminal input. Let it exit normally before
+    # TemporaryDirectory removes its runtime files: killing the pane can close
+    # stdin while its child is still writing the final input/status record.
+    subprocess.run(tmux + ["send-keys", "-t", "agent", "Enter"],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    try:
+        deadline = time.monotonic() + 10
+        while subprocess.run(tmux + ["has-session", "-t", "agent"],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+            if time.monotonic() >= deadline:
+                raise AssertionError("Fake native CLI did not exit before runtime cleanup")
+            time.sleep(0.05)
+    finally:
+        # This server belongs only to this test's unique socket.
+        subprocess.run(tmux + ["kill-server"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+
+
 class InteractiveResumeTest(unittest.TestCase):
     def launch(self, client, prompt):
         executable, protocol, session_file = CLIENTS[client]
@@ -149,7 +168,7 @@ class GrokInteractiveResumeTest(unittest.TestCase):
                 pasted = (runtime / "fake-input.txt").read_text() if (runtime / "fake-input.txt").exists() else None
                 return args, pasted
             finally:
-                subprocess.run(tmux + ["kill-session", "-t", "agent"], stderr=subprocess.DEVNULL, check=False)
+                finish_tmux_session(tmux)
 
     def test_resume_opens_saved_session_without_submitting_a_prompt(self):
         args, pasted = self.launch("")
@@ -223,7 +242,7 @@ class KimiInteractiveResumeTest(unittest.TestCase):
                 pasted = (runtime / "fake-input.txt").read_text() if (runtime / "fake-input.txt").exists() else None
                 return args, pasted
             finally:
-                subprocess.run(tmux + ["kill-session", "-t", "agent"], stderr=subprocess.DEVNULL, check=False)
+                finish_tmux_session(tmux)
 
     def test_resume_opens_saved_session_without_submitting_a_prompt(self):
         args, pasted = self.launch("")

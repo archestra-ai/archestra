@@ -49,6 +49,11 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # This published stable-release fallback is owned by release publication,
+  # not the CI SHA publishers. Keep it available until the release cutover;
+  # CI packages deliberately do not move a latest tag.
+  # supply-chain-policy: allow-latest published stable MCP fallback
+  RELEASED_MCP_SERVER_BASE_IMAGE: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest
   PLATFORM_IMAGE_REGISTRY: ghcr.io/archestra-ai/ci
   PLATFORM_IMAGE_NAME: platform
   MCP_SERVER_BASE_IMAGE_REGISTRY: ghcr.io/archestra-ai/ci
@@ -909,7 +914,7 @@ jobs:
           # registry — they fall back to the script's published :latest
           # default (host-loaded images are invisible to the embedded Kind).
           # supply-chain-policy: allow-latest quickstart needs a published public fallback
-          MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && 'europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest' || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+          MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && env.RELEASED_MCP_SERVER_BASE_IMAGE || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
         run: ./platform/scripts/e2e-lite.sh up
 
       - name: Configure embedded Kind registry cache
@@ -1086,7 +1091,7 @@ jobs:
           ARCHESTRA_BETA: "true"
           # Same MCP server base image choice as the lite job.
           # supply-chain-policy: allow-latest quickstart needs a published public fallback
-          MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && 'europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest' || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+          MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && env.RELEASED_MCP_SERVER_BASE_IMAGE || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
         run: ./platform/scripts/e2e-lite.sh up
 
       - name: Configure embedded Kind registry cache (OpenAPPA)
@@ -1232,7 +1237,7 @@ jobs:
             -p 127.0.0.1:3000:3000 \
             -e ARCHESTRA_QUICKSTART=true \
             -e ARCHESTRA_AUTH_RATE_LIMIT_DISABLED=true \
-            -e ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest \
+            -e "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${RELEASED_MCP_SERVER_BASE_IMAGE}" \
             -e ARCHESTRA_ANALYTICS=disabled \
             -e ARCHESTRA_OPENAI_BASE_URL=http://archestra-wiremock:8080/v1 \
             -e ARCHESTRA_ANTHROPIC_BASE_URL=http://archestra-wiremock:8080 \

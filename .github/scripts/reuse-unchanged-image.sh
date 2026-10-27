@@ -46,6 +46,8 @@ fi
 
 # Registry version creation time survives retagging. Fail closed when metadata
 # cannot establish freshness, so unchanged inputs still rebuild at least weekly.
+# Only the maintained flat CI namespace is eligible for GHCR reuse. Other
+# packages fall through to a normal build rather than broadening token access.
 if [[ "$IMAGE" =~ ^ghcr\.io/archestra-ai/(ci/[a-z0-9-]+)$ ]]; then
   package="${BASH_REMATCH[1]//\//%2F}"
   uploaded=""

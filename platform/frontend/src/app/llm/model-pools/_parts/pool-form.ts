@@ -13,9 +13,8 @@ import {
 import { isPoolableModel, poolModelName } from "./model-name";
 
 /**
- * A pool's members in the order requests try them. A linked member shares the
- * order of the one above it, and the two split traffic by weight; any other
- * member starts the next order, a fallback for every member above it.
+ * A pool's members, listed by order. Order 1 is tried first; members of one
+ * order split its traffic by weight. Orders run 1, 2, 3 with no gaps.
  */
 export type PoolFormValues = {
   name: string;
@@ -25,12 +24,22 @@ export type PoolFormValues = {
 export type PoolFormMember = {
   providerApiKeyId: string;
   modelId: string;
-  linked: boolean;
+  priority: number;
   weight: number;
   enabled: boolean;
 };
 
 export type PoolForm = UseFormReturn<PoolFormValues>;
+
+export type SavedMember = ModelPool["members"][number];
+
+/** A member's key and model id, which no two members may share. */
+export function memberKey(member: {
+  providerApiKeyId: string;
+  modelId: string;
+}): string {
+  return `${member.providerApiKeyId}|${member.modelId.trim()}`;
+}
 
 /** The API's limit on a member's weight. */
 export const MAX_WEIGHT = 1000;
@@ -43,12 +52,13 @@ export function toFormValues(pool: ModelPool | null): PoolFormValues {
   const members = [...(pool?.members ?? [])].sort(
     (a, b) => a.priority - b.priority,
   );
+  const priorities = denseOrders(members);
   return {
     name: pool?.name ?? "",
     members: members.map((member, index) => ({
       providerApiKeyId: member.providerApiKeyId,
       modelId: member.modelId,
-      linked: index > 0 && members[index - 1]?.priority === member.priority,
+      priority: priorities[index] ?? 1,
       weight: member.weight,
       enabled: member.enabled,
     })),
@@ -56,52 +66,24 @@ export function toFormValues(pool: ModelPool | null): PoolFormValues {
 }
 
 export function toPoolInput(values: PoolFormValues): ModelPoolInput {
-  const orders = memberOrders(values.members);
   return {
     name: values.name.trim(),
-    members: values.members.map((member, index) => ({
+    members: values.members.map((member) => ({
       providerApiKeyId: member.providerApiKeyId,
       modelId: member.modelId.trim(),
-      priority: orders[index] ?? 1,
+      priority: member.priority,
       weight: member.weight,
       enabled: member.enabled,
     })),
   };
 }
 
-/** Each member's order, 1 for the first: linked members share one. */
-export function memberOrders(members: { linked: boolean }[]): number[] {
-  const orders: number[] = [];
-  members.forEach((member, index) => {
-    const above = orders[index - 1] ?? 0;
-    orders.push(index > 0 && member.linked ? above : above + 1);
-  });
-  return orders;
-}
-
-/** The members after one is removed, keeping the others' orders. */
-export function removeMember(
-  members: PoolFormMember[],
-  index: number,
-): PoolFormMember[] {
-  const next = unlinkFollower(members, index);
-  next.splice(index, 1);
-  return leadWithUnlinked(next);
-}
-
-/** A leading member leaving its order hands the lead to the one after it. */
-function unlinkFollower(members: PoolFormMember[], index: number) {
-  const next = [...members];
-  const follower = next[index + 1];
-  if (!next[index]?.linked && follower?.linked) {
-    next[index + 1] = { ...follower, linked: false };
-  }
-  return next;
-}
-
-function leadWithUnlinked(members: PoolFormMember[]) {
-  const [first, ...rest] = members;
-  return first?.linked ? [{ ...first, linked: false }, ...rest] : members;
+/** Each member's order once the orders are renumbered 1, 2, 3. */
+export function denseOrders(members: { priority: number }[]): number[] {
+  const used = [...new Set(members.map((member) => member.priority))].sort(
+    (a, b) => a - b,
+  );
+  return members.map((member) => used.indexOf(member.priority) + 1);
 }
 
 /**
@@ -112,10 +94,9 @@ export function orderShare(
   members: PoolFormMember[],
   index: number,
 ): number | null {
-  const orders = memberOrders(members);
   const member = members[index];
   const sameOrder = members.filter(
-    (_, other) => orders[other] === orders[index],
+    (other) => other.priority === member?.priority,
   );
   if (!member?.enabled || sameOrder.length < 2) return null;
   const total = sameOrder
@@ -225,9 +206,7 @@ export function usePoolProblem(
 }
 
 function hasRepeatedMember(members: PoolFormMember[]) {
-  const keys = members.map(
-    (member) => `${member.providerApiKeyId}|${member.modelId.trim()}`,
-  );
+  const keys = members.map(memberKey);
   return keys.some((key, index) => keys.indexOf(key) !== index);
 }
 

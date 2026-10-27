@@ -53,11 +53,10 @@ import {
   type ConnectablePool,
   ConnectPoolDialog,
 } from "./_parts/connect-pool-dialog";
-import { CreatePoolDialog } from "./_parts/create-pool-dialog";
-import { EditPoolDialog } from "./_parts/edit-pool-dialog";
 import { PoolHealth } from "./_parts/member-status";
-import { PoolProviderIcons, PoolProviders } from "./_parts/pool-fields";
+import { PoolDialog } from "./_parts/pool-dialog";
 import { memberSummary } from "./_parts/pool-form";
+import { PoolProviderIcons, PoolProviders } from "./_parts/pool-providers";
 
 const DESCRIPTION = (
   <>
@@ -404,7 +403,8 @@ function ModelPools() {
         onSuccess={() => setCreating(true)}
       />
       {creating ? (
-        <CreatePoolDialog
+        <PoolDialog
+          pool={null}
           onOpenChange={(open) => {
             if (!open) setCreating(false);
           }}
@@ -415,7 +415,7 @@ function ModelPools() {
         />
       ) : null}
       {editing ? (
-        <EditPoolDialog
+        <PoolDialog
           key={editing.id}
           pool={editing}
           onOpenChange={(open) => {
@@ -426,10 +426,7 @@ function ModelPools() {
       {connecting ? (
         <ConnectPoolDialog
           key={connecting.pool.id}
-          pool={
-            pools.find((pool) => pool.id === connecting.pool.id) ??
-            connecting.pool
-          }
+          pool={connecting.pool}
           ready={connecting.ready}
           onOpenChange={(open) => {
             if (!open) setConnecting(null);

@@ -429,7 +429,6 @@ function OAuthClientProviderAccessFields({
       />
       {canSetModelPools && (
         <ModelPoolsField
-          id="oauth-client-model-pools"
           value={values.modelPoolIds ?? []}
           onChange={(value) =>
             form.setValue("modelPoolIds", value, { shouldDirty: true })

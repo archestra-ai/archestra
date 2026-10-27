@@ -1,47 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
-  memberOrders,
   orderShare,
   type PoolFormMember,
-  removeMember,
   toFormValues,
   toPoolInput,
 } from "./pool-form";
 
 function member(
   modelId: string,
-  linked = false,
+  priority: number,
   weight = 1,
   enabled = true,
 ): PoolFormMember {
-  return { providerApiKeyId: "key", modelId, linked, weight, enabled };
+  return { providerApiKeyId: "key", modelId, priority, weight, enabled };
 }
-
-/** "a b+c d": a alone, b and c linked, d alone. */
-function layout(members: PoolFormMember[]): string {
-  return members
-    .map((row, index) =>
-      index === 0 ? row.modelId : `${row.linked ? "+" : " "}${row.modelId}`,
-    )
-    .join("");
-}
-
-describe("memberOrders", () => {
-  it("gives linked members the order of the member above", () => {
-    expect(
-      memberOrders([
-        member("a"),
-        member("b", true),
-        member("c"),
-        member("d", true),
-        member("e", true),
-      ]),
-    ).toEqual([1, 1, 2, 2, 2]);
-  });
-});
 
 describe("toFormValues and toPoolInput", () => {
-  it("round-trips priorities through links, in order", () => {
+  it("renumbers orders 1, 2, 3 and lists members by order", () => {
     const values = toFormValues({
       id: "pool",
       organizationId: "org",
@@ -64,7 +39,6 @@ describe("toFormValues and toPoolInput", () => {
         benchReason: null,
       })),
     });
-    expect(layout(values.members)).toBe("m1 m0+m2 m3");
     expect(
       toPoolInput(values).members.map((row) => [row.modelId, row.priority]),
     ).toEqual([
@@ -76,21 +50,13 @@ describe("toFormValues and toPoolInput", () => {
   });
 });
 
-describe("removeMember", () => {
-  it("keeps the remaining members of an order together", () => {
-    expect(
-      layout(removeMember([member("a"), member("b", true), member("c")], 0)),
-    ).toBe("b c");
-  });
-});
-
 describe("orderShare", () => {
   it("splits an order's traffic by weight, among members that are on", () => {
     const members = [
-      member("a", false, 3),
-      member("b", true, 1),
-      member("c", true, 5, false),
-      member("d"),
+      member("a", 1, 3),
+      member("b", 1, 1),
+      member("c", 1, 5, false),
+      member("d", 2),
     ];
     expect(orderShare(members, 0)).toBe(75);
     expect(orderShare(members, 1)).toBe(25);

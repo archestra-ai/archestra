@@ -341,7 +341,6 @@ export function EditVirtualKeyDialog({
           />
           {canSetModelPools && (
             <ModelPoolsField
-              id="edit-virtual-key-model-pools"
               value={modelPoolIds ?? grantedPoolIds}
               onChange={setModelPoolIds}
             />

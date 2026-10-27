@@ -16,8 +16,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { ModelPool } from "@/lib/model-pools.query";
 import { cn } from "@/lib/utils/tailwind";
-
-type SavedMember = ModelPool["members"][number];
+import type { SavedMember } from "./pool-form";
 
 /**
  * "Cooling down · 23 s" while a member is skipped after a failure (LiteLLM's
@@ -66,7 +65,7 @@ export function PoolHealth({ pool }: { pool: ModelPool }) {
 }
 
 /** Members benched right now, with their seconds left. */
-export function useBenchedMembers(pool: ModelPool) {
+function useBenchedMembers(pool: ModelPool) {
   const now = useNow(
     pool.members.some((member) => member.benchedUntil !== null),
   );

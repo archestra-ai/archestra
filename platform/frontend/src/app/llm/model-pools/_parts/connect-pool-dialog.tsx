@@ -30,12 +30,7 @@ import type { ModelPool } from "@/lib/model-pools.query";
 import { cn } from "@/lib/utils/tailwind";
 
 /** What the view needs of a pool, which a pool just created also has. */
-export type ConnectablePool = Pick<ModelPool, "id" | "name"> & {
-  members: Pick<
-    ModelPool["members"][number],
-    "provider" | "modelId" | "enabled"
-  >[];
-};
+export type ConnectablePool = Pick<ModelPool, "id" | "name">;
 
 type Endpoint = "model-router" | "anthropic" | "openai";
 type Credential = "standard" | "token";

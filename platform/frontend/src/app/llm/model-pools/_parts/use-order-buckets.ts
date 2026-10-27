@@ -1,18 +1,16 @@
 "use client";
 
 import { useFieldArray } from "react-hook-form";
-import type { ModelPool } from "@/lib/model-pools.query";
 import { suggestModelId } from "./model-name";
 import {
-  memberOrders,
+  denseOrders,
+  memberKey,
   orderShare,
   type PoolForm,
   type PoolFormMember,
   type PoolOptions,
-  removeMember,
+  type SavedMember,
 } from "./pool-form";
-
-type SavedMember = ModelPool["members"][number];
 
 export type OrderMember = {
   /** Stable React key and drag id. */
@@ -31,8 +29,7 @@ export type OrderBucket = { order: number; members: OrderMember[] };
 
 /**
  * The pool's members grouped by order, and the moves between orders. The form
- * keeps one flat list where a linked member shares the order above it; this
- * hook hides that. An order exists while it has a member.
+ * keeps one flat list sorted by order; an order exists while it has a member.
  */
 export function useOrderBuckets({
   form,
@@ -49,15 +46,12 @@ export function useOrderBuckets({
   });
   const members = form.watch("members");
   const name = form.watch("name").trim();
-  const orders = memberOrders(members);
-  const memberKey = (member: PoolFormMember) =>
-    `${member.providerApiKeyId}|${member.modelId.trim()}`;
 
   const buckets: OrderBucket[] = [];
   fields.forEach((field, index) => {
     const member = members[index];
     if (!member) return;
-    const order = orders[index] ?? 1;
+    const order = member.priority;
     const first = members.findIndex(
       (other) => memberKey(other) === memberKey(member),
     );
@@ -73,14 +67,16 @@ export function useOrderBuckets({
             row.providerApiKeyId === member.providerApiKeyId &&
             row.modelId === member.modelId,
         ) ?? null,
-      repeatsOrder: first < index ? (orders[first] ?? 1) : null,
+      repeatsOrder: first < index ? (members[first]?.priority ?? 1) : null,
     });
   });
 
-  const relink = (linked: boolean[]) => {
-    linked.forEach((value, index) => {
-      if (form.getValues(`members.${index}.linked`) !== value) {
-        form.setValue(`members.${index}.linked`, value, { shouldDirty: true });
+  const setOrders = (priorities: number[]) => {
+    priorities.forEach((value, index) => {
+      if (form.getValues(`members.${index}.priority`) !== value) {
+        form.setValue(`members.${index}.priority`, value, {
+          shouldDirty: true,
+        });
       }
     });
   };
@@ -90,7 +86,7 @@ export function useOrderBuckets({
     const kept = groups.filter((group) => group.length > 0);
     const to = kept.flat().indexOf(from);
     if (to !== from) move(from, to);
-    relink(kept.flatMap((group) => group.map((_, at) => at > 0)));
+    setOrders(kept.flatMap((group, order) => group.map(() => order + 1)));
   };
 
   /** Every order's member indexes, without `from`. */
@@ -102,7 +98,7 @@ export function useOrderBuckets({
     );
 
   /** A new member on the next unused shared key, named after the pool. */
-  const newMember = (linked: boolean): PoolFormMember | null => {
+  const newMember = (priority: number): PoolFormMember | null => {
     const key =
       options.sharedKeys.find(
         (candidate) =>
@@ -116,7 +112,7 @@ export function useOrderBuckets({
         key.provider,
         options.modelIdsByKey.get(key.id),
       ),
-      linked,
+      priority,
       weight: 1,
       enabled: true,
     };
@@ -146,15 +142,15 @@ export function useOrderBuckets({
     /** A new member at the end of `order`, or in a new last order. */
     addToOrder: (order: number) => {
       const last = buckets[order - 1]?.members.at(-1);
-      const member = newMember(last !== undefined);
+      const member = newMember(last ? order : buckets.length + 1);
       if (!member) return;
       if (last) insert(last.index + 1, member);
       else append(member);
     },
     removeAt: (index: number) => {
-      const next = removeMember(form.getValues("members"), index);
+      const rest = form.getValues("members").filter((_, at) => at !== index);
       remove(index);
-      relink(next.map((member) => member.linked));
+      setOrders(denseOrders(rest));
     },
   };
 }

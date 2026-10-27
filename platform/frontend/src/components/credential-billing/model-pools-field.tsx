@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -23,14 +24,13 @@ export function useCanSetModelPools(): boolean {
  * its provider keys reach.
  */
 export function ModelPoolsField({
-  id,
   value,
   onChange,
 }: {
-  id: string;
   value: string[];
   onChange: (value: string[]) => void;
 }) {
+  const id = useId();
   const { data: pools = [] } = useModelPools();
   return (
     <div className="space-y-2">

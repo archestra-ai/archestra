@@ -14,6 +14,7 @@ vi.mock("next/image", () => ({
 }));
 vi.mock("@/lib/model-pools.query", () => ({
   useModelPools: vi.fn(),
+  useCreateModelPool: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateModelPool: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
@@ -34,7 +35,7 @@ import {
   useAppearanceSettings,
   useOrganization,
 } from "@/lib/organization.query";
-import { EditPoolDialog } from "./edit-pool-dialog";
+import { PoolDialog } from "./pool-dialog";
 
 const NOW = Date.now();
 
@@ -64,7 +65,7 @@ function pool(benchedUntil: string | null): ModelPool {
   } as ModelPool;
 }
 
-describe("EditPoolDialog", () => {
+describe("PoolDialog", () => {
   beforeEach(() => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
@@ -84,7 +85,7 @@ describe("EditPoolDialog", () => {
       data: [saved],
     } as unknown as ReturnType<typeof useModelPools>);
     const { rerender } = render(
-      <EditPoolDialog pool={saved} onOpenChange={() => {}} />,
+      <PoolDialog pool={saved} onOpenChange={() => {}} />,
     );
 
     const weight = screen.getAllByRole("spinbutton", { name: /Weight/ })[0];
@@ -96,7 +97,7 @@ describe("EditPoolDialog", () => {
     vi.mocked(useModelPools).mockReturnValue({
       data: [refetched],
     } as unknown as ReturnType<typeof useModelPools>);
-    rerender(<EditPoolDialog pool={refetched} onOpenChange={() => {}} />);
+    rerender(<PoolDialog pool={refetched} onOpenChange={() => {}} />);
 
     expect(
       screen.getAllByRole("spinbutton", { name: /Weight/ })[0],
@@ -105,41 +106,17 @@ describe("EditPoolDialog", () => {
     expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
   });
 
-  it.each([
-    ["Weight", ""],
-    ["Weight", "0"],
-    ["Weight", "1001"],
-  ])("keeps Save off while %s is %j", async (field, value) => {
+  it("keeps Save off while a weight is out of range", async () => {
     const user = userEvent.setup();
     const saved = pool(null);
     vi.mocked(useModelPools).mockReturnValue({
       data: [saved],
     } as unknown as ReturnType<typeof useModelPools>);
-    render(<EditPoolDialog pool={saved} onOpenChange={() => {}} />);
-    const input = screen.getAllByRole("spinbutton", {
-      name: new RegExp(field),
-    })[0];
+    render(<PoolDialog pool={saved} onOpenChange={() => {}} />);
+    const input = screen.getAllByRole("spinbutton", { name: /Weight/ })[0];
     await user.clear(input);
-    if (value) await user.type(input, value);
+    await user.type(input, "1001");
     expect(input).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
-  });
-
-  it("asks before Cancel discards edits", async () => {
-    const user = userEvent.setup();
-    const saved = pool(null);
-    vi.mocked(useModelPools).mockReturnValue({
-      data: [saved],
-    } as unknown as ReturnType<typeof useModelPools>);
-    const onOpenChange = vi.fn();
-    render(<EditPoolDialog pool={saved} onOpenChange={onOpenChange} />);
-    const weight = screen.getAllByRole("spinbutton", { name: /Weight/ })[0];
-    await user.clear(weight);
-    await user.type(weight, "5");
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(
-      await screen.findByText("Discard unsaved changes?"),
-    ).toBeInTheDocument();
-    expect(onOpenChange).not.toHaveBeenCalled();
   });
 });

@@ -456,7 +456,6 @@ export function CreateVirtualKeyDialog({
               )}
               {!isPassthrough && canSetModelPools && (
                 <ModelPoolsField
-                  id="virtual-key-model-pools"
                   value={modelPoolIds}
                   onChange={setModelPoolIds}
                 />

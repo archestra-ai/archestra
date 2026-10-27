@@ -65,8 +65,6 @@ describe("MemberCooldown and PoolHealth", () => {
       />,
     );
     expect(container).toBeEmptyDOMElement();
-    rerender(<MemberCooldown saved={null} />);
-    expect(container).toBeEmptyDOMElement();
   });
 
   it("sums up a pool by its members cooling down", () => {

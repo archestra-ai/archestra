@@ -32,7 +32,7 @@ Before you start, add a shared key for each provider on [Model Providers](/docs/
 
 The dialog then shows that the pool is ready, with a request you can copy. Send it, and the answer carries `x-archestra-pool: claude-sonnet-5-5` and `x-archestra-attempts: 1` headers.
 
-- A pool named after a model ID takes over that model: every request for `claude-sonnet-5-5` from a caller who can use the pool goes to the pool. Deleting the pool sends those requests back to the caller's own key.
+- A pool named after a model ID takes over that model on the LLM Proxy: every request for `claude-sonnet-5-5` from a caller who can use the pool goes to the pool. Deleting the pool sends those requests back to the caller's own key. In chat and agents, a pool answers only when you [pick it](#use-a-pool-in-chat-and-agents).
 - Switch a member off to stop sending it traffic and keep it in the pool.
 
 ## Order and Weight
@@ -64,7 +64,7 @@ A failed member cools down for as long as its `Retry-After` header asks, or 30 s
 
 ## Who Can Use a Pool
 
-A pool is open to any credential that can already reach one of its members. People who connected through [Connect](/docs/get-started/connect) use the pool without changing anything, when their key is one of its members.
+On the LLM Proxy, a pool is open to any credential that can already reach one of its members. People who connected through [Connect](/docs/get-started/connect) use the pool without changing anything, when their key is one of its members.
 
 - A [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) that maps a member's provider key.
 - An [OAuth client](/docs/llm-proxy/authentication#oauth-clients) whose provider keys include a member's key.
@@ -72,6 +72,15 @@ A pool is open to any credential that can already reach one of its members. Peop
 To let a virtual key or an OAuth client use a pool without mapping any of its members, add the pool under **Model pools** when you create or edit it. Only OAuth clients that [call as the app](/docs/llm-proxy/authentication#call-as-the-app) take pools. Setting **Model pools** needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
 
 A caller who can't use a pool is not refused. Their request for that name goes to their own key, as it would without a pool.
+
+## Use a Pool in Chat and Agents
+
+In Archestra Chat and in agents, a pool answers only when you pick it. A provider key and a model run on that key alone, even when the key is a pool member.
+
+- **Chat:** open the model menu, go to **Key**, and pick the pool under **Model pools**. The pool picks the member, so there is no model to choose.
+- **Agents:** in the agent's form, pick the pool under **Model pools** in the key picker. An agent on an [Agent Runtime](/docs/agents/runtime) can't pick a pool. It reaches one by name, as any other client does.
+
+You see the pools that have a member on a key you can use.
 
 ## Connect a Client
 

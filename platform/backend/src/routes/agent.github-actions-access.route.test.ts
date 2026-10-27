@@ -1,6 +1,10 @@
 import type { GitHubActionsAccess } from "@archestra/shared";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
-import { AgentModel, RuntimeCredentialDefinitionModel } from "@/models";
+import {
+  AgentModel,
+  AuditLogModel,
+  RuntimeCredentialDefinitionModel,
+} from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   authenticatedRouteApp,
@@ -49,6 +53,7 @@ describe("PUT /api/agents/:id with githubActionsAccess", () => {
       app = await authenticatedRouteApp({
         organizationId,
         routes: [agentRoutes],
+        auditLog: true,
       });
     },
   );
@@ -64,9 +69,15 @@ describe("PUT /api/agents/:id with githubActionsAccess", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().githubActionsAccess).toEqual(SETTING);
-    expect(
-      await AgentModel.findByIdForAudit(gatewayId, organizationId),
-    ).toMatchObject({ githubActionsAccess: SETTING });
+    const [record] = await auditRecords();
+    expect(record).toMatchObject({
+      action: "agent.updated",
+      outcome: "success",
+      resourceId: gatewayId,
+      actorId: editor.id,
+    });
+    expect(record.before).toMatchObject({ githubActionsAccess: null });
+    expect(record.after).toMatchObject({ githubActionsAccess: SETTING });
   });
 
   test("refuses the setting when the editor may not use the GitHub App", async () => {
@@ -89,6 +100,14 @@ describe("PUT /api/agents/:id with githubActionsAccess", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().githubActionsAccess).toBeNull();
+    // Turning it off is a change worth a record of its own.
+    const [record] = await auditRecords();
+    expect(record).toMatchObject({
+      action: "agent.updated",
+      resourceId: gatewayId,
+    });
+    expect(record.before).toMatchObject({ githubActionsAccess: SETTING });
+    expect(record.after).toMatchObject({ githubActionsAccess: null });
   });
 
   test("refuses a credential that is not an organization GitHub App", async () => {
@@ -135,6 +154,18 @@ describe("PUT /api/agents/:id with githubActionsAccess", () => {
       headers: { [USER_HEADER]: as.id },
       payload,
     });
+  }
+
+  async function auditRecords() {
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId,
+      resourceId: gatewayId,
+      action: "agent.updated",
+      limit: 10,
+      offset: 0,
+    });
+    expect(data).toHaveLength(1);
+    return data;
   }
 
   async function makeReviewApp(params: { usableBy: "organization" | "admin" }) {

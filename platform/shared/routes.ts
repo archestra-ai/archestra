@@ -59,6 +59,7 @@ export const RouteId = {
   GetAutoRoutingPlan: "getAutoRoutingPlan",
   ReplanAutoRouting: "replanAutoRouting",
   PreviewAutoRouting: "previewAutoRouting",
+  SimulateAutoRouting: "simulateAutoRouting",
   TransferSkillOwnership: "transferSkillOwnership",
   TransferPluginOwnership: "transferPluginOwnership",
   TransferProjectOwnership: "transferProjectOwnership",

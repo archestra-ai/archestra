@@ -30792,6 +30792,105 @@ export type PreviewAutoRoutingResponses = {
 
 export type PreviewAutoRoutingResponse = PreviewAutoRoutingResponses[keyof PreviewAutoRoutingResponses];
 
+export type SimulateAutoRoutingData = {
+    body: {
+        budgetUsdPerDay: number;
+        volumeMultiplier: number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/simulate';
+};
+
+export type SimulateAutoRoutingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SimulateAutoRoutingError = SimulateAutoRoutingErrors[keyof SimulateAutoRoutingErrors];
+
+export type SimulateAutoRoutingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'feasible';
+        summary: {
+            [key: string]: unknown;
+        };
+    } | {
+        status: 'infeasible';
+        minBudgetUsdPerDay: number;
+    } | {
+        status: 'cold_start';
+        sessions: number;
+        required: number;
+    };
+};
+
+export type SimulateAutoRoutingResponse = SimulateAutoRoutingResponses[keyof SimulateAutoRoutingResponses];
+
 export type AzureListFilesData = {
     body?: never;
     path?: never;

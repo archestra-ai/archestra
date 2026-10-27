@@ -21,6 +21,7 @@ import type {
   AutoRoutingPreview,
   AutoRoutingSettings,
   AutoRoutingSettingsUpdate,
+  AutoRoutingSimulation,
 } from "@/lib/auto-routing.query";
 import type { LlmModel } from "@/lib/llm-models.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -30,6 +31,12 @@ import AutoRoutingPlansPage from "./plans/page";
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("sonner");
+
+// Radix Select needs pointer capture and scrolling, which jsdom lacks.
+Element.prototype.scrollIntoView = vi.fn();
+Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+Element.prototype.setPointerCapture = vi.fn();
+Element.prototype.releasePointerCapture = vi.fn();
 
 const API_ORIGIN = "http://localhost:9000";
 const PLAN_ID = "00000000-0000-4000-8000-000000000001";
@@ -384,6 +391,61 @@ describe("AutoRoutingOverviewPage", () => {
     expect(screen.getByTestId("auto-routing-status")).toHaveTextContent(
       "Active plan from",
     );
+  });
+
+  it("simulates a traffic change on the active plan without saving", async () => {
+    settings = withActivePlan(makeSettings());
+    const simulated: unknown[] = [];
+    server.use(
+      http.post(
+        `${API_ORIGIN}/api/auto-routing/simulate`,
+        async ({ request }) => {
+          simulated.push(await request.json());
+          return HttpResponse.json({
+            status: "feasible",
+            summary: {
+              ...activePlan.summary,
+              tokens_per_day: 27_000_000,
+              expected_spend: 20,
+              value_size_weighted: 0.71,
+            },
+          } satisfies AutoRoutingSimulation);
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByLabelText("Traffic"));
+    await user.click(await screen.findByRole("option", { name: "×3" }));
+
+    const whatIf = screen.getByTestId("auto-routing-what-if");
+    expect(await within(whatIf).findByText("71.0%")).toBeInTheDocument();
+    expect(within(whatIf).getByText("$20.00/day")).toBeInTheDocument();
+    expect(whatIf).toHaveTextContent("27M tokens/day (now 9M)");
+    expect(simulated).toEqual([{ budgetUsdPerDay: 20, volumeMultiplier: 3 }]);
+    expect(updates).toEqual([]);
+  });
+
+  it("reports the minimum budget when the simulated traffic cannot be afforded", async () => {
+    settings = withActivePlan(makeSettings());
+    server.use(
+      http.post(`${API_ORIGIN}/api/auto-routing/simulate`, () =>
+        HttpResponse.json({
+          status: "infeasible",
+          minBudgetUsdPerDay: 31.4,
+        } satisfies AutoRoutingSimulation),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByLabelText("Traffic"));
+    await user.click(await screen.findByRole("option", { name: "×10" }));
+
+    expect(
+      await within(screen.getByTestId("auto-routing-what-if")).findByText(
+        "$31.40/day",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("labels the plan's tier split with the models it was fitted for", async () => {

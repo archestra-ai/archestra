@@ -2,7 +2,7 @@ import { z } from "zod";
 import { formatCurrency } from "@/lib/utils/format-currency";
 
 // router-core plan documents travel as untyped JSON; these mirror the Rust
-// structs (plan.rs) at plan format version 1.
+// structs (plan.rs) at plan format version 2.
 
 const TierTriple = z.tuple([z.number(), z.number(), z.number()]);
 

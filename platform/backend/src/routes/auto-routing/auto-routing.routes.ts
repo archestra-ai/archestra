@@ -1,6 +1,7 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { simulateFit } from "@/auto-routing/fit";
 import { previewAutoRouting } from "@/auto-routing/preview";
 import {
   getAutoRoutingSettings,
@@ -20,6 +21,8 @@ import {
   AutoRoutingPreviewResponseSchema,
   AutoRoutingSettingsChangeResponseSchema,
   AutoRoutingSettingsResponseSchema,
+  AutoRoutingSimulateBodySchema,
+  AutoRoutingSimulateResponseSchema,
   UpdateAutoRoutingSettingsBodySchema,
 } from "@/types/auto-routing-api";
 
@@ -139,9 +142,23 @@ const autoRoutingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, body }, reply) =>
-      reply.send(
-        await previewAutoRouting({ organizationId, text: body.text }),
-      ),
+      reply.send(await previewAutoRouting({ organizationId, text: body.text })),
+  );
+
+  fastify.post(
+    "/api/auto-routing/simulate",
+    {
+      schema: {
+        operationId: RouteId.SimulateAutoRouting,
+        description:
+          "Fit a plan at a budget and a scaled traffic volume without publishing it",
+        tags: TAGS,
+        body: AutoRoutingSimulateBodySchema,
+        response: constructResponseSchema(AutoRoutingSimulateResponseSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) =>
+      reply.send(await simulateFit(organizationId, body)),
   );
 };
 

@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import {
+  keepPreviousData,
   type QueryClient,
   useMutation,
   useQuery,
@@ -15,6 +16,7 @@ const {
   getAutoRoutingPlan,
   replanAutoRouting,
   previewAutoRouting,
+  simulateAutoRouting,
 } = archestraApiSdk;
 
 export type AutoRoutingSettings =
@@ -31,6 +33,10 @@ export type AutoRoutingPreviewBody =
   archestraApiTypes.PreviewAutoRoutingData["body"];
 export type AutoRoutingPreview =
   archestraApiTypes.PreviewAutoRoutingResponses["200"];
+type AutoRoutingSimulateBody =
+  archestraApiTypes.SimulateAutoRoutingData["body"];
+export type AutoRoutingSimulation =
+  archestraApiTypes.SimulateAutoRoutingResponses["200"];
 
 const autoRoutingKeys = {
   all: ["auto-routing"] as const,
@@ -38,6 +44,9 @@ const autoRoutingKeys = {
   plans: () => [...autoRoutingKeys.all, "plans"] as const,
   planDetails: () => [...autoRoutingKeys.all, "plan"] as const,
   plan: (id: string | null) => [...autoRoutingKeys.planDetails(), id] as const,
+  simulations: () => [...autoRoutingKeys.all, "simulate"] as const,
+  simulation: (body: AutoRoutingSimulateBody | null) =>
+    [...autoRoutingKeys.simulations(), body] as const,
 };
 
 export function useAutoRoutingSettings() {
@@ -111,6 +120,7 @@ async function applyFit(
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: autoRoutingKeys.plans() }),
     queryClient.invalidateQueries({ queryKey: autoRoutingKeys.planDetails() }),
+    queryClient.invalidateQueries({ queryKey: autoRoutingKeys.simulations() }),
   ]);
   switch (data.fit?.status) {
     case undefined:
@@ -138,5 +148,20 @@ export function usePreviewAutoRouting() {
       throwOnApiError(error);
       return data;
     },
+  });
+}
+
+/** A fit at `body`'s budget and traffic that publishes nothing; idle while `body` is null. */
+export function useSimulateAutoRouting(body: AutoRoutingSimulateBody | null) {
+  return useQuery({
+    queryKey: autoRoutingKeys.simulation(body),
+    queryFn: async () => {
+      if (!body) return null;
+      const { data, error } = await simulateAutoRouting({ body });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    enabled: body !== null,
+    placeholderData: keepPreviousData,
   });
 }

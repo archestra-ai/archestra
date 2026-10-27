@@ -11,6 +11,11 @@ import autoRoutingRoutes from "./auto-routing.routes";
 const READS = [
   { method: "GET", url: "/api/auto-routing/settings" },
   { method: "GET", url: "/api/auto-routing/plans" },
+  {
+    method: "POST",
+    url: "/api/auto-routing/simulate",
+    payload: { budgetUsdPerDay: 50, volumeMultiplier: 2 },
+  },
 ] as const;
 const WRITES = [
   {

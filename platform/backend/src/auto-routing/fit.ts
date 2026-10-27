@@ -10,6 +10,7 @@ import logger from "@/logging";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import RoutingPlanModel from "@/models/routing-plan";
 import RoutingUsageModel, { type FitVolume } from "@/models/routing-usage";
+import { ApiError } from "@/types";
 import {
   type AutoRoutingSettings,
   type RouterDocument,
@@ -19,7 +20,10 @@ import {
   type RoutingPlanTrigger,
   type RoutingPublishResult,
 } from "@/types/auto-routing";
-import type { AutoRoutingFitResult } from "@/types/auto-routing-api";
+import type {
+  AutoRoutingFitResult,
+  AutoRoutingSimulateResponse,
+} from "@/types/auto-routing-api";
 import { activeSourceVersion, routerFeatures } from "./signals";
 import {
   fingerprintMatches,
@@ -94,9 +98,57 @@ export async function infeasibleBudget(
   });
   if (!inputs) return null;
   const { outcome } = await fit(inputs);
-  if (outcome.status !== "failed") return null;
-  const cheapest = INFEASIBLE_ERROR.exec(outcome.error)?.[1];
-  return cheapest === undefined ? null : Number(cheapest);
+  return outcome.status === "failed" ? cheapestBudget(outcome.error) : null;
+}
+
+/**
+ * What a fit at `budgetUsdPerDay` would plan if the fitted usage window's
+ * sessions and tokens per day were `volumeMultiplier` times what they were.
+ * Runs regardless of the enabled switch and publishes nothing.
+ */
+export async function simulateFit(
+  organizationId: string,
+  params: { budgetUsdPerDay: number; volumeMultiplier: number },
+): Promise<AutoRoutingSimulateResponse> {
+  const settings = await AutoRoutingSettingsModel.find(organizationId);
+  const inputs =
+    settings &&
+    (await readFitInputs({
+      organizationId,
+      settings: {
+        ...settings,
+        enabled: true,
+        budgetUsdPerDay: params.budgetUsdPerDay.toFixed(2),
+      },
+      scorerVersionId: (await activeSourceVersion()).id,
+      requestedTrigger: "manual",
+    }));
+  if (!inputs) {
+    throw new ApiError(
+      400,
+      "Configure every tier model before simulating auto routing.",
+    );
+  }
+  const { outcome } = await fit(inputs, params.volumeMultiplier);
+  switch (outcome.status) {
+    case "active":
+      if (!outcome.summary) throw new Error("An active fit has no summary");
+      return { status: "feasible", summary: outcome.summary };
+    case "cold_start":
+      return {
+        status: "cold_start",
+        sessions: inputs.history.volume.sessions,
+        required: config.autoRouting.minSessions,
+      };
+    case "failed": {
+      const cheapest = cheapestBudget(outcome.error);
+      if (cheapest === null) throw new ApiError(400, outcome.error);
+      return {
+        status: "infeasible",
+        minBudgetUsdPerDay: Math.ceil(cheapest * 100) / 100,
+      };
+    }
+  }
 }
 
 /**
@@ -295,6 +347,12 @@ function volumeDocument(volume: FitVolume): RouterDocument {
 const INFEASIBLE_ERROR =
   /^ARCHESTRA_ROUTER_INFEASIBLE: cheapest routing costs (\S+) USD\/day/;
 
+/** The cheapest routing's USD/day when `error` is an infeasible-budget fit failure. */
+function cheapestBudget(error: string): number | null {
+  const cheapest = INFEASIBLE_ERROR.exec(error)?.[1];
+  return cheapest === undefined ? null : Number(cheapest);
+}
+
 const fitsInFlight = new Map<string, Promise<FitRun | null>>();
 
 async function prepareAndComplete(
@@ -394,7 +452,10 @@ const RouterFailureSchema = z.object({
 });
 const CodedErrorSchema = z.object({ code: z.string(), message: z.string() });
 
-async function fit(inputs: FitInputs): Promise<{
+async function fit(
+  inputs: FitInputs,
+  volumeMultiplier = 1,
+): Promise<{
   coreVersion: string;
   planFormatVersion: number;
   outcome: RoutingFitOutcome;
@@ -428,7 +489,11 @@ async function fit(inputs: FitInputs): Promise<{
   }
   try {
     const plan = RouterPlanSchema.parse(
-      JSON.parse(await fitPlan(JSON.stringify(planInput(inputs, tiers)))),
+      JSON.parse(
+        await fitPlan(
+          JSON.stringify(planInput(inputs, tiers, volumeMultiplier)),
+        ),
+      ),
     );
     return {
       coreVersion: plan.versions.core_version,
@@ -465,9 +530,13 @@ async function fit(inputs: FitInputs): Promise<{
  * router-core `PlanInput`: the per-session models fit on the sample, while
  * volume is flat at the whole window's arrival rate: sessions and tokens per
  * day over the span it covers (at least a day, so a burst does not read as an
- * extreme rate).
+ * extreme rate), times `volumeMultiplier`.
  */
-function planInput(inputs: FitInputs, tiers: RouterTierSet) {
+function planInput(
+  inputs: FitInputs,
+  tiers: RouterTierSet,
+  volumeMultiplier: number,
+) {
   const { sample, volume } = inputs.history;
   const span =
     (volume.lastCreatedAt?.getTime() ?? 0) -
@@ -484,8 +553,8 @@ function planInput(inputs: FitInputs, tiers: RouterTierSet) {
     budget: Number(inputs.budgetUsdPerDay),
     volume: {
       kind: "flat",
-      sessions_per_day: volume.sessions / days,
-      tokens_per_day: volume.tokens / days,
+      sessions_per_day: (volume.sessions / days) * volumeMultiplier,
+      tokens_per_day: (volume.tokens / days) * volumeMultiplier,
     },
     baseline_source: mostFrequentSource(sample),
   };

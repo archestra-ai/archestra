@@ -23,6 +23,7 @@ import { PlanSummaryView } from "./_parts/plan-summary";
 import { AutoRoutingSettingsForm } from "./_parts/settings-form";
 import type { TierName } from "./_parts/tiers";
 import { TryPrompt } from "./_parts/try-prompt";
+import { WhatIf } from "./_parts/what-if";
 
 export default function AutoRoutingOverviewPage() {
   const settingsQuery = useAutoRoutingSettings();
@@ -97,11 +98,19 @@ function ActivePlanSummary({ settings }: { settings: AutoRoutingSettings }) {
   const summary = plan ? parsePlanSummary(plan.summary) : null;
   if (!plan || !summary) return null;
   return (
-    <PlanSummaryView
-      summary={summary}
-      budgetUsdPerDay={plan.budgetUsdPerDay}
-      tierModels={tierModels}
-    />
+    <>
+      <PlanSummaryView
+        summary={summary}
+        budgetUsdPerDay={plan.budgetUsdPerDay}
+        tierModels={tierModels}
+      />
+      <WhatIf
+        key={`${plan.id}-${plan.budgetUsdPerDay}`}
+        current={summary}
+        savedBudgetUsdPerDay={plan.budgetUsdPerDay}
+        tierModels={tierModels}
+      />
+    </>
   );
 }
 

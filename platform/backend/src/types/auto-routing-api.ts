@@ -131,6 +131,36 @@ export const AutoRoutingPreviewBodySchema = z.strictObject({
   text: z.string().trim().min(1).max(AUTO_ROUTING_PREVIEW_MAX_CHARS),
 });
 
+export const AutoRoutingSimulateBodySchema = z.strictObject({
+  budgetUsdPerDay: BudgetUsdPerDaySchema,
+  /** Scales the fitted window's sessions/day and tokens/day alike. */
+  volumeMultiplier: z.number().positive().max(100),
+});
+
+/**
+ * A fit at the given budget and scaled volume that publishes nothing.
+ * `summary` is router-core's plan summary; `infeasible` gives the cheapest
+ * routing's USD/day, rounded up to the cent.
+ */
+export const AutoRoutingSimulateResponseSchema = z.discriminatedUnion(
+  "status",
+  [
+    z.object({ status: z.literal("feasible"), summary: RouterDocumentSchema }),
+    z.object({
+      status: z.literal("infeasible"),
+      minBudgetUsdPerDay: z.number(),
+    }),
+    z.object({
+      status: z.literal("cold_start"),
+      sessions: z.number().int().nonnegative(),
+      required: z.number().int().positive(),
+    }),
+  ],
+);
+export type AutoRoutingSimulateResponse = z.infer<
+  typeof AutoRoutingSimulateResponseSchema
+>;
+
 export const AutoRoutingPreviewResponseSchema = z.object({
   tierNeeded: z.tuple([z.number(), z.number(), z.number()]),
   pLong: z.number(),

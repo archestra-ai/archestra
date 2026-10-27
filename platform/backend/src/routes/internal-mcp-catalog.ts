@@ -1474,10 +1474,15 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       await requireCatalogRead({ request, id });
+      const reader = {
+        kind: "caller",
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      } as const;
       const tools =
         request.query.view === "picker"
-          ? await ToolModel.findPickerToolsByCatalogId(id)
-          : await ToolModel.findByCatalogId(id);
+          ? await ToolModel.findPickerToolsByCatalogId(id, reader)
+          : await ToolModel.findByCatalogId(id, reader);
       return reply.send(tools);
     },
   );

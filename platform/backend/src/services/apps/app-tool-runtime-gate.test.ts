@@ -503,7 +503,9 @@ test("seeding never creates a tool row for app-runtime-only built-ins", async ()
   } finally {
     config.skillsSandbox.enabled = originalEnabled;
   }
-  const seeded = await ToolModel.findByCatalogId(ARCHESTRA_MCP_CATALOG_ID);
+  const seeded = await ToolModel.findByCatalogId(ARCHESTRA_MCP_CATALOG_ID, {
+    kind: "caller",
+  });
   const names = new Set(seeded.map((tool) => tool.name));
   expect(names.has(getArchestraToolFullName(TOOL_READ_FILE_SHORT_NAME))).toBe(
     true,

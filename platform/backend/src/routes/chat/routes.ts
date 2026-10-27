@@ -4945,6 +4945,7 @@ async function findScheduleRunConversationForAdmin(params: {
     id: params.conversationId,
     organizationId: params.organizationId,
     tail: params.tail,
+    viewer: { kind: "caller", ...params },
   });
 }
 

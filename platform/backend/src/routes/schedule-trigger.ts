@@ -504,6 +504,7 @@ async function ensureRunConversation(params: {
     ? await ConversationModel.findByIdInOrganization({
         id: run.chatConversationId,
         organizationId,
+        viewer: { kind: "internal", purpose: "scheduled-run" },
       })
     : null;
   if (!conversation) {

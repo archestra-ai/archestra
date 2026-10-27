@@ -42,11 +42,15 @@ export const SYSTEM_PROMPT_VARIABLES = [
 export const SYSTEM_PROMPT_HELPER_NAMES = {
   currentDate: "currentDate",
   currentTime: "currentTime",
+  archestraVersion: "archestraVersion",
 } as const;
 
 export const SYSTEM_PROMPT_HELPER_EXPRESSIONS = {
   currentDate: toTemplateExpression(SYSTEM_PROMPT_HELPER_NAMES.currentDate),
   currentTime: toTemplateExpression(SYSTEM_PROMPT_HELPER_NAMES.currentTime),
+  archestraVersion: toTemplateExpression(
+    SYSTEM_PROMPT_HELPER_NAMES.archestraVersion,
+  ),
 } as const;
 
 export const SYSTEM_PROMPT_HELPERS = [
@@ -57,6 +61,10 @@ export const SYSTEM_PROMPT_HELPERS = [
   {
     expression: SYSTEM_PROMPT_HELPER_EXPRESSIONS.currentTime,
     description: "Current time in UTC (HH:MM:SS UTC)",
+  },
+  {
+    expression: SYSTEM_PROMPT_HELPER_EXPRESSIONS.archestraVersion,
+    description: "Version of the running platform, such as 1.4.0",
   },
 ] as const;
 

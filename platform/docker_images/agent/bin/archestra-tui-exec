@@ -132,10 +132,17 @@ def stop_process_group(child_pid: int) -> int:
     except ProcessLookupError:
         pass
 
+    # The whole group must end, not only its leader: a client's backend can
+    # outlive its front end and keep writing the client's state (Hermes's
+    # backend waits on its MCP requests while shutting down).
+    status = None
     deadline = time.monotonic() + 2
     while time.monotonic() < deadline:
-        exited_pid, status = os.waitpid(child_pid, os.WNOHANG)
-        if exited_pid == child_pid:
+        if status is None:
+            exited_pid, exited_status = os.waitpid(child_pid, os.WNOHANG)
+            if exited_pid == child_pid:
+                status = exited_status
+        if status is not None and not process_group_alive(child_pid):
             return status
         time.sleep(0.05)
 
@@ -143,7 +150,15 @@ def stop_process_group(child_pid: int) -> int:
         os.killpg(child_pid, signal.SIGKILL)
     except ProcessLookupError:
         pass
-    return os.waitpid(child_pid, 0)[1]
+    return status if status is not None else os.waitpid(child_pid, 0)[1]
+
+
+def process_group_alive(group: int) -> bool:
+    try:
+        os.killpg(group, 0)
+    except ProcessLookupError:
+        return False
+    return True
 
 
 if __name__ == "__main__":

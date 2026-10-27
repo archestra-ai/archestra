@@ -91,6 +91,8 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
     "Requires a user token. The caller must be the schedule actor, a project member, or someone with organization-wide Projects **Can read** access.",
   get_schedule_trigger_run:
     "Requires a user token. The caller must be the schedule actor, a project member, or someone with organization-wide Projects **Can read** access.",
+  get_schedule_trigger_run_transcript:
+    "Requires a user token. The caller must be the schedule actor, or hold both organization-wide Projects **Can read** access and `log:admin`. Project membership or Projects read alone shows run status but not the transcript.",
   update_schedule_trigger:
     "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can update** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   delete_schedule_trigger:

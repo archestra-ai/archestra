@@ -764,6 +764,11 @@ class InteractionModel {
       sessionId?: string;
       startDate?: Date;
       endDate?: Date;
+      /**
+       * Only calls from this source, plus untagged older rows; leaves out
+       * auxiliary calls (guardrails, tool-call repair) inside the session.
+       */
+      turnSource?: InteractionSource;
     },
   ): Promise<PaginatedResult<Interaction>> {
     // Determine the ORDER BY clause based on sorting params
@@ -814,6 +819,15 @@ class InteractionModel {
     // Session ID filter
     if (filters?.sessionId) {
       conditions.push(matchesSessionKey(filters.sessionId));
+    }
+
+    if (filters?.turnSource) {
+      conditions.push(
+        or(
+          isNull(schema.interactionsTable.source),
+          eq(schema.interactionsTable.source, filters.turnSource),
+        ) as SQL,
+      );
     }
 
     // Date range filter

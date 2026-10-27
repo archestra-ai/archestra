@@ -38,7 +38,8 @@ def signed_call_id(provider_call_id):
     """A tool-call ID in the proxy's signed layout: `appat1`, the session and
     provider ID, and a 22-character tag. It is longer than 64 characters, and
     one session's IDs share their first 64. The proxy matches a tool result to
-    its call by this ID, so it must come back unchanged."""
+    its call by this ID, so it must come back unchanged. The tag here is a
+    plain hash, not the proxy's HMAC: only the shape matters to the client."""
     payload = base64.urlsafe_b64encode(f"agent-run-startup-workspace\0{provider_call_id}".encode()).decode().rstrip("=")
     tag = base64.urlsafe_b64encode(hashlib.sha256(payload.encode()).digest()).decode()[:22]
     return "appat1" + payload + tag
@@ -162,7 +163,8 @@ class Handler(BaseHTTPRequestHandler):
         self.reply_id = str(self.server.sequence)
         self.server.requests.append({"names": names, "catalog_sent": self.server.catalog_sent})
         self.server.prompts.append(json.dumps(request.get("messages") or request.get("input") or ""))
-        self.server.returned_call_ids.update(message.get("tool_call_id") or "<tool result without tool_call_id>" for message in request.get("messages") or [] if message.get("role") == "tool")
+        results = [message for message in request.get("messages") or [] if message.get("role") == "tool"]
+        self.server.returned_call_ids.update(message.get("tool_call_id") or "<tool result without tool_call_id>" for message in results)
         if len(self.server.requests) == 1:
             print(f"{CLIENT}: first request gateway tools: {[n for n in names if 'remedy' in n or 'yell' in n]}", flush=True)
         tool = next((name for name in names if len(self.server.calls) < len(TOOLS) and name.endswith(TOOLS[len(self.server.calls)].removeprefix("archestra__"))), None)
@@ -196,7 +198,7 @@ class Handler(BaseHTTPRequestHandler):
         message = {"role": "assistant", "content": "STARTUP_OK"}
         finish = "stop"
         if tool:
-            call_id = signed_call_id(f"functions.{tool}:{self.reply_id}") if CLIENT == "kimi" else "call_test_" + self.reply_id
+            call_id = signed_call_id(f"functions.{tool}:{self.reply_id}")
             self.server.issued_call_ids.append(call_id)
             message = {"role": "assistant", "content": None, "tool_calls": [{"index": 0, "id": call_id, "type": "function", "function": {"name": tool, "arguments": "{}"}}]}
             finish = "tool_calls"
@@ -527,6 +529,8 @@ class StartupTest(unittest.TestCase):
                 for tool in TOOLS:
                     declared = [description for name, description in server.descriptions.items() if name.endswith(tool.removeprefix("archestra__"))]
                     self.assertEqual(declared, [DESCRIPTION], (tool, server.descriptions))
+            # Every client served over Chat Completions gets signed IDs.
+            if server.issued_call_ids:
                 self.assertEqual(server.returned_call_ids, set(server.issued_call_ids), "Tool results came back under changed call IDs")
             for request in server.requests:
                 self.assertTrue(request["catalog_sent"], "Inference preceded catalog discovery")

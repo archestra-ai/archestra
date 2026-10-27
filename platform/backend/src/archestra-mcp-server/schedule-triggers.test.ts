@@ -6,10 +6,12 @@ import { vi } from "vitest";
 import {
   ConversationModel,
   MemberModel,
+  MessageModel,
   ScheduleTriggerRunModel,
   TaskModel,
 } from "@/models";
 import AuditLogModel from "@/models/audit-log";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import { projectService } from "@/services/project";
 import { fileStore } from "@/skills-sandbox/file-store";
@@ -23,6 +25,9 @@ const LIST_TRIGGERS = getArchestraToolFullName("list_schedule_triggers");
 const GET_TRIGGER = getArchestraToolFullName("get_schedule_trigger");
 const LIST_RUNS = getArchestraToolFullName("list_schedule_trigger_runs");
 const GET_RUN = getArchestraToolFullName("get_schedule_trigger_run");
+const GET_RUN_TRANSCRIPT = getArchestraToolFullName(
+  "get_schedule_trigger_run_transcript",
+);
 const DISABLE_TRIGGER = getArchestraToolFullName("disable_schedule_trigger");
 const ENABLE_TRIGGER = getArchestraToolFullName("enable_schedule_trigger");
 const RUN_NOW = getArchestraToolFullName("run_schedule_trigger_now");
@@ -1370,6 +1375,383 @@ describe("schedule trigger MCP tools", () => {
           }
         ).runs.map((r) => r.id),
       ).toEqual([run.id]);
+    });
+  });
+
+  describe("get_schedule_trigger_run_transcript", () => {
+    test("returns the run's tool calls, including a review that could not be delivered", async ({
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+      makeConversation,
+    }) => {
+      const trigger = await makeScheduleTrigger({
+        organizationId,
+        agentId: agent.id,
+        actorUserId: userId,
+      });
+      const run = await makeScheduleTriggerRun(trigger.id);
+      const conversation = await makeConversation(agent.id, {
+        userId,
+        organizationId,
+      });
+      await ScheduleTriggerRunModel.setChatConversationId(
+        run.id,
+        conversation.id,
+      );
+      await MessageModel.bulkCreate([
+        {
+          conversationId: conversation.id,
+          role: "user",
+          content: {
+            id: "m1",
+            role: "user",
+            parts: [{ type: "text", text: "Post the weekly summary." }],
+          },
+        },
+        {
+          conversationId: conversation.id,
+          role: "assistant",
+          content: {
+            id: "m-reasoning",
+            role: "assistant",
+            parts: [{ type: "step-start" }, { type: "reasoning", text: "…" }],
+          },
+        },
+        {
+          conversationId: conversation.id,
+          role: "assistant",
+          content: {
+            id: "m2",
+            role: "assistant",
+            parts: [
+              { type: "reasoning", text: "thinking" },
+              {
+                type: "dynamic-tool",
+                toolName: "archestra__execute_remedy_plan",
+                toolCallId: "call-1",
+                state: "output-available",
+                input: { offer_id: "offer-1" },
+                output: { ok: false, outcome: "review_unavailable" },
+              },
+              {
+                type: "tool-call",
+                toolCallId: "call-2",
+                toolName: "slack__post_message",
+                args: { channel: "#metrics" },
+              },
+              {
+                type: "dynamic-tool",
+                toolName: "archestra__transfer_credential",
+                toolCallId: "call-3",
+                state: "output-available",
+                // Stored as a JSON string, as some clients send arguments.
+                input: JSON.stringify({
+                  agent_id: "a1",
+                  environment: [
+                    { key: "TOKEN", type: "secret", value: "s3cret-value" },
+                  ],
+                }),
+                output: { ok: true },
+              },
+              {
+                type: "tool-result",
+                toolCallId: "call-2",
+                toolName: "slack__post_message",
+                result: { blocked: true },
+              },
+              { type: "text", text: "The post needs approval." },
+              {
+                type: "blocked-tool",
+                toolName: "slack__post_message",
+                toolArguments: JSON.stringify({
+                  environment: [
+                    { key: "TOKEN", type: "secret", value: "blocked-secret" },
+                  ],
+                }),
+                reason: "needs human approval",
+                fullRefusal:
+                  "Blocked: needs human approval (review_unavailable)",
+              },
+              {
+                type: "data-subagent-tool-call",
+                data: {
+                  parentToolCallId: "call-1",
+                  toolCallId: "child-1",
+                  toolName: "posthog__query",
+                  input: {
+                    environment: [
+                      { key: "KEY", type: "secret", value: "child-secret" },
+                    ],
+                  },
+                  state: "output-error",
+                  errorText: "Blocked by policy",
+                },
+              },
+              {
+                type: "data-hook-run",
+                data: { hook: "pre-tool", outcome: "denied" },
+              },
+              { type: "file", mediaType: "image/png", url: "data:," },
+            ],
+          },
+        },
+      ]);
+      await ScheduleTriggerRunModel.markCompleted({
+        runId: run.id,
+        status: "failed",
+        error: "Human review was unavailable",
+      });
+
+      const result = await executeArchestraTool(
+        GET_RUN_TRANSCRIPT,
+        { schedule_trigger_id: trigger.id, run_id: run.id },
+        context,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(result.structuredContent).toEqual({
+        run: expect.objectContaining({ id: run.id, status: "failed" }),
+        session_id: `scheduled-${run.id}`,
+        source: "conversation",
+        truncated: false,
+        messages: [
+          {
+            role: "user",
+            parts: [{ type: "text", text: "Post the weekly summary." }],
+          },
+          {
+            role: "assistant",
+            parts: [
+              {
+                type: "tool",
+                tool_name: "archestra__execute_remedy_plan",
+                tool_call_id: "call-1",
+                state: "output-available",
+                input: JSON.stringify({ offer_id: "offer-1" }),
+                output: JSON.stringify({
+                  ok: false,
+                  outcome: "review_unavailable",
+                }),
+              },
+              {
+                type: "tool",
+                tool_name: "slack__post_message",
+                tool_call_id: "call-2",
+                state: "tool-call",
+                input: JSON.stringify({ channel: "#metrics" }),
+              },
+              {
+                type: "tool",
+                tool_name: "archestra__transfer_credential",
+                tool_call_id: "call-3",
+                state: "output-available",
+                input: expect.not.stringContaining("s3cret-value"),
+                output: JSON.stringify({ ok: true }),
+              },
+              {
+                type: "tool",
+                tool_name: "slack__post_message",
+                tool_call_id: "call-2",
+                state: "tool-result",
+                output: JSON.stringify({ blocked: true }),
+              },
+              { type: "text", text: "The post needs approval." },
+              {
+                type: "tool",
+                tool_name: "slack__post_message",
+                state: "blocked",
+                input: expect.not.stringContaining("blocked-secret"),
+                error_text:
+                  "Blocked: needs human approval (review_unavailable)",
+              },
+              {
+                type: "tool",
+                tool_name: "posthog__query",
+                tool_call_id: "child-1",
+                parent_tool_call_id: "call-1",
+                state: "output-error",
+                input: expect.not.stringContaining("child-secret"),
+                error_text: "Blocked by policy",
+              },
+              {
+                type: "data-hook-run",
+                output: JSON.stringify({ hook: "pre-tool", outcome: "denied" }),
+              },
+              { type: "file" },
+            ],
+          },
+        ],
+      });
+    });
+
+    test("reads a run without a conversation without creating one", async ({
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+    }) => {
+      const trigger = await makeScheduleTrigger({
+        organizationId,
+        agentId: agent.id,
+        actorUserId: userId,
+      });
+      const run = await makeScheduleTriggerRun(trigger.id);
+
+      const result = await executeArchestraTool(
+        GET_RUN_TRANSCRIPT,
+        { schedule_trigger_id: trigger.id, run_id: run.id },
+        context,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(result.structuredContent).toMatchObject({
+        source: "none",
+        messages: [],
+      });
+      expect(
+        (await ScheduleTriggerRunModel.findById(run.id))?.chatConversationId,
+      ).toBeNull();
+    });
+
+    test("a project member sees a shared run's status but not its transcript", async ({
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+      makeUser,
+      makeMember,
+    }) => {
+      const owner = await makeUser();
+      await makeMember(owner.id, organizationId, { role: "member" });
+      const project = await projectService.create({
+        organizationId,
+        userId,
+        name: "shared-automation",
+        description: null,
+      });
+      const trigger = await makeScheduleTrigger({
+        organizationId,
+        agentId: agent.id,
+        actorUserId: owner.id,
+        projectId: project.id,
+      });
+      const run = await makeScheduleTriggerRun(trigger.id);
+
+      const status = await executeArchestraTool(
+        GET_RUN,
+        { schedule_trigger_id: trigger.id, run_id: run.id },
+        context,
+      );
+      expect(status.isError).toBe(false);
+
+      const transcript = await executeArchestraTool(
+        GET_RUN_TRANSCRIPT,
+        { schedule_trigger_id: trigger.id, run_id: run.id },
+        context,
+      );
+      expect(transcript.isError).toBe(true);
+      expect(textOf(transcript)).toContain(
+        "organization-wide Projects read access",
+      );
+    });
+
+    test("another member's transcript needs org-wide Projects read and log:admin", async ({
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+      makeConversation,
+    }) => {
+      const owner = await makeUser();
+      await makeMember(owner.id, organizationId, { role: "member" });
+      const trigger = await makeScheduleTrigger({
+        organizationId,
+        agentId: agent.id,
+        actorUserId: owner.id,
+      });
+      const run = await makeScheduleTriggerRun(trigger.id);
+      const conversation = await makeConversation(agent.id, {
+        userId: owner.id,
+        organizationId,
+      });
+      await ScheduleTriggerRunModel.setChatConversationId(
+        run.id,
+        conversation.id,
+      );
+      await MessageModel.bulkCreate([
+        {
+          conversationId: conversation.id,
+          role: "assistant",
+          content: {
+            id: "run-reply",
+            role: "assistant",
+            parts: [{ type: "text", text: "The scheduled run needs review." }],
+          },
+        },
+      ]);
+      const args = { schedule_trigger_id: trigger.id, run_id: run.id };
+
+      // Organization-wide Projects read, without log:admin.
+      const projectReader = await makeCustomRole(organizationId, {
+        permission: { project: ["read"] },
+      });
+      await MemberModel.updateRole(userId, organizationId, projectReader.role);
+      const key = { organizationId, resource: "project" as const, scope: "*" };
+      const wildcard = await ResourcePermissionPolicyModel.find(key);
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: wildcard?.revision ?? 0,
+        grants: [{ subject: { type: "user", id: userId }, actions: ["read"] }],
+      });
+      expect((await executeArchestraTool(GET_RUN, args, context)).isError).toBe(
+        false,
+      );
+      const denied = await executeArchestraTool(
+        GET_RUN_TRANSCRIPT,
+        args,
+        context,
+      );
+      expect(denied.isError).toBe(true);
+      expect(textOf(denied)).toContain("log:admin");
+
+      await MemberModel.updateRole(userId, organizationId, "admin");
+      const allowed = await executeArchestraTool(
+        GET_RUN_TRANSCRIPT,
+        args,
+        context,
+      );
+      expect(allowed.isError, textOf(allowed)).toBe(false);
+      expect(allowed.structuredContent).toMatchObject({
+        source: "conversation",
+        messages: [
+          {
+            role: "assistant",
+            parts: [{ type: "text", text: "The scheduled run needs review." }],
+          },
+        ],
+      });
+    });
+
+    test("refuses a run of another member's schedule", async ({
+      makeScheduleTrigger,
+      makeScheduleTriggerRun,
+      makeUser,
+      makeMember,
+    }) => {
+      const stranger = await makeUser();
+      await makeMember(stranger.id, organizationId, { role: "member" });
+      const theirs = await makeScheduleTrigger({
+        organizationId,
+        agentId: agent.id,
+        actorUserId: stranger.id,
+      });
+      const run = await makeScheduleTriggerRun(theirs.id);
+
+      const result = await executeArchestraTool(
+        GET_RUN_TRANSCRIPT,
+        { schedule_trigger_id: theirs.id, run_id: run.id },
+        context,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("do not have access");
     });
   });
 

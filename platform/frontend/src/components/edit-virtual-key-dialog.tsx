@@ -351,6 +351,7 @@ export function EditVirtualKeyDialog({
         <VirtualKeyConnectionGuide
           keyType={virtualKey.keyType}
           mappedProviderKeys={virtualKey.providerApiKeys}
+          includeFutureProviders={virtualKey.includeFutureProviders}
           connectionBaseUrl={connectionBaseUrl}
           name={virtualKey.name}
           expiration={formatExpiration(virtualKey.expiresAt)}

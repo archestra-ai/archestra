@@ -1,7 +1,10 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { toast } from "sonner";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { runBulkAction } from "@/lib/bulk-action";
+import { useFeature } from "@/lib/config/config.query";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 const { getModelPools, createModelPool, updateModelPool, deleteModelPool } =
@@ -31,6 +34,29 @@ export function useModelPools(options?: {
       return data ?? [];
     },
   });
+}
+
+/**
+ * Whether a provider's model is served by a pool: a request for a pool's name
+ * on a provider with a member goes to the pool. Always false while model
+ * pools are off or the viewer can't read them.
+ */
+export function useIsPooledModel() {
+  const enabled = useFeature("llmModelPoolsEnabled") === true;
+  const { data: canRead } = useHasPermissions({ llmModel: ["read"] });
+  const { data: pools } = useModelPools({
+    enabled: enabled && canRead === true,
+    toastOnError: false,
+  });
+  return useMemo(() => {
+    const pooled = new Set(
+      (pools ?? []).flatMap((pool) =>
+        pool.members.map((member) => `${member.provider}:${pool.name}`),
+      ),
+    );
+    return (provider: string, modelId: string) =>
+      pooled.has(`${provider}:${modelId}`);
+  }, [pools]);
 }
 
 export function useCreateModelPool() {

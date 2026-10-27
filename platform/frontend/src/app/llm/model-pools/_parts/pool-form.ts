@@ -210,21 +210,7 @@ function hasRepeatedMember(members: PoolFormMember[]) {
   return keys.some((key, index) => keys.indexOf(key) !== index);
 }
 
-/**
- * "3 members · tries 2, then 1": how many there are, and how many share each
- * order among the members that are on.
- */
+/** "3 members": how many the pool has. */
 export function memberSummary(pool: ModelPool): string {
-  const count = `${pool.members.length} member${pool.members.length === 1 ? "" : "s"}`;
-  const counts = new Map<number, number>();
-  for (const member of pool.members) {
-    if (!member.enabled) continue;
-    counts.set(member.priority, (counts.get(member.priority) ?? 0) + 1);
-  }
-  if (counts.size < 2) return count;
-  const tries = [...counts.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([, size]) => size)
-    .join(", then ");
-  return `${count} · tries ${tries}`;
+  return `${pool.members.length} member${pool.members.length === 1 ? "" : "s"}`;
 }

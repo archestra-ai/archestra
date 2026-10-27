@@ -399,6 +399,7 @@ export function CreateVirtualKeyDialog({
               keyValue={createdKey.value}
               keyType={createdKey.keyType}
               mappedProviderKeys={createdKey.providerApiKeys}
+              includeFutureProviders={createdKey.includeFutureProviders}
               connectionBaseUrl={connectionBaseUrl}
               name={createdKey.name}
               expiration={formatExpiration(createdKey.expiresAt)}

@@ -87,6 +87,40 @@ test("reserves xterm's cell width for emoji and CJK in original layout", async (
   expect(screen.getByText("😀").style.width).toBe("");
 });
 
+test("a column starts at the same offset however its row is split into runs", async () => {
+  const terminal = new Terminal();
+  await new Promise<void>((resolve) =>
+    terminal.write("Ran 2 cmds │\r\nRan \x1b[1m2\x1b[22m cmds │", resolve),
+  );
+  const lines = snapshotTerminalRecording(terminal).lines.map((line) => ({
+    ...line,
+    runs: line.runs.map((run) => ({
+      ...run,
+      key: `${line.row}:${run.column}`,
+    })),
+  }));
+  terminal.dispose();
+  const { container } = render(
+    <TerminalRecordingBlock
+      lines={lines}
+      wrapLines={false}
+      cellWidth={7.1875}
+      virtualize={false}
+    />,
+  );
+  const offsets = [...container.querySelectorAll("[data-terminal-row]")].map(
+    (row) => {
+      const runs = [...row.children] as HTMLElement[];
+      const divider = runs.findIndex((run) => run.textContent === "│");
+      return runs
+        .slice(0, divider)
+        .reduce((sum, run) => sum + Number.parseFloat(run.style.width), 0);
+    },
+  );
+  expect(lines[1].runs.length).toBeGreaterThan(lines[0].runs.length);
+  expect(offsets).toEqual([11 * 7.1875, 11 * 7.1875]);
+});
+
 test("highlights and line-drawing characters fill their rows", async () => {
   const terminal = new Terminal();
   await new Promise<void>((resolve) =>

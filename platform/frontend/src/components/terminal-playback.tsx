@@ -220,7 +220,7 @@ export function TerminalPlayback({
   // place through later output and seeks.
   const viewportRef = useRef<HTMLDivElement>(null);
   const glyphProbeRef = useRef<HTMLSpanElement>(null);
-  const rowHeight = useRowHeight(glyphProbeRef);
+  const cell = useCellSize(glyphProbeRef);
   const openedAtEnd = useRef(false);
   const atEnd = useRef(true);
   useEffect(() => {
@@ -259,11 +259,13 @@ export function TerminalPlayback({
         data-recorded-cols={snapshot?.cols}
         data-recorded-rows={snapshot?.rows}
         style={{
-          ...(rowHeight ? { lineHeight: rowHeight } : {}),
+          ...(cell ? { lineHeight: cell.rowHeight } : {}),
           ...(wrapLines
             ? {}
             : {
-                minWidth: snapshot ? `max(100%, ${snapshot.cols}ch)` : "100%",
+                minWidth: snapshot
+                  ? `max(100%, ${cell ? `${snapshot.cols * cell.width}px` : `${snapshot.cols}ch`})`
+                  : "100%",
               }),
         }}
       >
@@ -277,6 +279,7 @@ export function TerminalPlayback({
             key={block[0].row}
             lines={block}
             wrapLines={wrapLines}
+            cellWidth={cell?.width ?? null}
             virtualize={virtualize}
           />
         ))}
@@ -298,21 +301,27 @@ const BASE_FONT_PX = 12;
 type TerminalRecording = ReturnType<typeof prepareTerminalRecording>;
 
 /**
- * The row height of xterm's own renderer: the font's glyph box. The
+ * The cell of xterm's own renderer: the font's glyph box and advance. The
  * document's 1.2 line height is taller than that box, and an inline
  * background or a line-drawing character covers only the box, so a
  * highlighted block showed dark seams between its rows and borders and
- * dividers broke into dashes. Null until measured.
+ * dividers broke into dashes. The advance is the browser's own, already a
+ * whole number of its layout units, so a run sized in whole cells ends on the
+ * same grid however its row is split. Null until measured.
  */
-function useRowHeight(
+function useCellSize(
   glyphProbeRef: RefObject<HTMLSpanElement | null>,
-): string | null {
-  const [height, setHeight] = useState<string | null>(null);
+): { rowHeight: string; width: number } | null {
+  const [cell, setCell] = useState<{
+    rowHeight: string;
+    width: number;
+  } | null>(null);
   useLayoutEffect(() => {
     const probe = glyphProbeRef.current;
     if (!probe) return;
-    const glyph = probe.getBoundingClientRect().height / BASE_FONT_PX;
-    if (glyph > 0) setHeight(`${glyph}em`);
+    const { height, width } = probe.getBoundingClientRect();
+    if (height > 0 && width > 0)
+      setCell({ rowHeight: `${height / BASE_FONT_PX}em`, width });
   }, [glyphProbeRef]);
-  return height;
+  return cell;
 }

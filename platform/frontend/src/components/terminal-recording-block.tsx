@@ -13,10 +13,13 @@ type DisplayLine = Omit<SnapshotLine, "runs"> & {
 export function TerminalRecordingBlock({
   lines,
   wrapLines,
+  cellWidth = null,
   virtualize,
 }: {
   lines: DisplayLine[];
   wrapLines: boolean;
+  /** The measured cell width in px; null until measured. */
+  cellWidth?: number | null;
   virtualize: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null);
@@ -118,15 +121,23 @@ export function TerminalRecordingBlock({
               // On the grid every run is an inline block of the row's height,
               // as in xterm's own DOM renderer, so a coloured block keeps no
               // gap between its rows even where a glyph falls back to a font
-              // with other metrics.
+              // with other metrics. Sized in whole cells, a run starts at its
+              // column's position in every row: sized by its text, the
+              // browser rounded each run's width, and a row split into more
+              // runs moved a divider's edge by a device pixel.
               const joins = joinsAdjacentCells(run.text);
+              const width = cellWidth
+                ? `${run.cells * cellWidth}px`
+                : run.fixedWidth
+                  ? `${run.cells}ch`
+                  : undefined;
               const style = {
                 ...run.style,
                 ...(!wrapLines
                   ? {
                       display: "inline-block",
                       verticalAlign: "top",
-                      ...(run.fixedWidth ? { width: `${run.cells}ch` } : {}),
+                      ...(width ? { width } : {}),
                     }
                   : {}),
                 ...(joins ? JOINING_CELL_STYLE : {}),

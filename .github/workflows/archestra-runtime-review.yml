@@ -43,7 +43,7 @@ jobs:
       id-token: write # Short-lived identity for the staging-only IAP HTTPS tunnel.
     # A pull request cannot change this pin's code: infra trusts only this commit of the job.
     # It is a main commit, not a release, so no tag points at it.
-    uses: archestra-ai/archestra/.github/workflows/archestra-runtime-review-job.yml@a8dbc78b8d57ec8266d7f533572039e7f1685ec5 # zizmor: ignore[stale-action-refs]
+    uses: archestra-ai/archestra/.github/workflows/archestra-runtime-review-job.yml@afbd296b860220ff5a3a1a80dc8a20d8fba0b20e # zizmor: ignore[stale-action-refs]
     with:
       gateway-url: ${{ vars.ARCHESTRA_REVIEW_GATEWAY_URL }}
       agents: ${{ vars.ARCHESTRA_REVIEW_AGENTS }}

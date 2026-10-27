@@ -2876,6 +2876,12 @@ const config = {
       appApiBaseUrl:
         process.env.ARCHESTRA_GITHUB_COPILOT_APP_API_BASE_URL ||
         "https://api.github.com",
+      /**
+       * Copilot-Integration-Id to send with GitHub App installation tokens,
+       * tried before the built-in candidates. Unset: auto-detect.
+       */
+      appIntegrationId:
+        process.env.ARCHESTRA_GITHUB_COPILOT_APP_INTEGRATION_ID || undefined,
     },
     "microsoft-365-copilot": {
       /** Microsoft Graph base URL serving the Microsoft 365 Copilot Chat API (beta). */

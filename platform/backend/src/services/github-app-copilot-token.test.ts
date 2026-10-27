@@ -249,15 +249,31 @@ describe("githubAppIntegrationIdCandidates", () => {
         identity: { id: 4242, slug: "acme-copilot", clientId: "Iv23abc" },
         appId: "4242",
       }),
-    ).toEqual(["Iv23abc", "acme-copilot", "4242"]);
+    ).toEqual(["copilot-developer-cli", "Iv23abc", "acme-copilot", "4242"]);
     expect(
       githubAppIntegrationIdCandidates({ identity: null, appId: "7" }),
-    ).toEqual(["7"]);
+    ).toEqual(["copilot-developer-cli", "7"]);
+  });
+
+  test("puts a configured integration id first", () => {
+    expect(
+      githubAppIntegrationIdCandidates({
+        identity: { id: 4242, slug: "acme-copilot", clientId: "Iv23abc" },
+        appId: "4242",
+        configured: " my-integration ",
+      }),
+    ).toEqual([
+      "my-integration",
+      "copilot-developer-cli",
+      "Iv23abc",
+      "acme-copilot",
+      "4242",
+    ]);
   });
 });
 
 describe("detectGithubAppWireMode", () => {
-  test("uses the client id bare (B) when Copilot accepts it", async () => {
+  test("tries the Copilot runtime id first, then the client id bare (B)", async () => {
     const credential = uniqueCredential();
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       if (isMintCall(input)) return mintResponse();
@@ -337,7 +353,7 @@ describe("detectGithubAppWireMode", () => {
     );
 
     await expect(detectGithubAppWireMode({ credential })).rejects.toThrow(
-      /B\(Iv23abc\): 400 .*does not match.*; A\(Iv23abc\): 400 .*; B\(acme-copilot\): 400 .*; A\(acme-copilot\): 400 .*; B\(4242\): 400 .*; A\(4242\): 400 .*; C: .*404/,
+      /B\(copilot-developer-cli\): 400 .*; A\(copilot-developer-cli\): 400 .*; B\(Iv23abc\): 400 .*does not match.*; A\(Iv23abc\): 400 .*; B\(acme-copilot\): 400 .*; A\(acme-copilot\): 400 .*; B\(4242\): 400 .*; A\(4242\): 400 .*; C: .*404/,
     );
   });
 
@@ -357,7 +373,7 @@ describe("detectGithubAppWireMode", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(detectGithubAppWireMode({ credential })).rejects.toThrow(
-      /B\(Iv23abc\): 403 Copilot requests from GitHub App installations are not enabled/,
+      /B\(copilot-developer-cli\): 403 Copilot requests from GitHub App installations are not enabled/,
     );
     // Mint, GET /app and one probe: no further candidates were tried.
     expect(fetchMock).toHaveBeenCalledTimes(3);
@@ -392,5 +408,30 @@ describe("createGithubCopilotFetch with a GitHub App credential", () => {
 
     expect(response.status).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe("detectGithubAppWireMode with the Copilot runtime id", () => {
+  test("wins with copilot-developer-cli before any App identifier", async () => {
+    const credential = uniqueCredential();
+    const sent: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown, init?: RequestInit) => {
+        if (isMintCall(input)) return mintResponse();
+        if (isAppCall(input)) return appResponse();
+        const id = new Headers(init?.headers).get("copilot-integration-id");
+        sent.push(String(id));
+        return id === "copilot-developer-cli"
+          ? Response.json({ data: [] })
+          : mismatch();
+      }),
+    );
+
+    expect(await detectGithubAppWireMode({ credential })).toEqual({
+      mode: "B",
+      integrationId: "copilot-developer-cli",
+    });
+    expect(sent).toEqual(["copilot-developer-cli"]);
   });
 });

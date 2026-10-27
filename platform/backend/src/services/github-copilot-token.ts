@@ -287,6 +287,7 @@ export async function detectGithubAppWireMode(params: {
   const candidates = githubAppIntegrationIdCandidates({
     identity,
     appId: credential.appId,
+    configured: config.llm["github-copilot"].appIntegrationId,
   });
   const wireModes: CopilotAppWireMode[] = [
     ...candidates.flatMap((integrationId): CopilotAppWireMode[] => [

@@ -45,21 +45,30 @@ interface GithubAppIdentity {
 }
 
 /**
- * Integration ids to try for an App, in order: client id, slug, numeric id.
+ * Integration ids to try for an App, in order: the configured override, the
+ * Copilot runtime's default, then the App's client id, slug and numeric id.
  * Falls back to the App ID from the credential when GET /app failed.
  */
 export function githubAppIntegrationIdCandidates(params: {
   identity: GithubAppIdentity | null;
   appId: string;
+  configured?: string;
 }): string[] {
-  const { identity, appId } = params;
+  const { identity, appId, configured } = params;
   const candidates = [
+    configured?.trim(),
+    // The Copilot runtime's default Copilot-Integration-Id, as named in
+    // GitHub's Copilot SDK docs (docs/setup/multi-tenancy.md); GitHub says
+    // that runtime works with installation tokens.
+    COPILOT_RUNTIME_INTEGRATION_ID,
     identity?.clientId,
     identity?.slug,
     identity?.id != null ? String(identity.id) : appId,
   ].filter((value): value is string => typeof value === "string" && !!value);
   return [...new Set(candidates)];
 }
+
+const COPILOT_RUNTIME_INTEGRATION_ID = "copilot-developer-cli";
 
 export function encodeGithubAppCredential(
   credential: GithubAppCredential,

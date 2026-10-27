@@ -45,7 +45,8 @@ For each session `i` and tier `k`:
 - **Size** `s_i` (expected tokens): a Poisson GLM,
   `log E[s / 1e6] = b0 + effect(source) + b_p · p_long`. Sources outside the most frequent
   `MAX_FIT_SOURCES`, and sources never seen in training, use the baseline's zero effect. The
-  fit is L2-penalized Newton with step halving.
+  fit is L2-penalized Newton with step halving. Each Newton step is solved as a weighted
+  least-squares problem, not by forming the Hessian.
 - **Long share** `ℓ_i`: the token-weighted share of tokens in long prompts. It is a clipped
   linear model on `[1, log s_i, is_subagent]`, fitted by weighted least squares.
 - **Price** `π_ik` (USD per token): the tier's prices weighted by the historical token mix
@@ -54,6 +55,12 @@ For each session `i` and tier `k`:
 - **Value** `a_ik = P(tier k is adequate) = Σ_{j ≤ k} tier_needed_j`.
 
 The expected cost of serving session `i` on tier `k` is `c_ik = s_i · π_ik` USD.
+
+Both fits share one solver: Householder QR (nalgebra) of the √weight-scaled design, with
+columns in priority order. A column whose part independent of the earlier columns is at most
+`1e-5` of the largest such part counts as dependent and gets coefficient 0. This drops
+zero-variance and (near-)collinear regressors, e.g. log size affine in `is_subagent`, instead
+of fitting them as a huge offsetting pair.
 
 ### Allocate
 
@@ -181,8 +188,23 @@ The list is ranked. Each item gives its prerequisite.
 8. **Embeddings as signals.** Add a first-prompt embedding neighbour score as a keyed pre-run
    signal. Expect little gain over the scorer. *Prereq:* keyed signals (in place), and a
    holdout that compares against a tier-share-matched random baseline.
-9. **Seasonal Volume.** Add per-weekday or per-hour volume to the fit. *Prereq:* the `Volume`
-   enum (in place). It feeds item 1's spend plan.
+9. **Seasonal Volume.** Start with an hour-of-week volume profile shrunk toward the flat
+   average, so thin hours do not swing the plan. Later, decompose with MSTL at periods 24 and
+   168 (`augurs-mstl`) and forecast with `augurs-ets`, which already builds on nalgebra. Both
+   need an hourly volume rollup table that outlives the 35-day fit window. *Prereq:* the
+   `Volume` enum (in place). It feeds item 1's spend plan.
+10. **Bandit algorithms.** What item 4 needs once exploration is allowed:
+    - an online ridge regression oracle, with LinUCB or linear Thompson sampling on top, kept
+      current by rank-1 Cholesky updates, and an RNG seeded by the caller so `decide` stays
+      deterministic;
+    - for Thompson sampling, a Monte-Carlo estimate of the propensity, logged for off-policy
+      evaluation;
+    - IPS, SNIPS and doubly robust estimators for that evaluation;
+    - isotonic or Platt calibration of scorer probabilities (item 6);
+    - a negative-binomial GLM or quantile model for the p90 guard (item 5);
+    - PCA or random projection to bring embeddings (item 8) down to 64 dimensions or fewer.
+
+    `decide` must stay at microseconds, so `plan` precomputes this state into the plan.
 
 ## References
 

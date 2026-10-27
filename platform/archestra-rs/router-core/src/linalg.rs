@@ -1,33 +1,36 @@
-/// A pivot below this fraction of its original diagonal means the matrix is numerically singular.
-const PIVOT_RELATIVE_TOLERANCE: f64 = 1e-12;
+use nalgebra::{DMatrix, DVector};
 
-/// Solves `m · x = rhs` for a symmetric positive-definite row-major `n×n` matrix by Cholesky.
-/// `None` when `m` is not (numerically) positive definite.
-pub(crate) fn solve_spd(mut m: Vec<f64>, rhs: &[f64]) -> Option<Vec<f64>> {
-    let n = rhs.len();
-    if m.len() != n * n {
+/// A column whose part independent of the columns before it has norm at most this fraction of
+/// the largest such norm counts as dependent. Far above f64 round-off, so a near-duplicate
+/// regressor is dropped instead of fit as a huge offsetting pair.
+const RANK_TOLERANCE: f64 = 1e-5;
+
+/// Least squares `min ‖a · x − b‖` by Householder QR. Column order is priority: column `j` is
+/// dropped (coefficient 0) when `|R_jj|`, its distance from the span of columns `0..j`, is at
+/// most [`RANK_TOLERANCE`] times the largest `|R_jj|`. `None` when nothing is kept or the
+/// result is not finite.
+pub(crate) fn least_squares(a: DMatrix<f64>, b: DVector<f64>) -> Option<DVector<f64>> {
+    let width = a.ncols();
+    let qr = a.clone().qr();
+    let r = qr.r();
+    let diagonal: Vec<f64> = (0..r.nrows()).map(|j| r[(j, j)].abs()).collect();
+    let scale = diagonal.iter().fold(0.0_f64, |m, &d| m.max(d));
+    let kept: Vec<usize> = (0..diagonal.len())
+        .filter(|&j| diagonal[j] > RANK_TOLERANCE * scale)
+        .collect();
+    if kept.is_empty() {
         return None;
     }
-    let diagonal: Vec<f64> = (0..n).map(|i| m[i * n + i]).collect();
-    for j in 0..n {
-        for i in j..n {
-            let s = m[i * n + j] - (0..j).map(|k| m[i * n + k] * m[j * n + k]).sum::<f64>();
-            match i == j {
-                true if s > PIVOT_RELATIVE_TOLERANCE * diagonal[j] && s.is_finite() => {
-                    m[j * n + j] = s.sqrt()
-                }
-                true => return None,
-                false => m[i * n + j] = s / m[j * n + j],
-            }
-        }
-    }
-    let mut y = vec![0.0; n];
-    for i in 0..n {
-        y[i] = (rhs[i] - (0..i).map(|k| m[i * n + k] * y[k]).sum::<f64>()) / m[i * n + i];
-    }
-    let mut x = vec![0.0; n];
-    for i in (0..n).rev() {
-        x[i] = (y[i] - (i + 1..n).map(|k| m[k * n + i] * x[k]).sum::<f64>()) / m[i * n + i];
+    let qr = match kept.len() == width {
+        true => qr,
+        false => a.select_columns(&kept).qr(),
+    };
+    let mut qtb = b;
+    qr.q_tr_mul(&mut qtb);
+    let kept_coefficients = qr.r().solve_upper_triangular(&qtb.rows(0, kept.len()))?;
+    let mut x = DVector::zeros(width);
+    for (&j, &v) in kept.iter().zip(kept_coefficients.iter()) {
+        x[j] = v;
     }
     x.iter().all(|v| v.is_finite()).then_some(x)
 }
@@ -37,9 +40,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn solves_spd_and_rejects_singular() {
-        let x = solve_spd(vec![4.0, 2.0, 2.0, 3.0], &[2.0, 1.0]).unwrap();
-        assert!((x[0] - 0.5).abs() < 1e-15 && x[1].abs() < 1e-15);
-        assert_eq!(solve_spd(vec![1.0, 1.0, 1.0, 1.0], &[1.0, 1.0]), None);
+    fn solves_full_rank_and_zeroes_dependent_columns() {
+        let a = DMatrix::from_row_slice(3, 2, &[1.0, 0.0, 1.0, 1.0, 1.0, 2.0]);
+        let x = least_squares(a, DVector::from_row_slice(&[1.0, 3.0, 5.0])).unwrap();
+        assert!((x[0] - 1.0).abs() < 1e-14 && (x[1] - 2.0).abs() < 1e-14);
+
+        let a = DMatrix::from_row_slice(2, 2, &[1.0, 2.0, 1.0, 2.0]);
+        let x = least_squares(a, DVector::from_row_slice(&[1.0, 3.0])).unwrap();
+        assert!((x[0] - 2.0).abs() < 1e-14 && x[1] == 0.0);
+
+        assert_eq!(least_squares(DMatrix::zeros(2, 2), DVector::zeros(2)), None);
+        assert_eq!(least_squares(DMatrix::zeros(0, 2), DVector::zeros(0)), None);
     }
 }

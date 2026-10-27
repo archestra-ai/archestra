@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
+nalgebra = { version = "0.35.0", default-features = false, features = ["std"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 

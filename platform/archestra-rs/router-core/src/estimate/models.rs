@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
 
+use nalgebra::{DMatrix, DVector};
 use serde::{Deserialize, Serialize};
 
 use crate::RouterError;
 use crate::domain::{HistoryRow, SessionFeatures, SessionKind, Source, TokenCounts, TokenMix};
-use crate::linalg::solve_spd;
+use crate::linalg::least_squares;
 
 /// Sizes are fit in millions of tokens.
 pub(crate) const TOKEN_SCALE: f64 = 1e6;
@@ -153,29 +154,29 @@ fn fit_poisson(x: &[Vec<f64>], y: &[f64], max_iterations: usize) -> Result<Vec<f
 
     let mut b = vec![0.0; width];
     b[0] = mean_y.ln();
+    let ridge = RIDGE_ALPHA.sqrt();
     for _ in 0..max_iterations {
-        let mut gradient = vec![0.0; width];
-        let mut hessian = vec![0.0; width * width];
-        for (row, yi) in x.iter().zip(y) {
-            let mu = dot(row, &b).exp();
-            for j in 0..width {
-                gradient[j] += (mu - yi) * row[j] / n;
-                for k in 0..width {
-                    hessian[j * width + k] += mu * row[j] * row[k] / n;
-                }
-            }
-        }
-        for j in 1..width {
-            gradient[j] += RIDGE_ALPHA * b[j];
-            hessian[j * width + j] += RIDGE_ALPHA;
-        }
-        let descent: Vec<f64> = gradient.iter().map(|g| -g).collect();
-        let step = solve_spd(hessian, &descent).ok_or(RouterError::SingularSizeModel)?;
+        // The Newton step solves H·s = −g as least squares on [√(μ/n)·X; √α·I₁..] with the
+        // residual [(y − μ)/√(nμ); −√α·b₁..], whose normal equations are exactly H and −g.
+        // μ is floored at f64::EPSILON (as R's glm does) so the residual stays finite; the
+        // gradient stays exact and only the curvature of vanishing-mean rows moves.
+        let mu: Vec<f64> = x.iter().map(|row| dot(row, &b).exp()).collect();
+        let rows = x.len();
+        let design = DMatrix::from_fn(rows + width - 1, width, |i, j| match i < rows {
+            true => (mu[i].max(f64::EPSILON) / n).sqrt() * x[i][j],
+            false if j == i - rows + 1 => ridge,
+            false => 0.0,
+        });
+        let residual = DVector::from_fn(rows + width - 1, |i, _| match i < rows {
+            true => (y[i] - mu[i]) / (n * mu[i].max(f64::EPSILON)).sqrt(),
+            false => -ridge * b[i - rows + 1],
+        });
+        let step = least_squares(design, residual).ok_or(RouterError::SingularSizeModel)?;
         let step_size = step.iter().fold(0.0_f64, |m, s| m.max(s.abs()));
         let current = objective(&b);
         let mut t = 1.0;
         loop {
-            let candidate: Vec<f64> = b.iter().zip(&step).map(|(v, s)| v + t * s).collect();
+            let candidate: Vec<f64> = b.iter().zip(step.iter()).map(|(v, s)| v + t * s).collect();
             if t * step_size < STEP_TOLERANCE {
                 return Ok(candidate);
             }
@@ -210,53 +211,29 @@ impl LongShareModel {
     }
 }
 
-/// Token-weighted least squares of long share on [1, log E[size], is_subagent]. Columns are taken
-/// greedily in that order and one that is (numerically) a linear combination of those already kept
-/// — zero variance, or e.g. log size affine in is_subagent — is dropped (coefficient 0).
+/// Token-weighted least squares of long share on [1, log E[size], is_subagent], solved as
+/// ordinary least squares on √w-scaled rows. Column priority is that order: a column that is
+/// (numerically) a linear combination of the ones before it — zero variance, or e.g. log size
+/// affine in is_subagent — gets coefficient 0.
 pub(crate) fn fit_long_share(
     rows: &[HistoryRow],
     sizes: &[f64],
 ) -> Result<LongShareModel, RouterError> {
-    let mut normal = [[0.0; 3]; 3];
-    let mut rhs = [0.0; 3];
-    for (r, &size) in rows.iter().zip(sizes) {
-        let w = r.total_tokens();
-        if w <= 0.0 {
-            continue;
-        }
-        let share = r.long.total() / w;
-        let x = [1.0, size.ln(), r.features.kind.indicator()];
-        for i in 0..3 {
-            rhs[i] += w * x[i] * share;
-            for j in 0..3 {
-                normal[i][j] += w * x[i] * x[j];
-            }
-        }
-    }
-    let solve_on = |columns: &[usize]| {
-        let m: Vec<f64> = columns
-            .iter()
-            .flat_map(|&i| columns.iter().map(move |&j| normal[i][j]))
-            .collect();
-        let b: Vec<f64> = columns.iter().map(|&i| rhs[i]).collect();
-        solve_spd(m, &b)
-    };
-    let mut columns: Vec<usize> = Vec::with_capacity(3);
-    let mut solution = None;
-    for c in 0..3 {
-        columns.push(c);
-        match solve_on(&columns) {
-            Some(s) => solution = Some(s),
-            None => {
-                columns.pop();
-            }
-        }
-    }
-    let solution = solution.ok_or(RouterError::SingularLongShare)?;
-    let mut coef = [0.0; 3];
-    for (&c, v) in columns.iter().zip(solution) {
-        coef[c] = v;
-    }
+    let weighted: Vec<(f64, [f64; 3], f64)> = rows
+        .iter()
+        .zip(sizes)
+        .filter_map(|(r, &size)| {
+            let w = r.total_tokens();
+            (w > 0.0).then(|| {
+                let root = w.sqrt();
+                let x = [1.0, size.ln(), r.features.kind.indicator()];
+                (root, x, r.long.total() / w)
+            })
+        })
+        .collect();
+    let design = DMatrix::from_fn(weighted.len(), 3, |i, j| weighted[i].0 * weighted[i].1[j]);
+    let target = DVector::from_fn(weighted.len(), |i, _| weighted[i].0 * weighted[i].2);
+    let coef = least_squares(design, target).ok_or(RouterError::SingularLongShare)?;
     Ok(LongShareModel {
         intercept: coef[0],
         log_size: coef[1],
@@ -381,6 +358,24 @@ mod tests {
             fit_long_share(&[], &[]),
             Err(RouterError::SingularLongShare)
         );
+    }
+
+    #[test]
+    fn near_collinear_long_share_regressors_stay_bounded() {
+        // as above, but one subagent size is off by a relative 3e-6: log size is almost, not
+        // exactly, affine in is_subagent, and that sliver alone would "explain" the subagent
+        // share spread with a huge offsetting log_size / is_subagent pair
+        let rows = [
+            row("a", SessionKind::Main, 0.0, 300, 100),
+            row("a", SessionKind::Main, 0.0, 600, 100),
+            row("b", SessionKind::Subagent, 0.0, 100, 100),
+            row("b", SessionKind::Subagent, 0.0, 300, 100),
+        ];
+        let exact = fit_long_share(&rows, &[1e5, 1e5, 2e5, 2e5]).unwrap();
+        let near = fit_long_share(&rows, &[1e5, 1e5, 2e5, 2e5 * (1.0 + 3e-6)]).unwrap();
+        for (a, b) in near.coefficients().iter().zip(exact.coefficients()) {
+            assert!((a - b).abs() < 1e-4, "{near:?} vs {exact:?}");
+        }
     }
 
     #[test]

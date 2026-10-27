@@ -645,7 +645,7 @@ describe("sreAgentService", () => {
       user: { name: "", email: "", role: "", teams: [] },
     });
     expect(rendered).not.toContain("{{");
-    expect(rendered?.includes(`checkout ${getAppSourceRef()}\n`)).toBe(
+    expect(rendered?.includes(` origin ${getAppSourceRef()} `)).toBe(
       sandbox,
     );
   });

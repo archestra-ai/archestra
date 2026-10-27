@@ -45,8 +45,11 @@ export const SRE_AGENT_TOOL_NAMES = [
 
 const SRE_SOURCE_REPOSITORY = "https://github.com/archestra-ai/archestra";
 const SRE_SOURCE_CHECKOUT = `${SKILL_SANDBOX_HOME}/archestra`;
-/** `checkout` takes both a release tag and a commit SHA; `clone --branch` takes only the tag. */
-export const SRE_SOURCE_CLONE = `git clone --filter=blob:none --no-checkout ${SRE_SOURCE_REPOSITORY} ${SRE_SOURCE_CHECKOUT} && git -C ${SRE_SOURCE_CHECKOUT} checkout ${ARCHESTRA_SOURCE_REF_EXPRESSION}`;
+/**
+ * Fetching the ref takes both a release tag and a commit SHA, including one no
+ * branch reaches any more; `clone --branch` takes only the tag.
+ */
+export const SRE_SOURCE_CLONE = `git clone --filter=blob:none --no-checkout ${SRE_SOURCE_REPOSITORY} ${SRE_SOURCE_CHECKOUT} && git -C ${SRE_SOURCE_CHECKOUT} fetch --filter=blob:none origin ${ARCHESTRA_SOURCE_REF_EXPRESSION} && git -C ${SRE_SOURCE_CHECKOUT} checkout FETCH_HEAD`;
 /** What early installs seeded; `SreAgentService.seed` rewrites it to `SRE_SOURCE_CLONE`. */
 export const SRE_LEGACY_SOURCE_CLONE = `git clone --filter=blob:none --branch platform-v${SYSTEM_PROMPT_HELPER_EXPRESSIONS.archestraVersion} ${SRE_SOURCE_REPOSITORY} ${SRE_SOURCE_CHECKOUT}`;
 

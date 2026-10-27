@@ -7,13 +7,18 @@ name: Archestra Runtime Review
 #   readies it.
 # - On demand, when a maintainer requests a review from the
 #   @archestra-ai/archestra-review team. The run uses that maintainer's
-#   account, and the team's request is cleared when the review ends.
+#   account, and the team's request is cleared when its run ends. If a newer
+#   push replaces that run before it starts, the request stays listed; remove
+#   it, or request the team again.
 # - Anything else, such as a contributor's pull request, or a push or request
 #   by someone who is not a maintainer, runs nothing and says nothing. The
 #   shared workflow's gate decides that, not this file, which a pull request
 #   can edit.
 # - A blocking finding requests changes; a later review that finds nothing
 #   blocking dismisses the request, and fixed findings' threads are resolved.
+#   Only the author's push reviews automatically: when someone else pushes the
+#   fix, or a review cannot finish, request the team to re-review, or have a
+#   writer dismiss the change request.
 #
 # The job signs in to Archestra with its GitHub Actions identity, so no
 # secrets are needed. The shared workflow in archestra-ai/.github has the
@@ -35,15 +40,16 @@ concurrency:
 jobs:
   review:
     name: Archestra Review
-    # A review request starts a run only when it names the review team; a
-    # request for a person or another team starts nothing.
+    # A review request starts a run only when it names the review team (the
+    # same slug as review-team below); a request for a person or another team
+    # starts nothing.
     if: >-
       github.repository == 'archestra-ai/archestra' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      (github.event.action == 'review_requested' && github.event.requested_team.slug == 'archestra-review' ||
-      github.event.action != 'review_requested' &&
+      ((github.event.action == 'review_requested' && github.event.requested_team.slug == 'archestra-review') ||
+      (github.event.action != 'review_requested' &&
       !github.event.pull_request.draft &&
-      !contains(github.event.pull_request.title, '[WIP]'))
+      !contains(github.event.pull_request.title, '[WIP]')))
     permissions:
       contents: read
       pull-requests: write # Post the review, its comments, and clear the team's request.
@@ -57,6 +63,7 @@ jobs:
       gateway-url: ${{ vars.ARCHESTRA_REVIEW_GATEWAY_URL }}
       private-staging-access: true
       agents: ${{ vars.ARCHESTRA_REVIEW_AGENTS }}
+      # The same slug as the job's if above.
       review-team: archestra-review
       review-event: request-changes
       # The GitHub Actions sign-in serves reviews only: no fix commands.

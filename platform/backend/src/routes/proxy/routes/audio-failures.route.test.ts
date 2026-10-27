@@ -261,7 +261,10 @@ describe.each([
         model: "alias",
         file: new File([over], "over.wav", { type: "audio/wav" }),
       }),
-    ).rejects.toMatchObject({ status: 413 });
+    ).rejects.toMatchObject({
+      status: 413,
+      message: expect.stringMatching(/exceeds? the size limit/),
+    });
     expect(calls).toBe(1);
     const rows = await InteractionModel.getAllInteractionsForProfile(agentId);
     expect(rows).toHaveLength(1);

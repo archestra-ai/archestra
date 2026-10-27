@@ -1,6 +1,7 @@
 import { Readable } from "node:stream";
 import Busboy, { type BusboyInstance } from "@fastify/busboy";
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { ApiError } from "@/types/api";
 
 export interface MediaMultipartFile {
   fieldname: string;
@@ -216,12 +217,14 @@ export async function parseMediaMultipart(
   });
 }
 
-class MediaMultipartError extends Error {
-  constructor(
-    readonly statusCode: number,
-    message: string,
-  ) {
-    super(message);
+/**
+ * An ApiError, so the error handler keeps this message: a bare 413 is read as
+ * Fastify's body-limit error and reworded around the route's much larger
+ * wire limit.
+ */
+class MediaMultipartError extends ApiError {
+  constructor(statusCode: number, message: string) {
+    super(statusCode, message);
     this.name = "MediaMultipartError";
   }
 }

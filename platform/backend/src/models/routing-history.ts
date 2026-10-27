@@ -42,9 +42,6 @@ const STATEMENT_TIMEOUT_MS = 20_000;
 /** Rows of a session read to find its opening main turn. */
 const OPENING_ROWS = 20;
 
-/** The last interaction a scan batch read, in (profile, created_at, id) order. */
-type ScanCursor = { profileId: string; createdAt: string; id: string };
-
 /** One eligible interaction of a scan batch, scalars only. */
 type ScanRow = {
   id: string;

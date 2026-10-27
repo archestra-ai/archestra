@@ -16,6 +16,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -53,6 +54,7 @@ import {
   SHORTCUT_NEW_ENCRYPTED_CHAT,
 } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { resolveContextWindowUsage } from "@/lib/chat/context-window-status";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -364,30 +366,40 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
 
   // Context usage follows the model picker when the pickers are inline, and
   // sits beside the attachment button when they collapse into the menu.
-  const contextUsage = tokensUsed > 0 && maxContextLength && (
-    <ContextWindowDialog
-      breakdown={contextWindow ?? null}
-      tokensUsed={tokensUsed}
-      cachedTokens={cachedTokens}
-      maxTokens={maxContextLength}
-      lastCompaction={lastCompaction}
-      onCompact={onCompactConversation}
-      isCompacting={isContextCompacting}
-    >
-      <UnstyledButton
-        type="button"
-        aria-label="Context usage"
-        data-testid={E2eTestId.ChatContextUsageTrigger}
-        className="inline-flex size-8 cursor-pointer items-center justify-center rounded-md outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <ContextIndicator
-          tokensUsed={tokensUsed}
-          maxTokens={maxContextLength}
-          size="sm"
-        />
-      </UnstyledButton>
-    </ContextWindowDialog>
+  const resolvedContextUsage = useMemo(
+    () =>
+      resolveContextWindowUsage({
+        tokensUsed,
+        maxTokens: maxContextLength,
+        breakdown: contextWindow ?? null,
+      }),
+    [tokensUsed, maxContextLength, contextWindow],
   );
+  const contextUsage = resolvedContextUsage.tokensUsed > 0 &&
+    resolvedContextUsage.maxTokens && (
+      <ContextWindowDialog
+        breakdown={contextWindow ?? null}
+        tokensUsed={resolvedContextUsage.tokensUsed}
+        cachedTokens={cachedTokens}
+        maxTokens={resolvedContextUsage.maxTokens}
+        lastCompaction={lastCompaction}
+        onCompact={onCompactConversation}
+        isCompacting={isContextCompacting}
+      >
+        <UnstyledButton
+          type="button"
+          aria-label="Context usage"
+          data-testid={E2eTestId.ChatContextUsageTrigger}
+          className="inline-flex size-8 cursor-pointer items-center justify-center rounded-md outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ContextIndicator
+            tokensUsed={resolvedContextUsage.tokensUsed}
+            maxTokens={resolvedContextUsage.maxTokens}
+            size="sm"
+          />
+        </UnstyledButton>
+      </ContextWindowDialog>
+    );
 
   return (
     <PromptInputTools ref={toolbarRef} className="gap-0.5">

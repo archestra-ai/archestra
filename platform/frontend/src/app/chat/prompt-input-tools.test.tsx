@@ -513,4 +513,41 @@ describe("chat composer typing performance", () => {
     );
     expect(screen.queryByRole("status")).toBeNull();
   });
+
+  it("keeps the composer context indicator and breakdown panel synchronized after a model switch", () => {
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-3.5-turbo-0613"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        conversationId="conv-1"
+        tokensUsed={9_700}
+        maxContextLength={16_385}
+        contextWindow={{
+          provider: "openai",
+          model: "gpt-4.1",
+          contextLength: 328_000,
+          usedTokens: 9_700,
+          freeTokens: 318_300,
+          usedPercent: 2.957,
+          estimatedInputCostUsd: 0.02,
+          segments: [{ category: "messages", tokens: 9_700 }],
+        }}
+      />,
+    );
+
+    const trigger = screen.getByTestId(E2eTestId.ChatContextUsageTrigger);
+    // 9.7k / 16.4k = 59.2% → elevated (yellow) band on the ring
+    expect(trigger.querySelector("circle.stroke-yellow-600")).not.toBeNull();
+
+    fireEvent.click(trigger);
+
+    const panel = screen.getByTestId(E2eTestId.ChatContextUsagePanel);
+    expect(panel).toHaveTextContent("9.7k / 16.4k tokens");
+    expect(panel).toHaveTextContent(
+      "21% of context remaining until auto-compact.",
+    );
+  });
 });

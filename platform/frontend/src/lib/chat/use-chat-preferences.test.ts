@@ -821,3 +821,25 @@ describe("resolveInitialModel with a GitHub App key on Copilot", () => {
     });
   });
 });
+
+describe("resolveInitialModel keeps a personal Copilot default per-user next to an App key", () => {
+  test("a default naming no App key stays per-user (placeholder dropped)", () => {
+    const result = resolveInitialModel({
+      modelsByProvider: { "github-copilot": [{ id: "uuid-copilot" }] },
+      agent: null,
+      chatApiKeys: [
+        {
+          id: "key-copilot-app",
+          provider: "github-copilot",
+          isGithubAppKey: true,
+        },
+      ],
+      organization: {
+        defaultModelId: "uuid-copilot",
+        defaultLlmApiKeyId: "someone-elses-personal-key",
+      },
+    });
+
+    expect(result).toEqual({ modelId: "uuid-copilot", apiKeyId: null });
+  });
+});

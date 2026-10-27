@@ -701,8 +701,18 @@ class LlmProviderApiKeyModel {
     // one user ride on another's token. Returns null (→ "link your account"
     // prompt) when the user has no personal key of their own.
     if (providerRequiresPerUserCredential(provider)) {
-      // A shared GitHub App key the user picked for this conversation is an
-      // explicit choice, so it wins over their own sign-in.
+      // A GitHub App key is a separate, shared way to use Copilot. It is used
+      // only when named: the agent's configured key or the conversation's pick.
+      // It never stands in for a missing personal sign-in.
+      if (
+        provider === "github-copilot" &&
+        (await LlmProviderApiKeyModel.isGithubAppKey(agentLlmApiKeyId))
+      ) {
+        const agentKey = await LlmProviderApiKeyModel.findById(
+          agentLlmApiKeyId as string,
+        );
+        if (agentKey?.organizationId === organizationId) return agentKey;
+      }
       if (provider === "github-copilot" && conversationId) {
         const conversation = await ConversationModel.findById({
           id: conversationId,
@@ -725,18 +735,10 @@ class LlmProviderApiKeyModel {
           return picked;
         }
       }
-      const personalKey = await LlmProviderApiKeyModel.findPersonalKey({
+      return LlmProviderApiKeyModel.findPersonalKey({
         organizationId,
         userId,
         provider,
-      });
-      if (personalKey || provider !== "github-copilot") return personalKey;
-      // No personal sign-in: an organization GitHub App key the user may use
-      // stands in. Never another user's personal key.
-      return LlmProviderApiKeyModel.findSharedGithubAppKey({
-        organizationId,
-        userId,
-        agentLlmApiKeyId,
       });
     }
 
@@ -1172,53 +1174,6 @@ class LlmProviderApiKeyModel {
     return (
       (await LlmProviderApiKeyModel.findCredentialKind(id)) === "github_app"
     );
-  }
-
-  /**
-   * A shared GitHub App key on `github-copilot` the user may use: the agent's
-   * configured key when it is one, else the best-ranked one they can reach.
-   */
-  static async findSharedGithubAppKey(params: {
-    organizationId: string;
-    userId?: string;
-    agentLlmApiKeyId?: string | null;
-  }): Promise<LlmProviderApiKey | null> {
-    const { organizationId, userId, agentLlmApiKeyId } = params;
-    const isAppKey = async (key: LlmProviderApiKey | null) =>
-      !!key &&
-      key.organizationId === organizationId &&
-      key.provider === "github-copilot" &&
-      key.userId === null &&
-      !!key.secretId &&
-      (await LlmProviderApiKeyModel.findCredentialKind(key.id)) ===
-        "github_app";
-    if (agentLlmApiKeyId) {
-      const agentKey = await LlmProviderApiKeyModel.findById(agentLlmApiKeyId);
-      if (await isAppKey(agentKey)) return agentKey;
-    }
-    if (!userId) {
-      const orgKey = await LlmProviderApiKeyModel.findOrganizationWideKey(
-        organizationId,
-        "github-copilot",
-      );
-      return (await isAppKey(orgKey)) ? orgKey : null;
-    }
-    const available = await LlmProviderApiKeyModel.getAvailableKeysForUser(
-      organizationId,
-      userId,
-      [],
-      "github-copilot",
-    );
-    const sorted = [...available].sort(
-      (a, b) =>
-        Number(b.isPrimary) - Number(a.isPrimary) ||
-        a.createdAt.getTime() - b.createdAt.getTime(),
-    );
-    for (const candidate of sorted) {
-      const key = await LlmProviderApiKeyModel.findById(candidate.id);
-      if (await isAppKey(key)) return key;
-    }
-    return null;
   }
 
   private static async findPersonalKey({

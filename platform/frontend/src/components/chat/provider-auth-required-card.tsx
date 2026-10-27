@@ -76,6 +76,7 @@ export function ProviderAuthRequiredCard({
             currentUserId !== undefined &&
             key.userId === currentUserId &&
             key.provider === provider &&
+            !key.isGithubAppKey &&
             (SUBSCRIPTION_CREDENTIALS[subscriptionKind].marker === null ||
               subscriptionKindFromKeyMetadata(key) === subscriptionKind),
         )

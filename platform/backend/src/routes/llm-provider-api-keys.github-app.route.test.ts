@@ -6,7 +6,10 @@ import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import { LlmProviderApiKeyModel } from "@/models";
+import {
+  LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
+} from "@/models";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -136,11 +139,12 @@ describe("POST /api/llm-provider-api-keys with a GitHub App credential", () => {
     expect(testProviderApiKey).not.toHaveBeenCalled();
   });
 
-  test("lets another member's resolution use the shared App key but never a personal key", async ({
+  test("keeps the App key and personal sign-ins separate in resolution and catalogs", async ({
     makeUser,
     makeMember,
+    makeSecret,
   }) => {
-    const created = (
+    const appKey = (
       await createKey({
         name: "Org Copilot",
         provider: "github-copilot",
@@ -149,21 +153,74 @@ describe("POST /api/llm-provider-api-keys with a GitHub App credential", () => {
         githubAppInstallationId: "777",
         githubAppPrivateKey: privateKey,
         initialGrants: [
-          { subject: { type: "organization", id: "*" }, actions: ["use"] },
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
         ],
       })
     ).json();
+    expect(appKey.id, JSON.stringify(appKey)).toBeTruthy();
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
+    const resolve = (params: { agentLlmApiKeyId?: string }) =>
+      LlmProviderApiKeyModel.getCurrentApiKey({
+        organizationId,
+        userId: member.id,
+        userTeamIds: [],
+        provider: "github-copilot",
+        conversationId: null,
+        ...params,
+      });
 
-    const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
-      organizationId,
-      userId: member.id,
-      userTeamIds: [],
-      provider: "github-copilot",
-      conversationId: null,
-    });
+    // No personal sign-in: the App key does not stand in.
+    expect(await resolve({})).toBeNull();
+    // Named explicitly (an agent's key), the App key is used.
+    expect((await resolve({ agentLlmApiKeyId: appKey.id }))?.id).toBe(
+      appKey.id,
+    );
 
-    expect(resolved?.id).toBe(created.id);
+    // A personal sign-in is used for the personal path, never the App key.
+    const secret = await makeSecret({ secret: { apiKey: "gho_member" } });
+    const personal = await LlmProviderApiKeyModel.create(
+      {
+        organizationId,
+        name: "My Copilot",
+        provider: "github-copilot",
+        secretId: secret.id,
+        scope: "personal",
+        userId: member.id,
+        isPrimary: true,
+      },
+      { apiKeyValue: "gho_member" },
+    );
+    expect((await resolve({}))?.id).toBe(personal.id);
+    expect((await resolve({ agentLlmApiKeyId: appKey.id }))?.id).toBe(
+      appKey.id,
+    );
+
+    // Catalogs: App-linked models are not in the per-user Copilot catalog.
+    const [model] = await db
+      .insert(schema.modelsTable)
+      .values({
+        externalId: "github-copilot/gpt-4o-app-only",
+        provider: "github-copilot",
+        modelId: "gpt-4o-app-only",
+      })
+      .returning();
+    await db
+      .insert(schema.llmProviderApiKeyModelsTable)
+      .values({ apiKeyId: appKey.id, modelId: model.id });
+    const perUser =
+      await LlmProviderApiKeyModelLinkModel.getOrgModelsForPerUserProvider(
+        organizationId,
+        "github-copilot",
+      );
+    expect(perUser.map(({ model }) => model.id)).not.toContain(model.id);
+    expect(
+      (
+        await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([appKey.id])
+      ).map(({ model }) => model.id),
+    ).toContain(model.id);
   });
 });

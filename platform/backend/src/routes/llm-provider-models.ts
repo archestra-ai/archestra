@@ -688,8 +688,19 @@ export async function getAvailableLlmModels(params: {
   // resolved per-user at request time, so they're sourced separately below
   // (visible to everyone, flagged) — keep them out of the per-key path so a
   // member's own connected copy isn't listed twice or shown unflagged.
+  // A GitHub App key is an ordinary shared key: its models stay keyed models.
+  const appKeyIds = apiKeys
+    .filter((key) => key.isGithubAppKey && apiKeyIds.includes(key.id))
+    .map((key) => key.id);
+  const appModelIds = new Set(
+    (
+      await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(appKeyIds)
+    ).map(({ model }) => model.id),
+  );
   let filteredModels = dbModels.filter(
-    ({ model }) => !providerRequiresPerUserCredential(model.provider),
+    ({ model }) =>
+      !providerRequiresPerUserCredential(model.provider) ||
+      appModelIds.has(model.id),
   );
   if (provider) {
     filteredModels = filteredModels.filter(
@@ -774,7 +785,11 @@ export async function getAvailableLlmModels(params: {
     isEmbedding,
     connectedProviders: new Set(
       apiKeys
-        .filter((key) => providerRequiresPerUserCredential(key.provider))
+        .filter(
+          (key) =>
+            providerRequiresPerUserCredential(key.provider) &&
+            !key.isGithubAppKey,
+        )
         .map((key) => key.provider),
     ),
   });

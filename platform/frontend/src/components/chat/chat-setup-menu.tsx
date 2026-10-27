@@ -132,6 +132,8 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
         const connected = data.keys.filter(
           (key) =>
             key.provider === spec.provider &&
+            // An organization GitHub App key is a provider key, not a sign-in.
+            !key.isGithubAppKey &&
             (spec.marker === null ||
               subscriptionKindFromKeyMetadata(key) === kind),
         );

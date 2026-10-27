@@ -624,6 +624,9 @@ class LlmProviderApiKeyModelLinkModel {
           eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
           eq(schema.llmProviderApiKeysTable.provider, provider),
           eq(schema.modelsTable.provider, provider),
+          // Personal sign-ins only: a shared key on this provider (a GitHub
+          // App key) lists its models as that key's own, not here.
+          isNotNull(schema.llmProviderApiKeysTable.userId),
         ),
       )
       .groupBy(schema.modelsTable.id)

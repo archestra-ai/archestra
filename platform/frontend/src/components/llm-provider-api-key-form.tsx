@@ -555,15 +555,14 @@ export function LlmProviderApiKeyForm({
   const isCredentialSubscriptionMode =
     isCredentialLevelSubscriptionProvider(provider) &&
     authMethod === "subscription";
-  const copilotAuthMethod = form.watch("copilotAuthMethod");
-  // GitHub App (organization) mode on GitHub Copilot: the only Copilot key
-  // that can be shared. The API-key flow offers no personal sign-in, so it
-  // always means this mode there.
+  // GitHub App (organization) mode on GitHub Copilot: a separate, shared way
+  // to connect. Offered only in the API-key flow; the personal connect flow
+  // offers only the GitHub sign-in.
   const isCopilotAppMode =
     provider === "github-copilot" &&
     !isEditMode &&
     !isSubscriptionFlow &&
-    (copilotAuthMethod === "github-app" || !allowPersonalSubscriptions);
+    !allowPersonalSubscriptions;
 
   const extraHeadersFieldArray = useFieldArray({
     control: form.control,
@@ -1458,35 +1457,6 @@ export function LlmProviderApiKeyForm({
                           SUBSCRIPTION_CREDENTIALS[providerSubscriptionKind]
                             .label
                         }
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                )}
-
-              {provider === "github-copilot" &&
-                allowPersonalSubscriptions &&
-                !isEditMode &&
-                !isSubscriptionFlow && (
-                  <Tabs
-                    value={copilotAuthMethod ?? "personal"}
-                    onValueChange={(value) => {
-                      form.setValue(
-                        "copilotAuthMethod",
-                        value as "personal" | "github-app",
-                        { shouldDirty: true },
-                      );
-                      form.setValue("apiKey", null, { shouldDirty: true });
-                      form.setValue("shared", value === "github-app", {
-                        shouldDirty: true,
-                      });
-                    }}
-                  >
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="personal" disabled={isPending}>
-                        Sign in with GitHub (personal)
-                      </TabsTrigger>
-                      <TabsTrigger value="github-app" disabled={isPending}>
-                        GitHub App (organization)
                       </TabsTrigger>
                     </TabsList>
                   </Tabs>

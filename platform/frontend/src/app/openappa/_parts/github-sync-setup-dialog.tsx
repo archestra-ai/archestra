@@ -608,7 +608,7 @@ export function GithubSyncSetupDialog({
             <Input
               id="github-sync-owner"
               value={ownerInput}
-              placeholder="acme"
+              placeholder="my-org"
               autoComplete="off"
               data-1p-ignore
               spellCheck={false}

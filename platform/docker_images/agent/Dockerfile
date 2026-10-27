@@ -117,6 +117,16 @@ RUN corepack disable \
  && npm install --global --ignore-scripts pnpm@11.28.7 \
  && node --version && npm --version && pnpm --version
 
+# npm's separately bundled Undici is not covered by application lockfiles.
+# 6.29.1 fixes CVE-2026-109869 and has cleared the seven-day release-age window.
+# Fetch the replacement before removing the copy npm itself uses to fetch it.
+RUN cd /usr/local/lib/node_modules/npm/node_modules \
+ && npm pack undici@6.29.1 \
+ && rm -rf undici \
+ && tar -xzf undici-6.29.1.tgz \
+ && mv package undici \
+ && rm undici-6.29.1.tgz
+
 COPY docker_images/agent/bin /usr/local/bin
 # The maintained launchers append this description of the machine to the
 # Agent's instructions, so a run knows where to work and what is installed.

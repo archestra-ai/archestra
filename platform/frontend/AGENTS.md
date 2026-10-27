@@ -20,4 +20,4 @@ Load the `archestra-dev-frontend` skill (`.agents/skills/archestra-dev-frontend/
 | File name | kebab-case, ASCII. |
 | Dot suffixes | Closed list: `.query`, `.keys`, `.utils`, `.types`, `.constants`, `.context`, `.server`, `.client`, `.ee`, `.test`, `.test-data`. A test may add topic segments before `.test` (`page.client.streaming.test.tsx`). Anything else folds into the kebab name. |
 
-Biome enforces these (`useFilenamingConvention` and the `route-private-folder` and `hook-file-name` plugins in `platform/biome.json`); `pnpm biome check --changed` from `platform/` lints only files that differ from `main`.
+Biome enforces these (`useFilenamingConvention` and the `route-private-folder` and `hook-file-name` plugins in `platform/biome.json`). To check changed files, run `pnpm biome check --changed --since=origin/main` from `platform/`, substituting the fetched target branch for `origin/main` when the PR targets a different branch.

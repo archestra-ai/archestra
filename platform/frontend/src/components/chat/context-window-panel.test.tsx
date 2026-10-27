@@ -472,4 +472,32 @@ describe("ContextWindowDialog — compact action", () => {
       screen.getByText("21% of context remaining until auto-compact."),
     ).toBeInTheDocument();
   });
+
+  it("shows the freed-tokens confirmation note and compact button after manual compaction clears the breakdown", async () => {
+    const onCompact = vi.fn();
+    await openDialog(
+      <ContextWindowDialog
+        breakdown={null}
+        tokensUsed={18_000}
+        maxTokens={200_000}
+        lastCompaction={{
+          originalTokenEstimate: 90_000,
+          compactedTokenEstimate: 18_000,
+          trigger: "manual",
+        }}
+        onCompact={onCompact}
+      >
+        <button type="button">Open</button>
+      </ContextWindowDialog>,
+    );
+
+    expect(screen.getByText("18.0k")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Compaction summarized earlier turns and freed/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("72.0k tokens")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /compact now/i }),
+    ).toBeInTheDocument();
+  });
 });

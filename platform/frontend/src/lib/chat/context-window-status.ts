@@ -84,10 +84,8 @@ export function reconcileContextWindowBreakdown(
       ? params.tokensUsed
       : breakdown.usedTokens;
   const contextLength =
-    params.maxTokens !== undefined
-      ? typeof params.maxTokens === "number" && params.maxTokens > 0
-        ? params.maxTokens
-        : breakdown.contextLength
+    typeof params.maxTokens === "number" && params.maxTokens > 0
+      ? params.maxTokens
       : breakdown.contextLength;
 
   if (

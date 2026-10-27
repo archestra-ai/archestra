@@ -193,6 +193,9 @@ export function ContextWindowDialog({
             tokensUsed={resolvedUsage.tokensUsed}
             maxTokens={resolvedUsage.maxTokens}
             appName={appName}
+            lastCompaction={lastCompaction}
+            onCompact={onCompact}
+            isCompacting={isCompacting}
           />
         )}
       </DialogContent>
@@ -719,33 +722,102 @@ function EmptyState({
   tokensUsed,
   maxTokens,
   appName,
+  lastCompaction,
+  onCompact,
+  isCompacting = false,
 }: {
   tokensUsed: number;
   maxTokens: number | null;
   appName: string;
+  lastCompaction?: LastCompaction | null;
+  onCompact?: () => void | Promise<void>;
+  isCompacting?: boolean;
 }) {
+  const hasRealWindow = maxTokens != null && maxTokens > 0;
+  const status = getContextWindowStatus(tokensUsed, maxTokens);
+  const compactionSaved = resolveCompactionSavings(lastCompaction);
+
   return (
-    <div className="flex flex-col gap-2 px-5 py-6 text-sm text-muted-foreground">
+    <div className="flex flex-col gap-3 px-5 py-6 text-sm text-muted-foreground">
       {tokensUsed > 0 && maxTokens ? (
         <>
-          <p className="tabular-nums">
-            About{" "}
-            <span className="font-medium text-foreground">
-              {formatTokens(tokensUsed)}
-            </span>{" "}
-            of{" "}
-            <span className="font-medium text-foreground">
-              {formatTokens(maxTokens)}
-            </span>{" "}
-            tokens used.
-          </p>
-          <p>Send a message to see the full per-category breakdown.</p>
+          <div className="flex flex-col gap-2">
+            <p className="tabular-nums">
+              About{" "}
+              <span className="font-medium text-foreground">
+                {formatTokens(tokensUsed)}
+              </span>{" "}
+              of{" "}
+              <span className="font-medium text-foreground">
+                {formatTokens(maxTokens)}
+              </span>{" "}
+              tokens used.
+            </p>
+            <p>Send a message to see the full per-category breakdown.</p>
+          </div>
+          {hasRealWindow && onCompact && (
+            <PanelNote
+              icon={
+                <ProgressRing
+                  percent={autoCompactProgressPercent(status)}
+                  size="xs"
+                  arcClassName={usageStrokeColor(status.usedPercent)}
+                  trackClassName="stroke-muted-foreground/25"
+                />
+              }
+              className={cn(
+                status.nearAutoCompact && usageTextColor(status.usedPercent),
+              )}
+              action={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={status.nearAutoCompact ? "default" : "outline"}
+                  className="-my-1 shrink-0"
+                  disabled={isCompacting}
+                  onClick={() => void onCompact()}
+                  data-testid={E2eTestId.ChatContextCompactButton}
+                >
+                  {isCompacting ? (
+                    <>
+                      <Loader2 className="animate-spin" aria-hidden />
+                      <span>Compacting…</span>
+                    </>
+                  ) : (
+                    <span>Compact now</span>
+                  )}
+                </Button>
+              }
+            >
+              {describeContextHeadroom(status)}
+            </PanelNote>
+          )}
         </>
       ) : (
         <p>
           Send a message to see how {appName} fills the model's context window
           this turn.
         </p>
+      )}
+
+      {compactionSaved > 0 && (
+        <PanelNote
+          icon={
+            <Sparkles
+              className="size-3.5 shrink-0 text-violet-500"
+              aria-hidden
+            />
+          }
+        >
+          {lastCompaction?.trigger === "manual"
+            ? "Compaction"
+            : "Auto-compaction"}{" "}
+          summarized earlier turns and freed{" "}
+          <span className="font-medium text-foreground">
+            {formatTokens(compactionSaved)} tokens
+          </span>{" "}
+          in this conversation.
+        </PanelNote>
       )}
     </div>
   );

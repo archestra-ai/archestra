@@ -1300,11 +1300,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // the breakdown would otherwise count only the system prompt and
                 // tools.
                 //
-                // After tool-call steps we re-emit an updated breakdown using the
+                // After each finished step we re-emit an updated breakdown using the
                 // provider's exact inputTokens so the visualizer headline stays
-                // accurate across multi-step turns. The category estimates stay
-                // proportional to the initial build; the ring and totals track
-                // the real prompt size.
+                // accurate across multi-step turns and the final response. The
+                // category estimates stay proportional to the initial build; the
+                // ring and totals track the real prompt size.
                 let latestBreakdown: ContextWindowBreakdown | null = null;
                 let breakdownPricePerToken: number | null = null;
                 try {
@@ -1482,7 +1482,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           // panel reads it from onData state, so keeping it out
                           // of the message list is what the client expects. A
                           // non-transient copy would be appended to the
-                          // assistant message once per tool step — persisted,
+                          // assistant message once per step — persisted,
                           // re-appended on every replay, and one more chance for
                           // the SDK to open a message of its own to hold it.
                           transient: true,
@@ -1490,7 +1490,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       } catch (error) {
                         logger.warn(
                           { error, conversationId },
-                          "[ContextWindow] failed to refresh breakdown after tool step",
+                          "[ContextWindow] failed to refresh breakdown after step",
                         );
                       }
                     }

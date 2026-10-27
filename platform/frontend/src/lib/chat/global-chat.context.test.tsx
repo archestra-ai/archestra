@@ -2675,6 +2675,9 @@ describe("context window breakdown state", () => {
     await waitFor(() =>
       expect(latestSessionRef.current?.contextWindow).not.toBeNull(),
     );
+    expect(latestSessionRef.current?.contextTokensUsed).toBe(
+      validBreakdown.usedTokens,
+    );
 
     act(() => {
       latestSessionRef.current?.recordContextCompaction({

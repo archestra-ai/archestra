@@ -225,13 +225,14 @@ export async function exchangeGitHubActionsToken(params: {
     // By id: a name can belong to another account once an owner is renamed
     // and its old name taken, and must never reach its repository.
     let githubToken: { token: string; expiresAt: number };
+    let contents: "read" | "write" = access.resolveReviewThreads
+      ? "write"
+      : "read";
     try {
       githubToken = await createRepositoryInstallationToken({
         ...app,
         repositoryId: claims.repository_id,
-        permissions: access.resolveReviewThreads
-          ? { ...GITHUB_TOKEN_PERMISSIONS, contents: "write" }
-          : GITHUB_TOKEN_PERMISSIONS,
+        permissions: { ...GITHUB_TOKEN_PERMISSIONS, contents },
       });
     } catch (firstError) {
       // An App installed without contents: write still reviews; it cannot
@@ -248,6 +249,7 @@ export async function exchangeGitHubActionsToken(params: {
         { gatewayId, repository, ...describeError(firstError) },
         "[github-actions] No repository token with contents: write; trying contents: read",
       );
+      contents = "read";
       try {
         githubToken = await createRepositoryInstallationToken({
           ...app,
@@ -269,6 +271,8 @@ export async function exchangeGitHubActionsToken(params: {
         githubLogin: login,
         pullRequestAuthor: pullRequest.user.login,
         actAs: access.actAs ?? "author",
+        // write only when the run's GitHub token can resolve review threads.
+        contents,
         userId,
       },
       "[github-actions] Issued an MCP gateway token for a GitHub Actions run",

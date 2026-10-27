@@ -351,6 +351,11 @@ describe("POST /api/github-actions/token", () => {
     expect(scopedTokenRequests).toMatchObject([
       { permissions: { contents: "write", pull_requests: "write" } },
     ]);
+    // The audit log says what the run's GitHub token can do.
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
+      expect.objectContaining({ gatewayId: resolving.id, contents: "write" }),
+      expect.any(String),
+    );
   });
 
   test("falls back to contents: read when the App may not write contents", async ({
@@ -398,6 +403,46 @@ describe("POST /api/github-actions/token", () => {
             .contents,
       ),
     ).toEqual(["write", "read"]);
+  });
+
+  test("takes the gateway token back when GitHub refuses both the write and the read token", async ({
+    makeAgent,
+  }) => {
+    const resolving = await makeGitHubActionsGateway(makeAgent, {
+      resolveReviewThreads: true,
+    });
+    server.use(
+      http.post(ACCESS_TOKENS_URL, async ({ request }) => {
+        const text = await request.text();
+        const body = text ? JSON.parse(text) : {};
+        if (body.repository_ids) {
+          scopedTokenRequests.push(body);
+          return HttpResponse.json(
+            { message: "Resource not accessible by integration" },
+            { status: 422 },
+          );
+        }
+        return HttpResponse.json(
+          {
+            token: "ghs_installation_wide",
+            expires_at: new Date(Date.now() + HOUR).toISOString(),
+          },
+          { status: 201 },
+        );
+      }),
+    );
+
+    const response = await exchange({
+      token: await oidcToken(),
+      resource: gatewayUrl(resolving.id),
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json().error).toBe("github_error");
+    expect(scopedTokenRequests).toHaveLength(2);
+    expect(
+      await OAuthClientModel.listWithUserTokens({ userId: author.id }),
+    ).toEqual([]);
   });
 
   test("does not fall back to contents: read when GitHub fails for another reason", async ({

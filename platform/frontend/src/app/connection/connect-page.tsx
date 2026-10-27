@@ -567,13 +567,9 @@ function Tile({
           : "text-muted-foreground hover:bg-linear-to-b hover:from-muted/50 hover:to-muted/50 hover:text-foreground",
       )}
     >
-      {/* Top-right corner column (20px wide at right-1.5 -> x = [W-26, W-6],
-          y = [6, 48]). Vertically it shares a band with the centered logo
-          (y = [14, 50] packed / [16, 56] roomy) and ends above a 1-line label
-          (y >= 58 packed / 64 roomy), while horizontally min-w-24 (W >= 96px
-          packed with 36px logo, w-36 = 144px roomy with 40px logo) keeps the
-          centered logo at x <= (W+36)/2 <= W-30 < W-26 so the 2D boxes stay
-          disjoint by >= 4px (packed) and 26px (roomy). */}
+      {/* Stack status marks in a 20px column at top-1.5 right-1.5 (guardrails
+          above last-connected); min-w-24 keeps the column to the right of the
+          centered 36px logo and above the label. */}
       {(marker || guardrailsSupported) && (
         <span className="absolute top-1.5 right-1.5 flex flex-col items-center gap-0.5">
           {guardrailsSupported && (

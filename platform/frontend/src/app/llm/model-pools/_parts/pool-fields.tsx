@@ -47,6 +47,7 @@ import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { OverlappedIcons } from "@/components/ui/overlapped-icons";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -848,19 +849,36 @@ export function FailoverNote() {
 /** The providers a pool's members are on, as icons. */
 export function PoolProviders({ pool }: { pool: ModelPool }) {
   const catalog = useModelProviderCatalog();
-  const providers = [
+  return (
+    <span className="truncate">
+      {poolProviders(pool)
+        .map((provider) => catalog.label(provider))
+        .join(", ")}
+    </span>
+  );
+}
+
+/** The pool's providers as overlapping logos, to tell pools apart at a glance. */
+export function PoolProviderIcons({ pool }: { pool: ModelPool }) {
+  const catalog = useModelProviderCatalog();
+  return (
+    <OverlappedIcons
+      className="w-14 shrink-0 -space-x-2"
+      maxVisible={2}
+      itemClassName="size-6"
+      icons={poolProviders(pool).map((provider) => ({
+        key: provider,
+        icon: <ProviderIcon provider={provider} size={14} />,
+        tooltip: catalog.label(provider),
+      }))}
+    />
+  );
+}
+
+function poolProviders(pool: ModelPool): SupportedProvider[] {
+  return [
     ...new Set(
       pool.members.map((member) => member.provider as SupportedProvider),
     ),
   ];
-  return (
-    <span className="flex items-center gap-1.5">
-      {providers.map((provider) => (
-        <ProviderIcon key={provider} provider={provider} />
-      ))}
-      <span className="truncate">
-        {providers.map((provider) => catalog.label(provider)).join(", ")}
-      </span>
-    </span>
-  );
 }

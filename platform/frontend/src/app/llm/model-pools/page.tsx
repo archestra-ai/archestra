@@ -56,7 +56,7 @@ import {
 import { CreatePoolDialog } from "./_parts/create-pool-dialog";
 import { EditPoolDialog } from "./_parts/edit-pool-dialog";
 import { PoolHealth } from "./_parts/member-status";
-import { PoolProviders } from "./_parts/pool-fields";
+import { PoolProviderIcons, PoolProviders } from "./_parts/pool-fields";
 import { memberSummary } from "./_parts/pool-form";
 
 const DESCRIPTION = (
@@ -198,7 +198,7 @@ function ModelPools() {
       size: 240,
       cell: ({ row }) => (
         <div className="flex min-w-0 items-center gap-2.5">
-          <PoolIcon />
+          <PoolProviderIcons pool={row.original} />
           <div className="min-w-0">
             <div className="truncate font-mono font-medium">
               {row.original.name}
@@ -350,7 +350,7 @@ function ModelPools() {
                 {visible.map((pool) => (
                   <TableCard
                     key={pool.id}
-                    icon={<PoolIcon />}
+                    icon={<PoolProviderIcons pool={pool} />}
                     title={<span className="font-mono">{pool.name}</span>}
                     description={<PoolProviders pool={pool} />}
                     onNavigate={() => setEditingId(pool.id)}
@@ -479,17 +479,6 @@ function ModelPools() {
         pendingLabel="Deleting..."
       />
     </PageLayout>
-  );
-}
-
-function PoolIcon() {
-  return (
-    <span
-      aria-hidden="true"
-      className="flex size-6 shrink-0 items-center justify-center rounded bg-primary/15 text-primary"
-    >
-      <Layers className="size-3.5" />
-    </span>
   );
 }
 

@@ -112,6 +112,33 @@ test("maps primary providers and the user's own sign-ins to the client's provide
   expect(payload.appName).toBe("Acme");
 });
 
+test("serves a Kimi Code pin on the China catalog from the routed global catalog", () => {
+  const payload = openCodePrimaryConfig(
+    {
+      ...PROXY,
+      passthroughProviders: [],
+      primaryProviders: [
+        {
+          provider: "kimi-code",
+          name: "Kimi Code",
+          models: [
+            { id: "k3.1-pro", name: "K3.1 Pro", context: null, output: null },
+          ],
+        },
+      ],
+    },
+    "Acme",
+  );
+  // One route, so the client lists the plan's models once.
+  expect(payload.routes).toEqual({
+    "kimi-code-plan-global": "https://proxy.example/v1/kimi-code",
+  });
+  expect(payload.catalog.legacy).toEqual({
+    "archestra-kimi-code": "kimi-code-plan-global",
+    "kimi-code-plan-cn": "kimi-code-plan-global",
+  });
+});
+
 test("the runtime catalog addresses the installation's agent on ordinary proxy routes", () => {
   expect(
     publicManagedCatalog({

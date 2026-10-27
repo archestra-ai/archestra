@@ -18,6 +18,12 @@ export interface OpenCodeProviderRoute {
   provider: SupportedProvider;
   openCodeProviderId: string;
   pathSuffix: string;
+  /**
+   * Other stock provider ids that list the same models, such as a region's
+   * catalog. A pin on one of them moves to `openCodeProviderId`, so the client
+   * lists those models once.
+   */
+  aliasProviderIds?: readonly string[];
 }
 
 /**
@@ -61,6 +67,8 @@ export const OPENCODE_PASSTHROUGH_PROVIDER_ROUTES = [
     provider: "kimi-code",
     openCodeProviderId: "kimi-code-plan-global",
     pathSuffix: "",
+    // The China endpoint is a Base URL on the key; the plan's model ids match.
+    aliasProviderIds: ["kimi-code-plan-cn"],
   },
 ] as const satisfies readonly OpenCodeProviderRoute[];
 

@@ -184,8 +184,15 @@ function buildRestoreCode(state: string): string {
  * function's JSON-serialized return value, or null if it returned nothing.
  */
 async function runCode(client: Client, code: string): Promise<string | null> {
+  // MCP 0.0.83 renamed this tool; use the server's advertised contract so
+  // upgrades preserve saved logins and older runtimes remain compatible.
+  const { tools } = await client.listTools();
+  const tool =
+    tools.find((tool) => tool.name === "browser_run_code") ??
+    tools.find((tool) => tool.name === "browser_run_code_unsafe");
+  if (!tool) throw new Error("Playwright browser code tool is unavailable");
   const result = await client.callTool(
-    { name: "browser_run_code", arguments: { code } },
+    { name: tool.name, arguments: { code } },
     undefined,
     { timeout: RUN_CODE_TIMEOUT_MS },
   );

@@ -1,6 +1,6 @@
 {
   "name": "@archestra/shared",
-  "version": "1.5.0-rc.9",
+  "version": "1.5.0-rc.11",
   "description": "",
   "type": "module",
   "sideEffects": false,
@@ -34,6 +34,7 @@
     "./subscription-credentials": "./subscription-credentials.ts",
     "./system-prompt-template": "./system-prompt-template.ts",
     "./test-mcp-server": "./test-mcp-server.ts",
+    "./time-zone": "./time-zone.ts",
     "./types": "./types.ts",
     "./websocket": "./websocket.ts"
   },

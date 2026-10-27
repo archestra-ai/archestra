@@ -29,6 +29,8 @@ import McpOauthClientModel from "@/models/mcp-oauth-client";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
+import ModelCostBackfillModel from "@/models/model-cost-backfill";
+import ModelPoolModel from "@/models/model-pool";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
@@ -46,6 +48,7 @@ import SiteNotificationModel from "@/models/site-notification";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
+import UserLimitUsageResetModel from "@/models/user-limit-usage-reset";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { findConnectedClientForAudit } from "@/services/connected-client";
@@ -728,6 +731,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       EnvironmentDefaultUserLimitModel.findByIdForAudit(id, orgId),
   },
+  // An admin resetting one user's limit usage: the snapshot is the user's
+  // reset marker, so before/after shows when it moved.
+  "/api/default-user-limits/users/:userId/reset": {
+    resourceType: "userLimitUsage",
+    resourceIdParam: "userId",
+    action: "userLimitUsage.reset",
+    fetchById: (userId, orgId) =>
+      UserLimitUsageResetModel.findByUserIdForAudit(userId, orgId),
+  },
 
   // Projects. Delete soft-deletes and restore is an oversight action on
   // another member's project, so both need a trail. The pin and instructions
@@ -1006,6 +1018,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   },
 
   // LLM virtual keys & OAuth clients
+  "/api/model-pools": {
+    resourceType: "modelPool",
+    fetchById: (id, orgId) => ModelPoolModel.findByIdForAudit(id, orgId),
+  },
+  "/api/model-pools/:id": {
+    resourceType: "modelPool",
+    fetchById: (id, orgId) => ModelPoolModel.findByIdForAudit(id, orgId),
+  },
   "/api/llm-virtual-keys": {
     resourceType: "virtualApiKey",
     fetchById: (id, orgId) => VirtualApiKeyModel.findByIdForAudit(id, orgId),
@@ -1067,6 +1087,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/llm-models/:id": {
     resourceType: "llmModel",
     fetchById: (id, orgId) => ModelModel.findByIdForAudit(id, orgId),
+  },
+  // Before/after are the model's latest cost backfill, so the record shows the
+  // range and prices the recompute was started with.
+  "/api/llm-models/:id/cost-backfill": {
+    resourceType: "llmModel",
+    action: "llmModel.cost_backfill_started",
+    fetchById: (id, _orgId) => ModelCostBackfillModel.findLatestForAudit(id),
   },
 
   // Internal catalog
@@ -1219,15 +1246,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
   },
 
-  // Enterprise: team vault folder (same snapshot model as teams)
-  // Creating/removing a team's vault folder mutates the team; the team survives
-  // the folder DELETE, so pin team.updated (not the derived team.deleted).
-  "/api/teams/:teamId/vault-folder": {
-    resourceType: "team",
-    resourceIdParam: "teamId",
-    action: "team.updated",
-    fetchById: (id, orgId) => TeamModel.findByIdForAudit(id, orgId),
-  },
   // Team membership & external-group mappings live in join tables the team
   // snapshot reflects; the parent team survives member/mapping removal, so pin
   // team.updated on both the POST (add) and the per-child DELETE.

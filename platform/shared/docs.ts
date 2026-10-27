@@ -41,6 +41,7 @@ export const COMMUNITY_DOCS_URL = getDocsUrl("get-started");
 export const DocsPage = {
   Contributing: "contributing",
   McpAuthentication: "mcp/authentication",
+  McpGatewayAuthentication: "mcp/authentication/gateway",
   Security: "contributing",
   // Platform
   PlatformAccessControl: "admin/access-control",
@@ -77,6 +78,7 @@ export const DocsPage = {
   PlatformKnowledgeSettings: "knowledge/settings",
   PlatformLlmProxyAuthentication: "llm-proxy/authentication",
   PlatformLlmProxy: "llm-proxy",
+  PlatformLlmProxyModelPools: "llm-proxy/model-pools",
   PlatformMastraExample: "integrations/sdks-and-frameworks",
   PlatformMcpGateway: "mcp/gateway",
   PlatformMigrateYourAgents: "get-started/migrate",

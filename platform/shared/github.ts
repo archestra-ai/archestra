@@ -1,6 +1,7 @@
-export function getGithubWebOrigin(
-  apiBaseUrl = "https://api.github.com",
-): string {
+/** The API root of GitHub.com, as a GitHub App definition records it. */
+export const GITHUB_COM_API_URL = "https://api.github.com";
+
+export function getGithubWebOrigin(apiBaseUrl = GITHUB_COM_API_URL): string {
   const webUrl = new URL(apiBaseUrl);
   if (webUrl.hostname === "api.github.com") {
     webUrl.hostname = "github.com";
@@ -16,7 +17,7 @@ export function getGithubWebOrigin(
  */
 export function getGithubApiBaseUrl(webOrigin = "https://github.com"): string {
   const url = new URL(webOrigin);
-  if (url.hostname === "github.com") return "https://api.github.com";
+  if (url.hostname === "github.com") return GITHUB_COM_API_URL;
   if (/\.ghe\.com$/.test(url.hostname))
     return `${url.protocol}//api.${url.host}`;
   return `${url.origin}/api/v3`;

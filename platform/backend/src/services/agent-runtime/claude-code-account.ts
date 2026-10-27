@@ -1,10 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { isVaultReference } from "@archestra/shared";
 import { z } from "zod";
 import logger from "@/logging";
 import { EnvironmentModel, OrganizationModel } from "@/models";
 import ClaudeCodeAccountModel from "@/models/claude-code-account";
-import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { secretManager } from "@/secrets-manager";
 import {
   AgentRuntimeCredentialsRequiredError,
   ApiError,
@@ -24,14 +23,12 @@ class ClaudeCodeAccountManager {
     const owner = await this.placement(params);
     const account = await ClaudeCodeAccountModel.find(owner);
     const flow = await ClaudeCodeAccountModel.flow(owner);
-    const base = { requiresVaultReference: isByosEnabled() };
     if (flow && !isExpired(flow.expiresAt)) {
-      if (flow.failed || (!flow.vaultReference && !flow.oauth))
-        return { ...base, state: "failed", flowId: flow.flowId };
-      if (flow.vaultReference || flow.completionStarted)
-        return { ...base, state: "connecting", flowId: flow.flowId };
+      if (flow.failed || !flow.oauth)
+        return { state: "failed", flowId: flow.flowId };
+      if (flow.completionStarted)
+        return { state: "connecting", flowId: flow.flowId };
       return {
-        ...base,
         state: "awaiting_code",
         flowId: flow.flowId,
         ...(params.inspectFlow === false
@@ -45,56 +42,30 @@ class ClaudeCodeAccountManager {
     }
     if (account)
       return {
-        ...base,
         state: isExpired(account.expiresAt) ? "expired" : "connected",
         expiresAt: account.expiresAt,
       };
-    return { ...base, state: flow ? "failed" : "disconnected" };
+    return { state: flow ? "failed" : "disconnected" };
   }
 
-  async start(
-    params: AccountOwner & { vaultReference?: string },
-  ): Promise<ClaudeCodeAccountStatus> {
+  async start(params: AccountOwner): Promise<ClaudeCodeAccountStatus> {
     const owner = await this.placement(params);
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    if (isByosEnabled() && !params.vaultReference)
-      throw new ApiError(
-        400,
-        "This deployment uses read-only Vault. Store a Claude setup-token in Vault and connect its path#key reference.",
-      );
-    if (
-      params.vaultReference &&
-      (!isByosEnabled() || !isVaultReference(params.vaultReference))
-    )
-      throw new ApiError(
-        400,
-        "A valid Vault path#key reference is required on a read-only Vault deployment",
-      );
-    // SPDX-SnippetEnd
-    const oauth = params.vaultReference ? undefined : claudeCodeOAuth.create();
+    const oauth = claudeCodeOAuth.create();
     const flowId = randomUUID();
     await ClaudeCodeAccountModel.startFlow({
       owner,
       flow: {
         flowId,
-        vaultReference: params.vaultReference,
-        oauth: oauth
-          ? {
-              state: oauth.state,
-              verifier: encryptSecretValue({ verifier: oauth.verifier }),
-            }
-          : undefined,
+        oauth: {
+          state: oauth.state,
+          verifier: encryptSecretValue({ verifier: oauth.verifier }),
+        },
       },
     });
     return {
-      state: params.vaultReference ? "connecting" : "awaiting_code",
+      state: "awaiting_code",
       flowId,
-      ...(oauth
-        ? { authorizationUrl: claudeCodeOAuth.authorizationUrl(oauth) }
-        : {}),
-      requiresVaultReference: isByosEnabled(),
+      authorizationUrl: claudeCodeOAuth.authorizationUrl(oauth),
     };
   }
 
@@ -108,26 +79,19 @@ class ClaudeCodeAccountManager {
       flow.flowId !== params.flowId ||
       isExpired(flow.expiresAt) ||
       flow.failed ||
-      (!flow.vaultReference && !flow.oauth)
+      !flow.oauth
     )
       throw new ApiError(
         409,
         "This sign-in has expired. Start Claude Code sign-in again.",
       );
-    if (Boolean(flow.vaultReference) !== isByosEnabled())
-      throw new ApiError(
-        409,
-        "Secret storage changed. Start Claude Code sign-in again.",
-      );
     if (flow.completionStarted)
       return { state: "connecting", flowId: params.flowId };
-    const oauth = flow.oauth ? readOAuth(flow.oauth) : undefined;
-    const code = oauth
-      ? claudeCodeOAuth.parseCode({
-          code: params.code ?? "",
-          state: oauth.state,
-        })
-      : undefined;
+    const oauth = readOAuth(flow.oauth);
+    const code = claudeCodeOAuth.parseCode({
+      code: params.code ?? "",
+      state: oauth.state,
+    });
     if (
       !(await ClaudeCodeAccountModel.claimFlow({
         owner,
@@ -141,26 +105,10 @@ class ClaudeCodeAccountManager {
     let secretId: string | null = null;
     let stored = false;
     try {
-      let token: string | undefined;
-      let expiresAt: string | null = null;
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      if (flow.vaultReference) {
-        secretId = (
-          await secretManager().createSecret(
-            { value: flow.vaultReference },
-            "claude-code-account",
-          )
-        ).id;
-        token = await this.readToken(secretId);
-      }
-      // SPDX-SnippetEnd
-      if (oauth && code) {
-        const result = await claudeCodeOAuth.exchange({ ...oauth, code });
-        token = result.token;
-        expiresAt = result.expiresAt;
-      }
+      const { token, expiresAt } = await claudeCodeOAuth.exchange({
+        ...oauth,
+        code,
+      });
       if (!token)
         throw new ApiError(502, "Claude did not return a subscription token");
       secretId ??= (
@@ -188,7 +136,6 @@ class ClaudeCodeAccountManager {
       return {
         state: "connected",
         expiresAt,
-        requiresVaultReference: isByosEnabled(),
       };
     } catch (error) {
       await ClaudeCodeAccountModel.failFlow({ owner, flowId: params.flowId });
@@ -215,7 +162,7 @@ class ClaudeCodeAccountManager {
     // authorize a new run. Existing runs keep their already-issued credential.
     const { account } = await ClaudeCodeAccountModel.delete(owner);
     await this.deleteSecret(account?.secretId ?? null);
-    return { state: "disconnected", requiresVaultReference: isByosEnabled() };
+    return { state: "disconnected" };
   }
 
   async requireConnection(

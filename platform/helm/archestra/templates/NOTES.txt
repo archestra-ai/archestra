@@ -32,3 +32,22 @@ Using internal PostgreSQL database:
   Database: {{ .Values.postgresql.auth.database }}
   Username: {{ .Values.postgresql.auth.username }}
 {{- end }}
+
+{{- $legacyOverrides := list }}
+{{- range $name := list "ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY" "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE" "ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE" }}
+{{- $value := index $.Values.archestra.env $name | default "" }}
+{{- if and (kindIs "string" $value) (or (eq $value "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public") (hasPrefix "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/" $value)) }}
+{{- $legacyOverrides = append $legacyOverrides (printf "archestra.env.%s" $name) }}
+{{- end }}
+{{- end }}
+{{- if $legacyOverrides }}
+
+Registry migration notice:
+  These overrides still point to Archestra's previous companion image registry:
+{{- range $legacyOverrides }}
+  - {{ . }}
+{{- end }}
+  New companion images are published at ghcr.io/archestra-ai.
+  Update these overrides to use this release's images, or your internal mirror.
+  Existing versions remain available at their original addresses.
+{{- end }}

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Fail the current Kimi Code turn with an image-owned message. Shared by the
+# turn hooks (TUI runs), the print-mode driver (plain runs) and the launcher.
+# Usage: archestra-kimi-turn-failure <reason>
+set -uo pipefail
+
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+code=kimi_turn_failed
+case "${1:-}" in
+  missing)
+    code=kimi_missing
+    message="Kimi Code is not installed in this image. Use the maintained agent-kimi image, or install the kimi CLI in a derived image." ;;
+  max_tokens)
+    message="Kimi Code stopped because the model reached its output limit." ;;
+  refusal)
+    message="The model provider blocked the response, so the turn did not complete." ;;
+  context_overflow)
+    message="Kimi Code stopped because the conversation exceeded the model's context window." ;;
+  max_steps)
+    message="Kimi Code stopped because the turn reached its step limit." ;;
+  provider_rejected)
+    message="The model provider refused the request. Check the configured provider credential and the selected model, then start the task again." ;;
+  cancelled)
+    message="The Kimi Code turn was cancelled before it completed." ;;
+  unavailable)
+    # Retriable: the provider or the CLI failed, not the model's own decision.
+    code=kimi_unavailable
+    message="Kimi Code could not complete the turn because the model provider did not answer. Check the configured provider credential, model availability, and network access, then retry." ;;
+  *)
+    message="Kimi Code could not complete the turn. Kimi reported: ${1:-unknown}." ;;
+esac
+
+"$(dirname "${BASH_SOURCE[0]}")/archestra-agent-failure" "${code}" "${message}"
+printf 'archestra: %s\n' "${message}" >&2
+mkdir -p "${runtime_dir}"
+printf '%s\n' "${message}" > "${runtime_dir}/final-answer.txt"
+touch "${runtime_dir}/turn-complete.failed"
+# archestra-tui-run publishes the turn when this marker changes.
+touch "${runtime_dir}/turn-complete"

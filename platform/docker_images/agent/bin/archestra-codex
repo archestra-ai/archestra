@@ -14,6 +14,17 @@ runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
 if [[ "${runtime_mode}" != "interactive" || "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" != "1" ]]; then
   : "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
 fi
+# Reject an invalid resume before invoking any native CLI command, including
+# catalog diagnostics used to prepare a valid session's configuration.
+session_id=""
+if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
+  session_file="${runtime_dir}/codex-main-session"
+  if [[ ! -s "${session_file}" ]]; then
+    echo "archestra: Cannot resume the saved Codex session: its session ID is missing. The workspace is preserved; no new session was started." >&2
+    exit 78
+  fi
+  session_id="$(cat "${session_file}")"
+fi
 export CODEX_HOME="${ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR:-${runtime_dir}}/codex"
 mkdir -p "${runtime_dir}" "${CODEX_HOME}"
 attention_hook="${runtime_dir}/codex-attention-hook.sh"
@@ -237,6 +248,13 @@ developer_instructions="$({
   printf '%s\n\n' "$("$(dirname "${BASH_SOURCE[0]}")/archestra-agent-instructions")"
   printf '%s' "Complete the delegated task fully in this isolated runner. Use the local shell and file tools directly. Do not stop after announcing a plan. Verify the work and report the concrete result."
 } | jq -Rs .)"
+# The Agent owns model selection. A catalog migration announcement otherwise
+# blocks the first delegated turn on a fresh CODEX_HOME, even with updates off.
+# Record the same acknowledgement as choosing to keep the configured model.
+model_migration_config="$(codex debug models --bundled 2>/dev/null | jq -r \
+  --arg model "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL}" \
+  '.models[] | select(.slug == $model and .upgrade.model != null)
+   | "\(.slug | tojson) = \(.upgrade.model | tojson)"')"
 cat > "${CODEX_HOME}/config.toml" <<EOF
 model = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}" '$value')
 model_provider = "archestra"
@@ -277,6 +295,9 @@ ${binding_toml}
 [projects.$(jq -Rn --arg value "${PWD}" '$value')]
 trust_level = "trusted"
 
+[notice.model_migrations]
+${model_migration_config}
+
 ${openappa_features}
 EOF
 chmod 0600 "${CODEX_HOME}/config.toml"
@@ -291,12 +312,7 @@ common_args=(
   --config model_provider='"archestra"'
 )
 if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
-  session_file="${runtime_dir}/codex-main-session"
-  if [[ ! -s "${session_file}" ]]; then
-    echo "archestra: Cannot resume the saved Codex session: its session ID is missing. The workspace is preserved; no new session was started." >&2
-    exit 78
-  fi
-  common_args=(resume "$(cat "${session_file}")" "${common_args[@]}")
+  common_args=(resume "${session_id}" "${common_args[@]}")
 fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

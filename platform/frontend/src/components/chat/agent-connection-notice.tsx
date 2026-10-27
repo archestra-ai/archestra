@@ -10,7 +10,7 @@ import {
   listServerNames,
   resolveAgentConnectionGate,
 } from "@/lib/chat/agent-connection-gate";
-import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
+import { useMcpInstallOrchestrator } from "@/lib/mcp/use-mcp-install-orchestrator";
 import { McpInstallDialogs } from "./mcp-install-dialogs";
 
 /**

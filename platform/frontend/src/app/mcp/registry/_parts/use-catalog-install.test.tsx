@@ -42,11 +42,8 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-// Feature flags the hook reads. byosEnabled keeps the OAuth confirmation
 // dialog alive (it carries the credential-storage warning), so tests flip it.
-const features = vi.hoisted(
-  () => ({ byosEnabled: false }) as Record<string, boolean>,
-);
+const features = vi.hoisted(() => ({}) as Record<string, boolean>);
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: (key: string) => features[key] ?? false,
 }));
@@ -355,7 +352,6 @@ describe("useCatalogInstall — fixed-target OAuth skips the confirmation dialog
   beforeEach(() => {
     sessionStorage.clear();
     nav.search = new URLSearchParams();
-    features.byosEnabled = false;
     Object.defineProperty(window, "location", {
       value: { href: "http://localhost/mcp/registry" },
       writable: true,
@@ -408,15 +404,5 @@ describe("useCatalogInstall — fixed-target OAuth skips the confirmation dialog
       expect(window.location.href).toBe(AUTHORIZATION_URL);
     });
     expect(screen.queryByTestId("install-dialog")).not.toBeInTheDocument();
-  });
-
-  it("keeps the dialog when BYOS is enabled (storage warning has content)", async () => {
-    features.byosEnabled = true;
-
-    renderAddPersonal(remoteConnectItem);
-
-    expect(await screen.findByTestId("install-dialog")).toBeInTheDocument();
-    expect(initiateOAuth).not.toHaveBeenCalled();
-    expect(window.location.href).toBe("http://localhost/mcp/registry");
   });
 });

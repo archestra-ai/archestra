@@ -8,15 +8,6 @@ export function normalizeTimezone(timezone: string): string {
   return timezone.trim();
 }
 
-export function isValidTimezone(timezone: string): boolean {
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(new Date());
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function createCron(params: {
   cronExpression: string;
   timezone: string;

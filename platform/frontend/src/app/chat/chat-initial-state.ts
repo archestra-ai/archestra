@@ -40,6 +40,8 @@ export type CreateConversationInput = {
   agentId: string;
   modelId?: string;
   chatApiKeyId?: string | null;
+  /** A model pool picked in place of the key and model. */
+  modelPoolId?: string | null;
   title?: string;
   /** Project the chat is started in (carried from /chat?project=...). */
   projectId?: string;
@@ -211,6 +213,7 @@ export function buildCreateConversationInput(params: {
   agentId: string | null;
   modelId: string;
   chatApiKeyId: string | null;
+  modelPoolId?: string | null;
   title?: string;
   projectId?: string | null;
   thinkingEffort?: ThinkingEffortSetting;
@@ -223,6 +226,7 @@ export function buildCreateConversationInput(params: {
     agentId: params.agentId,
     modelId: params.modelId || undefined,
     chatApiKeyId: params.chatApiKeyId ?? undefined,
+    modelPoolId: params.modelPoolId ?? undefined,
     title: params.title,
     projectId: params.projectId ?? undefined,
     thinkingEffort: params.thinkingEffort,

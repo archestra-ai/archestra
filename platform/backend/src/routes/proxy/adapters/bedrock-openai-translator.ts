@@ -291,6 +291,9 @@ export function createConverseToOpenaiSseEncoder(
   // only counts tool-use blocks; Bedrock's contentBlockIndex is dense across
   // all blocks (text + tool_use). We need to translate.
   const toolIndexByBlock = new Map<number, number>();
+  // Tool blocks that streamed any argument text. Bedrock streams a call with
+  // no input as one empty `input` delta, where OpenAI streams `{}`.
+  const toolBlocksWithInput = new Set<number>();
   let nextToolIndex = 0;
   let pendingFinishReason: OpenAi.Types.FinishReason | null = null;
   let rolePrepended = false;
@@ -362,6 +365,8 @@ export function createConverseToOpenaiSseEncoder(
         const blockIdx = e.contentBlockDelta.contentBlockIndex;
         const toolIdx =
           toolIndexByBlock.get(blockIdx) ?? Math.max(0, nextToolIndex - 1);
+        if (delta.toolUse.input === "") return null;
+        toolBlocksWithInput.add(blockIdx);
         return sse(
           envelope({
             tool_calls: [
@@ -377,7 +382,16 @@ export function createConverseToOpenaiSseEncoder(
     }
 
     if (e.contentBlockStop) {
-      return null;
+      const blockIdx = e.contentBlockStop.contentBlockIndex;
+      const toolIdx = toolIndexByBlock.get(blockIdx);
+      if (toolIdx === undefined || toolBlocksWithInput.has(blockIdx)) {
+        return null;
+      }
+      return sse(
+        envelope({
+          tool_calls: [{ index: toolIdx, function: { arguments: "{}" } }],
+        }),
+      );
     }
 
     if (e.messageStop) {

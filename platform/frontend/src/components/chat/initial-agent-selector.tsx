@@ -100,12 +100,12 @@ import {
   useKnowledgeBasesByIds,
 } from "@/lib/knowledge/knowledge-base.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
-import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
 import {
   fetchInternalMcpCatalogItem,
   type McpCatalogDirectoryItem,
   useMcpCatalogDirectory,
 } from "@/lib/mcp/mcp-registry.query";
+import { useMcpInstallOrchestrator } from "@/lib/mcp/use-mcp-install-orchestrator";
 import { useShellReady } from "@/lib/shell-deferral";
 import { mergeById } from "@/lib/utils/merge-by-id";
 import { cn } from "@/lib/utils/tailwind";

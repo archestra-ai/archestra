@@ -13,6 +13,7 @@ import {
   LLM_PROXY_OAUTH_SCOPE,
   perUserCredentialLabel,
   type SupportedProvider,
+  stripClaudeContextVariantSuffix,
 } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -32,6 +33,7 @@ import {
   ManagedOauthClientModel as LlmOauthClientModel,
   LlmProviderApiKeyModel,
   MemberModel,
+  ModelPoolModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
   OrganizationModel,
@@ -55,6 +57,7 @@ import {
   type ProviderKeySelection,
   selectMappedProviderKey,
 } from "@/utils/provider-key-mappings";
+import { type ModelPoolCaller, mayUseModelPool } from "./model-pool-failover";
 import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
 
 export function isJwtLike(token: string): boolean {
@@ -111,6 +114,11 @@ export interface VirtualKeyValidationResult {
   virtualKeyAuthorId?: string | null;
   /** Team the key's spend is charged to, when it has one. */
   billingTeamId?: string;
+  /**
+   * The key maps no key of this provider and passed only because it may use
+   * the pool the requested model names. No provider key is resolved.
+   */
+  modelPoolId?: string;
 }
 
 export interface PassthroughVirtualKeyResult {
@@ -171,6 +179,12 @@ export async function validateVirtualApiKey(params: {
    */
   requestedModel?: string | null;
   providerKeySelection?: ProviderKeySelection;
+  /**
+   * Set by callers that can serve a model pool. A key that maps no key of
+   * this provider then still passes when it may use the pool the requested
+   * model names.
+   */
+  allowModelPool?: boolean;
 }): Promise<VirtualKeyValidationResult> {
   const { tokenValue, expectedProvider, expectedOrganizationId } = params;
   const resolved = await validateVirtualApiKeyToken(tokenValue);
@@ -194,16 +208,36 @@ export async function validateVirtualApiKey(params: {
       "Passthrough virtual keys carry no provider credential — send them in the X-Archestra-Virtual-Key header, not Authorization.",
     );
   }
+  const mappings = await resolveVirtualKeyProviderMappings(
+    resolved.virtualKey.id,
+  );
   const mappedProviderKey = isSupportedProvider(expectedProvider)
     ? await selectMappedProviderKey({
-        mappings: await resolveVirtualKeyProviderMappings(
-          resolved.virtualKey.id,
-        ),
+        mappings,
         provider: expectedProvider,
         modelId: params.requestedModel,
         selection: params.providerKeySelection,
       })
     : undefined;
+  const modelPoolId =
+    !mappedProviderKey && params.allowModelPool
+      ? await usableModelPoolId({
+          organizationId: resolved.virtualKey.organizationId,
+          caller: {
+            virtualKeyId: resolved.virtualKey.id,
+            providerApiKeyIds: mappings.map(
+              (mapping) => mapping.providerApiKeyId,
+            ),
+          },
+          requestedModel: params.requestedModel,
+        })
+      : undefined;
+  if (modelPoolId) {
+    return {
+      ...(await virtualKeyIdentity(resolved.virtualKey)),
+      modelPoolId,
+    };
+  }
   if (!mappedProviderKey) {
     throw new ApiError(
       400,
@@ -285,14 +319,37 @@ export async function validateVirtualApiKey(params: {
     apiKey,
     baseUrl: mappedProviderKey.baseUrl ?? undefined,
     chatApiKeyId: mappedProviderKey.providerApiKeyId,
-    virtualKeyId: resolved.virtualKey.id,
-    virtualKeyIsPersonal: await VirtualApiKeyModel.isPersonal(
-      resolved.virtualKey,
-    ),
-    virtualKeyAuthorId: resolved.virtualKey.authorId,
-    serviceAccountId:
-      resolved.virtualKey.createdByServiceAccountId ?? undefined,
-    billingTeamId: resolved.virtualKey.billingTeamId ?? undefined,
+    ...(await virtualKeyIdentity(resolved.virtualKey)),
+  };
+}
+
+async function usableModelPoolId(params: {
+  organizationId: string;
+  caller: ModelPoolCaller;
+  requestedModel?: string | null;
+}): Promise<string | undefined> {
+  if (!config.llmProxy.modelPoolsEnabled || !params.requestedModel)
+    return undefined;
+  const pool = await ModelPoolModel.findByName({
+    organizationId: params.organizationId,
+    name: stripClaudeContextVariantSuffix(params.requestedModel),
+  });
+  return pool && mayUseModelPool({ pool, caller: params.caller })
+    ? pool.id
+    : undefined;
+}
+
+async function virtualKeyIdentity(
+  virtualKey: Awaited<
+    ReturnType<typeof validateVirtualApiKeyToken>
+  >["virtualKey"],
+) {
+  return {
+    virtualKeyId: virtualKey.id,
+    virtualKeyIsPersonal: await VirtualApiKeyModel.isPersonal(virtualKey),
+    virtualKeyAuthorId: virtualKey.authorId,
+    serviceAccountId: virtualKey.createdByServiceAccountId ?? undefined,
+    billingTeamId: virtualKey.billingTeamId ?? undefined,
   };
 }
 
@@ -461,6 +518,8 @@ export type LlmOAuthAccessTokenValidationResult = {
   serviceAccountId?: string;
   /** Team a client-credentials client's spend is charged to, when it has one. */
   billingTeamId?: string;
+  /** A model pool the client may use, for the model the request names. */
+  modelPoolId?: string;
 };
 
 export async function validateLlmOAuthAccessToken(params: {
@@ -476,6 +535,8 @@ export async function validateLlmOAuthAccessToken(params: {
   providerKeySelection?: ProviderKeySelection;
   /** A request-local negative lookup; never bypasses positive-token checks. */
   nonOAuthTokenHash?: string;
+  /** As for `validateVirtualApiKey`: the caller can serve a model pool. */
+  allowModelPool?: boolean;
 }): Promise<LlmOAuthAccessTokenValidationResult | null> {
   const tokenHash = OAuthAccessTokenModel.hashTokenForLookup(params.tokenValue);
   if (params.nonOAuthTokenHash === tokenHash) return null;
@@ -521,6 +582,7 @@ export async function validateLlmOAuthAccessToken(params: {
     agent: params.agent,
     requestedModel: params.requestedModel,
     providerKeySelection: params.providerKeySelection,
+    allowModelPool: params.allowModelPool,
   });
 }
 
@@ -1004,6 +1066,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
   agent: GatewayAgent;
   requestedModel?: string | null;
   providerKeySelection?: ProviderKeySelection;
+  allowModelPool?: boolean;
 }): Promise<LlmOAuthAccessTokenValidationResult> {
   const oauthClient = await LlmOauthClientModel.findByClientId(params.clientId);
   if (!oauthClient) {
@@ -1039,14 +1102,46 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
     }))
   )
     throw new ApiError(403, "Service account cannot access this LLM proxy.");
+  const mappings = await resolveOauthClientProviderMappings(oauthClient);
   const mappedProviderKey = isSupportedProvider(params.expectedProvider)
     ? await selectMappedProviderKey({
-        mappings: await resolveOauthClientProviderMappings(oauthClient),
+        mappings,
         provider: params.expectedProvider,
         modelId: params.requestedModel,
         selection: params.providerKeySelection,
       })
     : undefined;
+  const modelPoolId = params.allowModelPool
+    ? await usableModelPoolId({
+        organizationId: oauthClient.organizationId,
+        caller: {
+          providerApiKeyIds: mappings.map(
+            (mapping) => mapping.providerApiKeyId,
+          ),
+          modelPoolIds: oauthClient.modelPoolIds,
+        },
+        requestedModel: params.requestedModel,
+      })
+    : undefined;
+  const authenticatedApp = {
+    id: oauthClient.id,
+    name: oauthClient.name,
+    clientId: oauthClient.clientId,
+  };
+  // A client let in only for a pool has no key here; the pool's members
+  // answer instead.
+  if (!mappedProviderKey && modelPoolId) {
+    return {
+      apiKey: undefined,
+      baseUrl: undefined,
+      chatApiKeyId: undefined,
+      authMethod: "oauth_client_credentials",
+      authenticatedApp,
+      billingTeamId: oauthClient.billingTeamId ?? undefined,
+      serviceAccountId: account?.id,
+      modelPoolId,
+    };
+  }
   if (!mappedProviderKey) {
     throw new ApiError(
       400,
@@ -1102,16 +1197,13 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
     actualProvider: providerApiKey.provider,
     expectedProvider: params.expectedProvider,
     authMethod: "oauth_client_credentials",
-    authenticatedApp: {
-      id: oauthClient.id,
-      name: oauthClient.name,
-      clientId: oauthClient.clientId,
-    },
+    authenticatedApp,
   });
   return {
     ...resolvedKey,
     billingTeamId: oauthClient.billingTeamId ?? undefined,
     serviceAccountId: account?.id,
+    modelPoolId,
   };
 }
 

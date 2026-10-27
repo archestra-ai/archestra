@@ -194,9 +194,7 @@ export async function upsertCatalogClientSecretValue(params: {
 }): Promise<{ id: string; rotated: boolean }> {
   let existingSecretValues: Record<string, string>;
   try {
-    existingSecretValues = await getCatalogClientSecretValues(
-      params.clientSecretId,
-    );
+    existingSecretValues = await readSecretBag(params.clientSecretId);
   } catch (error) {
     if (
       !(error instanceof SecretDecryptionError) ||
@@ -232,12 +230,6 @@ export async function upsertCatalogClientSecretValue(params: {
     `${params.catalogName}-client-secrets`,
   );
   return { id: secret.id, rotated };
-}
-
-export async function getCatalogClientSecretValues(
-  clientSecretId: string | null | undefined,
-): Promise<Record<string, string>> {
-  return readSecretBag(clientSecretId);
 }
 
 // === Internal ===

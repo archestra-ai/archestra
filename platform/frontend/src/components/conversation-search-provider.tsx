@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { appInteractive } from "@/lib/app-interactive";
-import { useConversationSearch } from "@/lib/chat/conversation-search.hook";
+import { useConversationSearch } from "@/lib/chat/use-conversation-search";
 import { lazyComponent } from "@/lib/utils/preloadable-lazy";
 
 const ConversationSearchPalette = lazyComponent(() =>

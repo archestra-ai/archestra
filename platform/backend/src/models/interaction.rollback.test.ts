@@ -1911,6 +1911,52 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("getSessions model pool attempts", () => {
+    test("counts the attempts a pool failed over", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "Agent" });
+      const base = {
+        profileId: agent.id,
+        sessionId: "failed-over-session",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r",
+          object: "chat.completion" as const,
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions" as const,
+      };
+      await InteractionModel.create({
+        ...base,
+        attempt: 1,
+        attemptOutcome: "failed_over",
+        failureReason: "429",
+      });
+      await InteractionModel.create({
+        ...base,
+        attempt: 2,
+        attemptOutcome: "answered",
+      });
+      await InteractionModel.create(base);
+
+      const sessions = await InteractionModel.getSessionsCursor(
+        { limit: 100 },
+        admin.id,
+        true,
+      );
+      const session = sessions.data.find(
+        (s) => s.sessionId === "failed-over-session",
+      );
+      expect(session?.requestCount).toBe(3);
+      expect(session?.failedOverCount).toBe(1);
+    });
+  });
+
   describe("getSessions Archestra Chat session identity (T-894)", () => {
     // A new Archestra Chat fires two LLM calls that share one session_id (the
     // conversation id): the user's turn under their agent (source "chat") and

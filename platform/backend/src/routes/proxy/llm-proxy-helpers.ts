@@ -553,6 +553,44 @@ export function applyInputTokenFallback(params: {
 }
 
 /**
+ * The input a pool member we stopped waiting on is likely billed for, priced
+ * as that member. Marked estimated on the row; undefined when the prompt can't
+ * be counted, so recording the attempt never fails on it.
+ */
+export async function estimateCutOffAttemptUsage(params: {
+  /** The request's own wire, whose message shape the tokenizer reads. */
+  provider: SupportedProvider;
+  providerMessages: unknown;
+  tools: CommonMcpToolDefinition[];
+  member: {
+    provider?: SupportedProvider;
+    modelId?: string;
+    providerApiKeyId?: string;
+  };
+}): Promise<{ inputTokens: number; cost: string | null } | undefined> {
+  const { member } = params;
+  if (!member.provider || !member.modelId) return undefined;
+  let inputTokens: number;
+  try {
+    inputTokens = estimateRequestInputTokens(params);
+  } catch (error) {
+    logger.warn(
+      { err: error, provider: params.provider, model: member.modelId },
+      "Failed to estimate the input of a cut-off model pool attempt",
+    );
+    return undefined;
+  }
+  if (inputTokens <= 0) return undefined;
+  const cost = await calculateUsageCost({
+    model: member.modelId,
+    usage: { inputTokens, outputTokens: 0 },
+    provider: member.provider,
+    providerApiKeyId: member.providerApiKeyId,
+  });
+  return { inputTokens, cost: cost?.toFixed(10) ?? null };
+}
+
+/**
  * Build the InsertInteraction record from proxy context and response data.
  * Pure function — callers handle `InteractionModel.create()` and error handling.
  */
@@ -781,6 +819,51 @@ export function upstreamErrorMessage(
     if (transportFailure) return transportFailure.message;
   }
   return extractErrorMessage(error);
+}
+
+/**
+ * Why a model pool should move this request to its next member, or undefined
+ * when the failure would recur on any member (a bad request, a content
+ * filter) or nobody waits for the answer. Rate limits, overload, server
+ * errors, timeouts and unreachable upstreams are member-local, and so are a
+ * member's rejected credential (401/403) and a model it does not serve (404).
+ */
+export function poolFailoverReason(
+  error: unknown,
+): { reason: string; status: number; retryAfterMs?: number } | undefined {
+  if (error instanceof ObservedProviderUsageError) return undefined;
+  if (error instanceof ApiError || isClientAbortError(error)) return undefined;
+  const status =
+    explicitHttpStatus(error) ?? classifyTransientUpstreamError(error);
+  if (status === undefined) return undefined;
+  const failsOver =
+    status === 401 ||
+    status === 403 ||
+    status === 404 ||
+    status === 408 ||
+    status === 429 ||
+    status >= 500;
+  if (!failsOver) return undefined;
+  const retryAfter = extractRetryAfterHeader(error);
+  const retryAfterMs =
+    retryAfter === undefined
+      ? undefined
+      : /^\d+$/.test(retryAfter)
+        ? Number(retryAfter) * 1000
+        : Math.max(0, Date.parse(retryAfter) - Date.now());
+  const reason =
+    status === 429
+      ? "rate_limited"
+      : status === 401 || status === 403
+        ? "auth_failed"
+        : status === 404
+          ? "model_not_found"
+          : status === 408 || status === 504
+            ? "timeout"
+            : explicitHttpStatus(error) === undefined
+              ? "unreachable"
+              : "server_error";
+  return { reason: `${reason} (${status})`, status, retryAfterMs };
 }
 
 /**

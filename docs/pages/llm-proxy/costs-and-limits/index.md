@@ -39,3 +39,18 @@ Archestra syncs per-million-token prices (input, output, cache read, and cache w
 - **OpenRouter:** when OpenRouter returns `usage.cost` on a response, Archestra records that exact amount instead of recalculating from the price table.
 - **Custom or self-hosted models:** go to **Models**, edit the model, and open its **Pricing** tab to view or set rates per million tokens (see [Model Pricing, Limits, and Modalities](/docs/llm-proxy/providers#model-pricing-limits-and-modalities)). Unlisted models default to `$1.00` per million input and output tokens until you set a price.
 - **Prompt caching:** cached input tokens are priced at the model's cache read and cache write rates.
+
+## Recompute Past Costs After a Price Change
+
+A new price applies to new requests at once. To correct requests already recorded at a wrong or `$0` price, recompute them when you save the price, and [Costs](/docs/llm-proxy/costs-and-limits/costs) and [Limits](/docs/llm-proxy/costs-and-limits/limits) show what they should have cost.
+
+1. Go to **Models**, edit the model, and open **Pricing**.
+2. Set the new prices.
+3. Under **Apply new prices to**, pick **Requests since a date** or **All recorded requests**. For a date, drag the start on the cost chart, pick a preset, or pick an exact date and time. Days recorded at `$0` are flagged under the chart.
+4. Check the strip above the options: how many requests change, their cost before and after, and how many users are affected. Then click **Save Changes**.
+
+The recompute runs in the background. Reopen **Pricing** to see its progress and, when it finishes, how many requests changed. It needs [`llmModel:update`](/docs/reference/permissions#llmModel:update) on the model.
+
+- **OpenRouter:** past requests keep their recorded cost, because many of them carry the amount OpenRouter actually charged.
+- **LiteLLM:** when your LiteLLM gateway prices a model per API key, set a custom input and output price first (and cache prices, if its requests used the cache). Every recomputed request uses those prices.
+- **Already settled:** requests settled under [`ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE=enforce`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_PROXY_USAGE_ACCOUNTING_MODE) keep the cost they were charged. Subscription requests are recomputed but stay `$0` billed.

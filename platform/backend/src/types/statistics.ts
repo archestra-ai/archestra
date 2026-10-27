@@ -11,6 +11,24 @@ export const ProxyCostQuerySchema = z.object({
     ),
   authMethod: InteractionAuthMethodSchema.optional(),
   credentialId: z.string().min(1).max(256).optional(),
+  providerApiKeyId: z
+    .string()
+    .uuid()
+    .optional()
+    .describe("Limit usage to calls served by this provider key."),
+  modelPoolId: z
+    .string()
+    .uuid()
+    .optional()
+    .describe("Limit usage to calls balanced through this model pool."),
+  includeProviderKeys: z
+    .stringbool()
+    .optional()
+    .describe("Also group usage by the provider key that served each call."),
+  includeModelPools: z
+    .stringbool()
+    .optional()
+    .describe("Also group usage by the model pool each call went through."),
   includeLabelKeys: z
     .stringbool()
     .optional()
@@ -48,6 +66,11 @@ export const ProxyCostTotalsSchema = z.object({
   totalTokens: z.number(),
   billedCost: z.number(),
   subscriptionCost: z.number(),
+  failedOverAttempts: z
+    .number()
+    .describe(
+      "Model pool attempts that failed before the provider answered and moved on to the next member. Each is counted in requests at zero cost and tokens.",
+    ),
 });
 
 export const ProxyCostStatisticsSchema = z.object({
@@ -68,6 +91,23 @@ export const ProxyCostStatisticsSchema = z.object({
     offset: z.number(),
     total: z.number(),
   }),
+  providerKeys: z
+    .array(
+      ProxyCostTotalsSchema.extend({
+        providerApiKeyId: z.string().nullable(),
+        providerApiKeyName: z.string().nullable(),
+        provider: z.string().nullable(),
+      }),
+    )
+    .optional(),
+  modelPools: z
+    .array(
+      ProxyCostTotalsSchema.extend({
+        modelPoolId: z.string().nullable(),
+        modelPoolName: z.string().nullable(),
+      }),
+    )
+    .optional(),
   labelKeys: z.array(z.string()).optional(),
   labels: z
     .object({

@@ -338,6 +338,19 @@ describe("renderSystemPrompt", () => {
     expect(result).toMatch(/^Time is \d{2}:\d{2}:\d{2} UTC$/);
   });
 
+  test("renders archestraVersion helper as the running version", () => {
+    const previous = process.env.ARCHESTRA_VERSION;
+    process.env.ARCHESTRA_VERSION = "9.8.7";
+    try {
+      expect(
+        renderSystemPrompt("Version {{archestraVersion}}", baseContext),
+      ).toBe("Version 9.8.7");
+    } finally {
+      if (previous === undefined) delete process.env.ARCHESTRA_VERSION;
+      else process.env.ARCHESTRA_VERSION = previous;
+    }
+  });
+
   test("passes through plain text without templates unchanged", () => {
     const template = "You are a helpful assistant. Be concise.";
     expect(renderSystemPrompt(template, baseContext)).toBe(

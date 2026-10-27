@@ -1,0 +1,1098 @@
+{
+  "mode": "sensitivity",
+  "measuredRequests": 36000,
+  "upstreamRequestsIncludingWarmupProbesAndControls": 76812,
+  "responseBytes": {
+    "False": [
+      358
+    ],
+    "True": [
+      5714
+    ]
+  },
+  "allConstantUser": true,
+  "allCorrelationsUnique": true,
+  "allAccountingChecksPassed": true,
+  "allProxyLimitsMatched": true,
+  "noProxyOOM": true,
+  "resourcesWholeProcessLifetime": {
+    "archestra-cross-proxy-db": {
+      "samples": 97,
+      "maxCpuPercent": 86.35,
+      "maxMemoryBytes": 500904755.2
+    },
+    "archestra-cross-proxy-archestra": {
+      "samples": 10,
+      "maxCpuPercent": 143.8,
+      "maxMemoryBytes": 1580547964.928
+    },
+    "archestra-cross-proxy-litellm": {
+      "samples": 35,
+      "maxCpuPercent": 116.63,
+      "maxMemoryBytes": 880489267.2
+    },
+    "archestra-cross-proxy-litellm-default": {
+      "samples": 35,
+      "maxCpuPercent": 116.59,
+      "maxMemoryBytes": 827850752.0
+    }
+  },
+  "directControlBlocks": [
+    {
+      "target": "direct",
+      "repeat": "litellm-default-2",
+      "startedAt": "2026-10-26T21:59:59.957Z",
+      "finishedAt": "2026-10-26T22:00:00.457Z",
+      "streaming": false,
+      "concurrency": 50,
+      "count": 5000,
+      "warmup": 200,
+      "mode": "sensitivity",
+      "elapsedMs": 319.820318,
+      "requestsPerSecond": 15633.778464318832,
+      "errors": 0,
+      "totalMs": {
+        "count": 5000,
+        "mean": 3.1815147320000126,
+        "p50": 2.7053809999999885,
+        "p95": 5.71268299999997,
+        "p99": 7.276773000000006,
+        "min": 0.5398010000000113,
+        "max": 11.359229999999997
+      },
+      "clientAddedMs": {
+        "count": 5000,
+        "mean": 3.1589065660000064,
+        "p50": 2.6848610000049007,
+        "p95": 5.689097999982778,
+        "p99": 7.261964999992827,
+        "min": -0.13866299996811904,
+        "max": 11.321148000015427
+      },
+      "firstContentMs": null,
+      "firstContentAddedMs": null,
+      "gatewayOverheadMs": null
+    },
+    {
+      "target": "direct",
+      "repeat": "litellm-default-2",
+      "startedAt": "2026-10-26T22:00:01.346Z",
+      "finishedAt": "2026-10-26T22:00:05.687Z",
+      "streaming": true,
+      "concurrency": 50,
+      "count": 1000,
+      "warmup": 200,
+      "mode": "sensitivity",
+      "elapsedMs": 4173.58111,
+      "requestsPerSecond": 239.6023878879402,
+      "errors": 0,
+      "totalMs": {
+        "count": 1000,
+        "mean": 208.31343679500003,
+        "p50": 207.76810699999987,
+        "p95": 213.60874000000013,
+        "p99": 214.76765299999988,
+        "min": 201.4933900000001,
+        "max": 215.38922000000002
+      },
+      "clientAddedMs": {
+        "count": 1000,
+        "mean": 0.9998717330009258,
+        "p50": 0.8134690000497358,
+        "p95": 2.6871150000288253,
+        "p99": 3.5678930000156015,
+        "min": 0.08985000002280685,
+        "max": 4.1941579999736405
+      },
+      "firstContentMs": {
+        "count": 1000,
+        "mean": 10.349517037000012,
+        "p50": 10.245742000000064,
+        "p95": 12.30199400000015,
+        "p99": 12.49223300000017,
+        "min": 8.83037400000012,
+        "max": 14.628347000000758
+      },
+      "firstContentAddedMs": {
+        "count": 1000,
+        "mean": 0.3240232799993428,
+        "p50": 0.13892199997417265,
+        "p95": 1.3522699999855377,
+        "p99": 1.64288000000397,
+        "min": 0.05707700005314109,
+        "max": 3.3572849999864047
+      },
+      "gatewayOverheadMs": null
+    },
+    {
+      "target": "direct",
+      "repeat": "litellm-1",
+      "startedAt": "2026-10-26T21:57:42.146Z",
+      "finishedAt": "2026-10-26T21:57:42.591Z",
+      "streaming": false,
+      "concurrency": 50,
+      "count": 5000,
+      "warmup": 200,
+      "mode": "sensitivity",
+      "elapsedMs": 339.28523,
+      "requestsPerSecond": 14736.86314019623,
+      "errors": 0,
+      "totalMs": {
+        "count": 5000,
+        "mean": 3.375727883599986,
+        "p50": 2.835095999999993,
+        "p95": 6.116316999999995,
+        "p99": 7.251515000000012,
+        "min": 0.46784500000001117,
+        "max": 13.064768
+      },
+      "clientAddedMs": {
+        "count": 5000,
+        "mean": 3.3525186365998243,
+        "p50": 2.8126740000255666,
+        "p95": 6.0936629999948195,
+        "p99": 7.210536999995469,
+        "min": 0.11101999999885948,
+        "max": 13.041453999979964
+      },
+      "firstContentMs": null,
+      "firstContentAddedMs": null,
+      "gatewayOverheadMs": null
+    },
+    {
+      "target": "direct",
+      "repeat": "litellm-1",
+      "startedAt": "2026-10-26T21:57:43.448Z",
+      "finishedAt": "2026-10-26T21:57:47.645Z",
+      "streaming": true,
+      "concurrency": 50,
+      "count": 1000,
+      "warmup": 200,
+      "mode": "sensitivity",
+      "elapsedMs": 4125.726103,
+      "requestsPerSecond": 242.38157721445816,
+      "errors": 0,
+      "totalMs": {
+        "count": 1000,
+        "mean": 205.63626776199976,
+        "p50": 205.45967700000074,
+        "p95": 210.37129300000015,
+        "p99": 213.2524659999999,
+        "min": 199.75349700000015,
+        "max": 213.86706000000004
+      },
+      "clientAddedMs": {
+        "count": 1000,
+        "mean": 0.6813036760006788,
+        "p50": 0.5085229999926923,
+        "p95": 1.8046049999877596,
+        "p99": 3.19343499999718,
+        "min": 0.08247600000140665,
+        "max": 3.264057999991792
+      },
+      "firstContentMs": {
+        "count": 1000,
+        "mean": 10.548335322999995,
+        "p50": 10.36409599999979,
+        "p95": 12.693924999999808,
+        "p99": 12.78197299999988,
+        "min": 9.232114000000138,
+        "max": 13.392037999999957
+      },
+      "firstContentAddedMs": {
+        "count": 1000,
+        "mean": 0.40693103300057804,
+        "p50": 0.1696119999860457,
+        "p95": 1.5733080000011341,
+        "p99": 1.8956379999931414,
+        "min": 0.05119599999352431,
+        "max": 2.5273139999862906
+      },
+      "gatewayOverheadMs": null
+    },
+    {
+      "target": "direct",
+      "repeat": "archestra-2",
+      "startedAt": "2026-10-26T22:01:36.055Z",
+      "finishedAt": "2026-10-26T22:01:36.653Z",
+      "streaming": false,
+      "concurrency": 50,
+      "count": 5000,
+      "warmup": 200,
+      "mode": "sensitivity",
+      "elapsedMs": 317.563677,
+      "requestsPerSecond": 15744.873743857048,
+      "errors": 0,
+      "totalMs": {
+        "count": 5000,
+        "mean": 3.158843880800006,
+        "p50": 2.7102800000000116,
+        "p95": 5.724244999999996,
+        "p99": 6.6821470000000005,
+        "min": 0.3025030000000015,
+        "max": 12.575821999999988
+      },
+      "clientAddedMs": {
+        "count": 5000,
+        "mean": 3.13603138499978,
+        "p50": 2.688378999982831,
+        "p95": 5.700869000046751,
+        "p99": 6.667108999987718,
+        "min": 0.044555000031607506,
+        "max": 12.537328999970867
+      },
+      "firstContentMs": null,
+      "firstContentAddedMs": null,
+      "gatewayOverheadMs": null
+    },
+    {
+      "target": "direct",
+      "repeat": "archestra-2",
+      "startedAt": "2026-10-26T22:01:37.546Z",
+      "finishedAt": "2026-10-26T22:01:42.017Z",
+      "streaming": true,
+      "concurrency": 50,
+      "count": 1000,
+      "warmup": 200,
+      "mode": "sensitivity",
+      "elapsedMs": 4206.080399,
+      "requestsPerSecond": 237.75104257107188,
+      "errors": 0,
+      "totalMs": {
+        "count": 1000,
+        "mean": 209.90247861299991,
+        "p50": 209.26768300000003,
+        "p95": 215.78728399999954,
+        "p99": 218.44718899999998,
+        "min": 203.85724300000038,
+        "max": 219.05998799999998
+      },
+      "clientAddedMs": {
+        "count": 1000,
+        "mean": 1.1712043749995489,
+        "p50": 0.9858560000348007,
+        "p95": 2.6864859999723194,
+        "p99": 3.36912600001574,
+        "min": 0.11847400002125141,
+        "max": 3.9346569999920575
+      },
+      "firstContentMs": {
+        "count": 1000,
+        "mean": 10.602456655999992,
+        "p50": 10.461119999999937,
+        "p95": 12.429855999999972,
+        "p99": 12.45692699999995,
+        "min": 9.128107,
+        "max": 14.36715299999969
+      },
+      "firstContentAddedMs": {
+        "count": 1000,
+        "mean": 0.5624973200003205,
+        "p50": 0.3117600000123275,
+        "p95": 1.550503999994362,
+        "p99": 2.045792000023539,
+        "min": 0.06795800001327734,
+        "max": 3.8629319999895415
+      },
+      "gatewayOverheadMs": null
+    },
+    {
+      "target": "direct",
+      "repeat": "archestra-1",
+      "startedAt": "2026-10-26T21:56:31.999Z",
+      "finishedAt": "2026-10-26T21:56:32.419Z",
+      "streaming": false,
+      "concurrency": 50,
+      "count": 5000,
+      "warmup": 200,
+      "mode": "sensitivity",
+      "elapsedMs": 352.452101,
+      "requestsPerSecond": 14186.324853259988,
+      "errors": 0,
+      "totalMs": {
+        "count": 5000,
+        "mean": 3.506859831200006,
+        "p50": 3.053128000000015,
+        "p95": 7.105018000000001,
+        "p99": 10.215364999999991,
+        "min": 0.730842999999993,
+        "max": 12.294449999999998
+      },
+      "clientAddedMs": {
+        "count": 5000,
+        "mean": 3.4762918933998606,
+        "p50": 3.0302859999885072,
+        "p95": 7.067347000002528,
+        "p99": 10.188624000000985,
+        "min": 0.25882000000734706,
+        "max": 12.247491000000664
+      },
+      "firstContentMs": null,
+      "firstContentAddedMs": null,
+      "gatewayOverheadMs": null
+    },
+    {
+      "target": "direct",
+      "repeat": "archestra-1",
+      "startedAt": "2026-10-26T21:56:33.317Z",
+      "finishedAt": "2026-10-26T21:56:37.629Z",
+      "streaming": true,
+      "concurrency": 50,
+      "count": 1000,
+      "warmup": 200,
+      "mode": "sensitivity",
+      "elapsedMs": 4273.961592000001,
+      "requestsPerSecond": 233.97496174785462,
+      "errors": 0,
+      "totalMs": {
+        "count": 1000,
+        "mean": 212.93539971399997,
+        "p50": 212.62543000000005,
+        "p95": 220.157776,
+        "p99": 225.68707100000006,
+        "min": 206.46130200000016,
+        "max": 226.3951219999999
+      },
+      "clientAddedMs": {
+        "count": 1000,
+        "mean": 1.0949750040001043,
+        "p50": 0.8241189999926064,
+        "p95": 3.216477999997096,
+        "p99": 4.864928000000646,
+        "min": 0.09177399999316549,
+        "max": 5.4540129999932105
+      },
+      "firstContentMs": {
+        "count": 1000,
+        "mean": 10.72443071500002,
+        "p50": 10.577910999999858,
+        "p95": 12.849349999999959,
+        "p99": 13.18249999999989,
+        "min": 8.565582000000177,
+        "max": 13.653862999999546
+      },
+      "firstContentAddedMs": {
+        "count": 1000,
+        "mean": 0.6074051839997624,
+        "p50": 0.23735000000806394,
+        "p95": 1.8998660000102063,
+        "p99": 2.0980209999925137,
+        "min": 0.06538299999192532,
+        "max": 2.399602000012237
+      },
+      "gatewayOverheadMs": null
+    },
+    {
+      "target": "direct",
+      "repeat": "litellm-2",
+      "startedAt": "2026-10-26T22:01:09.826Z",
+      "finishedAt": "2026-10-26T22:01:10.395Z",
+      "streaming": false,
+      "concurrency": 50,
+      "count": 5000,
+      "warmup": 200,
+      "mode": "sensitivity",
+      "elapsedMs": 321.837597,
+      "requestsPerSecond": 15535.78589514512,
+      "errors": 0,
+      "totalMs": {
+        "count": 5000,
+        "mean": 3.191564304200002,
+        "p50": 2.7103100000000495,
+        "p95": 5.670402999999993,
+        "p99": 7.839217999999988,
+        "min": 1.314707999999996,
+        "max": 11.806837000000002
+      },
+      "clientAddedMs": {
+        "count": 5000,
+        "mean": 3.1694804676002337,
+        "p50": 2.6882390000016017,
+        "p95": 5.648620999956222,
+        "p99": 7.825471999988537,
+        "min": 1.2941189999784228,
+        "max": 11.742765999968327
+      },
+      "firstContentMs": null,
+      "firstContentAddedMs": null,
+      "gatewayOverheadMs": null
+    },
+    {
+      "target": "direct",
+      "repeat": "litellm-2",
+      "startedAt": "2026-10-26T22:01:11.276Z",
+      "finishedAt": "2026-10-26T22:01:15.732Z",
+      "streaming": true,
+      "concurrency": 50,
+      "count": 1000,
+      "warmup": 200,
+      "mode": "sensitivity",
+      "elapsedMs": 4231.614323,
+      "requestsPerSecond": 236.3164323753992,
+      "errors": 0,
+      "totalMs": {
+        "count": 1000,
+        "mean": 210.85602353400006,
+        "p50": 209.82630999999947,
+        "p95": 217.48595999999998,
+        "p99": 217.84366599999998,
+        "min": 203.06415299999935,
+        "max": 218.00164399999994
+      },
+      "clientAddedMs": {
+        "count": 1000,
+        "mean": 1.2917725500019874,
+        "p50": 1.0718980000019656,
+        "p95": 3.074580000031119,
+        "p99": 4.332100999987006,
+        "min": 0.10391699996944226,
+        "max": 4.948255999995354
+      },
+      "firstContentMs": {
+        "count": 1000,
+        "mean": 10.480946586000004,
+        "p50": 10.309432999999899,
+        "p95": 12.159735000000182,
+        "p99": 12.73772899999949,
+        "min": 8.918228999999883,
+        "max": 13.217376000000058
+      },
+      "firstContentAddedMs": {
+        "count": 1000,
+        "mean": 0.5351141050012861,
+        "p50": 0.25720600003478467,
+        "p95": 1.7903280000327868,
+        "p99": 2.803165999984685,
+        "min": 0.06342000002132409,
+        "max": 2.9945780000266495
+      },
+      "gatewayOverheadMs": null
+    },
+    {
+      "target": "direct",
+      "repeat": "litellm-default-1",
+      "startedAt": "2026-10-26T21:58:51.549Z",
+      "finishedAt": "2026-10-26T21:58:52.007Z",
+      "streaming": false,
+      "concurrency": 50,
+      "count": 5000,
+      "warmup": 200,
+      "mode": "sensitivity",
+      "elapsedMs": 314.438462,
+      "requestsPerSecond": 15901.362601118433,
+      "errors": 0,
+      "totalMs": {
+        "count": 5000,
+        "mean": 3.1279169776000013,
+        "p50": 2.612394000000023,
+        "p95": 5.529004999999998,
+        "p99": 7.330675000000014,
+        "min": 0.5011480000000006,
+        "max": 11.540091999999987
+      },
+      "clientAddedMs": {
+        "count": 5000,
+        "mean": 3.1039145952001013,
+        "p50": 2.5859340000212114,
+        "p95": 5.497494999971622,
+        "p99": 7.313580999993036,
+        "min": 0.4766319999950497,
+        "max": 11.518682000013342
+      },
+      "firstContentMs": null,
+      "firstContentAddedMs": null,
+      "gatewayOverheadMs": null
+    },
+    {
+      "target": "direct",
+      "repeat": "litellm-default-1",
+      "startedAt": "2026-10-26T21:58:52.880Z",
+      "finishedAt": "2026-10-26T21:58:57.212Z",
+      "streaming": true,
+      "concurrency": 50,
+      "count": 1000,
+      "warmup": 200,
+      "mode": "sensitivity",
+      "elapsedMs": 4200.784644,
+      "requestsPerSecond": 238.05076545123646,
+      "errors": 0,
+      "totalMs": {
+        "count": 1000,
+        "mean": 209.60917037599967,
+        "p50": 209.39882299999954,
+        "p95": 213.805523,
+        "p99": 215.43482600000016,
+        "min": 202.02578700000004,
+        "max": 216.26723300000003
+      },
+      "clientAddedMs": {
+        "count": 1000,
+        "mean": 1.005761424000037,
+        "p50": 0.8311030000340907,
+        "p95": 2.4651060000055622,
+        "p99": 3.3134609999983695,
+        "min": 0.07013300002017786,
+        "max": 3.568163000010827
+      },
+      "firstContentMs": {
+        "count": 1000,
+        "mean": 10.841464421000024,
+        "p50": 10.683532000000014,
+        "p95": 12.787963999999874,
+        "p99": 13.051311000000169,
+        "min": 9.211244000000079,
+        "max": 13.530678999999964
+      },
+      "firstContentAddedMs": {
+        "count": 1000,
+        "mean": 0.6941935040001095,
+        "p50": 0.3535790000178167,
+        "p95": 2.004633999978978,
+        "p99": 2.6608660000388227,
+        "min": 0.05972200002634054,
+        "max": 2.9759120000358052
+      },
+      "gatewayOverheadMs": null
+    }
+  ],
+  "profiles": {
+    "archestra": [
+      {
+        "target": "archestra",
+        "repeat": 1,
+        "startedAt": "2026-10-26T21:56:20.202Z",
+        "finishedAt": "2026-10-26T21:56:26.112Z",
+        "streaming": false,
+        "concurrency": 50,
+        "count": 5000,
+        "warmup": 200,
+        "mode": "sensitivity",
+        "elapsedMs": 5872.256007,
+        "requestsPerSecond": 851.4615156491423,
+        "errors": 0,
+        "totalMs": {
+          "count": 5000,
+          "mean": 58.596842821799974,
+          "p50": 59.098747,
+          "p95": 88.71195599999987,
+          "p99": 99.25848799999994,
+          "min": 26.63494300000002,
+          "max": 111.86101000000008
+        },
+        "clientAddedMs": {
+          "count": 5000,
+          "mean": 58.5575708953997,
+          "p50": 59.03875400000106,
+          "p95": 88.66301399999134,
+          "p99": 99.20527699999411,
+          "min": 26.56770499999675,
+          "max": 111.80971299998737
+        },
+        "firstContentMs": null,
+        "firstContentAddedMs": null,
+        "gatewayOverheadMs": {
+          "count": 5000,
+          "mean": 36.35157679999994,
+          "p50": 33.157,
+          "p95": 67.417,
+          "p99": 75.856,
+          "min": 9.86,
+          "max": 86.776
+        }
+      },
+      {
+        "target": "archestra",
+        "repeat": 1,
+        "startedAt": "2026-10-26T21:56:27.063Z",
+        "finishedAt": "2026-10-26T21:56:31.399Z",
+        "streaming": true,
+        "concurrency": 50,
+        "count": 1000,
+        "warmup": 200,
+        "mode": "sensitivity",
+        "elapsedMs": 4311.789703,
+        "requestsPerSecond": 231.92225708601538,
+        "errors": 0,
+        "totalMs": {
+          "count": 1000,
+          "mean": 212.71576789599993,
+          "p50": 210.4946259999997,
+          "p95": 237.08137700000043,
+          "p99": 246.55874500000027,
+          "min": 201.50296799999887,
+          "max": 252.87913899999967
+        },
+        "clientAddedMs": {
+          "count": 1000,
+          "mean": 7.251673946999935,
+          "p50": 4.80261000000246,
+          "p95": 30.760541000001467,
+          "p99": 41.205660999998145,
+          "min": 1.3832879999899887,
+          "max": 47.43673499999841
+        },
+        "firstContentMs": {
+          "count": 1000,
+          "mean": 14.080143450999968,
+          "p50": 12.455866000000242,
+          "p95": 26.68882500000018,
+          "p99": 30.48562100000072,
+          "min": 9.468120000001363,
+          "max": 31.247433000000456
+        },
+        "firstContentAddedMs": {
+          "count": 1000,
+          "mean": 4.071215390999976,
+          "p50": 2.4466800000027433,
+          "p95": 16.215951999992285,
+          "p99": 20.039818999986892,
+          "min": 0.5435379999889847,
+          "max": 20.47378099999696
+        },
+        "gatewayOverheadMs": null
+      },
+      {
+        "target": "archestra",
+        "repeat": 2,
+        "startedAt": "2026-10-26T22:01:23.906Z",
+        "finishedAt": "2026-10-26T22:01:30.015Z",
+        "streaming": false,
+        "concurrency": 50,
+        "count": 5000,
+        "warmup": 200,
+        "mode": "sensitivity",
+        "elapsedMs": 5817.605458999999,
+        "requestsPerSecond": 859.4601396120563,
+        "errors": 0,
+        "totalMs": {
+          "count": 5000,
+          "mean": 58.04388038959994,
+          "p50": 58.503189999999904,
+          "p95": 87.55346400000053,
+          "p99": 100.8114569999999,
+          "min": 26.452917999999954,
+          "max": 118.88166899999999
+        },
+        "clientAddedMs": {
+          "count": 5000,
+          "mean": 58.014922389599576,
+          "p50": 58.45740300000443,
+          "p95": 87.5214329999967,
+          "p99": 100.78666100003284,
+          "min": 26.42547600000853,
+          "max": 118.86113999996962
+        },
+        "firstContentMs": null,
+        "firstContentAddedMs": null,
+        "gatewayOverheadMs": {
+          "count": 5000,
+          "mean": 35.89326980000005,
+          "p50": 32.402,
+          "p95": 66.687,
+          "p99": 77.11,
+          "min": 9.389,
+          "max": 89.706
+        }
+      },
+      {
+        "target": "archestra",
+        "repeat": 2,
+        "startedAt": "2026-10-26T22:01:30.983Z",
+        "finishedAt": "2026-10-26T22:01:35.463Z",
+        "streaming": true,
+        "concurrency": 50,
+        "count": 1000,
+        "warmup": 200,
+        "mode": "sensitivity",
+        "elapsedMs": 4229.119468000001,
+        "requestsPerSecond": 236.4558408828568,
+        "errors": 0,
+        "totalMs": {
+          "count": 1000,
+          "mean": 209.2338011079999,
+          "p50": 207.1705350000011,
+          "p95": 226.55493399999978,
+          "p99": 245.2128079999993,
+          "min": 201.4174750000002,
+          "max": 253.8204199999991
+        },
+        "clientAddedMs": {
+          "count": 1000,
+          "mean": 5.965483843000914,
+          "p50": 3.725992000003316,
+          "p95": 22.67498700001306,
+          "p99": 40.11011699998562,
+          "min": 1.2826480000239826,
+          "max": 46.87450000002991
+        },
+        "firstContentMs": {
+          "count": 1000,
+          "mean": 13.593514051999984,
+          "p50": 12.009299999999712,
+          "p95": 24.727410999999847,
+          "p99": 30.371384999999464,
+          "min": 9.954319999998916,
+          "max": 31.190434000000096
+        },
+        "firstContentAddedMs": {
+          "count": 1000,
+          "mean": 3.5354768540011454,
+          "p50": 1.9420659999886993,
+          "p95": 14.654014000028837,
+          "p99": 19.592292999958772,
+          "min": 0.5447710000134975,
+          "max": 20.441568999969604
+        },
+        "gatewayOverheadMs": null
+      }
+    ],
+    "litellm": [
+      {
+        "target": "litellm",
+        "repeat": 1,
+        "startedAt": "2026-10-26T21:56:52.818Z",
+        "finishedAt": "2026-10-26T21:57:24.462Z",
+        "streaming": false,
+        "concurrency": 50,
+        "count": 5000,
+        "warmup": 200,
+        "mode": "sensitivity",
+        "elapsedMs": 31563.837666,
+        "requestsPerSecond": 158.40912796817196,
+        "errors": 0,
+        "totalMs": {
+          "count": 5000,
+          "mean": 315.1685207729997,
+          "p50": 290.55308500000046,
+          "p95": 382.99445900000137,
+          "p99": 844.6698500000002,
+          "min": 160.09778000000006,
+          "max": 889.1834410000001
+        },
+        "clientAddedMs": {
+          "count": 5000,
+          "mean": 315.1334154106002,
+          "p50": 290.53059100000155,
+          "p95": 382.89560199999687,
+          "p99": 844.619725999999,
+          "min": 159.96746400000484,
+          "max": 889.1534440000241
+        },
+        "firstContentMs": null,
+        "firstContentAddedMs": null,
+        "gatewayOverheadMs": null
+      },
+      {
+        "target": "litellm",
+        "repeat": 1,
+        "startedAt": "2026-10-26T21:57:27.759Z",
+        "finishedAt": "2026-10-26T21:57:41.480Z",
+        "streaming": true,
+        "concurrency": 50,
+        "count": 1000,
+        "warmup": 200,
+        "mode": "sensitivity",
+        "elapsedMs": 13662.222812999993,
+        "requestsPerSecond": 73.19453164301139,
+        "errors": 0,
+        "totalMs": {
+          "count": 1000,
+          "mean": 678.4261641060006,
+          "p50": 626.488854999996,
+          "p95": 1270.892037000005,
+          "p99": 1325.220002999995,
+          "min": 417.92893999999797,
+          "max": 1333.3720930000054
+        },
+        "clientAddedMs": {
+          "count": 1000,
+          "mean": 474.22633410400033,
+          "p50": 422.64262099999905,
+          "p95": 1067.5016570000225,
+          "p99": 1121.8925829999862,
+          "min": 213.3969700000016,
+          "max": 1130.8017350000082
+        },
+        "firstContentMs": {
+          "count": 1000,
+          "mean": 395.3382492520005,
+          "p50": 351.13711299999704,
+          "p95": 1027.1114789999992,
+          "p99": 1090.1950579999975,
+          "min": 208.55403299999307,
+          "max": 1132.4666959999959
+        },
+        "firstContentAddedMs": {
+          "count": 1000,
+          "mean": 384.9952848920004,
+          "p50": 341.3613899999764,
+          "p95": 1017.5379089999915,
+          "p99": 1080.4998470000137,
+          "min": 197.8074820000038,
+          "max": 1121.4937580000042
+        },
+        "gatewayOverheadMs": null
+      },
+      {
+        "target": "litellm",
+        "repeat": 2,
+        "startedAt": "2026-10-26T22:00:20.890Z",
+        "finishedAt": "2026-10-26T22:00:52.313Z",
+        "streaming": false,
+        "concurrency": 50,
+        "count": 5000,
+        "warmup": 200,
+        "mode": "sensitivity",
+        "elapsedMs": 31229.703023999995,
+        "requestsPerSecond": 160.10398805769958,
+        "errors": 0,
+        "totalMs": {
+          "count": 5000,
+          "mean": 311.47170540919967,
+          "p50": 289.6931570000015,
+          "p95": 361.3562950000014,
+          "p99": 836.705754999999,
+          "min": 144.79170900000008,
+          "max": 892.8819909999984
+        },
+        "clientAddedMs": {
+          "count": 5000,
+          "mean": 311.43857832879917,
+          "p50": 289.66134700004477,
+          "p95": 361.28886799997053,
+          "p99": 836.6627539999863,
+          "min": 144.68004699998983,
+          "max": 892.8489880000379
+        },
+        "firstContentMs": null,
+        "firstContentAddedMs": null,
+        "gatewayOverheadMs": null
+      },
+      {
+        "target": "litellm",
+        "repeat": 2,
+        "startedAt": "2026-10-26T22:00:55.366Z",
+        "finishedAt": "2026-10-26T22:01:09.143Z",
+        "streaming": true,
+        "concurrency": 50,
+        "count": 1000,
+        "warmup": 200,
+        "mode": "sensitivity",
+        "elapsedMs": 13583.012190000001,
+        "requestsPerSecond": 73.62137249175213,
+        "errors": 0,
+        "totalMs": {
+          "count": 1000,
+          "mean": 673.622434993,
+          "p50": 622.4258650000047,
+          "p95": 1255.272413000006,
+          "p99": 1294.701341,
+          "min": 329.8796880000009,
+          "max": 1358.6247899999944
+        },
+        "clientAddedMs": {
+          "count": 1000,
+          "mean": 469.9079812799994,
+          "p50": 419.1754290000026,
+          "p95": 1047.601801000048,
+          "p99": 1089.5901129999984,
+          "min": 126.88666999996349,
+          "max": 1154.27331099999
+        },
+        "firstContentMs": {
+          "count": 1000,
+          "mean": 391.6176653299996,
+          "p50": 346.1831760000059,
+          "p95": 1014.8007379999981,
+          "p99": 1058.1191580000013,
+          "min": 191.96500599999854,
+          "max": 1130.8712469999955
+        },
+        "firstContentAddedMs": {
+          "count": 1000,
+          "mean": 381.4928408289996,
+          "p50": 336.3089170000312,
+          "p95": 1005.0099169999958,
+          "p99": 1048.5503869999884,
+          "min": 182.02907999997842,
+          "max": 1120.7931119999776
+        },
+        "gatewayOverheadMs": null
+      }
+    ],
+    "litellm-default": [
+      {
+        "target": "litellm-default",
+        "repeat": 1,
+        "startedAt": "2026-10-26T21:58:02.769Z",
+        "finishedAt": "2026-10-26T21:58:31.540Z",
+        "streaming": false,
+        "concurrency": 50,
+        "count": 5000,
+        "warmup": 200,
+        "mode": "sensitivity",
+        "elapsedMs": 28646.97623,
+        "requestsPerSecond": 174.53849089886998,
+        "errors": 0,
+        "totalMs": {
+          "count": 5000,
+          "mean": 285.94390188560027,
+          "p50": 266.60629999999946,
+          "p95": 330.4514500000005,
+          "p99": 806.9890799999994,
+          "min": 165.4000649999998,
+          "max": 862.291973000003
+        },
+        "clientAddedMs": {
+          "count": 5000,
+          "mean": 285.9102138088007,
+          "p50": 266.5867329999892,
+          "p95": 330.3611690000207,
+          "p99": 806.9647240000195,
+          "min": 165.38072900000225,
+          "max": 862.2590700000183
+        },
+        "firstContentMs": null,
+        "firstContentAddedMs": null,
+        "gatewayOverheadMs": null
+      },
+      {
+        "target": "litellm-default",
+        "repeat": 1,
+        "startedAt": "2026-10-26T21:58:34.518Z",
+        "finishedAt": "2026-10-26T21:58:47.750Z",
+        "streaming": true,
+        "concurrency": 50,
+        "count": 1000,
+        "warmup": 200,
+        "mode": "sensitivity",
+        "elapsedMs": 13126.712054000003,
+        "requestsPerSecond": 76.18053903264203,
+        "errors": 0,
+        "totalMs": {
+          "count": 1000,
+          "mean": 652.7656194100007,
+          "p50": 597.1522089999999,
+          "p95": 1213.557388000001,
+          "p99": 1302.7018030000036,
+          "min": 422.3178180000032,
+          "max": 1344.6078389999966
+        },
+        "clientAddedMs": {
+          "count": 1000,
+          "mean": 448.32520126699967,
+          "p50": 391.8335289999959,
+          "p95": 1008.0425759999926,
+          "p99": 1093.7070149999927,
+          "min": 219.5714670000234,
+          "max": 1141.161132000001
+        },
+        "firstContentMs": {
+          "count": 1000,
+          "mean": 327.880529732,
+          "p50": 322.34148099999584,
+          "p95": 385.1346399999966,
+          "p99": 425.9238120000009,
+          "min": 192.08700600000157,
+          "max": 984.563768
+        },
+        "firstContentAddedMs": {
+          "count": 1000,
+          "mean": 317.74577345000006,
+          "p50": 312.22050500001933,
+          "p95": 375.43660500001715,
+          "p99": 415.67199899999105,
+          "min": 181.6788970000198,
+          "max": 974.4243079999942
+        },
+        "gatewayOverheadMs": null
+      },
+      {
+        "target": "litellm-default",
+        "repeat": 2,
+        "startedAt": "2026-10-26T21:59:12.340Z",
+        "finishedAt": "2026-10-26T21:59:41.514Z",
+        "streaming": false,
+        "concurrency": 50,
+        "count": 5000,
+        "warmup": 200,
+        "mode": "sensitivity",
+        "elapsedMs": 29011.220309999997,
+        "requestsPerSecond": 172.34711075826513,
+        "errors": 0,
+        "totalMs": {
+          "count": 5000,
+          "mean": 289.7380666853995,
+          "p50": 265.8884820000003,
+          "p95": 332.74723600000107,
+          "p99": 823.3063849999999,
+          "min": 151.75406699999985,
+          "max": 853.0193319999998
+        },
+        "clientAddedMs": {
+          "count": 5000,
+          "mean": 289.7041743411993,
+          "p50": 265.8486550000234,
+          "p95": 332.7203750000099,
+          "p99": 823.277621000012,
+          "min": 151.6234600000298,
+          "max": 852.9765209999787
+        },
+        "firstContentMs": null,
+        "firstContentAddedMs": null,
+        "gatewayOverheadMs": null
+      },
+      {
+        "target": "litellm-default",
+        "repeat": 2,
+        "startedAt": "2026-10-26T21:59:43.995Z",
+        "finishedAt": "2026-10-26T21:59:57.212Z",
+        "streaming": true,
+        "concurrency": 50,
+        "count": 1000,
+        "warmup": 200,
+        "mode": "sensitivity",
+        "elapsedMs": 13091.779938,
+        "requestsPerSecond": 76.38380760567287,
+        "errors": 0,
+        "totalMs": {
+          "count": 1000,
+          "mean": 651.276558459,
+          "p50": 596.3243619999994,
+          "p95": 1231.9818100000048,
+          "p99": 1281.7101829999956,
+          "min": 417.10822700000426,
+          "max": 1310.6747130000003
+        },
+        "clientAddedMs": {
+          "count": 1000,
+          "mean": 447.6088470840002,
+          "p50": 393.0534279999847,
+          "p95": 1026.1721710000202,
+          "p99": 1076.194620000002,
+          "min": 212.33797599999525,
+          "max": 1106.769579000007
+        },
+        "firstContentMs": {
+          "count": 1000,
+          "mean": 372.716340789,
+          "p50": 328.25112600000284,
+          "p95": 1006.0430229999984,
+          "p99": 1073.1434939999963,
+          "min": 188.58076000000437,
+          "max": 1084.4056710000004
+        },
+        "firstContentAddedMs": {
+          "count": 1000,
+          "mean": 362.5263334470013,
+          "p50": 318.39839800001937,
+          "p95": 996.0787830000118,
+          "p99": 1063.1214549999931,
+          "min": 178.00489199996082,
+          "max": 1074.921971000018
+        },
+        "gatewayOverheadMs": null
+      }
+    ]
+  }
+}

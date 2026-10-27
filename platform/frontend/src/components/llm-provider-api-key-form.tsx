@@ -17,7 +17,7 @@ import {
 } from "@archestra/shared";
 import { CheckCircle2, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { lazy, type Ref, Suspense, useEffect, useMemo, useRef } from "react";
+import { type Ref, useEffect, useMemo, useRef } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import { AdvancedSection } from "@/components/advanced-section";
 import {
@@ -52,12 +52,6 @@ import {
 import { Switch } from "./ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 
-const ExternalSecretSelector = lazy(
-  () =>
-    // biome-ignore lint/style/noRestrictedImports: lazy loading
-    import("@/components/external-secret-selector.ee"),
-);
-
 type CreateLlmProviderApiKeyBody =
   archestraApiTypes.CreateLlmProviderApiKeyData["body"];
 
@@ -75,10 +69,7 @@ export type LlmProviderApiKeyFormValues = {
    * Existing personal keys and subscription credentials retain their owner.
    */
   shared: boolean;
-  /** The team whose vault folder the secret picker browses. Not submitted. */
-  teamId: string | null;
-  vaultSecretPath: string | null;
-  vaultSecretKey: string | null;
+
   isPrimary: boolean;
   /**
    * Bedrock auth method selector:
@@ -378,8 +369,22 @@ const PROVIDER_CONFIG: Record<
     icon: "/icons/kimi.png",
     placeholder: "sk-...",
     enabled: true,
-    consoleUrl: "https://platform.moonshot.ai/console/api-keys",
-    consoleName: "Moonshot AI Platform",
+    consoleUrl: "https://platform.kimi.ai/console/api-keys",
+    consoleName: "Kimi API Platform",
+    // A Kimi Code membership key is not a platform key: it only answers on the
+    // Kimi Code endpoint, which is its own provider.
+    description:
+      "A pay-as-you-go Kimi API Platform key. For a Kimi Code membership key (sk-kimi-...), choose Kimi Code instead.",
+  },
+  "kimi-code": {
+    name: "Kimi Code",
+    icon: "/model-logos/kimi-code.svg",
+    placeholder: "sk-kimi-...",
+    enabled: true,
+    consoleUrl: "https://www.kimi.ai/code/console",
+    consoleName: "Kimi Code Console",
+    description:
+      "A Kimi Code membership key. Requests use your plan's quota, not per-token billing. For the China endpoint, set the Base URL under advanced settings to https://api.kimi.com/coding/v1.",
   },
   bedrock: {
     name: "AWS Bedrock",
@@ -482,8 +487,6 @@ interface LlmProviderApiKeyFormProps {
   allowPersonalSubscriptions?: boolean;
   /** Dedicated credential flow shown by the create dialog. */
   credentialMode?: "api-key" | "subscription";
-  /** The caller is satisfying an agent pin that requires this exact subscription kind. */
-  requiresExactSubscriptionCredential?: boolean;
   /** Hide optional API-key fields behind an Advanced disclosure. */
   progressive?: boolean;
   /** Called when a subscription sign-in returns a credential. */
@@ -510,7 +513,6 @@ export function LlmProviderApiKeyForm({
   forEmbedding = false,
   allowPersonalSubscriptions = true,
   credentialMode,
-  requiresExactSubscriptionCredential = false,
   progressive = false,
   onSubscriptionCredential,
   labels,
@@ -518,7 +520,7 @@ export function LlmProviderApiKeyForm({
   labelsRef,
 }: LlmProviderApiKeyFormProps) {
   const appName = useAppName();
-  const byosEnabled = useFeature("byosEnabled");
+
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicKeylessAuthEnabled = useFeature("anthropicKeylessAuthEnabled");
   const { data: providerBaseUrls } = useProviderBaseUrls();
@@ -529,7 +531,6 @@ export function LlmProviderApiKeyForm({
   const provider = form.watch("provider");
   const apiKey = form.watch("apiKey");
   const shared = form.watch("shared");
-  const teamId = form.watch("teamId");
   const currentUserId = useSession()?.data?.user?.id;
   const bedrockAuthMethod = form.watch("bedrockAuthMethod");
   const isBedrockSigV4 =
@@ -828,15 +829,6 @@ export function LlmProviderApiKeyForm({
   const connectCopy = activeSubscriptionKind
     ? SUBSCRIPTION_CREDENTIALS[activeSubscriptionKind].connect
     : null;
-  // BYOS Vault is intentionally read-only: Archestra can resolve references
-  // but cannot write or rotate an OAuth credential in the customer's Vault.
-  // Keep the dedicated connect surfaces open long enough to explain the
-  // limitation, but never start a flow whose completion cannot be saved.
-  const subscriptionUnavailableWithByos =
-    Boolean(byosEnabled) && activeSubscriptionKind !== null;
-  const subscriptionHasApiKeyAlternative = activeSubscriptionKind
-    ? SUBSCRIPTION_CREDENTIALS[activeSubscriptionKind].marker !== null
-    : false;
   // The connected card: for provider-level subscriptions (Copilot) editing
   // implies an existing credential. For a credential-level one, editing a key
   // whose stored credential is already that subscription (known from the key
@@ -932,8 +924,6 @@ export function LlmProviderApiKeyForm({
     form.setValue("baseUrl", null);
     form.setValue("inferenceBaseUrl", null);
     form.setValue("extraHeaders", []);
-    form.setValue("vaultSecretPath", null);
-    form.setValue("vaultSecretKey", null);
     form.setValue("awsAccessKeyId", null);
     form.setValue("awsSecretAccessKey", null);
     form.setValue("awsSessionToken", null);
@@ -944,23 +934,6 @@ export function LlmProviderApiKeyForm({
     // hide the API key field after switching providers.
     form.setValue("authMethod", "api-key");
   }, [form, isEditMode, provider]);
-
-  const vaultSecretSelector = (
-    <ExternalSecretSelector
-      selectedTeamId={teamId}
-      selectedSecretPath={form.getValues("vaultSecretPath")}
-      selectedSecretKey={form.getValues("vaultSecretKey")}
-      onTeamChange={(value) =>
-        form.setValue("teamId", value, { shouldDirty: true })
-      }
-      onSecretChange={(value) =>
-        form.setValue("vaultSecretPath", value, { shouldDirty: true })
-      }
-      onSecretKeyChange={(value) =>
-        form.setValue("vaultSecretKey", value, { shouldDirty: true })
-      }
-    />
-  );
 
   // Rendered either above "Advanced" or inside it, depending on
   // `showBaseUrlUpFront`, so the field itself is defined once.
@@ -1255,11 +1228,6 @@ export function LlmProviderApiKeyForm({
             </div>
           )}
 
-          {/*
-          Sits outside the `byosEnabled` branch below on purpose: the transport
-          is part of the provider, not a way of supplying credentials, so it
-          must stay visible when keys come from the vault.
-        */}
           {showOllamaTransport && (
             <div className="space-y-2">
               {/*
@@ -1317,15 +1285,7 @@ export function LlmProviderApiKeyForm({
             </div>
           )}
 
-          {byosEnabled && !isSubscriptionFlow ? (
-            <Suspense
-              fallback={
-                <div className="text-sm text-muted-foreground">Loading...</div>
-              }
-            >
-              {vaultSecretSelector}
-            </Suspense>
-          ) : (
+          {
             <div className="space-y-2">
               {provider === "bedrock" && (
                 <Tabs
@@ -1428,10 +1388,7 @@ export function LlmProviderApiKeyForm({
                       <TabsTrigger value="api-key" disabled={isPending}>
                         API Key
                       </TabsTrigger>
-                      <TabsTrigger
-                        value="subscription"
-                        disabled={isPending || Boolean(byosEnabled)}
-                      >
+                      <TabsTrigger value="subscription" disabled={isPending}>
                         {
                           SUBSCRIPTION_CREDENTIALS[providerSubscriptionKind]
                             .label
@@ -1461,23 +1418,7 @@ export function LlmProviderApiKeyForm({
                         )}
                       </>
                     )}
-                    {subscriptionUnavailableWithByos ? (
-                      <InlineNotice>
-                        <span className="font-medium">
-                          Subscription sign-in is unavailable with Bring Your
-                          Own Secrets
-                        </span>
-                        <InlineNoticeText>
-                          {appName} has read-only access to your external Vault,
-                          so it cannot save or rotate OAuth credentials there.
-                          {requiresExactSubscriptionCredential
-                            ? " This agent requires the same personal subscription, so a provider API key from Vault will not work. Ask an administrator to use managed secret storage, or choose a different agent or model."
-                            : subscriptionHasApiKeyAlternative
-                              ? " Store a provider API key in Vault instead, or ask an administrator to use managed secret storage."
-                              : " This provider has no API-key alternative, so an administrator must use managed secret storage to enable subscription sign-in."}
-                        </InlineNoticeText>
-                      </InlineNotice>
-                    ) : (
+                    {
                       <>
                         {perUserCredentialConnected && (
                           <div className="flex items-start gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
@@ -1513,7 +1454,7 @@ export function LlmProviderApiKeyForm({
                           }}
                         />
                       </>
-                    )}
+                    }
                   </>
                 ) : (
                   <>
@@ -1630,7 +1571,7 @@ export function LlmProviderApiKeyForm({
                 </div>
               )}
             </div>
-          )}
+          }
 
           {/* A saved key answers "who can reach this" from its own grant
             policy, so editing one shows the policy. */}

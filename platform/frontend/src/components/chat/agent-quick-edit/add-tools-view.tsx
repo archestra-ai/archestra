@@ -37,7 +37,6 @@ import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { isInstallInProgress } from "@/lib/mcp/install-status";
 import { fetchCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
-import type { McpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
 import {
   fetchInternalMcpCatalogItem,
   type McpRegistryRow,
@@ -47,6 +46,7 @@ import {
   useMcpServers,
   useMcpServersGroupedByCatalog,
 } from "@/lib/mcp/mcp-server.query";
+import type { McpInstallOrchestrator } from "@/lib/mcp/use-mcp-install-orchestrator";
 import { cn } from "@/lib/utils/tailwind";
 import type { QuickEditNotice } from "./settings-view";
 import { QuickEditFooter, QuickEditViewHeader } from "./view-header";

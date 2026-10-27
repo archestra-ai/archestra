@@ -73,6 +73,8 @@ if (process.argv[2] === "prepare") {
   ]);
   await run("pnpm", ["--dir", "backend", "exec", "tsdown"]);
   await run("pnpm", ["--dir", "backend", "db:migrate"]);
+} else if (process.argv[2] === "migrate") {
+  await run("pnpm", ["--dir", "backend", "db:migrate"]);
 } else if (process.argv[2] === "serve") {
   const args = [];
   if (cpuProfile) {
@@ -98,5 +100,5 @@ if (process.argv[2] === "prepare") {
     ]);
   } else await run(process.execPath, [...args, "backend/dist/server.mjs"]);
 } else {
-  throw new Error("Usage: node benchmarks/backend.mjs prepare|serve");
+  throw new Error("Usage: node benchmarks/backend.mjs prepare|migrate|serve");
 }

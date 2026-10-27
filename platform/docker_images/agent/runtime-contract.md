@@ -53,7 +53,7 @@ The entire UTF-8 file must not exceed 4,096 bytes. Missing files, malformed JSON
 
 Treat `message` as public task output. Image authors must remove credentials and private details before publishing it. Prefer safe messages constructed from structured client errors; never copy raw stderr or provider response bodies. Schema validation cannot detect secrets in otherwise valid text.
 
-The built-in Archestra image reports configuration, startup, and session failures. The maintained Claude Code wrapper publishes its own messages from `StopFailure` events. Delegated API failures end the run. Interactive sessions remain open and request attention. The OpenCode, OpenClaw, and Grok Build wrappers also publish safe messages for terminal one-shot errors. OpenCode context compaction remains recoverable. Shared initialization reports proxy connectivity failures, GitHub setup failures, and GitHub credentials that GitHub rejects. Codex, Hermes, OpenCode, OpenClaw, and Grok Build publish protocol configuration errors through the same envelope. Native errors without an adapter retain exit-status-only reporting.
+The built-in Archestra image reports configuration, startup, and session failures. The maintained Claude Code wrapper publishes its own messages from `StopFailure` events. Delegated API failures end the run. Interactive sessions remain open and request attention. The OpenCode, OpenClaw, Grok Build, and Kimi Code wrappers also publish safe messages for terminal one-shot errors. OpenCode context compaction remains recoverable. Shared initialization reports proxy connectivity failures, GitHub setup failures, and GitHub credentials that GitHub rejects. Codex, Hermes, OpenCode, OpenClaw, Grok Build, and Kimi Code publish protocol configuration errors through the same envelope. Native errors without an adapter retain exit-status-only reporting.
 
 The Codex wrapper reads terminal `task_complete.error` events from the main session's structured rollout. Failed delegated turns publish the upstream message after credential redaction and settle as failed. Interactive sessions request attention. Earlier resumed turns, subagent errors, and transient retries cannot fail the current turn. Rebuild maintained Codex images and advance derived-image pins to receive this behavior.
 
@@ -71,13 +71,13 @@ Bundled text files are returned as text. A `<skill_file encoding="base64">` cont
 
 ## MCP Startup
 
-In the default TUI mode, the maintained images wait for their native client's gateway catalog before submitting a delegated task. A failed connection, catalog request, or discovery timeout fails the run instead of starting it with only local tools. Claude Code checks its own TUI's registered gateway tools before submitting the prompt. Grok Build waits for its session's own record of the gateway connection, which includes the listed tool count. Custom clients must also complete gateway discovery before assembling their first model request; checking tool assignments or making a separate preflight connection does not establish that the client's tool catalog is ready.
+In the default TUI mode, the maintained images wait for their native client's gateway catalog before submitting a delegated task. A failed connection, catalog request, or discovery timeout fails the run instead of starting it with only local tools. Claude Code checks its own TUI's registered gateway tools before submitting the prompt. Grok Build waits for its session's own record of the gateway connection, which includes the listed tool count. Kimi Code waits for its gateway bridge's record of the answer to Kimi's own catalog request. Custom clients must also complete gateway discovery before assembling their first model request; checking tool assignments or making a separate preflight connection does not establish that the client's tool catalog is ready.
 
 The real-client tests in `docker_images/agent/tests/mcp-startup.py` run during image builds. They hold discovery behind a barrier, execute all three OpenAPPA recovery tools, resume a saved conversation, and check discovery errors and timeouts. The MCP and model endpoints are synthetic; the pinned clients, wrappers, tmux sessions, and tool execution paths are real.
 
 ## Readable Transcript
 
-The maintained Archestra Agent, Claude Code, Codex, OpenCode, Hermes, OpenClaw, and Grok Build images export their native message and tool history as a readable transcript. A custom image can provide the same completed-run experience by writing `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json` (normally `/var/run/archestra/readable-transcript.json`) before its process exits.
+The maintained Archestra Agent, Claude Code, Codex, OpenCode, Hermes, OpenClaw, Grok Build, and Kimi Code images export their native message and tool history as a readable transcript. A custom image can provide the same completed-run experience by writing `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json` (normally `/var/run/archestra/readable-transcript.json`) before its process exits.
 
 The file must be a JSON object using version 1 of this contract:
 
@@ -148,7 +148,7 @@ Archestra supplies the applicable variables below when launching a run. You do n
 | `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR` | Parent directory containing each turn's attached files. |
 | `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_MANIFEST` | JSON manifest containing each input file's name, path, media type, and size. |
 | `ARCHESTRA_AGENT_RUNTIME_MODEL` | Provider-qualified model ID for generic clients. |
-| `ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR` | Optional image-wrapper override for isolated Codex, Hermes, OpenClaw, or Grok Build conversation state. Control files and terminal recording remain in the runtime directory. |
+| `ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR` | Optional image-wrapper override for isolated Codex, Hermes, OpenClaw, Grok Build, or Kimi Code conversation state. Control files and terminal recording remain in the runtime directory. |
 | `ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL` | Provider-native model slug for clients that configure their provider separately. |
 | `ARCHESTRA_AGENT_RUNTIME_MODEL_CONTEXT_LENGTH`, `ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH` | Known context and output limits for native client configuration. |
 | `ARCHESTRA_LLM_PROXY_URL`, `ARCHESTRA_LLM_PROXY_PROTOCOL` | Agent-scoped inference endpoint and its `openai_responses`, `openai_chat`, or `anthropic` protocol. |

@@ -10,7 +10,7 @@ export const ClaudeCodeAccountSchema = z.object({
     "failed",
     "expired",
   ]),
-  requiresVaultReference: z.boolean().optional(),
+
   expiresAt: z.string().datetime().nullable().optional(),
   flowId: z.string().uuid().optional(),
   authorizationUrl: z

@@ -1828,6 +1828,146 @@ describe("stopping with queued messages", () => {
     expect(chatMessageQueue.get(conversationId)).toHaveLength(0);
   });
 
+  it.each([
+    "ready",
+    "approval-requested",
+    "input-available",
+    "approval-responded",
+  ])("does not interrupt when the current session is %s", async (state) => {
+    let session: ChatSessionSnapshot;
+    if (state === "ready") status = "ready";
+    else
+      messages = [
+        {
+          id: "assistant",
+          role: "assistant",
+          parts: [
+            {
+              type: "dynamic-tool",
+              toolName: "write",
+              toolCallId: "call",
+              state,
+              input: {},
+            },
+          ],
+        },
+      ] as UIMessage[];
+    render(
+      <ChatProvider>
+        <RegisterChatSession conversationId={conversationId} />
+        <CaptureChatSession
+          conversationId={conversationId}
+          onSession={(value) => {
+            session = value;
+          }}
+        />
+      </ChatProvider>,
+    );
+    await waitFor(() => expect(session).toBeDefined());
+    const stopServer = vi.fn().mockResolvedValue(undefined);
+    act(() => {
+      chatMessageQueue.enqueue(conversationId, { text: "correction" });
+      session?.stop({
+        preserveQueuedMessages: true,
+        interruptQueued: true,
+        stopServer,
+      });
+    });
+    expect(stopServer).not.toHaveBeenCalled();
+    expect(mocks.stop).not.toHaveBeenCalled();
+    if (state !== "ready")
+      expect(chatMessageQueue.get(conversationId)).toHaveLength(1);
+  });
+
+  it.each([
+    true,
+    false,
+  ])("sends the full queue in one turn after interrupt (aborted=%s)", async (isAbort) => {
+    let session: ChatSessionSnapshot;
+    let finishStop: () => void = () => {};
+    const stopServer = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishStop = resolve;
+        }),
+    );
+    const tree = () => (
+      <ChatProvider>
+        <RegisterChatSession conversationId={conversationId} />
+        <CaptureChatSession
+          conversationId={conversationId}
+          onSession={(value) => {
+            session = value;
+          }}
+        />
+      </ChatProvider>
+    );
+    const { rerender } = render(tree());
+    await waitFor(() => expect(session).toBeDefined());
+    act(() => {
+      chatMessageQueue.enqueue(conversationId, {
+        text: "first correction",
+        files: [
+          {
+            url: "data:text/plain;base64,SGk=",
+            mediaType: "text/plain",
+            filename: "note.txt",
+          },
+        ],
+      });
+      chatMessageQueue.enqueue(conversationId, { text: "second correction" });
+      session?.stop({
+        preserveQueuedMessages: true,
+        interruptQueued: true,
+        stopServer,
+      });
+      session?.stop({
+        preserveQueuedMessages: true,
+        interruptQueued: true,
+        stopServer,
+      });
+    });
+    expect(stopServer).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await chatOptions?.onFinish?.({
+        message: { id: "interrupted", role: "assistant", parts: [] },
+        isAbort,
+        isError: false,
+      });
+    });
+    status = "ready";
+    rerender(tree());
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+    await act(async () => finishStop());
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledTimes(1));
+    expect(mocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: [{ type: "text", text: "second correction" }],
+      }),
+    );
+    const append = mocks.setMessages.mock.calls.at(-1)?.[0];
+    expect(typeof append).toBe("function");
+    if (typeof append !== "function")
+      throw new Error("Missing batch transcript update");
+    expect(append([])).toEqual([
+      expect.objectContaining({
+        role: "user",
+        parts: [
+          { type: "text", text: "first correction" },
+          {
+            type: "file",
+            url: "data:text/plain;base64,SGk=",
+            mediaType: "text/plain",
+            filename: "note.txt",
+          },
+        ],
+      }),
+    ]);
+    expect(chatMessageQueue.get(conversationId)).toHaveLength(0);
+    rerender(tree());
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
   it("sends the oldest queued message immediately after a steering interrupt", async () => {
     const latestSessionRef: { current: ChatSessionSnapshot } = {
       current: undefined,
@@ -2458,6 +2598,99 @@ describe("context window breakdown state", () => {
 
     expect(sessionA.current?.contextWindow).toBeNull();
     expect(sessionB.current?.contextWindow).toBeNull();
+  });
+
+  it("reconciles contextWindow.usedTokens when data-token-usage refines the prompt token count", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-context-window-breakdown",
+        data: validBreakdown,
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextWindow?.usedTokens).toBe(84_200),
+    );
+    expect(latestSessionRef.current?.contextTokensUsed).toBe(84_200);
+
+    // Provider reports exact prompt tokens after the response finishes.
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-token-usage",
+        data: { inputTokens: 168_400, outputTokens: 120, totalTokens: 168_520 },
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextTokensUsed).toBe(168_400),
+    );
+    expect(latestSessionRef.current?.contextWindow?.usedTokens).toBe(168_400);
+    expect(latestSessionRef.current?.contextWindow?.freeTokens).toBe(
+      200_000 - 168_400,
+    );
+  });
+
+  it("clears stale contextWindow when compaction updates contextTokensUsed", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-context-window-breakdown",
+        data: validBreakdown,
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextWindow).not.toBeNull(),
+    );
+    expect(latestSessionRef.current?.contextTokensUsed).toBe(
+      validBreakdown.usedTokens,
+    );
+
+    act(() => {
+      latestSessionRef.current?.recordContextCompaction({
+        trigger: "manual",
+        originalTokenEstimate: 84_200,
+        compactedTokenEstimate: 12_000,
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextTokensUsed).toBe(12_000),
+    );
+    expect(latestSessionRef.current?.contextWindow).toBeNull();
   });
 });
 

@@ -19,6 +19,12 @@ export const OAUTH_CALLBACK_PATH = "/api/oauth/callback";
  */
 export const MS_TEAMS_SIGN_IN_PATH = "/api/webhooks/chatops/ms-teams/sign-in";
 export const MS_TEAMS_SIGN_IN_CALLBACK_PATH = `${MS_TEAMS_SIGN_IN_PATH}/callback`;
+/**
+ * Public token exchange for GitHub Actions pull-request jobs. The OIDC token
+ * in the body is the proof; the handler checks it against the gateway's
+ * GitHub Actions setting.
+ */
+export const GITHUB_ACTIONS_TOKEN_PATH = "/api/github-actions/token";
 export const WELL_KNOWN_ACME_PREFIX = "/.well-known/acme-challenge/";
 export const MCP_GATEWAY_PREFIX = "/v1/mcp";
 export const PROXY_API_PREFIX = "/v1";

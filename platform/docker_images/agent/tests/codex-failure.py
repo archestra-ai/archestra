@@ -82,6 +82,7 @@ class FailureWatchTest(unittest.TestCase):
 
     def test_real_codex_authentication_error_settles_delegated_tui(self):
         upstream_message = "Authentication failed. Reconnect your account."
+        requested_models = []
 
         class Provider(http.server.BaseHTTPRequestHandler):
             def do_POST(self):
@@ -98,6 +99,7 @@ class FailureWatchTest(unittest.TestCase):
                     status = 200
                     response = {"jsonrpc": "2.0", "id": request.get("id"), "result": result}
                 else:
+                    requested_models.append(request.get("model"))
                     status = 401
                     response = {"error": {"message": upstream_message, "type": "authentication_error"}}
                 data = json.dumps(response).encode()
@@ -144,6 +146,7 @@ class FailureWatchTest(unittest.TestCase):
                         status = os.waitstatus_to_exitcode(child_status)
                         break
                 self.assertEqual(status, 1, "delegated TUI must exit after the provider rejects the turn")
+                self.assertEqual(set(requested_models), {"gpt-5.6-terra"}, "startup must preserve the Agent's selected model")
                 envelope = json.loads((runtime / "turn.failure").read_text())
                 self.assertEqual(envelope, {"version": 1, "code": "codex_turn_failed", "message": "unexpected status 401 Unauthorized: " + upstream_message})
                 self.assertEqual((runtime / "final-answer.txt").read_text(), envelope["message"] + "\n")

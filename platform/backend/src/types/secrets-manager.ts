@@ -125,25 +125,6 @@ export interface VaultConfig {
   awsIamServerIdHeader?: string;
 }
 
-/**
- * Item returned when listing secrets in a Vault folder
- */
-export interface VaultSecretListItem {
-  /** Secret name/key within the folder */
-  name: string;
-  /** Full Vault path to the secret */
-  path: string;
-}
-
-/**
- * Result of checking connectivity to a Vault folder
- */
-export interface VaultFolderConnectivityResult {
-  connected: boolean;
-  secretCount: number;
-  error?: string;
-}
-
 export type VaultAuthMethod = "token" | "kubernetes" | "aws";
 
 export type VaultKvVersion = "1" | "2";

@@ -35,6 +35,10 @@ export const CacheKey = {
   OAuthState: "oauth-state",
   /** Token endpoint requests, before verifying client credentials. */
   OAuthTokenRateLimit: "oauth-token-rate-limit",
+  /** GitHub Actions OIDC token ids already exchanged, until they expire. */
+  GitHubActionsTokenJti: "github-actions-token-jti",
+  /** GitHub Actions token exchange requests, before verifying the OIDC token. */
+  GitHubActionsTokenRateLimit: "github-actions-token-rate-limit",
   /** MCP Gateway session state */
   McpSession: "mcp-session",
   /** Legacy HTTP+SSE stream records for the MCP Gateway */
@@ -175,6 +179,8 @@ export const CacheKey = {
    * next call reads them.
    */
   AgentRuntimePendingExports: "agent-runtime-pending-exports-v1",
+  /** Model pool members sitting out after a failure, shared by every replica. */
+  ModelPoolBench: "model-pool-bench",
   /**
    * Workspace transfer tickets: minted by whichever replica serves the tool
    * or API call, redeemed by whichever one the public content URL reaches.

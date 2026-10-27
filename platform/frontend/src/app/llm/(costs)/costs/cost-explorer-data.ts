@@ -7,9 +7,11 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   type StatisticsTimeFrame,
+  type SupportedProvider,
 } from "@archestra/shared";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useProxyLabelCosts } from "@/lib/proxy-label-costs.query";
 import {
   useProfileStatistics,
@@ -39,6 +41,9 @@ export const METRIC_IDS = [
   "subscription",
   "requests",
   "tokens",
+  "cacheRead",
+  "cacheWrite",
+  "cacheSavings",
   "toolCalls",
   "appRuns",
   "skillActivations",
@@ -46,6 +51,7 @@ export const METRIC_IDS = [
 export type MetricId = (typeof METRIC_IDS)[number];
 
 export const DIM_IDS = [
+  "time",
   "team",
   "agent",
   "model",
@@ -56,6 +62,8 @@ export const DIM_IDS = [
   "tool",
   "method",
   "key",
+  "providerKey",
+  "pool",
   "label",
 ] as const;
 export type DimId = (typeof DIM_IDS)[number];
@@ -95,6 +103,21 @@ export const METRICS: Record<
     money: false,
     note: "Counts newly processed input and output. Reused cached input is shown separately and is not included. Requests in flight may not appear yet.",
   },
+  cacheRead: {
+    label: "Cache reads",
+    money: false,
+    note: "Input tokens reused from the provider cache, across all billing modes. Based on provider-reported usage.",
+  },
+  cacheWrite: {
+    label: "Cache writes",
+    money: false,
+    note: "Input tokens written to the provider cache, across all billing modes. Based on provider-reported usage.",
+  },
+  cacheSavings: {
+    label: "Net cache savings",
+    money: true,
+    note: "Estimated savings on metered API usage versus full input pricing, after cache-write surcharges. Can be negative. Depends on recorded usage and available prices; subscription usage is excluded. Savings are available organization-wide over time, not by model or person.",
+  },
   toolCalls: {
     label: "Tool calls",
     money: false,
@@ -113,6 +136,7 @@ export const METRICS: Record<
 };
 
 export const DIMS: Record<DimId, { label: string; plural: string }> = {
+  time: { label: "Time", plural: "periods" },
   team: { label: "Team", plural: "teams" },
   agent: { label: "Agent", plural: "agents" },
   model: { label: "Model", plural: "models" },
@@ -123,6 +147,8 @@ export const DIMS: Record<DimId, { label: string; plural: string }> = {
   tool: { label: "Tool", plural: "tools" },
   method: { label: "Access method", plural: "access methods" },
   key: { label: "Key", plural: "keys" },
+  providerKey: { label: "Provider key", plural: "provider keys" },
+  pool: { label: "Model pool", plural: "model pools" },
   label: { label: "Label", plural: "label values" },
 };
 
@@ -131,19 +157,24 @@ const LLM_METRICS: MetricId[] = [
   "subscription",
   "requests",
   "tokens",
+  "cacheRead",
+  "cacheWrite",
 ];
 
 const SUPPORT: Record<DimId, MetricId[]> = {
+  time: [...LLM_METRICS, "cacheSavings"],
   team: LLM_METRICS,
   agent: [...LLM_METRICS, "toolCalls"],
   model: LLM_METRICS,
-  person: [...METRIC_IDS],
+  person: METRIC_IDS.filter((metric) => metric !== "cacheSavings"),
   app: ["billed", "requests", "tokens", "toolCalls", "appRuns"],
   skill: ["tokens", "skillActivations"],
   server: ["toolCalls"],
   tool: ["toolCalls"],
   method: LLM_METRICS,
   key: LLM_METRICS,
+  providerKey: LLM_METRICS,
+  pool: LLM_METRICS,
   label: LLM_METRICS,
 };
 
@@ -151,6 +182,7 @@ export const supports = (group: DimId, metric: MetricId) =>
   SUPPORT[group].includes(metric);
 
 export function splitOptions(metric: MetricId, group: DimId): DimId[] {
+  if (group === "time") return [];
   if (metric === "toolCalls" && group !== "app") {
     const all: DimId[] = ["server", "tool", "person", "agent"];
     return all.filter(
@@ -182,6 +214,7 @@ export function normalize(q: PivotQuery): PivotQuery {
 }
 
 const PREFERRED_GROUP: Partial<Record<MetricId, DimId>> = {
+  cacheSavings: "time",
   toolCalls: "server",
   appRuns: "app",
   skillActivations: "skill",
@@ -192,6 +225,16 @@ export const SAVED_VIEWS: { id: string; label: string; q: PivotQuery }[] = [
     id: "spend-model",
     label: "Spend by model",
     q: { metric: "billed", group: "model", split: "none", chart: "bars" },
+  },
+  {
+    id: "cache-model",
+    label: "Cache reads by model",
+    q: { metric: "cacheRead", group: "model", split: "none", chart: "bars" },
+  },
+  {
+    id: "cache-savings",
+    label: "Prompt cache savings",
+    q: { metric: "cacheSavings", group: "time", split: "none", chart: "lines" },
   },
   {
     id: "spend-label",
@@ -225,6 +268,16 @@ export const SAVED_VIEWS: { id: string; label: string; q: PivotQuery }[] = [
     q: { metric: "billed", group: "key", split: "none", chart: "table" },
   },
   {
+    id: "provider-keys",
+    label: "Provider keys by spend",
+    q: {
+      metric: "billed",
+      group: "providerKey",
+      split: "none",
+      chart: "table",
+    },
+  },
+  {
     id: "skills",
     label: "Skills by reach",
     q: {
@@ -243,6 +296,7 @@ export function formatValue(metric: MetricId, v: number) {
 }
 
 export function formatCell(metric: MetricId, v: number) {
+  if (metric === "cacheSavings") return formatCost(v);
   if (v === 0) return "·";
   if (METRICS[metric].money) {
     if (v >= 1000) return formatCost(v);
@@ -397,7 +451,10 @@ export function usePivotCube(
   });
   const teamQ = useTeamStatistics({ timeframe, enabled: on("team") });
   const agentQ = useProfileStatistics({ timeframe, enabled: on("agent") });
-  const modelQ = useCostStatistics({ timeframe, enabled: on("model") });
+  const modelQ = useCostStatistics({
+    timeframe,
+    enabled: on("model") || on("time"),
+  });
   const userQ = useUsersForPivot({
     timeframe,
     withModels: src.kind === "user" && src.models,
@@ -412,8 +469,11 @@ export function usePivotCube(
   const proxyQ = useProxyCostStatistics({
     timeframe,
     limit: 50,
+    ...(q.group === "providerKey" ? { includeProviderKeys: "true" } : {}),
+    ...(q.group === "pool" ? { includeModelPools: "true" } : {}),
     enabled: on("proxy") && q.group !== "label",
   });
+  const providerCatalog = useModelProviderCatalog();
   const labelQ = useProxyLabelCosts({
     timeframe,
     labelKey: q.labelKey ?? "cost_center",
@@ -436,8 +496,10 @@ export function usePivotCube(
             : { labelValue: value }),
         } as ProxyFilter,
       }));
-    return proxyBy && proxyQ.data ? proxyItemsFor(proxyBy, proxyQ.data) : [];
-  }, [proxyBy, proxyQ.data, labelQ.data, q.labelKey]);
+    return proxyBy && proxyQ.data
+      ? proxyItemsFor(proxyBy, proxyQ.data, providerCatalog.label)
+      : [];
+  }, [proxyBy, proxyQ.data, labelQ.data, q.labelKey, providerCatalog]);
   const itemQs = useQueries({
     queries: proxyItems.map((item) => ({
       queryKey: ["cost-explorer", "proxy-item", timeframe, item.filter],
@@ -471,7 +533,7 @@ export function usePivotCube(
               ? teamQ
               : src.kind === "agent"
                 ? agentQ
-                : src.kind === "model"
+                : src.kind === "model" || src.kind === "time"
                   ? modelQ
                   : src.kind === "user"
                     ? userQ
@@ -499,6 +561,50 @@ export function usePivotCube(
       },
     };
     switch (src.kind) {
+      case "time": {
+        const data = modelQ.data;
+        const cacheSavings = q.metric === "cacheSavings";
+        const points = cacheSavings
+          ? (data?.costSavings.timeSeries ?? []).map((point) => ({
+              timestamp: point.timestamp,
+              value: point.cacheSavings,
+            }))
+          : (data?.models ?? []).flatMap((model) =>
+              model.timeSeries.map((point) => ({
+                timestamp: point.timestamp,
+                value: pointValue(metric, point),
+              })),
+            );
+        const facts = points.map((point) => ({
+          g: "all",
+          gLabel: "All usage",
+          b: point.timestamp,
+          v: point.value,
+        }));
+        const total = cacheSavings
+          ? (data?.costSavings.totalCacheSavings ?? 0)
+          : (data?.models ?? []).reduce(
+              (sum, model) =>
+                sum +
+                (metric === "billed"
+                  ? model.cost
+                  : metric === "subscription"
+                    ? model.timeSeries.reduce(
+                        (n, point) => n + pointValue(metric, point),
+                        0,
+                      )
+                    : pointValue(metric, model)),
+              0,
+            );
+        return {
+          ...assemble(facts, {
+            totals: new Map([["all", total]]),
+            meta: new Map([["all", { g: "all", gLabel: "All usage" }]]),
+          }),
+          ...base,
+          isLoading: modelQ.isLoading,
+        };
+      }
       case "tool": {
         const rows = toolQ.data?.data ?? [];
         const facts: Fact[] = rows.map((r) => {
@@ -785,8 +891,10 @@ export function usePivotCube(
         const facts: Fact[] = [];
         const totals = new Map<string, number>();
         const meta = new Map<string, Omit<Fact, "b" | "v">>();
+        const failedOver = new Map<string, number>();
         proxyItems.forEach((item, i) => {
           totals.set(item.key, pointValue(metric, item.totals));
+          failedOver.set(item.key, item.totals.failedOverAttempts);
           meta.set(item.key, {
             g: item.key,
             gLabel: item.label,
@@ -807,9 +915,23 @@ export function usePivotCube(
             });
           }
         });
+        const cube = assemble(facts, { totals, meta });
+        // A pool that failed over wrote one request per attempt; show how
+        // many of the requests were attempts the client never saw.
+        const showFailedOver =
+          metric === "requests" &&
+          proxyItems.some((item) => item.totals.failedOverAttempts > 0);
+        if (showFailedOver) {
+          for (const row of cube.rows) {
+            row.extras.failedOver = failedOver.get(row.key) ?? 0;
+          }
+        }
         return {
-          ...assemble(facts, { totals, meta }),
+          ...cube,
           ...base,
+          extraCols: showFailedOver
+            ? [{ id: "failedOver", label: "Failed over", format: formatInt }]
+            : [],
           isLoading:
             primary.isLoading || itemQs.some((query) => query.isLoading),
         };
@@ -868,14 +990,16 @@ type Source =
   | { kind: "tool"; dims: ToolCallUsageDimension[] }
   | { kind: "app"; dims: AppUsageDimension[] }
   | { kind: "skill"; dims: SkillUsageDimension[] }
+  | { kind: "time" }
   | { kind: "team" }
   | { kind: "agent" }
   | { kind: "model" }
   | { kind: "user"; models: boolean }
-  | { kind: "proxy"; by: "method" | "key" | "label" };
+  | { kind: "proxy"; by: ProxyGroup };
 
 function resolveSource(q: PivotQuery): Source {
   const split = q.split === "none" ? null : q.split;
+  if (q.group === "time") return { kind: "time" };
   if (q.metric === "toolCalls" && q.group !== "app") {
     const dims = new Set<ToolCallUsageDimension>(["day"]);
     for (const d of [q.group, split]) {
@@ -908,13 +1032,21 @@ function resolveSource(q: PivotQuery): Source {
   if (q.group === "team") return { kind: "team" };
   if (q.group === "agent") return { kind: "agent" };
   if (q.group === "model") return { kind: "model" };
-  if (q.group === "method" || q.group === "key" || q.group === "label")
+  if (
+    q.group === "method" ||
+    q.group === "key" ||
+    q.group === "providerKey" ||
+    q.group === "pool" ||
+    q.group === "label"
+  )
     return { kind: "proxy", by: q.group };
   return { kind: "user", models: split === "model" };
 }
 
 function apiFor(src: Source, tf: string, q: PivotQuery) {
   switch (src.kind) {
+    case "time":
+      return `GET /api/statistics/costs?timeframe=${tf}`;
     case "tool":
       return `GET /api/statistics/mcp-tool-calls?groupBy=${src.dims.join(",")}&timeframe=${tf}`;
     case "app":
@@ -932,6 +1064,10 @@ function apiFor(src: Source, tf: string, q: PivotQuery) {
     case "proxy":
       if (q.group === "label")
         return `GET /api/statistics/llm-proxy?timeframe=${tf}&labelKey=${encodeURIComponent(q.labelKey ?? "cost_center")}`;
+      if (q.group === "providerKey")
+        return `GET /api/statistics/llm-proxy?timeframe=${tf}&includeProviderKeys=true`;
+      if (q.group === "pool")
+        return `GET /api/statistics/llm-proxy?timeframe=${tf}&includeModelPools=true`;
       return `GET /api/statistics/llm-proxy?timeframe=${tf}${q.group === "key" ? "&credentialId={id}" : "&authMethod={method}"}`;
   }
 }
@@ -956,6 +1092,7 @@ type SeriesPointLike = {
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   billedCost?: number;
   subscriptionCost?: number;
 };
@@ -968,6 +1105,10 @@ function pointValue(metric: MetricId, p: SeriesPointLike) {
       return p.subscriptionCost ?? 0;
     case "requests":
       return p.requests ?? 0;
+    case "cacheRead":
+      return p.cacheReadTokens ?? 0;
+    case "cacheWrite":
+      return p.cacheWriteTokens ?? 0;
     case "tokens":
       return p.totalTokens ?? 0;
     default:
@@ -1091,13 +1232,50 @@ function assemble(
 }
 
 type ProxyData = archestraApiTypes.GetProxyCostStatisticsResponses["200"];
+type ProxyGroup = "method" | "key" | "providerKey" | "pool" | "label";
 type ProxyFilter =
   | { credentialId: string }
+  | { providerApiKeyId: string }
+  | { modelPoolId: string }
   | { authMethod: ProxyData["methods"][number]["authMethod"] }
   | { labelKey: string; labelValue: string }
   | { labelKey: string; labelUnassigned: "true" };
 
-function proxyItemsFor(by: "method" | "key", data: ProxyData) {
+function proxyItemsFor(
+  by: Exclude<ProxyGroup, "label">,
+  data: ProxyData,
+  providerLabel: (provider: SupportedProvider) => string,
+) {
+  if (by === "providerKey") {
+    return (data.providerKeys ?? []).map((k) => ({
+      key: k.providerApiKeyId ?? "none",
+      label:
+        k.providerApiKeyName ??
+        (k.providerApiKeyId ? "Deleted provider key" : "No provider key"),
+      sub: k.providerApiKeyId
+        ? `ID ${k.providerApiKeyId}`
+        : "The caller's own key, or a call from before keys were recorded",
+      tag: k.provider
+        ? providerLabel(k.provider as SupportedProvider)
+        : undefined,
+      totals: k,
+      filter: k.providerApiKeyId
+        ? ({ providerApiKeyId: k.providerApiKeyId } as ProxyFilter)
+        : null,
+    }));
+  }
+  if (by === "pool") {
+    return (data.modelPools ?? []).map((p) => ({
+      key: p.modelPoolId ?? "none",
+      label: p.modelPoolName ?? (p.modelPoolId ? "Deleted pool" : "Not pooled"),
+      sub: p.modelPoolId ? `ID ${p.modelPoolId}` : undefined,
+      tag: undefined as string | undefined,
+      totals: p,
+      filter: p.modelPoolId
+        ? ({ modelPoolId: p.modelPoolId } as ProxyFilter)
+        : null,
+    }));
+  }
   if (by === "method") {
     return data.methods.map((m) => ({
       key: m.authMethod,

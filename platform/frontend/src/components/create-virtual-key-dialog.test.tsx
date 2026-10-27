@@ -9,6 +9,7 @@ import {
 } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmModels, useModelsWithApiKeys } from "@/lib/llm-models.query";
+import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useMyTeams, useTeams } from "@/lib/teams/team.query";
 import { useCreateVirtualApiKey } from "@/lib/virtual-api-keys.query";
@@ -28,6 +29,10 @@ vi.mock("@/lib/llm-models.query", () => ({
   useModelsWithApiKeys: vi.fn(),
   // The key pickers' per-key model counts.
   useLlmModelIdsByKey: () => ({ data: [], isPending: false }),
+}));
+vi.mock("@/lib/llm-provider-api-keys.query", async (importOriginal) => ({
+  ...(await importOriginal()),
+  useLlmProviderApiKeys: vi.fn(() => ({ data: [] })),
 }));
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");
@@ -390,6 +395,24 @@ describe("CreateVirtualKeyDialog", () => {
     expect(dialog).toHaveTextContent("Authorization: Bearer arch_created");
     expect(dialog).toHaveTextContent("NameLaptop");
     expect(dialog).toHaveTextContent("Visible toOnly you");
+  });
+
+  it("hands off a key on current and future providers with a request for its primary keys", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useLlmProviderApiKeys).mockReturnValue({
+      data: [
+        { id: "openai-key", provider: "openai", isPrimary: true, userId: null },
+      ],
+    } as unknown as ReturnType<typeof useLlmProviderApiKeys>);
+    mutateAsync.mockResolvedValue({
+      ...createdKey("standard", []),
+      includeFutureProviders: true,
+    });
+    renderDialog("standard");
+    await createFromAnyStep(user);
+
+    const dialog = await screen.findByTestId("virtual-key-create-dialog");
+    expect(dialog).toHaveTextContent('"model": "openai:gpt-5.6-sol"');
   });
 
   it("offers image-only mapped Azure deployments with generation and multipart edit examples", async () => {

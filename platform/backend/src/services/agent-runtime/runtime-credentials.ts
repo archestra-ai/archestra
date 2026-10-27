@@ -1,14 +1,10 @@
-import {
-  isVaultReference,
-  type ResourcePermissionGrant,
-} from "@archestra/shared";
+import type { ResourcePermissionGrant } from "@archestra/shared";
 import {
   RuntimeCredentialConnectionModel,
   RuntimeCredentialDefinitionModel,
 } from "@/models";
 import type { ResourceAccessFilter } from "@/models/resource-permission-subject";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { isByosEnabled } from "@/secrets-manager";
 import { CredentialAccess } from "@/services/credential-access";
 import { githubUserConnectionManager } from "@/services/github-user-connection";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -197,7 +193,6 @@ export async function setRuntimeCredentialConnection(params: {
   scope: RuntimeCredentialConnectionScope;
   value: string;
 }) {
-  assertConnectionValue(params.value);
   const definition = await requireRuntimeCredentialDefinition(params);
   assertScopeAllowed({ definition, scope: params.scope });
   if (definition.kind === "github_app_user")
@@ -321,16 +316,6 @@ function assertScopeAllowed(params: {
     throw new ApiError(
       400,
       `${params.definition.name} does not allow ${params.scope} connections`,
-    );
-  }
-}
-
-function assertConnectionValue(value: string): void {
-  if (!isByosEnabled()) return;
-  if (!isVaultReference(value)) {
-    throw new ApiError(
-      400,
-      "Readonly Vault credentials must select a secret and key",
     );
   }
 }

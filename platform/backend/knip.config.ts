@@ -16,6 +16,7 @@ const config: KnipConfig = {
     "scripts/create-statistics-index.mjs!",
     // GitHub Actions runs these CLIs to propose stable client version updates.
     "scripts/update-agent-runtime-clis.mjs!",
+    "scripts/update-playwright-mcp.mjs!",
     "scripts/update-codex-models-client-version.mjs!",
     "scripts/update-copilot-chat-client-version.mjs!",
     "scripts/update-grok-client-version.mjs!",

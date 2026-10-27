@@ -26,8 +26,7 @@ export function makeLlmProviderApiKey(
     updatedAt: "2026-01-01T00:00:00.000Z",
     teamName: null,
     userName: "Test Admin",
-    vaultSecretPath: null,
-    vaultSecretKey: null,
+
     secretStorageType: "database",
     bestModelId: null,
     isAgentKey: false,

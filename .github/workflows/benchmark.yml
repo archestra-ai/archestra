@@ -24,7 +24,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  GAR_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+  CI_IMAGE_REGISTRY: ghcr.io/archestra-ai/ci
   GKE_CLUSTER: archestra-staging
   GKE_ZONE: us-central1-a
   GKE_PROJECT: friendly-path-465518-r6
@@ -39,6 +39,7 @@ jobs:
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read # checkout
+      packages: write # Publish the benchmark image and cache to the CI registry.
       id-token: write # Workload Identity Federation + GKE credentials
     steps:
       - name: Checkout repository
@@ -57,6 +58,13 @@ jobs:
           service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
           registry: europe-west1-docker.pkg.dev
+
+      - name: Log in to GHCR
+        uses: $/.github/actions/docker-login
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       - name: Install gke-gcloud-auth-plugin
         run: gcloud components install gke-gcloud-auth-plugin
@@ -123,8 +131,8 @@ jobs:
           PLATFORM_IMAGE: ${{ steps.resolve.outputs.platform_image }}
         run: |
           set -euo pipefail
-          BENCH_IMAGE="${GAR_REGISTRY}/bench-runner:${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
-          CACHE_REF="${GAR_REGISTRY}/bench-runner:buildcache"
+          BENCH_IMAGE="${CI_IMAGE_REGISTRY}/bench-runner:${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          CACHE_REF="${CI_IMAGE_REGISTRY}/bench-runner:buildcache"
           # Registry cache keeps the (stable) musl Rust compile warm across daily runs; only the final
           # FROM ${PLATFORM_IMAGE} layers re-resolve when staging redeploys.
           docker buildx build --platform linux/amd64 --push \

@@ -1,4 +1,7 @@
-import type { IncomingEmailSecurityMode } from "@archestra/shared";
+import type {
+  GitHubActionsAccess,
+  IncomingEmailSecurityMode,
+} from "@archestra/shared";
 import { type SQL, sql } from "drizzle-orm";
 import {
   boolean,
@@ -24,6 +27,7 @@ import environmentsTable from "./environment";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
+import modelPoolsTable from "./model-pool";
 import secretsTable from "./secret";
 import serviceAccountsTable from "./service-account";
 import { softDeletablePgTable } from "./soft-deletable-table";
@@ -102,6 +106,14 @@ const agentsTable = softDeletablePgTable(
     modelId: uuid("model_id").references(() => modelsTable.id, {
       onDelete: "set null",
     }),
+    /**
+     * A model pool as the agent's default model. `llmApiKeyId` and `modelId`
+     * then hold one member, for everything that needs a single model; its
+     * runs and new chats go to the pool. ON DELETE SET NULL.
+     */
+    modelPoolId: uuid("model_pool_id").references(() => modelPoolsTable.id, {
+      onDelete: "set null",
+    }),
     /** Optional `fast` / `smart` tiers of the agent's trio, on `llmApiKeyId`. */
     fastModelId: uuid("fast_model_id").references(() => modelsTable.id, {
       onDelete: "set null",
@@ -147,6 +159,15 @@ const agentsTable = softDeletablePgTable(
 
     /** Allowlist of HTTP header names to forward from gateway requests to downstream MCP servers */
     passthroughHeaders: text("passthrough_headers").array(),
+
+    /**
+     * MCP gateways only: which GitHub Actions pull-request jobs may trade
+     * their OIDC token for a token on this gateway that acts as the pull
+     * request's author. Null turns the exchange off.
+     */
+    githubActionsAccess: jsonb(
+      "github_actions_access",
+    ).$type<GitHubActionsAccess>(),
 
     /** Whether tools/list exposes the full tool menu or only meta-discovery tools */
     toolExposureMode: text("tool_exposure_mode")

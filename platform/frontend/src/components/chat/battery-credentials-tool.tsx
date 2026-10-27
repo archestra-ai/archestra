@@ -31,7 +31,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useFeature } from "@/lib/config/config.query";
 import {
   type RuntimeCredentialDefinition,
   useCreateRuntimeCredential,
@@ -67,7 +66,7 @@ export function BatteryCredentialsTool({
   const credentials = useRuntimeCredentials();
   // The dropdown shows the new token, so no toast repeats it.
   const create = useCreateRuntimeCredential({ silent: true });
-  const byosEnabled = useFeature("byosEnabled") === true;
+
   useEffect(() => setSent(sessionStorage.getItem(sentKey)), [sentKey]);
   const all = credentials.data ?? [];
   const options = all.filter(
@@ -256,7 +255,6 @@ export function BatteryCredentialsTool({
             githubClientId: null,
           }}
           scope="organization"
-          useExternalSecretsManager={byosEnabled}
           // The dropdown shows the connected token instead of a toast.
           silent
           create={() => createToken(adding)}

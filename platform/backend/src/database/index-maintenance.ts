@@ -143,9 +143,15 @@ export async function createMcpServerIndexes(
  * keys a user authored through it; without it, every Connect page load scans
  * the window's interactions. It also serves the ON DELETE SET NULL lookup when
  * a virtual key is deleted. Partial, as most calls carry no passthrough key.
+ *
+ * And the partial index of calls whose media cost is unavailable:
+ * `interactions (created_at, id) WHERE response->'__mediaUsage'->>
+ * 'costAvailable' = 'false'`. The default user limit's organization-wide spend
+ * read (`LimitModel.getDefaultUserLimitUsageByUser`) finds those calls through
+ * it instead of detoasting every response in the window. Such calls are rare.
  * interactions is the LLM proxy's hot write path, so a migration's blocking
  * build is never an option (see the archestra-dev-interactions-migrations
- * rules): both indexes are built concurrently, on a dedicated connection,
+ * rules): these indexes are built concurrently, on a dedicated connection,
  * under one advisory lock, checked rather than trusted, and retried on the
  * next boot after a failure.
  */
@@ -157,6 +163,27 @@ export async function createInteractionsIndexes(
     lockKey: INTERACTIONS_INDEX_LOCK,
     options,
   });
+}
+
+/**
+ * Whether the model-history index on interactions exists, is valid and has the
+ * expected definition. Cost backfills and their previews only run once it is,
+ * because without it each of their queries scans the whole table. Worker
+ * startup builds it ({@link createInteractionsIndexes}); on a large table that
+ * takes minutes.
+ */
+export async function isModelHistoryIndexReady(): Promise<boolean> {
+  const existing = await inspectIndex({
+    client: db.$client,
+    name: MODEL_HISTORY_INDEX.name,
+    table: MODEL_HISTORY_INDEX.table,
+  });
+  return (
+    !!existing &&
+    existing.indisvalid === true &&
+    existing.indisready === true &&
+    hasExpectedDefinition({ existing, index: MODEL_HISTORY_INDEX })
+  );
 }
 
 // SPDX-SnippetBegin
@@ -238,10 +265,41 @@ interface IndexMaintenanceOptions {
 interface MaintainedIndex {
   table: string;
   name: string;
+  /** Key columns, in order. */
   columns: readonly string[];
-  /** As pg_get_expr prints it, so an existing index can be compared. */
-  predicate: string;
+  /** Non-key columns carried in the index (INCLUDE), so reads stay index-only. */
+  include?: readonly string[];
+  /**
+   * As pg_get_expr prints it, so an existing index can be compared; null for a
+   * full (non-partial) index.
+   */
+  predicate: string | null;
 }
+
+/**
+ * One model's request history in time order, with everything a cost backfill
+ * and its preview read: the backfill walks a model's rows by `(created_at, id)`
+ * and the preview aggregates them, both index-only. Without it either one scans
+ * the whole table (measured: 15.6 s for the preview on 6M rows, against 0.8 s
+ * with it).
+ */
+const MODEL_HISTORY_INDEX: MaintainedIndex = {
+  table: "interactions",
+  name: "interactions_model_created_at_idx",
+  columns: ["model", "created_at", "id"],
+  include: [
+    "type",
+    "input_tokens",
+    "output_tokens",
+    "cache_read_tokens",
+    "cache_write_tokens",
+    "cache_write_1h_tokens",
+    "cost",
+    "billing_mode",
+    "user_id",
+  ],
+  predicate: null,
+};
 
 const AGENT_TOOLS_INDEXES: readonly MaintainedIndex[] = [
   {
@@ -281,6 +339,14 @@ const INTERACTIONS_INDEXES: readonly MaintainedIndex[] = [
     columns: ["passthrough_virtual_key_id"],
     predicate: "(passthrough_virtual_key_id IS NOT NULL)",
   },
+  {
+    table: "interactions",
+    name: "interactions_media_cost_unavailable_idx",
+    columns: ["created_at", "id"],
+    predicate:
+      "(((response -> '__mediaUsage'::text) ->> 'costAvailable'::text) = 'false'::text)",
+  },
+  MODEL_HISTORY_INDEX,
 ];
 const INTERACTIONS_INDEX_LOCK = "index-maintenance:interactions";
 // The concurrent build and drop wait for every older transaction to finish,
@@ -455,8 +521,11 @@ async function buildMaintainedIndex(params: {
   logger.info({ table: index.table, indexName: index.name }, "Building index");
   await client.query(
     `CREATE INDEX ${concurrently ? "CONCURRENTLY " : ""}"${index.name}" ` +
-      `ON "${index.table}" (${index.columns.map((column) => `"${column}"`).join(", ")}) ` +
-      `WHERE ${index.predicate}`,
+      `ON "${index.table}" (${quoteColumns(index.columns)})` +
+      (index.include?.length
+        ? ` INCLUDE (${quoteColumns(index.include)})`
+        : "") +
+      (index.predicate ? ` WHERE ${index.predicate}` : ""),
   );
   return existing ? "rebuilt_invalid" : "created";
 }
@@ -493,6 +562,7 @@ function hasExpectedDefinition(params: {
   index: MaintainedIndex;
 }): boolean {
   const { existing, index } = params;
+  const allColumns = [...index.columns, ...(index.include ?? [])];
   return (
     existing.relkind === "i" &&
     existing.amname === "btree" &&
@@ -501,11 +571,15 @@ function hasExpectedDefinition(params: {
     existing.indisunique === false &&
     // Both counts: (a) INCLUDE (b) lists the same columns as (a, b).
     existing.indnkeyatts === index.columns.length &&
-    existing.indnatts === index.columns.length &&
+    existing.indnatts === allColumns.length &&
     existing.predicate === index.predicate &&
     Array.isArray(existing.columns) &&
-    existing.columns.join(",") === index.columns.join(",")
+    existing.columns.join(",") === allColumns.join(",")
   );
+}
+
+function quoteColumns(columns: readonly string[]): string {
+  return columns.map((column) => `"${column}"`).join(", ");
 }
 
 const LEGACY_PAYLOAD_TRGM_INDEXES = [

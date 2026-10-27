@@ -558,7 +558,7 @@ function Tile({
       }
       {...rest}
       className={cn(
-        "relative flex min-w-0 flex-col items-center justify-center gap-2 rounded-xl border bg-card px-2 text-xs transition-[border-color,background-color,color] duration-200 hover:border-foreground/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        "relative flex min-w-24 flex-col items-center justify-center gap-2 rounded-xl border bg-card px-2 text-xs transition-[border-color,background-color,color] duration-200 hover:border-foreground/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
         roomy ? "pt-4 pb-3" : "pt-3.5 pb-3",
         active
           ? // The muted tint is layered over the card fill, so the page's
@@ -567,32 +567,37 @@ function Tile({
           : "text-muted-foreground hover:bg-linear-to-b hover:from-muted/50 hover:to-muted/50 hover:text-foreground",
       )}
     >
-      {marker && <span className="absolute top-1.5 right-1.5">{marker}</span>}
+      {/* Stack status marks in a 20px column at top-1.5 right-1.5 (guardrails
+          above last-connected); min-w-24 keeps the column to the right of the
+          centered 36px logo and above the label. */}
+      {(marker || guardrailsSupported) && (
+        <span className="absolute top-1.5 right-1.5 flex flex-col items-center gap-0.5">
+          {guardrailsSupported && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  role="img"
+                  aria-label="Supports LLM proxy guardrails"
+                  className="grid size-5 place-items-center"
+                >
+                  <ShieldCheck className="size-3.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-60">
+                <span>
+                  Supports LLM proxy guardrails out of the box. Enforcement
+                  depends on your organization&apos;s settings.
+                </span>
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {marker}
+        </span>
+      )}
       {icon}
       {/* Labels wrap to two lines rather than truncate. */}
-      <span className="flex max-w-full items-center justify-center gap-1.5">
-        <span className="line-clamp-2 min-w-0 text-center leading-tight break-words">
-          {label}
-        </span>
-        {guardrailsSupported && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span
-                role="img"
-                aria-label="Supports LLM proxy guardrails"
-                className="shrink-0"
-              >
-                <ShieldCheck className="size-3.5" />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-60">
-              <span>
-                Supports LLM proxy guardrails out of the box. Enforcement
-                depends on your organization&apos;s settings.
-              </span>
-            </TooltipContent>
-          </Tooltip>
-        )}
+      <span className="line-clamp-2 w-full text-center leading-tight break-words">
+        {label}
       </span>
       {sub && (
         <span className="-mt-1 w-full text-center text-xs leading-tight font-normal text-muted-foreground">
@@ -680,7 +685,9 @@ function ConnectArea({
     tools: choices.tools && data.partsFor(client).tools,
   });
   // After copying: the status card under the band. A changed pick or choice
-  // sends it back to idle, except once connected.
+  // sends it back to idle, except once connected: the connected card stays
+  // through other choices for the same agent and shows only while that agent
+  // is selected.
   const setupKey = [
     client.id,
     script,
@@ -699,7 +706,10 @@ function ConnectArea({
     serverName,
   });
   const phase =
-    run.phase === "connected" || run.key === setupKey ? run.phase : "idle";
+    (run.phase === "connected" && run.client.id === client.id) ||
+    run.key === setupKey
+      ? run.phase
+      : "idle";
   const setPhase = (next: AfterConnectPhase) =>
     setRun({ phase: next, key: setupKey, client, script, serverName });
   // Only a copied prompt or command starts it: Manual setup and Claude

@@ -17,7 +17,8 @@
     {"source": "/docs/administration/identity/sso-team-sync", "destination": "/docs/admin/identity/sso#team-sync", "permanent": true},
     {"source": "/docs/administration/identity/two-factor-authentication", "destination": "/docs/admin/identity/account-security#two-factor-authentication", "permanent": true},
     {"source": "/docs/administration/observability", "destination": "/docs/admin/observability", "permanent": true},
-    {"source": "/docs/administration/observability/performance-benchmarks", "destination": "/docs/admin/observability/performance-benchmarks", "permanent": true},
+    {"source": "/docs/administration/observability/performance-benchmarks", "destination": "/docs/admin/performance-benchmarks", "permanent": true},
+    {"source": "/docs/admin/observability/performance-benchmarks", "destination": "/docs/admin/performance-benchmarks", "permanent": true},
     {"source": "/docs/administration/security", "destination": "/docs/admin", "permanent": true},
     {"source": "/docs/administration/security/content-encryption", "destination": "/docs/admin/content-encryption", "permanent": true},
     {"source": "/docs/administration/security/credentials", "destination": "/docs/admin/credentials", "permanent": true},
@@ -111,7 +112,7 @@
     {"source": "/docs/platform-ai-tool-guardrails", "destination": "/docs/agents/guardrails", "permanent": true},
     {"source": "/docs/platform-costs-and-limits", "destination": "/docs/llm-proxy/costs-and-limits", "permanent": true},
     {"source": "/docs/platform-observability", "destination": "/docs/admin/observability", "permanent": true},
-    {"source": "/docs/platform-performance-benchmarks", "destination": "/docs/admin/observability/performance-benchmarks", "permanent": true},
+    {"source": "/docs/platform-performance-benchmarks", "destination": "/docs/admin/performance-benchmarks", "permanent": true},
     {"source": "/docs/platform-environments", "destination": "/docs/admin/environments", "permanent": true},
     {"source": "/docs/platform-identity-providers", "destination": "/docs/admin/identity", "permanent": true},
     {"source": "/docs/platform-sso", "destination": "/docs/admin/identity/sso", "permanent": true},
@@ -166,7 +167,7 @@
     {"source": "/docs/contributing/adding-llm-providers", "destination": "/docs/contributing/extending-archestra#adding-llm-providers", "permanent": true},
     {"source": "/docs/contributing/adding-knowledge-connectors", "destination": "/docs/contributing/extending-archestra#adding-knowledge-connectors", "permanent": true},
     {"source": "/docs/contributing/adding-knowledge-retrieval-backends", "destination": "/docs/contributing/extending-archestra#adding-knowledge-retrieval-backends", "permanent": true},
-    {"source": "/docs/admin/usage-accounting", "destination": "/docs/admin/deployment/upgrades", "permanent": true},
+    {"source": "/docs/admin/usage-accounting", "destination": "/docs/admin/deployment/helm#upgrade", "permanent": true},
     {"source": "/docs/admin/security/credentials", "destination": "/docs/admin/credentials", "permanent": true},
     {"source": "/docs/admin/security/content-encryption", "destination": "/docs/admin/content-encryption", "permanent": true},
     {"source": "/docs/admin/security", "destination": "/docs/admin", "permanent": true},
@@ -174,6 +175,7 @@
     {"source": "/docs/agents/managed-agents", "destination": "/docs/agents/runtime", "permanent": true},
     {"source": "/docs/agents/managed-agents/setup", "destination": "/docs/agents/runtime/setup", "permanent": true},
     {"source": "/docs/agents/managed-agents/handoff", "destination": "/docs/agents/runtime/handoff", "permanent": true},
-    {"source": "/docs/agents/managed-agents/custom-images", "destination": "/docs/agents/runtime/custom-images", "permanent": true}
+    {"source": "/docs/agents/managed-agents/custom-images", "destination": "/docs/agents/runtime/custom-images", "permanent": true},
+    {"source": "/docs/admin/deployment/upgrades", "destination": "/docs/admin/deployment/helm#upgrade", "permanent": true}
   ]
 }

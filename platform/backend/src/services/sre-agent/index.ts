@@ -381,12 +381,17 @@ class SreAgentService {
     const agent = await SreRuntimeModel.findAgent(SRE_AGENT_ID);
     if (agent?.deletedAt !== null) return;
     if (!agent.systemPrompt?.includes(SRE_LEGACY_SOURCE_CLONE)) return;
-    await AgentModel.update(SRE_AGENT_ID, {
-      systemPrompt: agent.systemPrompt.replace(
-        SRE_LEGACY_SOURCE_CLONE,
-        SRE_SOURCE_CLONE,
-      ),
-    });
+    await AgentModel.update(
+      SRE_AGENT_ID,
+      {
+        systemPrompt: agent.systemPrompt.replace(
+          SRE_LEGACY_SOURCE_CLONE,
+          SRE_SOURCE_CLONE,
+        ),
+      },
+      // Version 1 marks setup complete; `ensureAgent` forks it after the tools.
+      { deferVersionFork: agent.latestVersion === 0 },
+    );
     logger.info({ agentId: SRE_AGENT_ID }, "Upgraded the SRE source clone");
   }
 }

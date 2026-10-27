@@ -667,6 +667,44 @@ describe("sreAgentService", () => {
     );
   });
 
+  test("upgrading the source clone of an agent an interrupted run left without tools still lets it get them", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const {
+      organizationId,
+      admin,
+      ensureAgent: ensure,
+    } = await seedSreInstall({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    await discoverTools(SRE_AGENT_TOOL_NAMES);
+    await AgentModel.create(
+      {
+        id: SRE_AGENT_ID,
+        organizationId,
+        name: "SRE",
+        agentType: "agent",
+        systemPrompt: SRE_LEGACY_SOURCE_CLONE,
+      },
+      admin.id,
+      { skipCreationDefaultTools: true, deferInitialVersionFork: true },
+    );
+
+    await sreAgentService.seed();
+    await ensure();
+
+    expect((await SreRuntimeModel.findAgent(SRE_AGENT_ID))?.systemPrompt).toBe(
+      SRE_SOURCE_CLONE,
+    );
+    expect(await AgentToolModel.findToolIdsByAgent(SRE_AGENT_ID)).toHaveLength(
+      SRE_AGENT_TOOL_NAMES.length,
+    );
+  });
+
   test("does not seed without a service account", async ({
     makeOrganization,
     makeUser,

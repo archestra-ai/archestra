@@ -493,6 +493,7 @@ describe("McpClient", () => {
     ).rejects.toThrow("disabled");
     await expect(
       mcpClient.inspectServer({
+        caller: { kind: "caller" },
         catalogItem: catalog,
         mcpServerId: server.id,
         secrets: {},

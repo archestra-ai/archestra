@@ -41,7 +41,7 @@ jobs:
       checks: read # Count the failing checks of the reviewed commit.
       actions: read # The shared job asks for it (CI triage); unused by a review.
       id-token: write # Short-lived identity for the staging-only IAP HTTPS tunnel.
-    uses: archestra-ai/.github/.github/workflows/archestra-runtime-review.yml@aa92ccf8b96c2c001048e701583d98b41af3bf8f # v1.8.0
+    uses: archestra-ai/.github/.github/workflows/archestra-runtime-review.yml@e7904ae4cd8f25266170da27a9c63c9f64fed1ad # v1.9.0
     with:
       kind: review
       gateway-url: ${{ vars.ARCHESTRA_REVIEW_GATEWAY_URL }}

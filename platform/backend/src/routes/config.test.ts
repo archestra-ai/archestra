@@ -200,6 +200,7 @@ describe("config routes", () => {
       "groq",
       "jev",
       "kimi",
+      "kimi-code",
       "microsoft-365-copilot",
       "minimax",
       "mistral",

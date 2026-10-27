@@ -38,6 +38,9 @@ export const providerToLogoProvider: Record<SupportedProvider, string> = {
   deepseek: "deepseek",
   minimax: "minimax",
   kimi: "moonshotai",
+  // models.dev has no Kimi Code mark; this is Kimi's K and dot from
+  // @lobehub/icons-static-svg, recolored to currentColor.
+  "kimi-code": "kimi-code",
   azure: "azure",
   "github-copilot": "github-copilot",
   "microsoft-365-copilot": "microsoft-365-copilot",

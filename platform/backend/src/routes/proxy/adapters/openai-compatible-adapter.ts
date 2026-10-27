@@ -58,6 +58,11 @@ interface OpenAiCompatibleAdapterOptions {
   extractInternalCode?: (
     error: unknown,
   ) => ArchestraInternalErrorCode | undefined;
+  /**
+   * Whether a credential is covered by a flat-rate plan, judged by its format
+   * alone (see `resolveInteractionBillingMode`). Omit for metered-only providers.
+   */
+  isSubscriptionCredential?: (apiKey: string | undefined) => boolean;
 }
 
 function defaultExtractInternalCode(
@@ -72,7 +77,13 @@ function defaultExtractInternalCode(
 export function createOpenAiCompatibleAdapterFactory(
   options: OpenAiCompatibleAdapterOptions,
 ): LLMProvider<Request, Response, Messages, StreamChunk, Headers> {
-  const { provider, interactionType, getBaseUrl, createClient } = options;
+  const {
+    provider,
+    interactionType,
+    getBaseUrl,
+    createClient,
+    isSubscriptionCredential,
+  } = options;
 
   return {
     provider,
@@ -96,6 +107,8 @@ export function createOpenAiCompatibleAdapterFactory(
     extractApiKey(headers: Headers): string | undefined {
       return headers.authorization;
     },
+
+    ...(isSubscriptionCredential ? { isSubscriptionCredential } : {}),
 
     getBaseUrl,
 

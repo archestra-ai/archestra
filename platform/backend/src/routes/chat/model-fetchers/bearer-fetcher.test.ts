@@ -61,6 +61,42 @@ describe("descriptor-table fetchers", () => {
     ]);
   });
 
+  test("kimi-code names each plan model and asks the Kimi Code endpoint by default", async () => {
+    mockModelsResponse({
+      data: [
+        {
+          id: "kimi-for-coding",
+          created: 1761264000,
+          display_name: "K2.8 Preview",
+        },
+        { id: "k3.1-pro" },
+      ],
+    });
+
+    const models = await modelFetchers["kimi-code"]("sk-kimi-k");
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://api.kimi.ai/coding/v1/models",
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: "Bearer sk-kimi-k" }),
+      }),
+    );
+    expect(models).toEqual([
+      {
+        id: "kimi-for-coding",
+        displayName: "K2.8 Preview",
+        provider: "kimi-code",
+        createdAt: new Date(1761264000 * 1000).toISOString(),
+      },
+      {
+        id: "k3.1-pro",
+        displayName: "k3.1-pro",
+        provider: "kimi-code",
+        createdAt: undefined,
+      },
+    ]);
+  });
+
   test("mistral maps every model with createdAt as created*1000", async () => {
     mockModelsResponse({ data: [{ id: "mistral-a", created: 1700000000 }] });
 

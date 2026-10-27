@@ -26,6 +26,7 @@ export const SupportedProvidersSchema = z.enum([
   "deepseek",
   "minimax",
   "kimi",
+  "kimi-code",
   "azure",
   "github-copilot",
   "microsoft-365-copilot",
@@ -66,6 +67,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "deepseek:chatCompletions",
   "minimax:chatCompletions",
   "kimi:chatCompletions",
+  "kimi-code:chatCompletions",
   "azure:chatCompletions",
   "azure:responses",
   "azure:images",
@@ -224,6 +226,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   deepseek: "DeepSeek",
   minimax: "MiniMax",
   kimi: "Moonshot (Kimi)",
+  "kimi-code": "Kimi Code",
   azure: "Azure AI Foundry",
   "github-copilot": "GitHub Copilot",
   "microsoft-365-copilot": "Microsoft 365 Copilot",
@@ -519,6 +522,7 @@ export const MODEL_ROUTER_SUPPORTED_PROVIDERS = [
   "deepseek",
   "groq",
   "kimi",
+  "kimi-code",
   "minimax",
   "mistral",
   "ollama",
@@ -558,6 +562,7 @@ export function isModelRouterSupportedProvider(
  */
 export const CHAT_COMPLETIONS_ONLY_ROUTER_PROVIDERS = [
   "kimi",
+  "kimi-code",
 ] as const satisfies ReadonlyArray<SupportedProvider>;
 
 export function isChatCompletionsOnlyRouterProvider(
@@ -623,6 +628,12 @@ export function getAgentRuntimeProviderCompatibility(params: {
     return {
       compatible: false,
       message: `The maintained Codex runtime requires an OpenAI model, but the Agent's selected model uses ${providerDisplayNames[params.provider]}.`,
+    };
+  }
+  if (runtimeCommand === "archestra-kimi" && params.provider !== "kimi-code") {
+    return {
+      compatible: false,
+      message: `The maintained Kimi Code runtime requires a Kimi Code model, but the Agent's selected model uses ${providerDisplayNames[params.provider]}.`,
     };
   }
   if (
@@ -895,6 +906,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   deepseek: "https://api.deepseek.com",
   minimax: "https://api.minimax.io/v1",
   kimi: "https://api.moonshot.ai/v1",
+  "kimi-code": "https://api.kimi.ai/coding/v1",
   azure: "https://<resource>.openai.azure.com/openai",
   "github-copilot": "https://api.githubcopilot.com",
   "microsoft-365-copilot": "https://graph.microsoft.com/beta",
@@ -1005,6 +1017,7 @@ export const PROVIDER_MODEL_TIERS: Record<
   },
   minimax: { normal: "MiniMax-M3" },
   kimi: { normal: "kimi-k3.1-pro" },
+  "kimi-code": { normal: "k3.1-pro" },
   azure: { normal: "gpt-5.5" },
   "github-copilot": {
     // Copilot has no Haiku 5.5 yet, and older Claude is not worth defaulting to.
@@ -1249,11 +1262,10 @@ export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
     llama: "openai",
     deepseek: "deepseek",
     moonshotai: "kimi",
-    // Kimi for Coding membership keys serve the same provider from the Kimi
-    // Code endpoints with plan model ids (k3.1-pro, kimi-for-coding, ...)
-    // priced at $0; both regions list the same ids.
-    "kimi-code-plan-global": "kimi",
-    "kimi-code-plan-cn": "kimi",
+    // Kimi Code membership plans list their model ids (k3.1-pro,
+    // kimi-for-coding, ...) at $0; both regions list the same ids.
+    "kimi-code-plan-global": "kimi-code",
+    "kimi-code-plan-cn": "kimi-code",
     groq: "groq",
     "fireworks-ai": "openai",
     togetherai: "openai",

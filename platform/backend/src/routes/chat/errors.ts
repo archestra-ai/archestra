@@ -1479,6 +1479,7 @@ const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   zhipuai: providerErrorHandler(parseZhipuaiError, mapZhipuaiErrorToCode),
   deepseek: openAiCompatibleErrorHandler,
   kimi: openAiCompatibleErrorHandler,
+  "kimi-code": openAiCompatibleErrorHandler,
   "github-copilot": providerErrorHandler(
     parseOpenAIError,
     mapGithubCopilotErrorToCode,

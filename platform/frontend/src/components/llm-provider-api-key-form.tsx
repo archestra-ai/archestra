@@ -380,10 +380,20 @@ const PROVIDER_CONFIG: Record<
     enabled: true,
     consoleUrl: "https://platform.kimi.ai/console/api-keys",
     consoleName: "Kimi API Platform",
-    // A Kimi for Coding membership key is not a platform key: it only answers
-    // on the Kimi Code endpoint, which the key's Base URL selects.
+    // A Kimi Code membership key is not a platform key: it only answers on the
+    // Kimi Code endpoint, which is its own provider.
     description:
-      "A Kimi API Platform key works as is. A Kimi for Coding membership key from the Kimi Code console only works on the Kimi Code endpoint: set the Base URL under advanced settings to https://api.kimi.ai/coding/v1 (or https://api.kimi.com/coding/v1 for kimi.com accounts).",
+      "A pay-as-you-go Kimi API Platform key. For a Kimi Code membership key (sk-kimi-...), choose Kimi Code instead.",
+  },
+  "kimi-code": {
+    name: "Kimi Code",
+    icon: "/model-logos/kimi-code.svg",
+    placeholder: "sk-kimi-...",
+    enabled: true,
+    consoleUrl: "https://www.kimi.ai/code/console",
+    consoleName: "Kimi Code Console",
+    description:
+      "A Kimi Code membership key. Requests use your plan's quota, not per-token billing. For the China endpoint, set the Base URL under advanced settings to https://api.kimi.com/coding/v1.",
   },
   bedrock: {
     name: "AWS Bedrock",

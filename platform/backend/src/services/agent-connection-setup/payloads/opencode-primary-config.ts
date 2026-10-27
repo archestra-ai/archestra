@@ -71,7 +71,8 @@ function openCodeCatalog(params: {
     if (entry) {
       shown.add(entry.provider);
       catalog.managed[id] = entry.models.map((model) => model.id);
-      catalog.legacy[`archestra-${route.provider}`] = id;
+      // A provider with two catalogs keeps an earlier pin on its first one.
+      catalog.legacy[`archestra-${route.provider}`] ??= id;
     }
     if (passthrough) catalog.passthrough.push(id);
   }

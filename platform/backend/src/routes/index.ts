@@ -87,6 +87,7 @@ export { default as githubCopilotProxyRoutes } from "./proxy/routes/github-copil
 export { default as groqProxyRoutes } from "./proxy/routes/groq";
 export { default as jevProxyRoutes } from "./proxy/routes/jev";
 export { default as kimiProxyRoutes } from "./proxy/routes/kimi";
+export { default as kimiCodeProxyRoutes } from "./proxy/routes/kimi-code";
 export { default as microsoft365CopilotProxyRoutes } from "./proxy/routes/microsoft-365-copilot";
 export { default as minimaxProxyRoutes } from "./proxy/routes/minimax";
 export { default as mistralProxyRoutes } from "./proxy/routes/mistral";

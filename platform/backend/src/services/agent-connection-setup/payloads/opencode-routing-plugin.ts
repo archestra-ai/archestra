@@ -634,5 +634,7 @@ const OPENCODE_CREDENTIAL_ENV_BY_PROVIDER: Record<string, readonly string[]> = {
   zhipuai: ["ZHIPU_API_KEY"],
   minimax: ["MINIMAX_API_KEY"],
   moonshotai: ["MOONSHOT_API_KEY"],
+  "kimi-code-plan-global": ["KIMI_API_KEY"],
+  "kimi-code-plan-cn": ["KIMI_API_KEY"],
   xai: ["XAI_API_KEY"],
 };

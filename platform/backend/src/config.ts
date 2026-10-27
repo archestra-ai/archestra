@@ -2863,6 +2863,14 @@ const config = {
       baseUrl:
         process.env.ARCHESTRA_KIMI_BASE_URL || "https://api.moonshot.ai/v1",
     },
+    // Kimi Code membership keys answer only on the Kimi Code endpoint. The
+    // default is the overseas host; China accounts use
+    // https://api.kimi.com/coding/v1.
+    "kimi-code": {
+      baseUrl:
+        process.env.ARCHESTRA_KIMI_CODE_BASE_URL ||
+        "https://api.kimi.ai/coding/v1",
+    },
     "github-copilot": {
       baseUrl:
         process.env.ARCHESTRA_GITHUB_COPILOT_BASE_URL ||
@@ -3007,6 +3015,9 @@ const config = {
     },
     kimi: {
       apiKey: process.env.ARCHESTRA_CHAT_KIMI_API_KEY || "",
+    },
+    "kimi-code": {
+      apiKey: process.env.ARCHESTRA_CHAT_KIMI_CODE_API_KEY || "",
     },
     "github-copilot": {
       apiKey: process.env.ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY || "",

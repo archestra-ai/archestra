@@ -237,6 +237,7 @@ export const TOOL_PERMISSIONS: Record<
   get_schedule_trigger: { resource: "project", action: "read" },
   list_schedule_trigger_runs: { resource: "project", action: "read" },
   get_schedule_trigger_run: { resource: "project", action: "read" },
+  get_schedule_trigger_run_transcript: { resource: "project", action: "read" },
   enable_schedule_trigger: { resource: "project", action: "update" },
   disable_schedule_trigger: { resource: "project", action: "update" },
   // Starting a run creates a run row, matching RunScheduleTriggerNow.

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils/tailwind";
 import {
   MessagingProvidersRow,
   useMessagingProviders,
-} from "./_components/messaging-providers";
+} from "./_parts/messaging-providers";
 
 /**
  * A provider's page. The settings sidebar lists the providers under

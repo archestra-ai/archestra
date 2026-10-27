@@ -348,7 +348,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
 
 vi.mock("@/lib/organization.query");
 
-vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
+vi.mock("@/lib/chat/use-chat-placeholder", () => ({
   useChatPlaceholder: (...args: unknown[]) => mockUseChatPlaceholder(...args),
 }));
 

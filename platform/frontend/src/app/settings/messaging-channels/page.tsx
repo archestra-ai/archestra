@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { useTriggerStatuses } from "./_components/use-trigger-statuses";
+import { useTriggerStatuses } from "./_parts/use-trigger-statuses";
 
 export default function MessagingChannelSettingsPage() {
   const router = useRouter();

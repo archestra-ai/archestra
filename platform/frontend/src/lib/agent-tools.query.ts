@@ -2,7 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { agentDelegationsQueryKeys } from "@/lib/agent-tools-query-keys";
-import { invalidateToolAssignmentQueries } from "./agent-tools.hook";
+import { invalidateToolAssignmentQueries } from "./use-invalidate-tool-assignment-queries";
 import {
   getApiErrorMessage,
   handleApiError,

@@ -1,0 +1,32 @@
+// Project-specific Biome (GritQL) lint plugin — hook file naming.
+//
+// Hooks are named after their export, `use-<thing>.ts`, and live beside the
+// feature that uses them; a hook that a second feature imports moves to
+// `lib/hooks/`. The older `<thing>.hook.ts` suffix is retired: the same hook
+// could be found under either name, and `.hook` said nothing about which hook
+// the file exported.
+//
+// Scoped in biome.json to `frontend/src/**/*.hook.ts(x)` and their
+// `.hook.test.ts(x)` tests, so it only ever sees a file with the retired
+// suffix. It reports once per file, anchored on the first import (or on the
+// whole file when there is none). Plugin diagnostics are not suppressible via
+// biome-ignore: rename the file.
+//
+// Conventions: platform/frontend/AGENTS.md, "Conventions".
+language js
+
+file(body=$body) where {
+  or {
+    and {
+      $body <: contains `import $_ from $_` as $anchor,
+      register_diagnostic(
+        span = $anchor,
+        message = "Name hooks by their export, `use-<thing>.ts`, beside the feature that uses them; promote to `lib/hooks/` when a second feature imports it. The `.hook.ts` suffix is retired. See `platform/frontend/AGENTS.md`, Conventions."
+      )
+    },
+    register_diagnostic(
+      span = $body,
+      message = "Name hooks by their export, `use-<thing>.ts`, beside the feature that uses them; promote to `lib/hooks/` when a second feature imports it. The `.hook.ts` suffix is retired. See `platform/frontend/AGENTS.md`, Conventions."
+    )
+  }
+}

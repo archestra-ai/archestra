@@ -16,7 +16,6 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { agentCatalogToolsQueryKey } from "@/lib/agent-query-keys";
-import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { appInteractive } from "@/lib/app-interactive";
 import { awaitBootstrapSeed } from "@/lib/auth/auth.query";
 import { callApi } from "@/lib/chat/api-call";
@@ -36,6 +35,7 @@ import {
   storeEncryptedChatKey,
 } from "@/lib/chat/encrypted-chat";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
+import { invalidateToolAssignmentQueries } from "@/lib/use-invalidate-tool-assignment-queries";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 import websocketService from "@/lib/websocket/websocket";
 

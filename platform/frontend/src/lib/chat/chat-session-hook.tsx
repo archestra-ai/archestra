@@ -56,8 +56,8 @@ import {
 import { encryptedChatRequestHeaders } from "@/lib/chat/encrypted-chat";
 import { getQueueInterruptBlockedReason } from "@/lib/chat/queue-interrupt";
 import { ResumableChatTransport } from "@/lib/chat/resumable-chat-transport";
-import { useStreamStall } from "@/lib/chat/stream-stall.hook";
 import { readThinkingEffort } from "@/lib/chat/thinking-effort-cache";
+import { useStreamStall } from "@/lib/chat/use-stream-stall";
 import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
 

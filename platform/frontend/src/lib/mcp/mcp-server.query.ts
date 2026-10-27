@@ -22,7 +22,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import { toast } from "sonner";
-import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { clipErrorMessage, trackEvent } from "@/lib/analytics";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
@@ -38,6 +37,7 @@ import {
   externalMcpSkillDetailQueryKey,
   externalMcpSkillsQueryKey,
 } from "@/lib/skills/skill.query";
+import { invalidateToolAssignmentQueries } from "@/lib/use-invalidate-tool-assignment-queries";
 import {
   getApiErrorMessage,
   handleApiError,

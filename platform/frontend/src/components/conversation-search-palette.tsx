@@ -55,8 +55,8 @@ import {
 import { useAgentOptionsPage } from "@/lib/agent-options.query";
 import { useMyAgentRuns } from "@/lib/agent-runtime.query";
 import { useApps } from "@/lib/app.query";
-import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useIsAuthenticated } from "@/lib/auth/use-is-authenticated";
 import {
   useConversations,
   useDeleteConversation,

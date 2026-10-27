@@ -57,12 +57,12 @@ import {
   type QueuedChatFile,
   useConversationMessageQueue,
 } from "@/lib/chat/chat-message-queue";
-import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
 import {
   chatDraftStorageKey,
   migrateLegacyNewChatDraft,
 } from "@/lib/chat/chat-utils";
 import { isActionAvailableForConversation } from "@/lib/chat/encrypted-chat";
+import { useChatPlaceholder } from "@/lib/chat/use-chat-placeholder";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useToolbarCollapse } from "@/lib/hooks/use-toolbar-collapse";

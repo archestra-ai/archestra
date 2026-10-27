@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # Required to package the chart from the checked-out repository.
-      id-token: write # Required for Workload Identity Federation.
+      packages: write # Publish the OCI chart to GHCR.
     defaults:
       run:
         working-directory: ./platform/helm/archestra
@@ -48,13 +48,12 @@ jobs:
           persist-credentials: false
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
 
-      - name: Authenticate to Google Artifact Registry
+      - name: Log in to GHCR for Helm
         if: inputs.push_chart
-        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
-        with:
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-          registry: europe-west1-docker.pkg.dev
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ github.actor }}
+        run: printf '%s' "$GHCR_TOKEN" | helm registry login ghcr.io --username "$GHCR_USER" --password-stdin
 
       - name: helm package
         env:
@@ -74,4 +73,4 @@ jobs:
         env:
           IMAGE_TAG: ${{ inputs.version }}
         run: |
-          helm push "archestra-platform-${IMAGE_TAG}.tgz" oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts
+          helm push "archestra-platform-${IMAGE_TAG}.tgz" oci://ghcr.io/archestra-ai/helm-charts

@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra on Kubernetes with Helm
 order: 1
-lastUpdated: 2026-10-22
+lastUpdated: 2026-10-27
 ---
 
 <span id="docker-deployment"></span><span id="quickstart-deployment"></span>
@@ -22,7 +22,7 @@ Install Archestra on Kubernetes with Helm. You need a cluster, Helm 3 or later, 
    ```bash
    export ARCHESTRA_VERSION="1.5.0-rc.11" # x-release-please-version
    helm show values \
-     oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+     oci://ghcr.io/archestra-ai/helm-charts/archestra-platform \
      --version "$ARCHESTRA_VERSION" > values.yaml
    ```
 
@@ -31,7 +31,7 @@ Install Archestra on Kubernetes with Helm. You need a cluster, Helm 3 or later, 
 
    ```bash
    helm upgrade archestra-platform \
-     oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+     oci://ghcr.io/archestra-ai/helm-charts/archestra-platform \
      --version "$ARCHESTRA_VERSION" \
      --install --namespace archestra --create-namespace \
      --values values.yaml --wait

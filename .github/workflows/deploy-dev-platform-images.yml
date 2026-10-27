@@ -120,7 +120,7 @@ jobs:
       # min, the long pole) produced an image nothing schedules. The
       # `deploy-dev-platform-images` label and workflow_dispatch stay multi-arch
       # so a dev build handed to a tester runs natively on Apple Silicon (arm64).
-      # Release images (build-dockerhub-image.yml) are always multi-arch.
+      # Release images (build-release-image.yml) are always multi-arch.
       amd64_only: ${{ github.event_name == 'push' }}
       # Match the 16-CPU Blacksmith E2E builder; use native Blacksmith ARM.
       amd64_runner: blacksmith-16vcpu-ubuntu-2404

@@ -185,7 +185,7 @@ gh() {
         )[1].split("      - name:", 1)[0]
         script = textwrap.dedent(section.split("        run: |\n", 1)[1])
         mcp_image = "registry.example.invalid/relocated/mcp@sha256:" + "a" * 64
-        platform_image = "archestra/platform@sha256:" + "b" * 64
+        platform_image = "ghcr.io/archestra-ai/platform@sha256:" + "b" * 64
         stub = "helm() { printf 'helm %s\\n' \"$*\"; }; docker() { printf 'docker %s\\n' \"$*\"; };\n"
         for reference in (None, "", mcp_image):
             with self.subTest(reference=reference), tempfile.TemporaryDirectory() as directory:
@@ -209,11 +209,11 @@ gh() {
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout.splitlines(), [
                     "helm push archestra-platform-1.4.0.tgz "
-                    "oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts",
+                    "oci://ghcr.io/archestra-ai/helm-charts",
                     f"docker buildx imagetools create --tag registry.example.invalid/relocated/mcp:latest {mcp_image}",
                 ])
 
-    PLATFORM_IMAGE = "archestra/platform@sha256:" + "b" * 64
+    PLATFORM_IMAGE = "ghcr.io/archestra-ai/platform@sha256:" + "b" * 64
 
     def run_platform_latest(self, releases=(), *, version, api_status=0):
         section = WORKFLOW.read_text().split(
@@ -256,7 +256,7 @@ docker() { printf 'docker %s\\n' "$*"; }
         def published(*versions, draft=False):
             return [{"tag_name": f"platform-v{v}", "draft": draft} for v in versions]
 
-        tagged = f"docker buildx imagetools create --tag archestra/platform:latest {self.PLATFORM_IMAGE}"
+        tagged = f"docker buildx imagetools create --tag ghcr.io/archestra-ai/platform:latest {self.PLATFORM_IMAGE}"
         for releases, version, moves in (
             ((), "1.4.0-rc.22", True),
             (published("1.4.0-rc.22"), "1.4.0-rc.22", True),  # retry

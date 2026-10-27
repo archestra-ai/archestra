@@ -1,5 +1,5 @@
 # https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images#publishing-images-to-docker-hub
-name: Build Docker Hub image
+name: Build GHCR image
 
 on:
   workflow_call:
@@ -22,7 +22,7 @@ on:
         type: string
         default: ""
       push_image:
-        description: "Whether to push the image to Docker Hub"
+        description: "Whether to push the image to GHCR"
         required: true
         type: boolean
       checkout_ref:
@@ -45,12 +45,12 @@ on:
 permissions: {}
 
 concurrency:
-  group: build-dockerhub-image-${{ inputs.image_name }}-${{ inputs.version }}-${{ github.ref }}
+  group: build-release-image-${{ inputs.image_name }}-${{ inputs.version }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-dockerhub-image:
-    name: Build Docker Hub image
+  build-release-image:
+    name: Build GHCR image
     permissions:
       packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to checkout the repository and build the image.
@@ -59,10 +59,10 @@ jobs:
     with:
       image_directory: ${{ inputs.image_directory }}
       image_name: ${{ inputs.image_name }}
-      image_registry: docker.io/archestra
+      image_registry: ghcr.io/archestra-ai
       version: ${{ inputs.version }}
       push_image: ${{ inputs.push_image }}
-      auth_provider: dockerhub
+      auth_provider: ghcr
       # Docker contexts exclude .git, and release builds use an explicit tag.
       # Fetching the full repository history adds ~30s to each native build.
       checkout_fetch_depth: 1

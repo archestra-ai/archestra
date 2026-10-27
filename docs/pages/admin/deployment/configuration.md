@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 5
-lastUpdated: 2026-10-26
+lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -784,7 +784,7 @@ Chat streams, A2A task streams and LLM proxy settings stay in sync across replic
   - Default: `localhost`
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`** - Base image for MCP servers that do not set their own image.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:<platform version>`
+  - Default: `ghcr.io/archestra-ai/mcp-server-base:<platform version>`
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST`** - CPU request for each MCP server container.
   - Default: `50m`
@@ -975,7 +975,7 @@ Archestra creates one Dagger engine per organization and per environment. Each e
 Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox controller installed. Agents can override the settings described as defaults. See [Agent Runtime](/docs/agents/runtime) for cluster setup.
 
 - **`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`** - Registry the maintained Claude Code, Codex, OpenCode, Hermes, OpenClaw, Grok Build, and Kimi Code images are pulled from.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public`
+  - Default: `ghcr.io/archestra-ai`
   - Set it when you mirror these images to a private registry.
 
 - **`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG`** - Tag of the maintained images.
@@ -1175,7 +1175,7 @@ These configure the OAuth client for the Google Drive connector's [individual au
 [Perforce permission sync](/docs/knowledge/connectors/perforce) runs the `p4` CLI in a per-connector pod and needs the Kubernetes orchestrator. Archestra downloads the `p4` binary from Perforce and checks its SHA-256. Air-gapped installs point the URLs at an internal mirror and set matching checksums.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE`** - Image of the pod that runs `p4` for permission sync.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:<platform version>`
+  - Default: `ghcr.io/archestra-ai/p4-shim:<platform version>`
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_AMD64`** - Download URL of the `p4` binary for x86-64 nodes.
   - Default: `https://cdist2.perforce.com/perforce/r25.2/bin.linux26x86_64/p4`

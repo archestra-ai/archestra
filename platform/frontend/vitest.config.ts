@@ -44,6 +44,10 @@ export default defineConfig({
         __dirname,
         "../shared/model-price.ts",
       ),
+      "@archestra/shared/time-zone": path.resolve(
+        __dirname,
+        "../shared/time-zone.ts",
+      ),
       "@archestra/shared": path.resolve(__dirname, "../shared/index.ts"),
     },
   },

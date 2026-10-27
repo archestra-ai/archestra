@@ -8,8 +8,7 @@ import {
   RemediesActivitySchema,
   RemediesViewSchema,
 } from "@/types/openappa-remedies";
-
-const TIME_ZONES = new Set(["UTC", ...Intl.supportedValuesOf("timeZone")]);
+import { NamedTimeZoneSchema } from "@/types/time-zone";
 
 /** A read-only view of the policy; it changes nothing, so it produces no audit record. */
 const routes: FastifyPluginAsyncZod = async (app) => {
@@ -43,10 +42,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           "Tool calls the runtime denied on each of the last seven days, by how each ended: approved by an authority, cleaned by a sanitizer, or blocked when neither lifted it. Days are calendar days in `timeZone`.",
         tags: ["OpenAPPA"],
         querystring: z.object({
-          timeZone: z
-            .string()
-            .refine((zone) => TIME_ZONES.has(zone), "Unknown time zone")
-            .default("UTC"),
+          timeZone: NamedTimeZoneSchema.default("UTC"),
         }),
         response: constructResponseSchema(RemediesActivitySchema),
       },

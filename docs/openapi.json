@@ -398416,7 +398416,8 @@
           {
             "schema": {
               "default": "UTC",
-              "type": "string"
+              "type": "string",
+              "maxLength": 64
             },
             "in": "query",
             "name": "timeZone",

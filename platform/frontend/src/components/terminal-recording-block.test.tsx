@@ -110,8 +110,12 @@ test("highlights and line-drawing characters fill their rows", async () => {
   const grid = screen.getByText("> prompt");
   expect(grid.style.display).toBe("inline-block");
   expect(grid.style.verticalAlign).toBe("top");
-  // A divider drawn with box-drawing characters joins from row to row.
-  expect(screen.getByText("\u2502").style.transform).toBe("scaleY(1.1)");
+  // A divider drawn with box-drawing characters joins from row to row: the
+  // glyph is stretched past its cell and clipped to it, so neighbours meet
+  // without overlapping.
+  const glyph = screen.getByText("\u2502");
+  expect(glyph.style.transform).toBe("scale(1.1)");
+  expect(glyph.parentElement?.style.overflow).toBe("hidden");
   rerender(
     <TerminalRecordingBlock lines={lines} wrapLines virtualize={false} />,
   );

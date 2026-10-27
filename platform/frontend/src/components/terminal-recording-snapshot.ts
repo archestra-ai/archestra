@@ -155,7 +155,10 @@ function cellStyle(cell: IBufferCell): CSSProperties {
   ].filter(Boolean);
   return {
     color: cell.isInvisible() ? "transparent" : foreground,
-    backgroundColor: background,
+    // The document paints the default background. Painted per run, it covered
+    // the part of a wide fallback glyph (a symbol the monospace font lacks)
+    // that reaches into the next cell, as a terminal does not.
+    ...(inverse || !cell.isBgDefault() ? { backgroundColor: background } : {}),
     ...(cell.isBold() ? { fontWeight: "bold" } : {}),
     ...(cell.isItalic() ? { fontStyle: "italic" } : {}),
     ...(decorations.length

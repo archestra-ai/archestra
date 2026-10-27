@@ -125,6 +125,9 @@ test("resolves RGB, palette, inverse, bold and invisible cells", async () => {
         color: "#ef2929",
         fontWeight: "bold",
       });
+      // The document paints the default background, so a wide fallback
+      // glyph in the cell before is not covered.
+      expect(runs[2].style.backgroundColor).toBeUndefined();
       expect(runs[3].style.color).toBe("#ff0000");
       expect(runs[4].style.color).toBe("#808080");
       expect(runs[5].style).toMatchObject({

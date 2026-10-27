@@ -119,6 +119,7 @@ export function TerminalRecordingBlock({
               // as in xterm's own DOM renderer, so a coloured block keeps no
               // gap between its rows even where a glyph falls back to a font
               // with other metrics.
+              const joins = joinsAdjacentCells(run.text);
               const style = {
                 ...run.style,
                 ...(!wrapLines
@@ -128,9 +129,12 @@ export function TerminalRecordingBlock({
                       ...(run.fixedWidth ? { width: `${run.cells}ch` } : {}),
                     }
                   : {}),
+                ...(joins ? JOINING_CELL_STYLE : {}),
               };
-              const text = joinsAdjacentRows(run.text) ? (
-                <span style={STRETCHED_GLYPH_STYLE}>{run.text}</span>
+              const text = joins ? (
+                <span key={run.key} style={STRETCHED_GLYPH_STYLE}>
+                  {run.text}
+                </span>
               ) : (
                 run.text
               );
@@ -167,18 +171,24 @@ export function TerminalRecordingBlock({
 // ===================== internals =====================
 
 /**
- * Fonts draw box-drawing and block characters to their own ascent and
- * descent, which the browser rounds, so they stop a fraction of a pixel short
- * of the row and a divider, a border or a logo showed as dashes. Stretched a
- * little past the row, as xterm's own glyphs fill their cell, they join.
+ * Fonts draw box-drawing and block characters to their own metrics, which the
+ * browser rounds, so they stop a fraction of a pixel short of their cell and a
+ * divider, a rule or a logo showed as dashes. Each is stretched a little past
+ * its cell and clipped to it, as xterm's own glyphs fill their cell: unclipped,
+ * neighbours overlapped and the overlaps showed as brighter ticks.
  */
+const JOINING_CELL_STYLE = {
+  display: "inline-block",
+  verticalAlign: "top",
+  overflow: "hidden",
+} as const;
 const STRETCHED_GLYPH_STYLE = {
   display: "inline-block",
   verticalAlign: "top",
-  transform: "scaleY(1.1)",
+  transform: "scale(1.1)",
 } as const;
 
-function joinsAdjacentRows(text: string): boolean {
+function joinsAdjacentCells(text: string): boolean {
   const code = text.codePointAt(0) ?? 0;
   return text.length === 1 && code >= 0x2500 && code <= 0x259f;
 }

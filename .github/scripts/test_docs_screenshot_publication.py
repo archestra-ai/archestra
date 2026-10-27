@@ -57,13 +57,13 @@ class ScreenshotPublicationTests(unittest.TestCase):
 
     def test_generated_benchmark_table_does_not_start_a_capture_commit_loop(self):
         self.commit("docs: update proxy benchmark results", [
-            "docs/pages/admin/observability/performance-benchmarks.md",
+            "docs/pages/admin/performance-benchmarks.md",
         ])
         self.assertEqual(self.decision(), "false")
 
     def test_benchmark_subject_cannot_hide_a_source_change(self):
         self.commit("docs: update proxy benchmark results", [
-            "docs/pages/admin/observability/performance-benchmarks.md", "platform/app.ts",
+            "docs/pages/admin/performance-benchmarks.md", "platform/app.ts",
         ])
         self.assertEqual(self.decision(), "true")
 

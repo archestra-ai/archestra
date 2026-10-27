@@ -1,0 +1,20 @@
+{
+  "liteDebugFlags": false,
+  "liteDebugLogLines": 0,
+  "liteTracebacks": 0,
+  "uniqueUpstreamAttempts": 321624,
+  "retryAttemptsObserved": 0,
+  "clientConcurrency": 50,
+  "clientMaxSockets": 50,
+  "effectivePoolsAll": 20,
+  "quotaCpuPercent": 400,
+  "peakSampledProxyCpuPercent": {
+    "archestra": 135.69,
+    "litellm": 125.35,
+    "litellm-default": 127.95
+  },
+  "cgroupThrottleCountersCaptured": false,
+  "swapCountersCaptured": false,
+  "ordinaryInfoAccessLoggingRetained": true,
+  "noExtraLiteCallbacks": true
+}

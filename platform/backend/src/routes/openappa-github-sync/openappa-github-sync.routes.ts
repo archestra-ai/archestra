@@ -16,7 +16,6 @@ import {
   AppaGithubAppRepositoriesSchema,
   AppaGithubRepositoryQuerySchema,
   AppaGithubRepositoryStatusSchema,
-  CompleteAppaGithubAppSchema,
   PendingAppaGithubAppSchema,
   StartAppaGithubAppSchema,
 } from "@/types/openappa-github-app-setup";
@@ -94,29 +93,6 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       request.auditSkip = true;
       return reply.send(
         await openappaGithubAppSetup.start({
-          organizationId: request.organizationId,
-          userId: request.user.id,
-          ...request.body,
-        }),
-      );
-    },
-  );
-  app.post(
-    "/api/openappa/github-app/manifest/complete",
-    {
-      schema: {
-        operationId: RouteId.CompleteAppaGithubApp,
-        description:
-          "Exchange GitHub's one-time code for the new App; it is stored once installed",
-        tags: ["OpenAPPA"],
-        body: CompleteAppaGithubAppSchema,
-        response: constructResponseSchema(PendingAppaGithubAppSchema),
-      },
-    },
-    async (request, reply) => {
-      request.auditSkip = true;
-      return reply.send(
-        await openappaGithubAppSetup.complete({
           organizationId: request.organizationId,
           userId: request.user.id,
           ...request.body,

@@ -855,9 +855,11 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "llmProviderApiKey",
     action: "llmProviderApiKey.created",
   },
-  "/api/github-copilot-app/manifest/complete": {
+  "/api/github-copilot-app/credential": {
     resourceType: "llmProviderApiKey",
     action: "llmProviderApiKey.created",
+    fetchById: (id, orgId) =>
+      LlmProviderApiKeyModel.findByIdForAudit(id, orgId),
   },
   "/api/github-copilot-app/pending": {
     resourceType: "llmProviderApiKey",
@@ -875,7 +877,7 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "credential",
     action: "credential.created",
   },
-  "/api/openappa/github-app/manifest/complete": {
+  "/api/github-app-setup/complete": {
     resourceType: "credential",
     action: "credential.created",
   },

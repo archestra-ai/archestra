@@ -15,29 +15,23 @@ export const StartCopilotGithubAppSchema = z.object({
   organization: GithubOrganizationSchema,
 });
 
-export const CopilotGithubAppManifestSchema = z.object({
-  /** GitHub's "create App from manifest" page; the browser posts `manifest` there. */
-  url: z.string().url(),
-  manifest: z.string(),
-});
-
-export const CompleteCopilotGithubAppSchema = z.object({
-  code: z.string().trim().min(1).max(200),
-  state: z.string().trim().min(1).max(200),
-});
-
-export const PendingCopilotGithubAppSchema = z.object({
-  name: z.string(),
-  slug: z.string(),
+/** An App connected to the organization that lacks Copilot Requests on its installation. */
+export const CopilotGithubAppNeedsPermissionSchema = z.object({
+  status: z.literal("needs_permission"),
+  appName: z.string(),
   organization: z.string(),
-  appId: z.string(),
-  /** GitHub's install page for the organization. */
-  installUrl: z.string().url(),
-  settingsUrl: z.string().url(),
+  /** Where an admin adds the permission. */
+  settingsUrl: z.string(),
 });
-export type PendingCopilotGithubApp = z.infer<
-  typeof PendingCopilotGithubAppSchema
->;
+
+/** Use a GitHub App credential the organization already has. */
+export const ConnectCopilotGithubAppCredentialSchema = z.object({
+  credentialId: z.string().uuid(),
+  /** Omitted when reconnecting a key: the key's own organization is used. */
+  organization: GithubOrganizationSchema.optional(),
+  replaceKeyId: z.string().uuid().optional(),
+  grants: GrantsSchema,
+});
 
 export const InstallCopilotGithubAppSchema = z.object({
   grants: GrantsSchema,
@@ -104,3 +98,9 @@ export const ReplaceCopilotGithubAppPrivateKeySchema = z.object({
   /** The App's new private key (PEM). Never returned or logged. */
   privateKey: z.string().min(1).max(20_000),
 });
+
+export const ConnectCopilotGithubAppCredentialResultSchema =
+  z.discriminatedUnion("status", [
+    CopilotGithubAppConnectedSchema,
+    CopilotGithubAppNeedsPermissionSchema,
+  ]);

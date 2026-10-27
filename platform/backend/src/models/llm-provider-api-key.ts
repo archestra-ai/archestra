@@ -37,6 +37,7 @@ import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
 import {
   decodeGithubAppCredential,
+  decodeGithubAppReference,
   githubAppOrganization,
 } from "@/services/github-app-copilot-token";
 import type {
@@ -2042,6 +2043,8 @@ async function githubOrganizationOf(key: {
       key.secretIsVault || key.secretIsByosVault
         ? await getSecretValueForLlmProviderApiKey(key.secretId)
         : readApiKeyValue(key.secret);
+    const reference = decodeGithubAppReference(value as string | null);
+    if (reference) return reference.organization;
     const credential = decodeGithubAppCredential(value as string | null);
     return credential ? await githubAppOrganization(credential) : null;
   } catch {

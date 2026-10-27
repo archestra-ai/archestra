@@ -95,8 +95,7 @@ export function AppShell({
   const isAuthCallback =
     pathname === "/oauth-callback" ||
     pathname === "/github/callback" ||
-    pathname === "/github/app-setup" ||
-    pathname === "/github/copilot-app-setup";
+    pathname === "/github/app-setup";
   // Full-page app runtimes all live under /a/… (the owned standalone
   // /a/[appId] and the external /a/catalog/[catalogId]), so the whole
   // namespace is chrome-less by construction — no per-route regexes to keep in

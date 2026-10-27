@@ -38,22 +38,6 @@ export function useStartCopilotGithubApp() {
   });
 }
 
-export function useCompleteCopilotGithubApp() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: async (
-      body: archestraApiTypes.CompleteCopilotGithubAppData["body"],
-    ) => {
-      const { data, error } = await archestraApiSdk.completeCopilotGithubApp({
-        body,
-      });
-      if (error) throw toApiError(error);
-      return data;
-    },
-    onSuccess: (data) => client.setQueryData(pendingQueryKey, data ?? null),
-  });
-}
-
 export function useInstallCopilotGithubApp() {
   const client = useQueryClient();
   return useMutation({

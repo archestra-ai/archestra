@@ -12,7 +12,6 @@ import { Label } from "@/components/ui/label";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   useCheckCopilotGithubOrganization,
-  useCompleteCopilotGithubApp,
   useConnectExistingCopilotGithubApp,
   useDiscardCopilotGithubApp,
   useInstallCopilotGithubApp,
@@ -55,10 +54,9 @@ export function CopilotOrganizationConnectDialog({
   const pending = usePendingCopilotGithubApp(open && !replace);
   const checkOrganization = useCheckCopilotGithubOrganization();
   const start = useStartCopilotGithubApp();
-  const complete = useCompleteCopilotGithubApp();
   const install = useInstallCopilotGithubApp();
   const discard = useDiscardCopilotGithubApp();
-  const createdApp = pending.data ?? complete.data ?? null;
+  const createdApp = pending.data ?? null;
 
   useEffect(() => {
     if (!open) return;
@@ -71,7 +69,7 @@ export function CopilotOrganizationConnectDialog({
   // Resume a setup whose App already exists on GitHub.
   useEffect(() => {
     if (createdApp && step === "start") {
-      setOrganization(createdApp.organization);
+      setOrganization(createdApp.account);
       setStep("install");
     }
   }, [createdApp, step]);
@@ -170,14 +168,13 @@ export function CopilotOrganizationConnectDialog({
         ) : step === "install" ? (
           <InstallStep
             name={createdApp?.name ?? null}
-            organization={createdApp?.organization ?? organization}
+            organization={createdApp?.account ?? organization}
             waiting={waiting === "install"}
             error={install.error?.message ?? null}
             canInstall={!!createdApp}
             onInstall={openInstall}
             onStartOver={() => {
               discard.mutate();
-              complete.reset();
               setWaiting(null);
               setStep("start");
             }}

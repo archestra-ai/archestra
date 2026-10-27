@@ -3,8 +3,10 @@
  *
  * An organization can let a GitHub App (organization permission "Copilot
  * Requests") call Copilot on its behalf, billed to the organization. The key
- * stores the App ID, installation ID, private key, GitHub address and
- * organization as one marker-encoded value. Installation tokens (`ghs_…`)
+ * stores a marker-encoded value that references the App's GitHub App
+ * credential (the store Guardrails uses too), with the installation on the
+ * organization. Keys from the preview embed the App's private key instead and
+ * keep working. Installation tokens (`ghs_…`)
  * come from the shared GitHub App helpers and are sent to Copilot as a Bearer
  * with the Copilot runtime's integration id.
  */
@@ -12,6 +14,7 @@ import { createHash, createPrivateKey, createPublicKey } from "node:crypto";
 import {
   GITHUB_APP_CREDENTIAL_MARKER,
   getGithubApiBaseUrl,
+  getGithubWebOrigin,
 } from "@archestra/shared";
 import config from "@/config";
 import { LRUCacheManager } from "@/in-memory-lru-cache";
@@ -32,7 +35,125 @@ export interface GithubAppCredential {
   organization?: string;
 }
 
+/**
+ * A key's pointer to a GitHub App credential: the App and its private key live
+ * there, shared with every other use of the App. The installation is the
+ * App's installation on this organization.
+ */
+interface GithubAppCredentialReference {
+  ref: { organizationId: string; credentialId: string };
+  installationId: string;
+  organization: string;
+  /** GitHub web address. */
+  githubUrl: string;
+}
+
 const DEFAULT_GITHUB_URL = "https://github.com";
+
+export function encodeGithubAppReference(
+  reference: GithubAppCredentialReference,
+): string {
+  return `${GITHUB_APP_CREDENTIAL_MARKER}${Buffer.from(JSON.stringify(reference), "utf8").toString("base64url")}`;
+}
+
+/** The reference a key's value holds, or null for an embedded or other value. */
+export function decodeGithubAppReference(
+  value: string | null | undefined,
+): GithubAppCredentialReference | null {
+  if (!value || !value.startsWith(GITHUB_APP_CREDENTIAL_MARKER)) return null;
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(
+        value.slice(GITHUB_APP_CREDENTIAL_MARKER.length),
+        "base64url",
+      ).toString("utf8"),
+    ) as Partial<GithubAppCredentialReference>;
+    if (
+      typeof parsed.ref?.organizationId !== "string" ||
+      typeof parsed.ref?.credentialId !== "string" ||
+      typeof parsed.installationId !== "string" ||
+      typeof parsed.organization !== "string" ||
+      typeof parsed.githubUrl !== "string"
+    )
+      return null;
+    return {
+      ref: {
+        organizationId: parsed.ref.organizationId,
+        credentialId: parsed.ref.credentialId,
+      },
+      installationId: parsed.installationId,
+      organization: parsed.organization,
+      githubUrl: parsed.githubUrl,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The App a key's value signs in as: embedded in the value (preview keys), or
+ * read from the referenced GitHub App credential. Null for a value that is no
+ * GitHub App marker. Throws a 400 when the referenced credential or its
+ * connection is gone, which the fetch path turns into a reconnect.
+ */
+export async function resolveGithubAppCredential(
+  value: string | null | undefined,
+): Promise<GithubAppCredential | null> {
+  const reference = decodeGithubAppReference(value);
+  if (!reference) return decodeGithubAppCredential(value);
+  const cacheKey = `${reference.ref.organizationId}:${reference.ref.credentialId}`;
+  let app = referenceCache.get(cacheKey);
+  if (!app) {
+    const [{ default: definitions }, { default: connections }] =
+      await Promise.all([
+        import("@/models/runtime-credential-definition"),
+        import("@/models/runtime-credential-connection"),
+      ]);
+    const definition = await definitions.findById({
+      id: reference.ref.credentialId,
+      organizationId: reference.ref.organizationId,
+    });
+    const privateKey =
+      definition?.kind === "github_app" && definition.appId
+        ? await connections
+            .resolveValue({
+              organizationId: reference.ref.organizationId,
+              credentialId: definition.key,
+              scope: "organization",
+            })
+            .catch(() => null)
+        : null;
+    if (!definition?.appId || !privateKey)
+      throw new ApiError(
+        400,
+        "The GitHub App credential this subscription uses was deleted or disconnected. Reconnect it.",
+      );
+    app = { appId: definition.appId, privateKey, name: definition.name };
+    referenceCache.set(cacheKey, app);
+  }
+  return {
+    appId: app.appId,
+    privateKey: app.privateKey,
+    installationId: reference.installationId,
+    organization: reference.organization,
+    githubUrl: reference.githubUrl,
+  };
+}
+
+/** Forget a resolved reference, after its credential changed. */
+export function forgetGithubAppReference(reference: {
+  organizationId: string;
+  credentialId: string;
+}) {
+  referenceCache.delete(
+    `${reference.organizationId}:${reference.credentialId}`,
+  );
+}
+
+/** The web address of a credential's GitHub API base. */
+export function githubWebFromApi(api: string | null | undefined): string {
+  return getGithubWebOrigin(api ?? "https://api.github.com");
+}
 
 export function encodeGithubAppCredential(
   credential: GithubAppCredential,
@@ -103,7 +224,11 @@ export function validateGithubAppPrivateKey(params: {
 export function githubAppKeyFingerprint(privateKey: string): string {
   let der: Buffer;
   try {
-    const key = createPrivateKey(privateKey);
+    // A stored App credential holds the PEM with its OAuth client secret.
+    const pem = privateKey.trimStart().startsWith("{")
+      ? (JSON.parse(privateKey) as { privateKey: string }).privateKey
+      : privateKey;
+    const key = createPrivateKey(pem);
     if (key.asymmetricKeyType !== "rsa") throw new Error("not rsa");
     der = createPublicKey(key).export({ type: "spki", format: "der" });
   } catch {
@@ -116,7 +241,7 @@ export function githubAppKeyFingerprint(privateKey: string): string {
 }
 
 /** The REST API base for a credential's GitHub. */
-export function githubAppApiBase(credential: GithubAppCredential): string {
+export function githubAppApiBase(credential: { githubUrl?: string }): string {
   return getGithubApiBaseUrl(credential.githubUrl ?? DEFAULT_GITHUB_URL);
 }
 
@@ -212,4 +337,17 @@ const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 const organizationCache = new LRUCacheManager<string | null>({
   maxSize: 200,
   defaultTtl: 60 * 60 * 1000,
+});
+
+/**
+ * Resolved references, briefly: a request does not read the credential store
+ * each time, and a deleted credential stops working within this long.
+ */
+const referenceCache = new LRUCacheManager<{
+  appId: string;
+  privateKey: string;
+  name: string;
+}>({
+  maxSize: 200,
+  defaultTtl: 30 * 1000,
 });

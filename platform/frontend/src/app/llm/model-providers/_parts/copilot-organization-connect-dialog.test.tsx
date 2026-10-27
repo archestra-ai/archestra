@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useCheckCopilotGithubOrganization,
-  useCompleteCopilotGithubApp,
   useConnectExistingCopilotGithubApp,
   useDiscardCopilotGithubApp,
   useInstallCopilotGithubApp,
@@ -18,7 +17,6 @@ import {
 
 vi.mock("@/lib/github-copilot-app.query", () => ({
   useCheckCopilotGithubOrganization: vi.fn(),
-  useCompleteCopilotGithubApp: vi.fn(),
   useConnectExistingCopilotGithubApp: vi.fn(),
   useDiscardCopilotGithubApp: vi.fn(),
   useInstallCopilotGithubApp: vi.fn(),
@@ -53,7 +51,6 @@ beforeEach(() => {
   for (const hook of [
     useCheckCopilotGithubOrganization,
     useStartCopilotGithubApp,
-    useCompleteCopilotGithubApp,
     useInstallCopilotGithubApp,
     useDiscardCopilotGithubApp,
   ])
@@ -145,7 +142,7 @@ describe("CopilotOrganizationConnectDialog", () => {
       data: {
         name: "My Org Copilot",
         slug: "my-org-copilot",
-        organization: "my-org",
+        account: "my-org",
         appId: "1",
         installUrl: "https://github.com/apps/my-org-copilot/installations/new",
         settingsUrl: "https://github.com/organizations/my-org/settings/apps/x",

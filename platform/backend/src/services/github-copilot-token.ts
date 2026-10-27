@@ -12,6 +12,7 @@
  * concurrent exchanges for the same token.
  */
 import { createHmac, randomBytes } from "node:crypto";
+import { isGithubAppCredential } from "@archestra/shared";
 import config from "@/config";
 import { LRUCacheManager } from "@/in-memory-lru-cache";
 import logger from "@/logging";
@@ -19,9 +20,9 @@ import { ApiError } from "@/types/api";
 import {
   copilotAppErrorMessage,
   copilotAppIntegrationId,
-  decodeGithubAppCredential,
   type GithubAppCredential,
   getGithubAppInstallationToken,
+  resolveGithubAppCredential,
 } from "./github-app-copilot-token";
 
 // Copilot endpoints require a recognized VS Code and Copilot Chat identity.
@@ -190,10 +191,9 @@ export function createGithubCopilotFetch(params: {
       return baseFetch(input, init);
     }
 
-    const appCredential = decodeGithubAppCredential(githubToken);
-    if (appCredential) {
+    if (isGithubAppCredential(githubToken)) {
       return githubAppCopilotFetch({
-        credential: appCredential,
+        value: githubToken,
         input,
         init,
         baseFetch,
@@ -341,13 +341,23 @@ function resolveCopilotRequestUrl(
  * says what to fix.
  */
 async function githubAppCopilotFetch(params: {
-  credential: GithubAppCredential;
+  /** The key's value: a reference to a GitHub App credential, or an embedded App. */
+  value: string;
   input: string | URL | Request;
   init?: RequestInit;
   baseFetch: FetchLike;
   onRejected?: () => Promise<void>;
 }): Promise<Response> {
-  const { credential, input, init, baseFetch, onRejected } = params;
+  const { value, input, init, baseFetch, onRejected } = params;
+  let credential: GithubAppCredential;
+  try {
+    const resolved = await resolveGithubAppCredential(value);
+    if (!resolved)
+      throw new ApiError(400, "The GitHub App credential is unreadable.");
+    credential = resolved;
+  } catch (error) {
+    return appSignInFailure(error, onRejected);
+  }
   const send = (token: string) => {
     const headers = new Headers(
       init?.headers ?? (input instanceof Request ? input.headers : undefined),

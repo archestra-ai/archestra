@@ -1730,7 +1730,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateAppaGithubRepository]: { organizationSettings: ["update"] },
   [RouteId.StartAppaGithubApp]: { organizationSettings: ["update"] },
   [RouteId.StartCopilotGithubApp]: { llmProviderApiKey: ["create"] },
-  [RouteId.CompleteCopilotGithubApp]: { llmProviderApiKey: ["create"] },
+  [RouteId.ConnectCopilotGithubAppCredential]: {
+    llmProviderApiKey: ["create"],
+  },
   [RouteId.GetPendingCopilotGithubApp]: { llmProviderApiKey: ["create"] },
   [RouteId.DiscardCopilotGithubApp]: { llmProviderApiKey: ["create"] },
   [RouteId.InstallCopilotGithubApp]: { llmProviderApiKey: ["create"] },
@@ -1742,7 +1744,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // The service checks the key's own grants, like the key's read and update.
   [RouteId.GetCopilotGithubAppKeySummary]: {},
   [RouteId.ReplaceCopilotGithubAppPrivateKey]: {},
-  [RouteId.CompleteAppaGithubApp]: { organizationSettings: ["update"] },
+  // Each setup flow checks its own permission when it completes.
+  [RouteId.CompleteGithubAppSetup]: {},
   [RouteId.GetPendingAppaGithubApp]: { organizationSettings: ["update"] },
   [RouteId.DiscardAppaGithubApp]: { organizationSettings: ["update"] },
   [RouteId.InstallAppaGithubApp]: { organizationSettings: ["update"] },

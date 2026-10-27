@@ -330,7 +330,7 @@ export function GithubSyncSetupDialog({
     const tab = openGithubWindow("about:blank");
     setWaiting("create");
     start.mutate(
-      { githubUrl: github.web, owner },
+      { organization: `${github.web}/${owner}` },
       {
         onSuccess: (manifest) => {
           if (manifest) postManifest(manifest);

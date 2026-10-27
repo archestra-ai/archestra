@@ -4,17 +4,20 @@ import { z } from "zod";
 import { copilotGithubAppSetup } from "@/services/github-copilot-app-setup";
 import { constructResponseSchema, DeleteObjectResponseSchema } from "@/types";
 import {
+  GithubAppManifestSchema,
+  PendingGithubAppSchema,
+} from "@/types/github-app-manifest-setup";
+import {
   CheckCopilotGithubOrganizationSchema,
-  CompleteCopilotGithubAppSchema,
+  ConnectCopilotGithubAppCredentialResultSchema,
+  ConnectCopilotGithubAppCredentialSchema,
   ConnectExistingCopilotGithubAppSchema,
   CopilotGithubAppConnectedSchema,
   CopilotGithubAppInstallResultSchema,
   CopilotGithubAppKeySummarySchema,
-  CopilotGithubAppManifestSchema,
   CopilotGithubOrganizationSchema,
   ExistingCopilotGithubAppValidationSchema,
   InstallCopilotGithubAppSchema,
-  PendingCopilotGithubAppSchema,
   ReplaceCopilotGithubAppPrivateKeySchema,
   StartCopilotGithubAppSchema,
   ValidateExistingCopilotGithubAppSchema,
@@ -34,7 +37,7 @@ const githubCopilotAppRoutes: FastifyPluginAsyncZod = async (app) => {
           "Start registering a GitHub App, from a manifest, that makes Copilot requests for a GitHub organization",
         tags: ["LLM Provider API Keys"],
         body: StartCopilotGithubAppSchema,
-        response: constructResponseSchema(CopilotGithubAppManifestSchema),
+        response: constructResponseSchema(GithubAppManifestSchema),
       },
     },
     async (request, reply) => {
@@ -42,29 +45,6 @@ const githubCopilotAppRoutes: FastifyPluginAsyncZod = async (app) => {
       request.auditSkip = true;
       return reply.send(
         await copilotGithubAppSetup.start({
-          organizationId: request.organizationId,
-          userId: request.user.id,
-          ...request.body,
-        }),
-      );
-    },
-  );
-  app.post(
-    "/api/github-copilot-app/manifest/complete",
-    {
-      schema: {
-        operationId: RouteId.CompleteCopilotGithubApp,
-        description:
-          "Exchange GitHub's one-time code for the new App; it is stored once installed",
-        tags: ["LLM Provider API Keys"],
-        body: CompleteCopilotGithubAppSchema,
-        response: constructResponseSchema(PendingCopilotGithubAppSchema),
-      },
-    },
-    async (request, reply) => {
-      request.auditSkip = true;
-      return reply.send(
-        await copilotGithubAppSetup.complete({
           organizationId: request.organizationId,
           userId: request.user.id,
           ...request.body,
@@ -80,9 +60,7 @@ const githubCopilotAppRoutes: FastifyPluginAsyncZod = async (app) => {
         description:
           "The Copilot GitHub App created during setup that is not installed yet",
         tags: ["LLM Provider API Keys"],
-        response: constructResponseSchema(
-          PendingCopilotGithubAppSchema.nullable(),
-        ),
+        response: constructResponseSchema(PendingGithubAppSchema.nullable()),
       },
     },
     async (request, reply) =>
@@ -133,6 +111,31 @@ const githubCopilotAppRoutes: FastifyPluginAsyncZod = async (app) => {
       });
       if (result.status === "waiting") request.auditSkip = true;
       else request.auditBefore = null;
+      return reply.send(result);
+    },
+  );
+  app.post(
+    "/api/github-copilot-app/credential",
+    {
+      schema: {
+        operationId: RouteId.ConnectCopilotGithubAppCredential,
+        description:
+          "Use a GitHub App the organization already connected. Says so when its installation lacks Copilot Requests",
+        tags: ["LLM Provider API Keys"],
+        body: ConnectCopilotGithubAppCredentialSchema,
+        response: constructResponseSchema(
+          ConnectCopilotGithubAppCredentialResultSchema,
+        ),
+      },
+    },
+    async (request, reply) => {
+      const result = await copilotGithubAppSetup.connectFromCredential({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        ...request.body,
+      });
+      if (result.status !== "installed") request.auditSkip = true;
+      else if (!request.body.replaceKeyId) request.auditBefore = null;
       return reply.send(result);
     },
   );
@@ -194,7 +197,7 @@ const githubCopilotAppRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request, reply) => {
-      const result = await copilotGithubAppSetup.connectExisting({
+      const result = await copilotGithubAppSetup.connectByKey({
         organizationId: request.organizationId,
         userId: request.user.id,
         ...request.body,

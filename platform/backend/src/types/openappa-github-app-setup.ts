@@ -1,4 +1,15 @@
 import { z } from "zod";
+import {
+  GithubAppManifestSchema,
+  PendingGithubAppSchema,
+  StartGithubAppSchema,
+} from "./github-app-manifest-setup";
+
+/** Guardrails registers its App through the shared manifest setup. */
+export const StartAppaGithubAppSchema = StartGithubAppSchema;
+export const AppaGithubAppManifestSchema = GithubAppManifestSchema;
+export const PendingAppaGithubAppSchema = PendingGithubAppSchema;
+
 import { PolicyTestDirectorySchema } from "./openappa-policy-tests";
 
 /** A repository as `owner/name`, the way GitHub shows it. */
@@ -26,10 +37,6 @@ const GithubLoginSchema = z
   );
 
 /** Registers the App on the organization that owns the policy repository. */
-export const StartAppaGithubAppSchema = z.object({
-  githubUrl: GithubUrlSchema,
-  owner: GithubLoginSchema,
-});
 
 export const AppaGithubRepositoryQuerySchema = z.object({
   /** The App to look through; setup always has one by now. */
@@ -92,31 +99,6 @@ export const AppaGithubAppRepositoriesSchema = z.object({
 });
 
 /** What the browser posts to GitHub to register the App from a manifest. */
-export const AppaGithubAppManifestSchema = z.object({
-  url: z.string(),
-  manifest: z.string(),
-});
-
-export const CompleteAppaGithubAppSchema = z.object({
-  code: z.string().min(1).max(512),
-  state: z.string().min(1).max(256),
-});
-
-/** An App created on GitHub that is not installed yet. */
-export const PendingAppaGithubAppSchema = z.object({
-  name: z.string(),
-  slug: z.string(),
-  account: z.string(),
-  /** GitHub's ID for the App, to recognize it once it is saved as a credential. */
-  appId: z.string(),
-  /** The owning account on its GitHub, e.g. https://github.com/acme. */
-  accountUrl: z.string(),
-  htmlUrl: z.string(),
-  installUrl: z.string(),
-  /** Where the admin can upload a logo; GitHub's manifest cannot set one. */
-  settingsUrl: z.string(),
-});
-export type PendingAppaGithubApp = z.infer<typeof PendingAppaGithubAppSchema>;
 
 export const AppaGithubAppInstallResultSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("waiting") }),

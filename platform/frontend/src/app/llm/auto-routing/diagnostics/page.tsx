@@ -18,9 +18,8 @@ import {
   JevHistograms,
   RoutingTriangle,
   SizeScatter,
-  TIER_COLOR,
 } from "../_parts/diagnostics-charts";
-import { TIER_NAMES } from "../_parts/tiers";
+import { TIER_COLOR, TIER_NAMES } from "../_parts/tiers";
 
 type Ready = Extract<AutoRoutingDiagnostics, { status: "ready" }>;
 
@@ -83,9 +82,18 @@ function RoutingBlock({ saved }: { saved: Ready }) {
     () => budgetScale(saved.savedBudgetUsdPerDay),
     [saved.savedBudgetUsdPerDay],
   );
-  // An absolute budget, so a refreshed saved budget never reinterprets it; null follows the saved one.
-  const [selected, setSelected] = useState<number | null>(null);
-  const requested = selected ?? saved.savedBudgetUsdPerDay;
+  // The absolute budget survives a saved-budget refresh; the raw coordinate keeps arrow steps
+  // advancing through cent-rounding plateaus and is valid only on the scale it was picked on.
+  const [selected, setSelected] = useState<{
+    budget: number;
+    at: number;
+    onScaleOf: number;
+  } | null>(null);
+  const requested = selected?.budget ?? saved.savedBudgetUsdPerDay;
+  const at =
+    selected?.onScaleOf === saved.savedBudgetUsdPerDay
+      ? selected.at
+      : scale.positionOf(requested);
   const debounced = useDebouncedValue(requested, 300);
   const routed = useAutoRoutingDiagnostics(
     selected === null || debounced === saved.savedBudgetUsdPerDay
@@ -140,8 +148,14 @@ function RoutingBlock({ saved }: { saved: Ready }) {
           min={0}
           max={scale.steps}
           step={1}
-          value={[scale.positionOf(requested)]}
-          onValueChange={([value]) => setSelected(scale.budgetAt(value))}
+          value={[at]}
+          onValueChange={([value]) =>
+            setSelected({
+              budget: scale.budgetAt(value),
+              at: value,
+              onScaleOf: saved.savedBudgetUsdPerDay,
+            })
+          }
         />
       </div>
       <div className={requested !== shownBudget ? "opacity-60" : undefined}>

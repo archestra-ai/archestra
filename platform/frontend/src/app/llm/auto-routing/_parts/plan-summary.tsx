@@ -4,7 +4,7 @@ import { Bar, BarChart, XAxis, YAxis } from "recharts";
 import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
 import { formatCurrency } from "@/lib/utils/format-currency";
 import type { PlanSummary } from "./plan-document";
-import { TIER_NAMES, type TierName } from "./tiers";
+import { TIER_COLOR, TIER_NAMES, type TierName } from "./tiers";
 
 export function PlanSummaryView({
   summary,
@@ -56,11 +56,11 @@ function TierSplit({
   tierModels: Record<TierName, string>;
 }) {
   const config: ChartConfig = Object.fromEntries(
-    TIER_NAMES.map((tier, index) => [
+    TIER_NAMES.map((tier) => [
       tier,
       {
         label: `${tier} · ${tierModels[tier]}`,
-        color: `var(--chart-${index + 1})`,
+        color: TIER_COLOR[tier].css,
       },
     ]),
   );
@@ -100,8 +100,7 @@ function TierSplit({
         {TIER_NAMES.map((tier, i) => (
           <span key={tier} className="flex items-center gap-1.5">
             <span
-              className="size-2.5 rounded-sm"
-              style={{ background: `var(--chart-${i + 1})` }}
+              className={`size-2.5 rounded-sm ${TIER_COLOR[tier].swatch}`}
             />
             <span>
               {config[tier].label}:{" "}

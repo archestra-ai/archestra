@@ -92,4 +92,46 @@ describe("RoutingTriangle", () => {
     expect(container.querySelectorAll("path[data-tier]")).toHaveLength(0);
     expect(container.querySelectorAll("circle[data-tier]")).toHaveLength(120);
   });
+
+  it("labels a tier holding no area outside the triangle, clear of every region", () => {
+    const base = triangle(() => SHORT);
+    // Smart never beats normal at these prices, yet the plan routes some sessions there.
+    const prices: Prices = [1e-7, 6e-7, 1e-5];
+    const smart = {
+      ...base.sessions[0],
+      tierNeeded: [0.1, 0.2, 0.7] as Prices,
+    };
+    const data: Ready = {
+      ...base,
+      sessions: [
+        ...base.sessions.map((s) => ({
+          ...s,
+          usdPerToken: prices,
+          tier: s.tier === "smart" ? ("normal" as const) : s.tier,
+        })),
+        ...[0, 1, 2].map(() => ({
+          ...smart,
+          usdPerToken: prices,
+          tier: "smart" as const,
+        })),
+      ],
+    };
+    const { container } = render(<RoutingTriangle data={data} />);
+
+    const regions = [...container.querySelectorAll("path[data-tier]")].map(
+      (path) => polygon(path.getAttribute("d") ?? ""),
+    );
+    expect(regions.length).toBeGreaterThan(0);
+    expect(container.querySelector('path[data-tier="smart"]')).toBeNull();
+    const label = container.querySelector('[data-label="smart"] text');
+    const at: [number, number] = [
+      Number(label?.getAttribute("x")),
+      Number(label?.getAttribute("y")),
+    ];
+    const outline = polygon(
+      container.querySelector("path:not([data-tier])")?.getAttribute("d") ?? "",
+    );
+    expect(contains(outline, at)).toBe(false);
+    for (const region of regions) expect(contains(region, at)).toBe(false);
+  });
 });

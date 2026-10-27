@@ -269,6 +269,21 @@ describe("AutoRoutingDiagnosticsPage", () => {
     );
   });
 
+  it("steps by keyboard through cent-rounding plateaus at low budgets", async () => {
+    respond = (budget) => HttpResponse.json(ready(budget ?? 0.01, 0.01));
+    const user = userEvent.setup();
+    renderPage();
+    (await screen.findByRole("slider", { name: "Budget" })).focus();
+
+    await user.keyboard("{ArrowRight>40/}");
+
+    expect(screen.getByRole("slider", { name: "Budget" })).toHaveAttribute(
+      "aria-valuetext",
+      "$0.02/day",
+    );
+    await waitFor(() => expect(requestedBudgets).toContain(0.02));
+  });
+
   it("shows no blocks without an active plan", async () => {
     respond = () => HttpResponse.json({ status: "cold_start" });
     renderPage();

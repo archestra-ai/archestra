@@ -20,33 +20,11 @@ import {
 import type { AutoRoutingDiagnostics } from "@/lib/auto-routing.query";
 import { formatCompactNumber } from "@/lib/utils/format-compact-number";
 import { centroid, type Point, routingRegions } from "./routing-regions";
-import { TIER_NAMES, type TierName } from "./tiers";
+import { TIER_COLOR, TIER_NAMES, type TierName } from "./tiers";
 
 type Ready = Extract<AutoRoutingDiagnostics, { status: "ready" }>;
 type Session = Ready["sessions"][number];
 type TierTriple = Session["usdPerToken"];
-
-/** Validated categorical slots (aqua, blue, orange), stepped per theme. */
-export const TIER_COLOR: Record<
-  TierName,
-  { dot: string; region: string; swatch: string }
-> = {
-  fast: {
-    dot: "fill-[#1baf7a] dark:fill-[#199e70]",
-    region: "fill-[#1baf7a]/15 dark:fill-[#199e70]/25",
-    swatch: "bg-[#1baf7a] dark:bg-[#199e70]",
-  },
-  normal: {
-    dot: "fill-[#2a78d6] dark:fill-[#3987e5]",
-    region: "fill-[#2a78d6]/15 dark:fill-[#3987e5]/25",
-    swatch: "bg-[#2a78d6] dark:bg-[#3987e5]",
-  },
-  smart: {
-    dot: "fill-[#eb6834] dark:fill-[#d95926]",
-    region: "fill-[#eb6834]/15 dark:fill-[#d95926]/25",
-    swatch: "bg-[#eb6834] dark:bg-[#d95926]",
-  },
-};
 
 const SERIES: ChartConfig = {
   sessions: {
@@ -258,6 +236,13 @@ export function SizeScatter({ sessions }: { sessions: Session[] }) {
 // === Routing triangle ===
 
 const TRI = { size: 360, pad: 36 };
+const LABEL_OFFSET = 22;
+
+type TierLabel = {
+  tier: TierName;
+  at: Point;
+  leader: readonly [Point, Point] | null;
+};
 
 export function RoutingTriangle({ data }: { data: Ready }) {
   const { size, pad } = TRI;
@@ -269,13 +254,22 @@ export function RoutingTriangle({ data }: { data: Ready }) {
   // Region boundaries hold at one set of prices; long-context pricing gives each session its own.
   const prices = sharedPrices(data.sessions);
   const regions = prices && routingRegions(data.lamStar, prices);
-  const anchor = (tier: TierName): Point | null => {
-    if (regions && regions[tier].length > 0) return centroid(regions[tier]);
+  const labels = TIER_NAMES.flatMap((tier): TierLabel[] => {
+    const region = regions?.[tier] ?? [];
+    if (region.length > 0)
+      return [{ tier, at: centroid(region), leader: null }];
     const routed = data.sessions.filter((s) => s.tier === tier);
-    return routed.length > 0
-      ? centroid(routed.map((s) => [s.tierNeeded[1], s.tierNeeded[2]]))
-      : null;
-  };
+    if (routed.length === 0) return [];
+    const dots = centroid(
+      routed.map((s) => [s.tierNeeded[1], s.tierNeeded[2]]),
+    );
+    if (!regions) return [{ tier, at: dots, leader: null }];
+    // A tier holding no area would label another tier's region: label it past the hypotenuse instead.
+    const u = Math.min(0.9, Math.max(0.1, (dots[0] - dots[1] + 1) / 2));
+    const out = LABEL_OFFSET / (span * Math.SQRT2);
+    const past = (k: number): Point => [u + k * out, 1 - u + k * out];
+    return [{ tier, at: past(1), leader: [past(0), past(0.4)] }];
+  });
   const ticks = [0, 0.25, 0.5, 0.75, 1];
 
   return (
@@ -335,22 +329,31 @@ export function RoutingTriangle({ data }: { data: Ready }) {
           <title>{`${s.tier} · p_normal ${s.tierNeeded[1].toFixed(2)} · p_smart ${s.tierNeeded[2].toFixed(2)}`}</title>
         </circle>
       ))}
-      {TIER_NAMES.map((tier) => {
-        const at = anchor(tier);
-        return at ? (
+      {labels.map(({ tier, at, leader }) => (
+        <g key={tier} data-label={tier}>
+          {leader && (
+            <line
+              x1={x(leader[0][0])}
+              y1={y(leader[0][1])}
+              x2={x(leader[1][0])}
+              y2={y(leader[1][1])}
+              className="stroke-muted-foreground"
+              strokeWidth={1}
+            />
+          )}
           <text
-            key={tier}
             x={x(at[0])}
             y={y(at[1])}
             textAnchor="middle"
+            dominantBaseline={leader ? "middle" : undefined}
             className={LABEL}
             strokeWidth={4}
             paintOrder="stroke"
           >
             {tier}
           </text>
-        ) : null;
-      })}
+        </g>
+      ))}
       <text x={size / 2} y={size - 4} textAnchor="middle" className={TICK}>
         p_normal
       </text>

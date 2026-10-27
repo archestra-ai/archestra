@@ -369,7 +369,7 @@ export function RosterSheet({
               ? null
               : hasNextPage
                 ? `Showing ${rows.length.toLocaleString("en-US")} of ${matching.toLocaleString("en-US")}`
-                : `${formatUsd(summary.spent)} spent by ${pluralUsers(summary.total)}${environmentLabel ? ` in ${environmentLabel}` : ""}`}
+                : `${formatUsd(summary.spent)} spent by ${pluralUsers(summary.spenders)}${environmentLabel ? ` in ${environmentLabel}` : ""}`}
           </span>
           {canManage && filter === "at" && counts.at > 1 ? (
             // Bulk reset lives with the at-limit view it acts on.

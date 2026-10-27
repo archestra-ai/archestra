@@ -333,6 +333,8 @@ type EnvironmentOverride = {
 
 /** Avatars before "+N", sized so the counts still fit on the same row. */
 const MAX_STACK = 4;
+/** Larger "+N" counts overflow the avatar-sized chip; show "99+" instead. */
+const MAX_HIDDEN_LABEL = 99;
 
 /** Above this many overrides the overrides list gets a search field. */
 const SEARCH_THRESHOLD = 4;
@@ -677,7 +679,7 @@ function StatusCount({
         aria-hidden
         className={cn("size-2 rounded-full", STATUS_META[status].dot)}
       />
-      <span className="font-medium">{count}</span>
+      <span className="font-medium">{count.toLocaleString("en-US")}</span>
       <span className="sr-only">{STATUS_META[status].label.toLowerCase()}</span>
     </span>
   );
@@ -866,11 +868,17 @@ function WhoIsAffected({
   const unlimited = summary?.none ?? 0;
   const allUnlimited = total > 0 && unlimited === total;
   const spent = summary?.spent ?? 0;
+  const spenders = summary?.spenders ?? 0;
 
   const stack = allUnlimited
     ? rows.filter((row) => row.spent > 0)
     : rows.filter((row) => row.status !== "ok");
-  const hidden = Math.max((allUnlimited ? total : flagged) - stack.length, 0);
+  // The avatars stand for spenders (or flagged users), never the whole roster:
+  // "All N" in the header already counts everyone.
+  const hidden = Math.max(
+    (allUnlimited ? spenders : flagged) - stack.length,
+    0,
+  );
 
   const resetsItem: DotItem | null = summary?.resetsAt
     ? {
@@ -930,8 +938,12 @@ function WhoIsAffected({
             aria-hidden
             className={cn("size-2 rounded-full", UNLIMITED_DOT)}
           />
-          <span className="font-medium tabular-nums">{unlimited}</span>
-          <span className="text-muted-foreground">without a limit</span>
+          <span className="font-medium tabular-nums">
+            {spenders.toLocaleString("en-US")}
+          </span>
+          <span className="text-muted-foreground">
+            spending without a limit
+          </span>
         </UnstyledButton>
       </>
     );
@@ -1052,10 +1064,10 @@ function AvatarStack({
       {hidden > 0 ? (
         <UnstyledButton
           onClick={() => onOpen({})}
-          aria-label={`${hidden} more users`}
+          aria-label={`${hidden.toLocaleString("en-US")} more users`}
           className="relative flex size-8 items-center justify-center rounded-full border-2 border-card bg-muted text-xs font-medium tabular-nums hover:bg-accent focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
-          {`+${hidden}`}
+          {hidden > MAX_HIDDEN_LABEL ? `${MAX_HIDDEN_LABEL}+` : `+${hidden}`}
         </UnstyledButton>
       ) : null}
     </div>
@@ -1082,7 +1094,9 @@ function StatusLink({
         aria-hidden
         className={cn("size-2 rounded-full", STATUS_META[status].dot)}
       />
-      <span className="font-medium tabular-nums">{count}</span>
+      <span className="font-medium tabular-nums">
+        {count.toLocaleString("en-US")}
+      </span>
       <span className="text-muted-foreground">{label}</span>
     </UnstyledButton>
   );

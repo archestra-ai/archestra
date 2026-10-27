@@ -345,12 +345,13 @@ export async function readRunTranscript(params: {
     | "none";
   messages: PartialUIMessage[];
 }> {
-  const { trigger, run, organizationId, userId } = params;
+  const { trigger, run, organizationId } = params;
+  // Stable's organization-scoped reader relies on the caller's authorization:
+  // the tool requires the actor or both Projects oversight and log:admin.
   const conversation = run.chatConversationId
     ? await ConversationModel.findByIdInOrganization({
         id: run.chatConversationId,
         organizationId,
-        viewer: { kind: "caller", userId, organizationId },
       })
     : null;
   if (conversation?.encryptedChat) return { source: "encrypted", messages: [] };

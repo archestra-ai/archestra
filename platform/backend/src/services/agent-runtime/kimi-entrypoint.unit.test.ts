@@ -148,7 +148,7 @@ describe("Kimi Code image entrypoint", () => {
     }
   });
 
-  test("uses the plain OpenAI provider type, a default context size and no binding for other providers", async () => {
+  test("uses a default context size and no binding without OpenAPPA", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "archestra-kimi-"));
     try {
       const { bin, runtime } = await prepare(root);
@@ -157,20 +157,17 @@ describe("Kimi Code image entrypoint", () => {
         env: runtimeEnv({
           root,
           mode: "one_shot",
-          ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER: "openai",
-          ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "gpt-4.1",
+          ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER: "kimi-code",
+          ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "kimi-for-coding",
           ARCHESTRA_AGENT_RUNTIME_OPENAPPA: "0",
           ARCHESTRA_AGENT_RUNTIME_BINDING: "",
         }),
       });
       const config = await readToml(path.join(runtime, "kimi", "config.toml"));
-      const providers = config.providers as Record<string, unknown>;
       const models = config.models as Record<string, Record<string, unknown>>;
-      expect(providers.archestra).toMatchObject({ type: "openai" });
       // Kimi refuses a model without a context size.
       expect(models.archestra.max_context_size).toBe(131072);
       expect(models.archestra).not.toHaveProperty("max_output_size");
-      expect(models.archestra).not.toHaveProperty("capabilities");
       expect(await readFile(path.join(runtime, "env"), "utf8")).not.toContain(
         "KIMI_CODE_CUSTOM_HEADERS",
       );

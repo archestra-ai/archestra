@@ -1648,6 +1648,8 @@ esac
     expect(script).toContain("/v1/anthropic/v1");
     expect(script).toContain("/v1/gemini/v1beta");
     expect(script).toContain("moonshotai");
+    expect(script).toContain("kimi-code-plan-global");
+    expect(script).toContain("/v1/kimi-code");
     expect(script).toContain("enabled_providers");
     expect(script).toContain("archestra-llm-proxy.js");
     expect(script).toContain("opencode-routing-plugin-state.json");

@@ -71,8 +71,6 @@ home, hook, bridge = sys.argv[1], sys.argv[2], sys.argv[3]
 env = os.environ
 session = env.get("ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID") or env["ARCHESTRA_AGENT_RUNTIME_TASK_ID"]
 model = env["ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL"]
-# A Kimi Code membership key (the Kimi Code provider) or a Kimi API Platform key.
-kimi_provider = env.get("ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER") in ("kimi-code", "kimi")
 tracing = {
     "X-Archestra-Run-Id": env["ARCHESTRA_AGENT_RUNTIME_TASK_ID"],
     "X-Archestra-Session-Id": session,
@@ -117,8 +115,10 @@ lines = [
     "telemetry = false",
     "",
     # Model requests go to the Agent-scoped proxy; MCP tools come from mcp.json.
+    # The platform runs this client on Kimi Code models only; the "kimi" type
+    # adds Kimi's thinking switch.
     "[providers.archestra]",
-    f'type = "{"kimi" if kimi_provider else "openai"}"',
+    'type = "kimi"',
     f"base_url = {string(env['OPENAI_BASE_URL'])}",
     'api_key_env = "OPENAI_API_KEY"',
     "",
@@ -133,8 +133,7 @@ lines = [
 output_length = positive("ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH")
 if output_length:
     lines.append(f"max_output_size = {output_length}")
-if kimi_provider:
-    lines.append(f"capabilities = {json.dumps(kimi_capabilities(model))}")
+lines.append(f"capabilities = {json.dumps(kimi_capabilities(model))}")
 lines.append("")
 
 

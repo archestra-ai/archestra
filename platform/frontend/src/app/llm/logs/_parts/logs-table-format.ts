@@ -60,11 +60,14 @@ export function describeModelOrigin(params: {
   model: string;
   interactionType: string | null | undefined;
 }): ModelOrigin {
-  const maker = makerProviderForModel(params.model);
+  const servedBy = params.interactionType?.split(":")[0];
+  // Kimi Code serves only Moonshot's models, under plan ids (k3.1-pro, k3, ...).
+  const maker =
+    makerProviderForModel(params.model) ??
+    (servedBy === "kimi-code" ? "kimi" : null);
   if (maker) {
     return { kind: "maker", provider: maker, name: MODEL_MAKER_NAMES[maker] };
   }
-  const servedBy = params.interactionType?.split(":")[0];
   const aggregator = AGGREGATOR_PROVIDERS.find(
     (provider) => provider === servedBy,
   );
@@ -333,8 +336,7 @@ function makerProviderForModel(model: string): ModelMakerProvider | null {
   if (base.startsWith("grok")) return "xai";
   if (base.startsWith("deepseek")) return "deepseek";
   if (base.startsWith("sonar")) return "perplexity";
-  // Kimi Code serves Moonshot's models under plan ids (k3.1-pro, k3, ...).
-  if (/^(kimi|moonshot|k\d)/.test(base)) return "kimi";
+  if (/^(kimi|moonshot)/.test(base)) return "kimi";
   if (base.startsWith("glm")) return "zhipuai";
   if (/^(minimax|abab)/.test(base)) return "minimax";
   if (base.startsWith("voyage")) return "voyage";

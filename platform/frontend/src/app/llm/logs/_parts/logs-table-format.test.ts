@@ -56,6 +56,13 @@ describe("describeModelOrigin", () => {
         interactionType: "kimi-code:chatCompletions",
       }),
     ).toEqual({ kind: "maker", provider: "kimi", name: "Moonshot" });
+    // Another vendor's k-numbered model is not Moonshot's.
+    expect(
+      describeModelOrigin({
+        model: "k2-think",
+        interactionType: "ollama:chatCompletions",
+      }),
+    ).toEqual({ kind: "aggregator", provider: "ollama" });
   });
 
   it("falls back to an aggregator that served an unrecognised model", () => {

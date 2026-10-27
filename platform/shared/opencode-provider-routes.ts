@@ -57,6 +57,11 @@ export const OPENCODE_PASSTHROUGH_PROVIDER_ROUTES = [
   { provider: "zhipuai", openCodeProviderId: "zhipuai", pathSuffix: "" },
   { provider: "minimax", openCodeProviderId: "minimax", pathSuffix: "" },
   { provider: "kimi", openCodeProviderId: "moonshotai", pathSuffix: "" },
+  {
+    provider: "kimi-code",
+    openCodeProviderId: "kimi-code-plan-global",
+    pathSuffix: "",
+  },
 ] as const satisfies readonly OpenCodeProviderRoute[];
 
 export function openCodePassthroughBaseUrl(

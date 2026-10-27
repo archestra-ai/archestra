@@ -11,6 +11,7 @@ import {
   listJiraProjects,
   verifyJiraBotIdentity,
 } from "@/agents/chatops/jira-provider";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasPermission } from "@/auth";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
@@ -236,7 +237,7 @@ const jiraChatOpsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ) {
           throw new ApiError(
             409,
-            "Each Jira account and Archestra agent can only be connected once",
+            `Each Jira account and ${archestraMcpBranding.appName} agent can only be connected once`,
           );
         }
         return { ...latest, bots: [...latest.bots, bot] };

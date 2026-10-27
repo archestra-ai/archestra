@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { HttpResponse, http } from "msw";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import db, { schema } from "@/database";
 import A2AContextModel from "@/models/a2a/context";
@@ -8,7 +9,7 @@ import AgentRunModel from "@/models/agent-run";
 import AgentRunAttentionNoticeModel from "@/models/agent-run-attention-notice";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import ChatOpsConfigModel from "@/models/chatops-config";
-import { beforeEach, expect, test } from "@/test";
+import { afterEach, beforeEach, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import type { AgentRunRecord } from "@/types/agent-runtime";
@@ -24,6 +25,8 @@ let jiraConfig: JiraDbConfig;
 let posted: Record<string, unknown>[];
 let edits: Record<string, unknown>[];
 let loseResponse: boolean;
+
+afterEach(() => archestraMcpBranding.syncFromOrganization(null));
 
 beforeEach(async ({ makeOrganization, makeAgent, makeUser }) => {
   posted = [];
@@ -136,11 +139,19 @@ beforeEach(async ({ makeOrganization, makeAgent, makeUser }) => {
 });
 
 test("Jira runtime input posts one generic UI link and edits the same comment on clear", async () => {
+  (
+    config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+  ).fullWhiteLabeling = true;
+  archestraMcpBranding.syncFromOrganization({
+    appName: "Example Workspace",
+    iconLogo: null,
+  });
   const notice = await requireAttention();
   await handleAgentRunAttentionNotice({ noticeId: notice.id });
   await handleAgentRunAttentionNotice({ noticeId: notice.id });
   expect(posted).toHaveLength(1);
   expect(JSON.stringify(posted)).toContain(`/chat/runs/${run.taskId}`);
+  expect(JSON.stringify(posted)).toContain("open Example Workspace UI");
   expect(JSON.stringify(posted)).not.toContain(run.title);
   await AgentRunModel.updateAttentionState({
     taskId: run.taskId,
@@ -150,6 +161,7 @@ test("Jira runtime input posts one generic UI link and edits the same comment on
   await handleAgentRunAttentionNotice({ noticeId: notice.id });
   expect(edits).toHaveLength(1);
   expect(edits[0].id).toBe("30000");
+  expect(JSON.stringify(edits)).toContain("Open Example Workspace UI");
   expect(
     (await AgentRunAttentionNoticeModel.find(notice.id))?.resolvedNotified,
   ).toBe(true);

@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import ChatOpsConfigModel from "@/models/chatops-config";
@@ -516,7 +517,7 @@ export default class JiraProvider implements ChatOpsProvider {
     await this.assertIssueBinding(numericId(params.threadId), params.channelId);
     return this.postComment(
       params.threadId,
-      `Action needed: open Archestra UI: ${params.runUrl}`,
+      `Action needed: open ${archestraMcpBranding.appName} UI: ${params.runUrl}`,
       `runtime-attention:${params.noticeId}`,
     );
   }
@@ -531,7 +532,9 @@ export default class JiraProvider implements ChatOpsProvider {
     const issueId = numericId(params.threadId);
     await this.assertIssueBinding(issueId, params.channelId);
     const body = {
-      body: jiraReplyDocument(`Resolved. Open Archestra UI: ${params.runUrl}`),
+      body: jiraReplyDocument(
+        `Resolved. Open ${archestraMcpBranding.appName} UI: ${params.runUrl}`,
+      ),
     };
     await this.replaceComment({
       issueId,

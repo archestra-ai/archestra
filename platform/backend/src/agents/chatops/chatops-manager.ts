@@ -2266,7 +2266,7 @@ export class ChatOpsManager {
         if (!linkedUser || linkedUser.banned)
           return {
             success: false,
-            error: "The linked Archestra account is unavailable",
+            error: `The linked ${archestraMcpBranding.appName} account is unavailable`,
           };
         userEmail = linkedUser.email;
       }
@@ -2325,7 +2325,7 @@ export class ChatOpsManager {
             action: "use",
           }))
         ) {
-          message.text = `[Jira requester accountId ${message.senderId}; email unavailable. Running under the configured restricted service identity; this is not a verified human Archestra identity.]\n${message.text}`;
+          message.text = `[Jira requester accountId ${message.senderId}; email unavailable. Running under the configured restricted service identity; this is not a verified human ${archestraMcpBranding.appName} identity.]\n${message.text}`;
           return { success: true, userId: fallbackUserId };
         }
       }
@@ -2381,7 +2381,10 @@ export class ChatOpsManager {
       });
     }
     if (provider.providerId === "jira" && user.banned) {
-      return { success: false, error: "This Archestra account is disabled" };
+      return {
+        success: false,
+        error: `This ${archestraMcpBranding.appName} account is disabled`,
+      };
     }
     if (provider.providerId === "ms-teams") {
       const admission = await ChatOpsUserAdmissionModel.acquire(userEmail);

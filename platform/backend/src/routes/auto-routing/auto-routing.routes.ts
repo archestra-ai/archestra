@@ -12,7 +12,12 @@ import {
 } from "@/auto-routing/settings";
 import config from "@/config";
 import RoutingPlanModel from "@/models/routing-plan";
-import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
+import {
+  ApiError,
+  constructResponseSchema,
+  generateErrorResponseSchema,
+  UuidIdSchema,
+} from "@/types";
 import {
   AutoRoutingPlanDetailSchema,
   AutoRoutingPlanSummarySchema,
@@ -154,7 +159,10 @@ const autoRoutingRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Fit a plan at a budget and a scaled traffic volume without publishing it",
         tags: TAGS,
         body: AutoRoutingSimulateBodySchema,
-        response: constructResponseSchema(AutoRoutingSimulateResponseSchema),
+        response: {
+          ...constructResponseSchema(AutoRoutingSimulateResponseSchema),
+          429: generateErrorResponseSchema("api_rate_limit_error"),
+        },
       },
     },
     async ({ organizationId, body }, reply) =>

@@ -401,15 +401,7 @@ describe("AutoRoutingOverviewPage", () => {
         `${API_ORIGIN}/api/auto-routing/simulate`,
         async ({ request }) => {
           simulated.push(await request.json());
-          return HttpResponse.json({
-            status: "feasible",
-            summary: {
-              ...activePlan.summary,
-              tokens_per_day: 27_000_000,
-              expected_spend: 20,
-              value_size_weighted: 0.71,
-            },
-          } satisfies AutoRoutingSimulation);
+          return HttpResponse.json(feasibleSimulation(0.71));
         },
       ),
     );
@@ -421,9 +413,104 @@ describe("AutoRoutingOverviewPage", () => {
     const whatIf = screen.getByTestId("auto-routing-what-if");
     expect(await within(whatIf).findByText("71.0%")).toBeInTheDocument();
     expect(within(whatIf).getByText("$20.00/day")).toBeInTheDocument();
-    expect(whatIf).toHaveTextContent("27M tokens/day (now 9M)");
+    expect(whatIf).toHaveTextContent(
+      "30M tokens/day, 450 sessions/day (now 10M tokens/day, 150 sessions/day)",
+    );
     expect(simulated).toEqual([{ budgetUsdPerDay: 20, volumeMultiplier: 3 }]);
     expect(updates).toEqual([]);
+  });
+
+  it("labels the simulated tier split with the models the simulation fitted", async () => {
+    settings = withActivePlan(makeSettings());
+    server.use(
+      http.post(`${API_ORIGIN}/api/auto-routing/simulate`, () =>
+        HttpResponse.json(feasibleSimulation(0.71)),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByLabelText("Traffic"));
+    await user.click(await screen.findByRole("option", { name: "×3" }));
+
+    const whatIf = screen.getByTestId("auto-routing-what-if");
+    expect(
+      await within(whatIf).findByText(
+        "fast · claude-haiku: 50.0% sessions, 20.0% tokens",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("fast · unknown: 50.0% sessions, 20.0% tokens"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a result only for the current inputs", async () => {
+    settings = withActivePlan(makeSettings());
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.post(
+        `${API_ORIGIN}/api/auto-routing/simulate`,
+        async ({ request }) => {
+          const body = (await request.json()) as { volumeMultiplier: number };
+          if (body.volumeMultiplier === 5) await held;
+          return HttpResponse.json(
+            feasibleSimulation(body.volumeMultiplier === 5 ? 0.6 : 0.71),
+          );
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    const whatIf = await screen.findByTestId("auto-routing-what-if");
+    await user.click(within(whatIf).getByLabelText("Traffic"));
+    await user.click(await screen.findByRole("option", { name: "×3" }));
+    expect(await within(whatIf).findByText("71.0%")).toBeInTheDocument();
+
+    await user.click(within(whatIf).getByLabelText("Traffic"));
+    await user.click(await screen.findByRole("option", { name: "×5" }));
+
+    expect(await within(whatIf).findByText("Simulating…")).toBeInTheDocument();
+    expect(within(whatIf).queryByText("71.0%")).not.toBeInTheDocument();
+    release();
+    expect(await within(whatIf).findByText("60.0%")).toBeInTheDocument();
+
+    await user.clear(within(whatIf).getByLabelText("Budget (USD/day)"));
+
+    expect(within(whatIf).queryByText("60.0%")).not.toBeInTheDocument();
+    expect(within(whatIf).queryByText("Simulating…")).not.toBeInTheDocument();
+  });
+
+  it("retries a simulation refused while an earlier one finishes", async () => {
+    settings = withActivePlan(makeSettings());
+    let calls = 0;
+    server.use(
+      http.post(`${API_ORIGIN}/api/auto-routing/simulate`, () => {
+        calls += 1;
+        return calls === 1
+          ? HttpResponse.json(
+              {
+                error: {
+                  message: "A simulation is already running",
+                  type: "api_rate_limit_error",
+                },
+              },
+              { status: 429 },
+            )
+          : HttpResponse.json(feasibleSimulation(0.71));
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByLabelText("Traffic"));
+    await user.click(await screen.findByRole("option", { name: "×3" }));
+
+    const whatIf = screen.getByTestId("auto-routing-what-if");
+    expect(
+      await within(whatIf).findByText("71.0%", {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(calls).toBe(2);
   });
 
   it("reports the minimum budget when the simulated traffic cannot be afforded", async () => {
@@ -433,6 +520,7 @@ describe("AutoRoutingOverviewPage", () => {
         HttpResponse.json({
           status: "infeasible",
           minBudgetUsdPerDay: 31.4,
+          baseline: { tokensPerDay: 10_000_000, sessionsPerDay: 150 },
         } satisfies AutoRoutingSimulation),
       ),
     );
@@ -679,6 +767,27 @@ function setCanUpdate(canUpdate: boolean) {
     data: canUpdate,
     isPending: false,
   } as unknown as ReturnType<typeof useHasPermissions>);
+}
+
+/** A fit on the saved tiers over 10M tokens and 150 sessions a day, shown at ×3. */
+function feasibleSimulation(quality: number): AutoRoutingSimulation {
+  const saved = makeSettings().tiers;
+  return {
+    status: "feasible",
+    summary: {
+      ...activePlan.summary,
+      tokens_per_day: 30_000_000,
+      sessions_per_day: 450,
+      expected_spend: 20,
+      value_size_weighted: quality,
+    },
+    tiersFingerprint: fingerprint([
+      saved.fast?.id ?? "",
+      saved.normal?.id ?? "",
+      saved.smart?.id ?? "",
+    ]),
+    baseline: { tokensPerDay: 10_000_000, sessionsPerDay: 150 },
+  };
 }
 
 function fingerprint(modelIds: string[]) {

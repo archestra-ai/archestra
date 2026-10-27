@@ -1,13 +1,12 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import {
-  keepPreviousData,
   type QueryClient,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { throwOnApiError } from "@/lib/utils/api";
+import { getApiErrorType, throwOnApiError } from "@/lib/utils/api";
 
 const {
   getAutoRoutingSettings,
@@ -37,6 +36,10 @@ type AutoRoutingSimulateBody =
   archestraApiTypes.SimulateAutoRoutingData["body"];
 export type AutoRoutingSimulation =
   archestraApiTypes.SimulateAutoRoutingResponses["200"];
+export type SimulatedTraffic = Extract<
+  AutoRoutingSimulation,
+  { status: "feasible" }
+>["baseline"];
 
 const autoRoutingKeys = {
   all: ["auto-routing"] as const,
@@ -151,7 +154,11 @@ export function usePreviewAutoRouting() {
   });
 }
 
-/** A fit at `body`'s budget and traffic that publishes nothing; idle while `body` is null. */
+/**
+ * A fit at `body`'s budget and traffic that publishes nothing; idle while
+ * `body` is null. The backend runs one simulation per organization at a time,
+ * so one refused while an abandoned earlier one finishes is retried.
+ */
 export function useSimulateAutoRouting(body: AutoRoutingSimulateBody | null) {
   return useQuery({
     queryKey: autoRoutingKeys.simulation(body),
@@ -162,6 +169,12 @@ export function useSimulateAutoRouting(body: AutoRoutingSimulateBody | null) {
       return data ?? null;
     },
     enabled: body !== null,
-    placeholderData: keepPreviousData,
+    retry: (failures, error) =>
+      failures < SIMULATION_RETRIES &&
+      getApiErrorType(error.cause) === "api_rate_limit_error",
+    retryDelay: SIMULATION_RETRY_DELAY_MS,
   });
 }
+
+const SIMULATION_RETRIES = 10;
+const SIMULATION_RETRY_DELAY_MS = 1000;

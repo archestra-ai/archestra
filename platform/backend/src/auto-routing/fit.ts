@@ -23,6 +23,7 @@ import {
 import type {
   AutoRoutingFitResult,
   AutoRoutingSimulateResponse,
+  SimulatedTraffic,
 } from "@/types/auto-routing-api";
 import { activeSourceVersion, routerFeatures } from "./signals";
 import {
@@ -104,50 +105,28 @@ export async function infeasibleBudget(
 /**
  * What a fit at `budgetUsdPerDay` would plan if the fitted usage window's
  * sessions and tokens per day were `volumeMultiplier` times what they were.
- * Runs regardless of the enabled switch and publishes nothing.
+ * Runs regardless of the enabled switch and publishes nothing. Each one reads
+ * and fits the whole usage window, so an organization runs one at a time and
+ * the process at most `MAX_SIMULATIONS`; excess calls are refused with a 429.
  */
 export async function simulateFit(
   organizationId: string,
   params: { budgetUsdPerDay: number; volumeMultiplier: number },
 ): Promise<AutoRoutingSimulateResponse> {
-  const settings = await AutoRoutingSettingsModel.find(organizationId);
-  const inputs =
-    settings &&
-    (await readFitInputs({
-      organizationId,
-      settings: {
-        ...settings,
-        enabled: true,
-        budgetUsdPerDay: params.budgetUsdPerDay.toFixed(2),
-      },
-      scorerVersionId: (await activeSourceVersion()).id,
-      requestedTrigger: "manual",
-    }));
-  if (!inputs) {
+  if (simulationsInFlight.has(organizationId)) {
     throw new ApiError(
-      400,
-      "Configure every tier model before simulating auto routing.",
+      429,
+      "A simulation is already running for this organization; retry when it finishes.",
     );
   }
-  const { outcome } = await fit(inputs, params.volumeMultiplier);
-  switch (outcome.status) {
-    case "active":
-      if (!outcome.summary) throw new Error("An active fit has no summary");
-      return { status: "feasible", summary: outcome.summary };
-    case "cold_start":
-      return {
-        status: "cold_start",
-        sessions: inputs.history.volume.sessions,
-        required: config.autoRouting.minSessions,
-      };
-    case "failed": {
-      const cheapest = cheapestBudget(outcome.error);
-      if (cheapest === null) throw new ApiError(400, outcome.error);
-      return {
-        status: "infeasible",
-        minBudgetUsdPerDay: Math.ceil(cheapest * 100) / 100,
-      };
-    }
+  if (simulationsInFlight.size >= MAX_SIMULATIONS) {
+    throw new ApiError(429, "Too many simulations are running; retry shortly.");
+  }
+  simulationsInFlight.add(organizationId);
+  try {
+    return await simulate(organizationId, params);
+  } finally {
+    simulationsInFlight.delete(organizationId);
   }
 }
 
@@ -288,6 +267,62 @@ export async function fitNow(
 }
 
 // === Internal ===
+
+const simulationsInFlight = new Set<string>();
+const MAX_SIMULATIONS = 4;
+
+async function simulate(
+  organizationId: string,
+  params: { budgetUsdPerDay: number; volumeMultiplier: number },
+): Promise<AutoRoutingSimulateResponse> {
+  const settings = await AutoRoutingSettingsModel.find(organizationId);
+  const inputs =
+    settings &&
+    (await readFitInputs({
+      organizationId,
+      settings: {
+        ...settings,
+        enabled: true,
+        budgetUsdPerDay: params.budgetUsdPerDay.toFixed(2),
+      },
+      scorerVersionId: (await activeSourceVersion()).id,
+      requestedTrigger: "manual",
+    }));
+  if (!inputs) {
+    throw new ApiError(
+      400,
+      "Configure every tier model before simulating auto routing.",
+    );
+  }
+  const { outcome } = await fit(inputs, params.volumeMultiplier);
+  switch (outcome.status) {
+    case "active":
+      if (!outcome.summary) throw new Error("An active fit has no summary");
+      if (inputs.tiers.kind !== "ok")
+        throw new Error("An active fit has unpriced tiers");
+      return {
+        status: "feasible",
+        summary: outcome.summary,
+        tiersFingerprint: inputs.tiers.tiers,
+        baseline: dailyVolume(inputs.history.volume),
+      };
+    case "cold_start":
+      return {
+        status: "cold_start",
+        sessions: inputs.history.volume.sessions,
+        required: config.autoRouting.minSessions,
+      };
+    case "failed": {
+      const cheapest = cheapestBudget(outcome.error);
+      if (cheapest === null) throw new ApiError(400, outcome.error);
+      return {
+        status: "infeasible",
+        minBudgetUsdPerDay: Math.ceil(cheapest * 100) / 100,
+        baseline: dailyVolume(inputs.history.volume),
+      };
+    }
+  }
+}
 
 async function readFitInputs(params: {
   organizationId: string;
@@ -527,10 +562,23 @@ async function fit(
 }
 
 /**
+ * The window's arrival rate: sessions and tokens per day over the span it
+ * covers (at least a day, so a burst does not read as an extreme rate).
+ */
+function dailyVolume(volume: FitVolume): SimulatedTraffic {
+  const span =
+    (volume.lastCreatedAt?.getTime() ?? 0) -
+    (volume.firstCreatedAt?.getTime() ?? 0);
+  const days = Math.max(1, span / DAY_MS);
+  return {
+    sessionsPerDay: volume.sessions / days,
+    tokensPerDay: volume.tokens / days,
+  };
+}
+
+/**
  * router-core `PlanInput`: the per-session models fit on the sample, while
- * volume is flat at the whole window's arrival rate: sessions and tokens per
- * day over the span it covers (at least a day, so a burst does not read as an
- * extreme rate), times `volumeMultiplier`.
+ * volume is flat at the whole window's arrival rate times `volumeMultiplier`.
  */
 function planInput(
   inputs: FitInputs,
@@ -538,10 +586,7 @@ function planInput(
   volumeMultiplier: number,
 ) {
   const { sample, volume } = inputs.history;
-  const span =
-    (volume.lastCreatedAt?.getTime() ?? 0) -
-    (volume.firstCreatedAt?.getTime() ?? 0);
-  const days = Math.max(1, span / DAY_MS);
+  const { sessionsPerDay, tokensPerDay } = dailyVolume(volume);
   return {
     history: sample.map((row) => ({
       features: routerFeatures(row.features),
@@ -553,8 +598,8 @@ function planInput(
     budget: Number(inputs.budgetUsdPerDay),
     volume: {
       kind: "flat",
-      sessions_per_day: (volume.sessions / days) * volumeMultiplier,
-      tokens_per_day: (volume.tokens / days) * volumeMultiplier,
+      sessions_per_day: sessionsPerDay * volumeMultiplier,
+      tokens_per_day: tokensPerDay * volumeMultiplier,
     },
     baseline_source: mostFrequentSource(sample),
   };

@@ -109418,11 +109418,35 @@
                         "summary": {
                           "type": "object",
                           "additionalProperties": {}
+                        },
+                        "tiersFingerprint": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "baseline": {
+                          "type": "object",
+                          "properties": {
+                            "sessionsPerDay": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "tokensPerDay": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "sessionsPerDay",
+                            "tokensPerDay"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "status",
-                        "summary"
+                        "summary",
+                        "tiersFingerprint",
+                        "baseline"
                       ],
                       "additionalProperties": false
                     },
@@ -109437,11 +109461,30 @@
                         },
                         "minBudgetUsdPerDay": {
                           "type": "number"
+                        },
+                        "baseline": {
+                          "type": "object",
+                          "properties": {
+                            "sessionsPerDay": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "tokensPerDay": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "sessionsPerDay",
+                            "tokensPerDay"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "status",
-                        "minBudgetUsdPerDay"
+                        "minBudgetUsdPerDay",
+                        "baseline"
                       ],
                       "additionalProperties": false
                     },
@@ -109651,6 +109694,44 @@
                           "type": "string",
                           "enum": [
                             "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_rate_limit_error"
                           ]
                         },
                         "internal_code": {

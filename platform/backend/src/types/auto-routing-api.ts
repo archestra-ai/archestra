@@ -137,18 +137,32 @@ export const AutoRoutingSimulateBodySchema = z.strictObject({
   volumeMultiplier: z.number().positive().max(100),
 });
 
+/** The fitted usage window's arrival rate, before the simulated multiplier. */
+const SimulatedTrafficSchema = z.object({
+  sessionsPerDay: z.number().nonnegative(),
+  tokensPerDay: z.number().nonnegative(),
+});
+export type SimulatedTraffic = z.infer<typeof SimulatedTrafficSchema>;
+
 /**
  * A fit at the given budget and scaled volume that publishes nothing.
- * `summary` is router-core's plan summary; `infeasible` gives the cheapest
- * routing's USD/day, rounded up to the cent.
+ * `summary` is router-core's plan summary and `tiersFingerprint` the tiers it
+ * was fitted for, as a plan's; `infeasible` gives the cheapest routing's
+ * USD/day, rounded up to the cent.
  */
 export const AutoRoutingSimulateResponseSchema = z.discriminatedUnion(
   "status",
   [
-    z.object({ status: z.literal("feasible"), summary: RouterDocumentSchema }),
+    z.object({
+      status: z.literal("feasible"),
+      summary: RouterDocumentSchema,
+      tiersFingerprint: RouterDocumentSchema,
+      baseline: SimulatedTrafficSchema,
+    }),
     z.object({
       status: z.literal("infeasible"),
       minBudgetUsdPerDay: z.number(),
+      baseline: SimulatedTrafficSchema,
     }),
     z.object({
       status: z.literal("cold_start"),

@@ -1,3 +1,4 @@
+import { simulateFit } from "@/auto-routing/fit";
 import { activeSourceVersion } from "@/auto-routing/signals";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -30,13 +31,19 @@ describe("POST /api/auto-routing/simulate", () => {
       payload: { budgetUsdPerDay, volumeMultiplier },
     });
 
-  const feasible = async (budget: number, multiplier = 1) => {
+  const feasibleResponse = async (budget: number, multiplier = 1) => {
     const response = await simulate(budget, multiplier);
     expect(response.statusCode, response.body).toBe(200);
     const body = response.json();
     expect(body.status).toBe("feasible");
-    return body.summary as Summary;
+    return body as {
+      summary: Summary;
+      tiersFingerprint: { tiers: { model_id: string }[] };
+      baseline: { sessionsPerDay: number; tokensPerDay: number };
+    };
   };
+  const feasible = async (budget: number, multiplier = 1) =>
+    (await feasibleResponse(budget, multiplier)).summary;
 
   const minBudget = async (multiplier = 1) => {
     const response = await simulate(0.01, multiplier);
@@ -81,6 +88,64 @@ describe("POST /api/auto-routing/simulate", () => {
     expect(tripled.value_size_weighted).toBeLessThan(base.value_size_weighted);
     expect(tripled.tokens_per_day).toBeCloseTo(3 * base.tokens_per_day, 6);
     expect(tripled.sessions_per_day).toBeCloseTo(3 * base.sessions_per_day, 9);
+  });
+
+  test("reports the tiers it fitted and the unscaled traffic it scaled", async () => {
+    const trio = await withHistory();
+    const cheapest = await minBudget();
+    const allSmart = (await feasible(1_000_000)).expected_spend;
+    const budget = Math.round((cheapest + allSmart) * 50) / 100;
+
+    const base = await feasibleResponse(budget, 1);
+    const tripled = await feasibleResponse(budget, 3);
+
+    expect(tripled.tiersFingerprint.tiers.map((t) => t.model_id)).toEqual(
+      trio.map((model) => model.id),
+    );
+    expect(tripled.baseline).toEqual(base.baseline);
+    expect(base.baseline.tokensPerDay).toBeCloseTo(
+      base.summary.tokens_per_day,
+      6,
+    );
+    expect(tripled.summary.sessions_per_day).toBeCloseTo(
+      3 * tripled.baseline.sessionsPerDay,
+      9,
+    );
+  });
+
+  test("runs one simulation per organization at a time", async () => {
+    await withHistory();
+
+    const statuses = (
+      await Promise.all([simulate(50, 1), simulate(50, 2)])
+    ).map((response) => response.statusCode);
+
+    expect(statuses.sort()).toEqual([200, 429]);
+    expect((await simulate(50, 2)).statusCode).toBe(200);
+  });
+
+  test("refuses simulations beyond the process-wide limit", async () => {
+    const organizations = Array.from({ length: 5 }, () => crypto.randomUUID());
+
+    const results = await Promise.allSettled(
+      organizations.map((organizationId) =>
+        simulateFit(organizationId, {
+          budgetUsdPerDay: 50,
+          volumeMultiplier: 1,
+        }),
+      ),
+    );
+
+    const statuses = results.map((result) =>
+      result.status === "rejected" ? result.reason.statusCode : 200,
+    );
+    expect(statuses).toEqual([400, 400, 400, 400, 429]);
+    await expect(
+      simulateFit(organizations[4], {
+        budgetUsdPerDay: 50,
+        volumeMultiplier: 1,
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
   });
 
   test("an infeasible budget reports the cheapest routing, which scales with traffic", async () => {

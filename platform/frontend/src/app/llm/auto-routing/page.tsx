@@ -5,23 +5,20 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
-  type AutoRoutingPlanDetail,
   type AutoRoutingSettings,
   useAutoRoutingPlan,
   useAutoRoutingSettings,
 } from "@/lib/auto-routing.query";
-import { useLlmModels } from "@/lib/llm-models.query";
 import { formatDate } from "@/lib/utils/date-time";
+import { useFittedTierModels } from "./_parts/fitted-tier-models";
 import {
   describeFitError,
   type FittedHistory,
   parseFittedHistory,
   parsePlanSummary,
-  parseTierModelIds,
 } from "./_parts/plan-document";
 import { PlanSummaryView } from "./_parts/plan-summary";
 import { AutoRoutingSettingsForm } from "./_parts/settings-form";
-import type { TierName } from "./_parts/tiers";
 import { TryPrompt } from "./_parts/try-prompt";
 import { WhatIf } from "./_parts/what-if";
 
@@ -94,7 +91,10 @@ function ActivePlanSummary({ settings }: { settings: AutoRoutingSettings }) {
   const { data: plan } = useAutoRoutingPlan(
     settings.status.activePlan?.id ?? null,
   );
-  const tierModels = usePlanTierModels(plan, settings);
+  const tierModels = useFittedTierModels(
+    plan?.tiersFingerprint ?? null,
+    settings.tiers,
+  );
   const summary = plan ? parsePlanSummary(plan.summary) : null;
   if (!plan || !summary) return null;
   return (
@@ -106,29 +106,9 @@ function ActivePlanSummary({ settings }: { settings: AutoRoutingSettings }) {
       />
       <WhatIf
         key={`${plan.id}-${plan.budgetUsdPerDay}`}
-        current={summary}
         savedBudgetUsdPerDay={plan.budgetUsdPerDay}
-        tierModels={tierModels}
+        savedTiers={settings.tiers}
       />
     </>
   );
-}
-
-/** The models the plan was fitted for, which the current tiers may no longer be. */
-function usePlanTierModels(
-  plan: AutoRoutingPlanDetail | null | undefined,
-  settings: AutoRoutingSettings,
-): Record<TierName, string> {
-  const { data: models = [] } = useLlmModels();
-  const ids = plan ? parseTierModelIds(plan.tiersFingerprint) : null;
-  const saved = Object.values(settings.tiers);
-  const name = (id: string) =>
-    models.find((model) => model.dbId === id)?.id ??
-    saved.find((tier) => tier?.id === id)?.modelId ??
-    id;
-  return {
-    fast: ids ? name(ids[0]) : "unknown",
-    normal: ids ? name(ids[1]) : "unknown",
-    smart: ids ? name(ids[2]) : "unknown",
-  };
 }

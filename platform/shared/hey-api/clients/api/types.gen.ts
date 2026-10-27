@@ -30859,6 +30859,16 @@ export type SimulateAutoRoutingErrors = {
     /**
      * Default Response
      */
+    429: {
+        error: {
+            message: string;
+            type: 'api_rate_limit_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: {
             message: string;
@@ -30879,9 +30889,20 @@ export type SimulateAutoRoutingResponses = {
         summary: {
             [key: string]: unknown;
         };
+        tiersFingerprint: {
+            [key: string]: unknown;
+        };
+        baseline: {
+            sessionsPerDay: number;
+            tokensPerDay: number;
+        };
     } | {
         status: 'infeasible';
         minBudgetUsdPerDay: number;
+        baseline: {
+            sessionsPerDay: number;
+            tokensPerDay: number;
+        };
     } | {
         status: 'cold_start';
         sessions: number;

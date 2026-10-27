@@ -596,15 +596,21 @@ describe("POST /api/github-actions/token", () => {
   });
 
   test.each([
-    ["the primary limit", { "x-ratelimit-remaining": "0" }],
-    ["a secondary limit", { "retry-after": "60" }],
-  ])("reports %s on the connection check as a GitHub error, not as not linked", async (_case, headers) => {
+    [
+      "the primary limit",
+      { "x-ratelimit-remaining": "0" },
+      "API rate limit exceeded",
+    ],
+    ["a secondary limit", { "retry-after": "60" }, "API rate limit exceeded"],
+    [
+      "a secondary limit without a header",
+      { "x-ratelimit-remaining": "4000" },
+      "You have exceeded a secondary rate limit. Please wait a few minutes before you try again.",
+    ],
+  ])("reports %s on the connection check as a GitHub error, not as not linked", async (_case, headers, message) => {
     server.use(
       http.get(GITHUB_USER_URL, () =>
-        HttpResponse.json(
-          { message: "API rate limit exceeded" },
-          { status: 403, headers },
-        ),
+        HttpResponse.json({ message }, { status: 403, headers }),
       ),
     );
 

@@ -112,7 +112,9 @@ class RoutingHistoryModel {
           and ${start}
           and i.created_at < ${utc(params.cutoff)}::timestamp
           and ${eligibleInteraction}
-        order by i.created_at, i.id
+        -- NULLS FIRST matches the backward scan of the created_at DESC NULLS LAST
+        -- indexes, so the batch reads ~limit rows instead of sorting the window.
+        order by i.created_at nulls first, i.id
         limit ${params.limit}`),
     );
     return rows.rows.map((row) => ({

@@ -312,16 +312,8 @@ export function CopilotOrganizationConnectDialog({
               if (apps.length === 1) setPickedId(apps[0].id);
             }}
             onCreate={() => setMode("create")}
+            onConnectByKey={() => setMode("key")}
           />
-          <Button
-            type="button"
-            variant="link"
-            size="sm"
-            className="h-auto px-0"
-            onClick={() => setMode("key")}
-          >
-            <span>Connect an App by its ID and private key</span>
-          </Button>
         </div>
       ) : null}
 

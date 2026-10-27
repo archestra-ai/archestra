@@ -251,9 +251,12 @@ describe("CopilotOrganizationConnectDialog", () => {
       byKey as never,
     );
     const user = await continueWithOrganization();
+    expect(
+      screen.getByText("For an App that isn't connected to My App yet."),
+    ).toBeInTheDocument();
     await user.click(
       screen.getByRole("button", {
-        name: "Connect an App by its ID and private key",
+        name: /Connect an App by its ID and private key/,
       }),
     );
     expect(

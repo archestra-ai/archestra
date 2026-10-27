@@ -78,6 +78,42 @@ describe("GithubAppChoice", () => {
     expect(onCreate).toHaveBeenCalledOnce();
   });
 
+  it("offers two choices, and a third to connect an App by its key when asked", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <GithubAppChoice
+        icons={[null]}
+        appName="My App"
+        canCreate
+        onUseExisting={vi.fn()}
+        onCreate={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByRole("button")).toHaveLength(2);
+
+    const onConnectByKey = vi.fn();
+    rerender(
+      <GithubAppChoice
+        icons={[null]}
+        appName="My App"
+        canCreate
+        onUseExisting={vi.fn()}
+        onCreate={vi.fn()}
+        onConnectByKey={onConnectByKey}
+      />,
+    );
+    expect(screen.getAllByRole("button")).toHaveLength(3);
+    expect(
+      screen.getByText("For an App that isn't connected to My App yet."),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", {
+        name: /Connect an App by its ID and private key/,
+      }),
+    );
+    expect(onConnectByKey).toHaveBeenCalledOnce();
+  });
+
   it("can't use an existing App when none is connected, nor create one without permission", () => {
     render(
       <GithubAppChoice

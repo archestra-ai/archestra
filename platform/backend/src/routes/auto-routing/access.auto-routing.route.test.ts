@@ -16,6 +16,7 @@ const READS = [
     url: "/api/auto-routing/simulate",
     payload: { budgetUsdPerDay: 50, volumeMultiplier: 2 },
   },
+  { method: "GET", url: "/api/auto-routing/backfill" },
 ] as const;
 const WRITES = [
   {
@@ -29,6 +30,13 @@ const WRITES = [
     url: "/api/auto-routing/preview",
     payload: { text: "Fix a typo" },
   },
+  { method: "POST", url: "/api/auto-routing/backfill/scan" },
+  {
+    method: "POST",
+    url: "/api/auto-routing/backfill/score",
+    payload: { maxSessions: 10, maxCostUsd: 1 },
+  },
+  { method: "DELETE", url: "/api/auto-routing/backfill" },
 ] as const;
 
 describe("auto routing API access", () => {
@@ -80,7 +88,7 @@ describe("auto routing API access", () => {
     }
   });
 
-  test("a member reads but cannot change settings, re-plan or preview", async () => {
+  test("a member reads but cannot change settings, re-plan, preview or backfill", async () => {
     const authorization = await tokenFor("member");
 
     for (const request of READS) {
@@ -105,8 +113,9 @@ describe("auto routing API access", () => {
 
   test("an admin passes the permission check on every write", async () => {
     const authorization = await tokenFor("admin");
-    // Preview gets past the gate and stops at the missing scorer key.
-    const expected = [200, 200, 400];
+    // Preview gets past the gate and stops at the missing scorer key; scoring
+    // waits for the scan it just started, which the cancel then stops.
+    const expected = [200, 200, 400, 200, 409, 200];
 
     const statuses = [];
     for (const request of WRITES) {

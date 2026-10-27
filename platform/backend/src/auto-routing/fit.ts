@@ -8,8 +8,15 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import RoutingHistoryModel, {
+  type HistoryFitRow,
+  type PastWindow,
+} from "@/models/routing-history";
 import RoutingPlanModel from "@/models/routing-plan";
-import RoutingUsageModel, { type FitVolume } from "@/models/routing-usage";
+import RoutingUsageModel, {
+  type FitVolume,
+  HISTORY_MS,
+} from "@/models/routing-usage";
 import { ApiError } from "@/types";
 import {
   type AutoRoutingSettings,
@@ -156,12 +163,31 @@ export async function fitInputsUnchanged(
   ) {
     return false;
   }
-  const volume = await RoutingUsageModel.findFitVolume({
+  const window = await readFitWindow({
     organizationId,
     scorerVersionId: scorerVersion.id,
     inputWatermark: new Date(),
   });
-  return isDeepStrictEqual(plan.diagnostics?.history, volumeDocument(volume));
+  return isDeepStrictEqual(plan.diagnostics?.history, volumeDocument(window));
+}
+
+/**
+ * What a fit started at `inputWatermark` would read, without reading its
+ * sessions: the cold-start progress, and what a refit would change.
+ */
+export async function readFitWindow(params: {
+  organizationId: string;
+  scorerVersionId: string;
+  inputWatermark: Date;
+}): Promise<FitWindowSummary> {
+  const [live, past] = await Promise.all([
+    RoutingUsageModel.findFitVolume(params),
+    RoutingHistoryModel.findPopulation({
+      ...params,
+      windowStart: historyWindowStart(params.inputWatermark),
+    }),
+  ]);
+  return summarizeWindow(live, past);
 }
 
 /**
@@ -189,6 +215,19 @@ export async function completeFit(
 
 /** A finished fit: the inputs it read and what publication made of them. */
 type FitRun = { inputs: FitInputs; published: RoutingPublishResult };
+
+/**
+ * What the fit learns from and sizes the plan for. `sessions` (live plus
+ * scored past ones) is what the cold-start minimum counts. Volume is the
+ * live window's once it spans a week; before that, the backfill
+ * population's, which estimates it from all eligible traffic.
+ */
+type FitWindowSummary = {
+  sessions: number;
+  pastSessions: number;
+  volume: FitVolume;
+  volumeSource: "live" | "history";
+};
 
 /** How many sessions a fit read for a scorer version: the cold-start progress. */
 export type FitSessions = { scorerVersionId: string; sessions: number };
@@ -310,7 +349,7 @@ async function simulate(
     case "cold_start":
       return {
         status: "cold_start",
-        sessions: inputs.history.volume.sessions,
+        sessions: inputs.history.sessions,
         required: config.autoRouting.minSessions,
       };
     case "failed": {
@@ -341,7 +380,7 @@ async function readFitInputs(params: {
   const inputWatermark = new Date();
   const history =
     tiers.kind === "ok"
-      ? await RoutingUsageModel.findFitHistory(
+      ? await readFitHistory(
           {
             organizationId,
             scorerVersionId,
@@ -370,14 +409,61 @@ async function readFitInputs(params: {
   };
 }
 
-/** The fitted usage window, stored with an active plan so a re-plan can tell whether usage moved. */
-function volumeDocument(volume: FitVolume): RouterDocument {
+/** The fitted window, stored with an active plan so a re-plan can tell whether usage moved. */
+function volumeDocument(window: FitWindowSummary): RouterDocument {
+  const { volume } = window;
   return {
-    sessions: volume.sessions,
+    sessions: window.sessions,
+    past_sessions: window.pastSessions,
     tokens: volume.tokens,
     first_created_at: volume.firstCreatedAt?.toISOString() ?? null,
     last_created_at: volume.lastCreatedAt?.toISOString() ?? null,
+    volume_source: window.volumeSource,
   };
+}
+
+/** Live auto sessions at weight 1 and scored past sessions at their inverse-inclusion weight. */
+async function readFitHistory(
+  params: {
+    organizationId: string;
+    scorerVersionId: string;
+    inputWatermark: Date;
+    longContextThreshold: number | null;
+  },
+  maxSessions?: number,
+): Promise<FitHistory> {
+  const [live, past] = await Promise.all([
+    RoutingUsageModel.findFitHistory(params, maxSessions),
+    RoutingHistoryModel.findFitHistory({
+      ...params,
+      windowStart: historyWindowStart(params.inputWatermark),
+    }),
+  ]);
+  return {
+    ...summarizeWindow(live.volume, past),
+    sample: [
+      ...live.sample.map((row) => ({ ...row, weight: 1 })),
+      ...past.sample,
+    ],
+  };
+}
+
+function summarizeWindow(live: FitVolume, past: PastWindow): FitWindowSummary {
+  const span =
+    (live.lastCreatedAt?.getTime() ?? 0) -
+    (live.firstCreatedAt?.getTime() ?? 0);
+  const fromHistory =
+    span < LIVE_VOLUME_MIN_SPAN_MS && past.population.sessions > 0;
+  return {
+    sessions: live.sessions + past.scored,
+    pastSessions: past.scored,
+    volume: fromHistory ? past.population : live,
+    volumeSource: fromHistory ? "history" : "live",
+  };
+}
+
+function historyWindowStart(inputWatermark: Date): Date {
+  return new Date(inputWatermark.getTime() - HISTORY_MS);
 }
 
 const INFEASIBLE_ERROR =
@@ -404,7 +490,7 @@ function fitSessions(inputs: FitInputs): FitSessions | null {
   return inputs.tiers.kind === "ok"
     ? {
         scorerVersionId: inputs.scorerVersionId,
-        sessions: inputs.history.volume.sessions,
+        sessions: inputs.history.sessions,
       }
     : null;
 }
@@ -445,20 +531,25 @@ function fitTiers(trio: Trio): FitTiers {
   }
 }
 
-type FitHistory = Awaited<ReturnType<typeof RoutingUsageModel.findFitHistory>>;
-type FitHistoryRow = FitHistory["sample"][number];
+type FitHistoryRow = HistoryFitRow;
+type FitHistory = FitWindowSummary & { sample: FitHistoryRow[] };
 
 const EMPTY_HISTORY: FitHistory = {
   sample: [],
+  sessions: 0,
+  pastSessions: 0,
   volume: {
     sessions: 0,
     tokens: 0,
     firstCreatedAt: null,
     lastCreatedAt: null,
   },
+  volumeSource: "live",
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** Live auto traffic sizes the plan once its window spans this long. */
+const LIVE_VOLUME_MIN_SPAN_MS = 7 * DAY_MS;
 
 /** Bounds refits when settings keep changing under an inline fit. */
 const INLINE_FIT_ATTEMPTS = 3;
@@ -511,7 +602,7 @@ async function fit(
     };
   }
   const { tiers } = inputs.tiers;
-  const sessions = inputs.history.volume.sessions;
+  const { sessions } = inputs.history;
   const minSessions = config.autoRouting.minSessions;
   if (sessions < minSessions) {
     return {
@@ -540,7 +631,7 @@ async function fit(
         summary: plan.summary,
         diagnostics: {
           ...plan.diagnostics,
-          history: volumeDocument(inputs.history.volume),
+          history: volumeDocument(inputs.history),
         },
       },
     };
@@ -594,7 +685,7 @@ function planInput(
       short: tokenCounts(row.short),
       long: tokenCounts(row.long),
       timestamp_ms: row.createdAt.getTime(),
-      weight: 1,
+      weight: row.weight,
     })),
     tiers,
     budget: Number(inputs.budgetUsdPerDay),

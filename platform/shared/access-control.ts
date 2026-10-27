@@ -704,6 +704,11 @@ export const requiredEndpointPermissionsMap: Partial<
   // Preview spends on the scorer, so it needs the same right as changing settings.
   [RouteId.PreviewAutoRouting]: { llmProxy: ["update"] },
   [RouteId.SimulateAutoRouting]: { llmProxy: ["read"] },
+  [RouteId.GetAutoRoutingBackfill]: { llmProxy: ["read"] },
+  [RouteId.ScanAutoRoutingBackfill]: { llmProxy: ["update"] },
+  // Scoring sends past prompts to the scorer and spends on it.
+  [RouteId.ScoreAutoRoutingBackfill]: { llmProxy: ["update"] },
+  [RouteId.CancelAutoRoutingBackfill]: { llmProxy: ["update"] },
   // Agent-tool routes: agent-type and scope checks are handled dynamically in the route handlers
   [RouteId.GetAgentTools]: {},
   [RouteId.GetAllAgentTools]: {},

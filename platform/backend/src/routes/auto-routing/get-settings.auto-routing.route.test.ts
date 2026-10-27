@@ -40,7 +40,7 @@ describe("GET /api/auto-routing/settings", () => {
         coldStart: {
           scorerVersionId: (await activeSourceVersion()).id,
           sessions: 0,
-          required: 100,
+          required: 1000,
         },
         lastFitError: null,
       },
@@ -94,7 +94,7 @@ describe("GET /api/auto-routing/settings", () => {
       plannedGeneration: 2,
       status: {
         activePlan: { id: plan.id, createdAt: plan.createdAt.toISOString() },
-        coldStart: { scorerVersionId: running.id, sessions: 2, required: 100 },
+        coldStart: { scorerVersionId: running.id, sessions: 2, required: 1000 },
         lastFitError: "solver diverged",
       },
     });

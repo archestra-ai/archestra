@@ -2,6 +2,9 @@ import { SupportedProvidersSchema } from "@archestra/shared";
 import { z } from "zod";
 import {
   RouterDocumentSchema,
+  RoutingBackfillBreakdownSchema,
+  RoutingBackfillPhaseSchema,
+  RoutingBackfillStatusSchema,
   RoutingDecisionReasonSchema,
   RoutingPlanRecordSchema,
   RoutingPlanStatusSchema,
@@ -191,4 +194,67 @@ export const AutoRoutingPreviewResponseSchema = z.object({
 });
 export type AutoRoutingPreviewResponse = z.infer<
   typeof AutoRoutingPreviewResponseSchema
+>;
+
+/** Most past sessions one backfill scores. */
+export const AUTO_ROUTING_BACKFILL_MAX_SESSIONS = 5000;
+
+export const AutoRoutingScoreBackfillBodySchema = z.strictObject({
+  maxSessions: z
+    .number()
+    .int()
+    .min(1)
+    .max(AUTO_ROUTING_BACKFILL_MAX_SESSIONS)
+    .default(3000),
+  /** Ceiling on what the scorer calls cost, in USD. */
+  maxCostUsd: z.number().positive().max(1000),
+});
+export type AutoRoutingScoreBackfillBody = z.infer<
+  typeof AutoRoutingScoreBackfillBodySchema
+>;
+
+export const AutoRoutingBackfillResponseSchema = z.object({
+  /** The organization's newest backfill. */
+  backfill: z
+    .object({
+      id: z.string().uuid(),
+      status: RoutingBackfillStatusSchema,
+      phase: RoutingBackfillPhaseSchema,
+      windowStart: z.date(),
+      cutoff: z.date(),
+      /** Past sessions eligible for history, counted when the scan finished. */
+      eligibleSessions: z.number().int().nonnegative(),
+      eligibleTokens: z.number().nonnegative(),
+      breakdown: RoutingBackfillBreakdownSchema,
+      /** Whether it scores with the running scorer version; null before scoring starts. */
+      scorerCurrent: z.boolean().nullable(),
+      maxSessions: z.number().int().nullable(),
+      maxCostUsd: z.number().nullable(),
+      spentCostUsd: z.number(),
+      progress: z
+        .object({
+          sample: z.number().int(),
+          scored: z.number().int(),
+          noText: z.number().int(),
+          failed: z.number().int(),
+        })
+        .nullable(),
+      error: z.string().nullable(),
+      completedAt: z.date().nullable(),
+    })
+    .nullable(),
+  /** What scoring the latest scan with the running scorer version would take; null when nothing is left to score. */
+  scoreOffer: z
+    .object({
+      sessions: z.number().int().positive(),
+      remaining: z.number().int().positive(),
+      estimatedCostUsd: z.number(),
+      suggestedMaxCostUsd: z.number(),
+      /** The sessions were scored before by another scorer version. */
+      rescore: z.boolean(),
+    })
+    .nullable(),
+});
+export type AutoRoutingBackfillResponse = z.infer<
+  typeof AutoRoutingBackfillResponseSchema
 >;

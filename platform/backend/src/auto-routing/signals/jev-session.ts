@@ -77,7 +77,9 @@ export class JevSessionSource
       state: sessionState(input),
       questions: this.spec.questions,
     };
-    const timeout = AbortSignal.timeout(config.autoRouting.scorerTimeoutMs);
+    const timeout = AbortSignal.timeout(
+      ctx.timeoutMs ?? config.autoRouting.scorerTimeoutMs,
+    );
     const body = await postDecisions({
       url: baseUrl ?? config.llm.jev.baseUrl,
       apiKey: apiKey.replace(/^Bearer\s+/i, ""),

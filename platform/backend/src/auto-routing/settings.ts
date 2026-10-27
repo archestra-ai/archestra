@@ -5,7 +5,6 @@ import AutoRoutingSettingsModel, {
   mergeSettings,
 } from "@/models/auto-routing-settings";
 import RoutingPlanModel from "@/models/routing-plan";
-import RoutingUsageModel from "@/models/routing-usage";
 import { ApiError, type Model } from "@/types";
 import type {
   AutoRoutingSettings,
@@ -19,11 +18,13 @@ import type {
   AutoRoutingSettingsResponse,
   UpdateAutoRoutingSettingsBody,
 } from "@/types/auto-routing-api";
+import { scanOnFirstEnable } from "./backfill";
 import {
   type FitSessions,
   fitInputsUnchanged,
   fitNow,
   infeasibleBudget,
+  readFitWindow,
 } from "./fit";
 import { activeSourceVersion } from "./signals";
 import { sharedLongContextThreshold, TIER_NAMES } from "./tiers";
@@ -89,6 +90,7 @@ export async function updateAutoRoutingSettings(
       throw error;
     });
   }
+  if (updated.enabled) await scanOnFirstEnable(organizationId);
   return fitAndDescribe(organizationId, "settings");
 }
 
@@ -290,7 +292,7 @@ async function describe(
           fitted?.scorerVersionId === scorerVersion.id
             ? fitted.sessions
             : (
-                await RoutingUsageModel.findFitVolume({
+                await readFitWindow({
                   organizationId,
                   scorerVersionId: scorerVersion.id,
                   inputWatermark: new Date(),

@@ -63,6 +63,26 @@ class AutoRoutingDispatchModel {
       .returning({ id: tasks.id });
     return inserted.length;
   }
+
+  /** Queues a backfill run unless one is already queued; the run claims whichever backfill is free. */
+  static async enqueueBackfillRun(): Promise<void> {
+    const queued = await db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.taskType, "auto_routing_backfill"),
+          eq(tasks.status, "pending"),
+        ),
+      )
+      .limit(1);
+    if (queued.length > 0) return;
+    await db.insert(tasks).values({
+      taskType: "auto_routing_backfill",
+      payload: {},
+      maxAttempts: 1,
+    });
+  }
 }
 
 export default AutoRoutingDispatchModel;

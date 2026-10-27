@@ -307,6 +307,26 @@ function computeRequestType(
   return "main";
 }
 
+/**
+ * Whether a stored request is one of its session's own turns, by the rules
+ * the sessions list picks its tip with: not a guardrail's call, a title or
+ * prompt-suggestion request, nor a sub-agent or side turn.
+ */
+export function isSessionMainTurn(row: {
+  request: unknown;
+  sessionSource: string | null;
+  source: string | null;
+}): boolean {
+  if (isGuardrailSource(row.source)) return false;
+  const text = JSON.stringify(row.request) ?? "";
+  if (SESSION_PREVIEW_MARKERS.some((marker) => text.includes(marker))) {
+    return false;
+  }
+  return (
+    computeRequestType(row.request, row.sessionSource, row.source) === "main"
+  );
+}
+
 function computeOpenCodeRequestType(request: unknown): "main" | "subagent" {
   const req = request as {
     system?: string | Array<{ text?: string; type?: string }>;

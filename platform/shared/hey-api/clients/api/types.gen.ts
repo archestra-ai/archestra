@@ -30912,6 +30912,481 @@ export type SimulateAutoRoutingResponses = {
 
 export type SimulateAutoRoutingResponse = SimulateAutoRoutingResponses[keyof SimulateAutoRoutingResponses];
 
+export type CancelAutoRoutingBackfillData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/backfill';
+};
+
+export type CancelAutoRoutingBackfillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CancelAutoRoutingBackfillError = CancelAutoRoutingBackfillErrors[keyof CancelAutoRoutingBackfillErrors];
+
+export type CancelAutoRoutingBackfillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        backfill: {
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            windowStart: string;
+            cutoff: string;
+            eligibleSessions: number;
+            eligibleTokens: number;
+            breakdown: Array<{
+                apiShape: 'chat_completions' | 'responses' | 'messages';
+                client: string;
+                sessions: number;
+            }>;
+            scorerCurrent: boolean | null;
+            maxSessions: number | null;
+            maxCostUsd: number | null;
+            spentCostUsd: number;
+            progress: {
+                sample: number;
+                scored: number;
+                noText: number;
+                failed: number;
+            } | null;
+            error: string | null;
+            completedAt: string | null;
+        } | null;
+        scoreOffer: {
+            sessions: number;
+            remaining: number;
+            estimatedCostUsd: number;
+            suggestedMaxCostUsd: number;
+            rescore: boolean;
+        } | null;
+    };
+};
+
+export type CancelAutoRoutingBackfillResponse = CancelAutoRoutingBackfillResponses[keyof CancelAutoRoutingBackfillResponses];
+
+export type GetAutoRoutingBackfillData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/backfill';
+};
+
+export type GetAutoRoutingBackfillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAutoRoutingBackfillError = GetAutoRoutingBackfillErrors[keyof GetAutoRoutingBackfillErrors];
+
+export type GetAutoRoutingBackfillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        backfill: {
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            windowStart: string;
+            cutoff: string;
+            eligibleSessions: number;
+            eligibleTokens: number;
+            breakdown: Array<{
+                apiShape: 'chat_completions' | 'responses' | 'messages';
+                client: string;
+                sessions: number;
+            }>;
+            scorerCurrent: boolean | null;
+            maxSessions: number | null;
+            maxCostUsd: number | null;
+            spentCostUsd: number;
+            progress: {
+                sample: number;
+                scored: number;
+                noText: number;
+                failed: number;
+            } | null;
+            error: string | null;
+            completedAt: string | null;
+        } | null;
+        scoreOffer: {
+            sessions: number;
+            remaining: number;
+            estimatedCostUsd: number;
+            suggestedMaxCostUsd: number;
+            rescore: boolean;
+        } | null;
+    };
+};
+
+export type GetAutoRoutingBackfillResponse = GetAutoRoutingBackfillResponses[keyof GetAutoRoutingBackfillResponses];
+
+export type ScanAutoRoutingBackfillData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/backfill/scan';
+};
+
+export type ScanAutoRoutingBackfillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ScanAutoRoutingBackfillError = ScanAutoRoutingBackfillErrors[keyof ScanAutoRoutingBackfillErrors];
+
+export type ScanAutoRoutingBackfillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        backfill: {
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            windowStart: string;
+            cutoff: string;
+            eligibleSessions: number;
+            eligibleTokens: number;
+            breakdown: Array<{
+                apiShape: 'chat_completions' | 'responses' | 'messages';
+                client: string;
+                sessions: number;
+            }>;
+            scorerCurrent: boolean | null;
+            maxSessions: number | null;
+            maxCostUsd: number | null;
+            spentCostUsd: number;
+            progress: {
+                sample: number;
+                scored: number;
+                noText: number;
+                failed: number;
+            } | null;
+            error: string | null;
+            completedAt: string | null;
+        } | null;
+        scoreOffer: {
+            sessions: number;
+            remaining: number;
+            estimatedCostUsd: number;
+            suggestedMaxCostUsd: number;
+            rescore: boolean;
+        } | null;
+    };
+};
+
+export type ScanAutoRoutingBackfillResponse = ScanAutoRoutingBackfillResponses[keyof ScanAutoRoutingBackfillResponses];
+
+export type ScoreAutoRoutingBackfillData = {
+    body: {
+        maxSessions?: number;
+        maxCostUsd: number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/backfill/score';
+};
+
+export type ScoreAutoRoutingBackfillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ScoreAutoRoutingBackfillError = ScoreAutoRoutingBackfillErrors[keyof ScoreAutoRoutingBackfillErrors];
+
+export type ScoreAutoRoutingBackfillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        backfill: {
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            windowStart: string;
+            cutoff: string;
+            eligibleSessions: number;
+            eligibleTokens: number;
+            breakdown: Array<{
+                apiShape: 'chat_completions' | 'responses' | 'messages';
+                client: string;
+                sessions: number;
+            }>;
+            scorerCurrent: boolean | null;
+            maxSessions: number | null;
+            maxCostUsd: number | null;
+            spentCostUsd: number;
+            progress: {
+                sample: number;
+                scored: number;
+                noText: number;
+                failed: number;
+            } | null;
+            error: string | null;
+            completedAt: string | null;
+        } | null;
+        scoreOffer: {
+            sessions: number;
+            remaining: number;
+            estimatedCostUsd: number;
+            suggestedMaxCostUsd: number;
+            rescore: boolean;
+        } | null;
+    };
+};
+
+export type ScoreAutoRoutingBackfillResponse = ScoreAutoRoutingBackfillResponses[keyof ScoreAutoRoutingBackfillResponses];
+
 export type AzureListFilesData = {
     body?: never;
     path?: never;

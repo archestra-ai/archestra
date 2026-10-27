@@ -8,6 +8,8 @@ export interface PreRunInput {
 
 export interface SignalSourceContext {
   organizationId: string;
+  /** Overrides the live-routing scorer timeout, for callers no request waits on. */
+  timeoutMs?: number;
 }
 
 /**

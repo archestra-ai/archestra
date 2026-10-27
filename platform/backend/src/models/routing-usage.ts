@@ -23,7 +23,7 @@ const usage = schema.routingUsageTable;
 /** A session counts once nothing was added to it for this long before the fit. */
 const IDLE_MS = 24 * 60 * 60 * 1000;
 /** How far back the fit reads sessions. */
-const HISTORY_MS = 35 * 24 * 60 * 60 * 1000;
+export const HISTORY_MS = 35 * 24 * 60 * 60 * 1000;
 
 class RoutingUsageModel {
   /** Called in the interaction's write transaction; a retried write adds nothing. */

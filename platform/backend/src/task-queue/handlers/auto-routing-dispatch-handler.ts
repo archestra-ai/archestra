@@ -1,14 +1,16 @@
 import config from "@/config";
 import logger from "@/logging";
 import AutoRoutingDispatchModel from "@/models/auto-routing-dispatch";
+import RoutingBackfillModel from "@/models/routing-backfill";
 import RoutingDecisionModel from "@/models/routing-decision";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Enqueues a fit for every organization whose plan is due — settings changed
- * since its last fit outcome, or no outcome for a day — and purges expired
- * routing history once a day per process.
+ * since its last fit outcome, or no outcome for a day — resumes a backfill
+ * whose worker died, and purges expired routing history once a day per
+ * process.
  */
 class AutoRoutingDispatcher {
   private lastPurgeAt: number | null = null;
@@ -19,6 +21,9 @@ class AutoRoutingDispatcher {
     const due = await AutoRoutingDispatchModel.findDueOrganizations(
       new Date(now.getTime() - DAY_MS),
     );
+    if (await RoutingBackfillModel.hasClaimable()) {
+      await AutoRoutingDispatchModel.enqueueBackfillRun();
+    }
     const enqueued = await AutoRoutingDispatchModel.enqueueFits(due);
     if (enqueued > 0) {
       logger.info(

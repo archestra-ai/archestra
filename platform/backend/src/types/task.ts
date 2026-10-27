@@ -50,6 +50,7 @@ export const TaskTypeSchema = z.enum([
   "agent_run_attention_notice",
   "auto_routing_dispatch",
   "auto_routing_fit",
+  "auto_routing_backfill",
   "check_due_model_cost_backfills",
   "model_cost_backfill",
 ]);
@@ -113,6 +114,7 @@ export const TASK_LANES = {
     "agent_run_attention_notice",
     "auto_routing_dispatch",
     "auto_routing_fit",
+    "auto_routing_backfill",
     "check_due_model_cost_backfills",
     "model_cost_backfill",
   ],

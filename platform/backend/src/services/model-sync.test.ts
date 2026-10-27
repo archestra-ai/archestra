@@ -287,6 +287,9 @@ describe("ModelSyncService", () => {
             "whisper-1",
             "gpt-4o-transcribe",
             "gpt-transcribe",
+            "gpt-live-transcribe",
+            "gpt-realtime-2.1",
+            "omni-moderation-latest",
             "davinci-002",
           ].map((id) => ({
             id,
@@ -314,6 +317,7 @@ describe("ModelSyncService", () => {
       "gpt-4o-mini-tts",
       "gpt-4o-transcribe",
       "gpt-image-1",
+      "gpt-live-transcribe",
       "gpt-transcribe",
       "tts-1",
       "whisper-1",

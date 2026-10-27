@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { logContentNotStored } from "@archestra/shared";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -248,6 +248,27 @@ describe("auto routing backfill", () => {
       client: "claude-code",
       sessions: 1,
     });
+  });
+
+  test("reads every turn the database stored at sub-millisecond precision", async () => {
+    const first = await turn("precise", "Port the parser to a tokenizer", {
+      createdAt: new Date(Date.now() - 3 * DAY_MS),
+    });
+    const second = await turn("precise", "Now add tests for that", {
+      createdAt: new Date(Date.now() - 3 * DAY_MS + 60_000),
+    });
+    await db
+      .update(schema.interactionsTable)
+      .set({ createdAt: sql`created_at + interval '0.4 milliseconds'` })
+      .where(inArray(schema.interactionsTable.id, [first.id, second.id]));
+
+    await scanAndScore({});
+
+    expect(prompts).toEqual(["Port the parser to a tokenizer"]);
+    const usage = await db.select().from(schema.routingHistoryUsageTable);
+    expect(usage.map((row) => row.interactionId).sort()).toEqual(
+      [first.id, second.id].sort(),
+    );
   });
 
   test("the first enable scans for free; a later save does not scan again", async () => {

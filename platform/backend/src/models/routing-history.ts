@@ -532,10 +532,12 @@ function apiShape(type: string): RoutingApiShape {
  * another organization's rows under the same session id are never read.
  */
 function sessionInteractions(session: RoutingHistorySession): SQL {
+  // The bounds come back as millisecond Dates over microsecond timestamps,
+  // so the upper one is widened by the truncated part.
   return sql`i.session_id = ${session.sessionKey}
     and i.profile_id in (select a.id from agents a where a.organization_id = ${session.organizationId})
     and i.created_at >= ${utc(session.startedAt)}::timestamp
-    and i.created_at <= ${utc(session.lastActivityAt)}::timestamp
+    and i.created_at < ${utc(session.lastActivityAt)}::timestamp + interval '1 millisecond'
     and ${eligibleInteraction}`;
 }
 

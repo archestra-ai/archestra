@@ -33,7 +33,6 @@ class ImageInputTests(unittest.TestCase):
             self.write(path, "name: build\n")
         self.write("platform/.dockerignore", "e2e-tests\ntools/docs-screenshots\n**/*.test.ts\n**/*.test.tsx\n")
         self.write("platform/Dockerfile", "FROM scratch\nCOPY . /app\n")
-        self.write("platform/package.json", '{"version":"1.5.0-rc.12"}\n')
         self.write("platform/backend/app.ts", "export const value = 1;\n")
         self.write("platform/docker_images/mcp_server/Dockerfile", "FROM scratch\n")
         self.commit()
@@ -111,12 +110,12 @@ class ImageInputTests(unittest.TestCase):
         self.commit()
         self.assertEqual(self.digest("mcp-base"), previous)
 
-    def resolve(self, pull_fails=False, override="", mcp=False, mcp_override=""):
+    def resolve(self, pull_fails=False, override=""):
         # Evaluate the real harness definitions, without dispatching a stack.
         # Docker is the process boundary; no daemon or running dev stack is used.
         source = (self.root / HARNESS).read_text().rsplit('\ncase "${1:-}" in\n', 1)[0]
         runner = self.root / "platform/scripts/resolve-test.sh"
-        runner.write_text(source + ('\nprintf "%s\\n" "$MCP_SERVER_BASE_IMAGE"\n' if mcp else "\nresolve_platform_image\n"))
+        runner.write_text(source + "\nresolve_platform_image\n")
         bin_dir = Path(self.temp.name).parent / (self.root.name + "-bin")
         bin_dir.mkdir(exist_ok=True)
         self.addCleanup(shutil.rmtree, bin_dir)
@@ -135,18 +134,11 @@ class ImageInputTests(unittest.TestCase):
             env=os.environ | {
                 "PATH": f"{bin_dir}:{os.environ['PATH']}",
                 "DOCKER_CALLS": str(marker), "PULL_FAILS": str(pull_fails).lower(),
-                "PLATFORM_IMAGE": override, "MCP_SERVER_BASE_IMAGE": mcp_override,
+                "PLATFORM_IMAGE": override,
             },
             check=True,
         )
         return result.stdout.strip(), marker.read_text() if marker.exists() else ""
-
-    def test_mcp_default_uses_the_available_release_version_before_a_stable_latest_exists(self):
-        image, calls = self.resolve(mcp=True)
-        self.assertEqual(image, "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.12")
-        self.assertEqual(calls, "")
-        image, _ = self.resolve(mcp=True, mcp_override="registry.example/internal/mcp:pinned")
-        self.assertEqual(image, "registry.example/internal/mcp:pinned")
 
     def test_screenshot_harness_pulls_the_current_input_tag(self):
         image, calls = self.resolve()

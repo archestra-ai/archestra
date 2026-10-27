@@ -44,7 +44,7 @@ REPO_ROOT="$(dirname "${PLATFORM_DIR}")"
 
 REGISTRY="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public"
 CI_REGISTRY="ghcr.io/archestra-ai/ci"
-MCP_SERVER_BASE_IMAGE="${MCP_SERVER_BASE_IMAGE:-ghcr.io/archestra-ai/mcp-server-base:$(node -p 'require(process.argv[1]).version' "${PLATFORM_DIR}/package.json")}"
+MCP_SERVER_BASE_IMAGE="${MCP_SERVER_BASE_IMAGE:-${REGISTRY}/mcp-server-base:latest}"
 
 NETWORK="archestra-lite-net"
 PLATFORM_CONTAINER="archestra-lite"

@@ -97,7 +97,7 @@ jobs:
       # while the tunnel is still up, and records itself in the review comment.
       - name: Review on the Archestra runtime
         if: steps.token.outputs.available == 'true'
-        uses: archestra-ai/code-review-action@6feebecdc3db710d189d940628a3ffe5bc3d3fa6 # v0.5.0
+        uses: archestra-ai/code-review-action@abb6d5390dddffb9e91a383b9406b4ea19d9d528 # v0.5.1
         with:
           archestra-gateway-url: ${{ inputs.gateway-url }}
           archestra-auth: ${{ inputs.archestra-auth }}

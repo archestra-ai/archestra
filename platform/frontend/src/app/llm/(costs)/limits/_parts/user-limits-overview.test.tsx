@@ -108,6 +108,34 @@ describe("UserLimitsOverview", () => {
     expect(screen.getByRole("button", { name: "1 custom" })).toBeVisible();
   });
 
+  it("waits for defaults and environments before showing either", async () => {
+    defaults = [];
+    let releaseEnvironments = () => {};
+    const environmentsHeld = new Promise<void>((resolve) => {
+      releaseEnvironments = resolve;
+    });
+    server.use(
+      http.get(`${API}/api/environments`, async () => {
+        await environmentsHeld;
+        return HttpResponse.json({ environments: [], resourceDefaults: {} });
+      }),
+    );
+    renderOverview();
+
+    // Defaults and usage have loaded; environments have not.
+    expect(await screen.findByText(/at limit/)).toBeVisible();
+    expect(screen.queryByText("No limit")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Per-environment limits" }),
+    ).not.toBeInTheDocument();
+
+    releaseEnvironments();
+    expect(await screen.findByText("No limit")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Per-environment limits" }),
+    ).toBeVisible();
+  });
+
   it("resets a blocked user's usage from the at-limit list", async () => {
     const user = userEvent.setup();
     renderOverview();

@@ -164,6 +164,50 @@ describe("user limit usage routes", () => {
     expect(inProduction.data.map((row) => row.name)).toEqual(["Prod Pat"]);
   });
 
+  // Enforcement treats unpriced media as exhausting the limit, so the listing
+  // must too, but only for such calls inside the current window.
+  test("a call whose media cost is unavailable puts the user at the limit", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId,
+      environmentId: null,
+      limitValue: 100,
+      cleanupInterval: "calendar_month",
+    });
+    const unpriced = { __mediaUsage: { costAvailable: false } } as never;
+    const media = await member({ makeUser, makeMember }, "Media Mo");
+    await makeInteraction(agentId, { userId: media.id, cost: "2" });
+    await makeInteraction(agentId, {
+      userId: media.id,
+      cost: "30",
+      response: unpriced,
+    });
+    const earlier = await member({ makeUser, makeMember }, "Earlier Eli");
+    await makeInteraction(agentId, { userId: earlier.id, cost: "1" });
+    await makeInteraction(agentId, {
+      userId: earlier.id,
+      cost: "30",
+      response: unpriced,
+      createdAt: new Date(Date.now() - 62 * 24 * 60 * 60 * 1000),
+    });
+
+    const body = await list();
+
+    expect(body.data.find((row) => row.name === "Media Mo")).toMatchObject({
+      status: "at",
+      percent: 100,
+      // The unpriced call's recorded cost is not counted as spend.
+      spent: 2,
+    });
+    expect(body.data.find((row) => row.name === "Earlier Eli")).toMatchObject({
+      status: "ok",
+      spent: 1,
+    });
+  });
+
   test("lists users with no limit when no default applies", async ({
     makeUser,
     makeMember,

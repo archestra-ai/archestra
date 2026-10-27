@@ -282,6 +282,20 @@ describe("POST /api/github-actions/token", () => {
     expect(scopedTokenRequests).toHaveLength(1);
   });
 
+  test("accepts a token once when two exchanges race", async () => {
+    const oidc = await oidcToken();
+
+    const responses = await Promise.all([
+      exchange({ token: oidc }),
+      exchange({ token: oidc }),
+    ]);
+
+    expect(responses.map((response) => response.statusCode).sort()).toEqual([
+      200, 401,
+    ]);
+    expect(scopedTokenRequests).toHaveLength(1);
+  });
+
   test.each([
     ["for another audience", { audience: "https://elsewhere.example.com" }],
     ["from another issuer", { issuer: "https://token.actions.example.com" }],

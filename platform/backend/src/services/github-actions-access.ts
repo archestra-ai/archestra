@@ -137,7 +137,7 @@ export async function exchangeGitHubActionsToken(params: {
     return refuse(
       403,
       "not_trusted",
-      "Pull requests from forks cannot use this gateway.",
+      "Pull requests from forks, or whose head repository no longer exists, cannot use this gateway.",
       login,
     );
   // A collaborator who pushes to someone else's pull request starts the run;
@@ -587,6 +587,10 @@ async function hasUsableConnection(params: {
 async function claimTokenId(claims: OidcClaims): Promise<boolean> {
   const key =
     `${CacheKey.GitHubActionsTokenJti}-${createHash("sha256").update(claims.jti).digest("hex")}` as const;
+  // Until the token can no longer pass validation: its expiry plus the
+  // validator's clock tolerance, on both sides. GitHub's tokens live minutes;
+  // the one-hour cap only bounds the cache entry of a token that claims a
+  // longer life, which GitHub never issues.
   const ttl = Math.min(
     Math.max(claims.exp * 1000 - Date.now(), 0) + 2 * CLOCK_TOLERANCE_MS,
     60 * 60 * 1000,

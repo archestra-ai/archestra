@@ -36,11 +36,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useBrowserStream } from "@/lib/browser-stream.hook";
 import {
   useConversation,
   useHasPlaywrightMcpTools,
 } from "@/lib/chat/chat.query";
+import { useBrowserStream } from "@/lib/use-browser-stream";
 import { cn } from "@/lib/utils/tailwind";
 import { BrowserConnectingState } from "./browser-connecting-state";
 

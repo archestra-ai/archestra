@@ -272,6 +272,63 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("record", () => {
+    test("stores the same row create would, for users and non-users", async ({
+      makeUser,
+    }) => {
+      const user = await makeUser();
+      const request = {
+        model: "gpt-4",
+        messages: [{ role: "user" as const, content: "Hello \u0000 there" }],
+      };
+      const ids = [crypto.randomUUID(), crypto.randomUUID()];
+      await InteractionModel.record({
+        id: ids[0],
+        profileId,
+        userId: user.id,
+        request,
+        response: {
+          id: "r",
+          object: "chat.completion",
+          created: 0,
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+        model: "gpt-4",
+        inputTokens: 3,
+        outputTokens: 5,
+      });
+      await InteractionModel.record({
+        id: ids[1],
+        profileId,
+        request,
+        response: {
+          id: "r",
+          object: "chat.completion",
+          created: 0,
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const [withUser, withoutUser] = await Promise.all(
+        ids.map((id) => InteractionModel.findById(id)),
+      );
+      expect(withUser).toMatchObject({
+        userId: user.id,
+        profileId,
+        inputTokens: 3,
+        outputTokens: 5,
+        request: { messages: [{ content: "Hello  there" }] },
+      });
+      expect(withoutUser).toMatchObject({ userId: null, profileId });
+      // Sanitizing copies only what it changes; the caller's payload is intact.
+      expect(request.messages[0].content).toBe("Hello \u0000 there");
+    });
+  });
+
   describe("create - null byte sanitization", () => {
     test("strips null bytes from JSONB fields to avoid PostgreSQL rejection", async () => {
       // PostgreSQL JSONB rejects \u0000 (null byte) Unicode escape sequences.
@@ -1851,6 +1908,52 @@ describe("InteractionModel", () => {
       expect(Number(session?.totalCost)).toBeCloseTo(7, 5);
       expect(Number(session?.totalBilledCost)).toBeCloseTo(2, 5);
       expect(Number(session?.totalSubscriptionCost)).toBeCloseTo(5, 5);
+    });
+  });
+
+  describe("getSessions model pool attempts", () => {
+    test("counts the attempts a pool failed over", async ({
+      makeAdmin,
+      makeAgent,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "Agent" });
+      const base = {
+        profileId: agent.id,
+        sessionId: "failed-over-session",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r",
+          object: "chat.completion" as const,
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions" as const,
+      };
+      await InteractionModel.create({
+        ...base,
+        attempt: 1,
+        attemptOutcome: "failed_over",
+        failureReason: "429",
+      });
+      await InteractionModel.create({
+        ...base,
+        attempt: 2,
+        attemptOutcome: "answered",
+      });
+      await InteractionModel.create(base);
+
+      const sessions = await InteractionModel.getSessionsCursor(
+        { limit: 100 },
+        admin.id,
+        true,
+      );
+      const session = sessions.data.find(
+        (s) => s.sessionId === "failed-over-session",
+      );
+      expect(session?.requestCount).toBe(3);
+      expect(session?.failedOverCount).toBe(1);
     });
   });
 

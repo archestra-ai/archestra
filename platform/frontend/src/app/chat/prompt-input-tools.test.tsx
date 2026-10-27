@@ -92,7 +92,7 @@ vi.mock("@/lib/hooks/use-toolbar-collapse", () => ({
   useToolbarCollapse: () => layoutState.isNarrow,
 }));
 
-vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
+vi.mock("@/lib/chat/use-chat-placeholder", () => ({
   useChatPlaceholder: () => ({
     placeholder: "placeholder",
     isAnimating: false,

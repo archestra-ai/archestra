@@ -23,6 +23,7 @@ import {
 } from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import {
@@ -31,6 +32,7 @@ import {
 } from "@/k8s/shared";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
+import { readConfig } from "@/services/config-cache";
 import { catalogInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import {
   type CatalogItemApprovalStatus,
@@ -815,6 +817,35 @@ class InternalMcpCatalogModel {
 
     return catalogItem;
   }
+
+  /**
+   * The catalog item a tool call runs against, with its secrets expanded.
+   * Leaves out what only catalog pages show (labels, teams, granted scope,
+   * author), so `labels` and `teams` are empty.
+   */
+  static async findForToolCall(id: string): Promise<InternalMcpCatalog | null> {
+    const row = await readConfig(`tool-call-catalog\0${id}`, async () => {
+      const [item] = await InternalMcpCatalogModel.byId.get().execute({ id });
+      return item ?? null;
+    });
+    if (!row) return null;
+    const catalogItem: InternalMcpCatalog = { ...row, labels: [], teams: [] };
+    await InternalMcpCatalogModel.expandSecrets([catalogItem]);
+    return catalogItem;
+  }
+
+  private static readonly byId = new PreparedQuery((database) =>
+    database
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.id, sql.placeholder("id")),
+          notDeleted(schema.internalMcpCatalogTable),
+        ),
+      )
+      .prepare("archestra_internal_mcp_catalog_by_id"),
+  );
 
   /**
    * Resolve only the OAuth client secret of an already authorized catalog.

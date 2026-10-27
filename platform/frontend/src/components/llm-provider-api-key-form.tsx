@@ -369,8 +369,22 @@ const PROVIDER_CONFIG: Record<
     icon: "/icons/kimi.png",
     placeholder: "sk-...",
     enabled: true,
-    consoleUrl: "https://platform.moonshot.ai/console/api-keys",
-    consoleName: "Moonshot AI Platform",
+    consoleUrl: "https://platform.kimi.ai/console/api-keys",
+    consoleName: "Kimi API Platform",
+    // A Kimi Code membership key is not a platform key: it only answers on the
+    // Kimi Code endpoint, which is its own provider.
+    description:
+      "A pay-as-you-go Kimi API Platform key. For a Kimi Code membership key (sk-kimi-...), choose Kimi Code instead.",
+  },
+  "kimi-code": {
+    name: "Kimi Code",
+    icon: "/model-logos/kimi-code.svg",
+    placeholder: "sk-kimi-...",
+    enabled: true,
+    consoleUrl: "https://www.kimi.ai/code/console",
+    consoleName: "Kimi Code Console",
+    description:
+      "A Kimi Code membership key. Requests use your plan's quota, not per-token billing. For the China endpoint, set the Base URL under advanced settings to https://api.kimi.com/coding/v1.",
   },
   bedrock: {
     name: "AWS Bedrock",

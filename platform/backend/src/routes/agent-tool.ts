@@ -13,6 +13,7 @@ import {
   requireAgentModifyPermission,
   requireAgentTypePermission,
 } from "@/auth";
+import { dropHiddenTools } from "@/auth/permission-gated";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { type Transaction } from "@/database";
 import {
@@ -750,7 +751,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate all target agents exist and are internal agents
       for (const targetAgentId of body.targetAgentIds) {
-        const targetAgent = await AgentModel.findById(targetAgentId);
+        const targetAgent = await AgentModel.findById(
+          targetAgentId,
+          user.id,
+          true,
+        );
         if (!targetAgent) {
           throw new ApiError(404, `Target agent ${targetAgentId} not found`);
         }
@@ -925,8 +930,12 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const [connections, agents] = await Promise.all([
-        AgentToolModel.getAllDelegationConnections(organizationId),
-        AgentModel.findDelegationGraphNodes(organizationId),
+        AgentToolModel.getAllDelegationConnections(
+          organizationId,
+          user.id,
+          true,
+        ),
+        AgentModel.findDelegationGraphNodes(organizationId, user.id),
       ]);
 
       return reply.send({
@@ -961,7 +970,7 @@ export async function getAgentToolsForUser(params: {
 }) {
   const { agentId, catalogId, userId, organizationId } = params;
   // Only the access columns: the tools are read on their own below.
-  const agent = await AgentModel.findByIdForAccess(agentId);
+  const agent = await AgentModel.findByIdForAccess(agentId, userId);
   if (!agent || agent.organizationId !== organizationId) {
     throw new ApiError(404, `Agent with ID ${agentId} not found`);
   }
@@ -1000,12 +1009,9 @@ export async function getAgentToolsForUser(params: {
   // A user who can only use the agent sees the tools the gateway would
   // serve them: an assigned tool whose MCP server they cannot access is
   // left out, as it is from their tools/list.
-  return isAgentTypeAdmin
-    ? tools
-    : await filterToolsByCallerCatalogAccess(tools, {
-        userId,
-        organizationId,
-      });
+  if (!isAgentTypeAdmin)
+    return filterToolsByCallerCatalogAccess(tools, { userId, organizationId });
+  return dropHiddenTools(tools, { userId, organizationId });
 }
 
 /** `GET /api/agents/:agentId/delegations` */
@@ -1016,7 +1022,7 @@ export async function getAgentDelegationsForUser(params: {
 }) {
   const { agentId, userId, organizationId } = params;
   // Only the access columns, to learn the type; the targets are read below.
-  const agent = await AgentModel.findByIdForAccess(agentId);
+  const agent = await AgentModel.findByIdForAccess(agentId, userId);
   if (!agent || agent.organizationId !== organizationId) {
     throw new ApiError(404, "Agent not found");
   }

@@ -27,8 +27,7 @@ export const GitHubUserIdSchema = z
   .brand<"GitHubUserId">();
 export type GitHubUserId = z.infer<typeof GitHubUserIdSchema>;
 
-/** The API root of GitHub.com, as a GitHub App definition records it. */
-export const GITHUB_COM_API_URL = "https://api.github.com";
+export { GITHUB_COM_API_URL } from "@archestra/shared";
 
 /**
  * Why a credential an MCP server is configured with cannot be resolved for

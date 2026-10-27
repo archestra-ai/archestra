@@ -157,6 +157,15 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
       );
       expect(config.plugins.enabled).toEqual(["archestra-attention"]);
       expect(config.providers.archestra.transport).toBe("openai_chat");
+      // Gateway tools must be declared directly, and nothing Hermes says on a
+      // first run (update notices, consent, onboarding) may hold or join a turn.
+      expect(config.tools.tool_search.enabled).toBe("off");
+      expect(config.updates.check).toBe(false);
+      expect(config.telemetry.shared_metrics).toMatchObject({
+        enabled: false,
+        send: false,
+      });
+      expect(config.onboarding.profile_build).toBe("off");
       expect(config.mcp_servers.archestra.headers.Authorization).toBe(
         "Bearer test-token",
       );

@@ -25,7 +25,7 @@ vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name");
 
 // Mock AuthViewWithErrorHandling
-vi.mock("@/app/auth/_components/auth-view-with-error-handling", () => ({
+vi.mock("@/app/auth/_parts/auth-view-with-error-handling", () => ({
   AuthViewWithErrorHandling: vi.fn(
     ({ path, callbackURL }: { path: string; callbackURL?: string }) => (
       <div data-testid="auth-view">

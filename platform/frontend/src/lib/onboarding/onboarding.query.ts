@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useIsAuthenticated } from "@/lib/auth/auth.hook";
+import { useIsAuthenticated } from "@/lib/auth/use-is-authenticated";
 import { throwOnApiError } from "@/lib/utils/api";
 
 export const onboardingKeys = {

@@ -81,7 +81,7 @@ vi.mock("@/components/mcp-catalog-icon", () => ({
 
 import type { CatalogItem } from "@/app/mcp/registry/_parts/mcp-server-card";
 import { Dialog } from "@/components/ui/dialog";
-import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
+import { useMcpInstallOrchestrator } from "@/lib/mcp/use-mcp-install-orchestrator";
 import { ConnectView } from "./add-tools-view";
 
 const INSTALL_FORMS = ["remote-install", "local-install", "no-auth"] as const;

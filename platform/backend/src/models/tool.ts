@@ -44,6 +44,12 @@ import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
+import {
+  type GatedCaller,
+  gatedCatalogToolsFence,
+  hiddenAgentsAmong,
+  mayUseCatalog,
+} from "@/auth/permission-gated";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
@@ -58,6 +64,7 @@ import {
 } from "@/database/utils/pagination";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
+import { readConfig } from "@/services/config-cache";
 import {
   toolInEnvironmentOrDefaultPredicate,
   toolInEnvironmentPredicate,
@@ -520,10 +527,17 @@ class ToolModel {
 
   static async findAll(params: {
     userId?: string;
+    organizationId?: string;
     isAgentAdmin?: boolean;
     pagination: { limit: number; offset: number };
   }): Promise<PaginatedResult<ExtendedTool>> {
     const conditions = [
+      params.userId
+        ? await gatedCatalogToolsFence({
+            userId: params.userId,
+            organizationId: params.organizationId,
+          })
+        : undefined,
       eq(schema.toolsTable.clonedPendingDiscovery, false),
       // Outbound A2A tools are credential-bearing tenant resources exposed
       // only by their dedicated registry and assignment APIs.
@@ -892,8 +906,10 @@ class ToolModel {
    * run_tool dispatch pre-check and the tool-invocation guardrail.
    */
   static async getAssignedToolNames(agentId: string): Promise<Set<string>> {
-    const tools = await ToolModel.getMcpToolsByAgent(agentId);
-    return new Set(tools.map((tool) => tool.name));
+    return readConfig(`assigned-tool-names\0${agentId}`, async () => {
+      const tools = await ToolModel.getMcpToolsByAgent(agentId);
+      return new Set(tools.map((tool) => tool.name));
+    });
   }
 
   /**
@@ -1919,53 +1935,10 @@ class ToolModel {
     if (toolNames.length === 0) {
       return [];
     }
-
-    // Environment isolation: never resolve (and therefore never execute) a tool
-    // whose catalog belongs to a different environment than the agent's.
-    const agentEnvironmentId = await AgentModel.findEnvironmentId(agentId);
-
-    const mcpTools = await db
-      .select({
-        toolName: schema.toolsTable.name,
-        rawName: schema.toolsTable.rawName,
-        mcpServerId: schema.agentToolsTable.mcpServerId,
-        credentialResolutionMode:
-          schema.agentToolsTable.credentialResolutionMode,
-        catalogId: schema.toolsTable.catalogId,
-        catalogName: schema.internalMcpCatalogTable.name,
-        meta: schema.toolsTable.meta,
-        parameters: schema.toolsTable.parameters,
-      })
-      .from(schema.toolsTable)
-      .innerJoin(
-        schema.agentToolsTable,
-        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .leftJoin(
-        schema.internalMcpCatalogTable,
-        eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
-      )
-      .where(
-        and(
-          eq(schema.agentToolsTable.agentId, agentId),
-          inArray(schema.toolsTable.name, toolNames),
-          isNotNull(schema.toolsTable.catalogId), // Only MCP tools (have catalogId)
-          toolInEnvironmentPredicate(agentEnvironmentId),
-          notDisabledAppLaunchTool(),
-          // A soft-deleted catalog's tools must not resolve for execution.
-          notDeleted(schema.toolsTable),
-        ),
-      )
-      .orderBy(
-        desc(
-          ToolModel.hasHealthyMcpServerInstall(
-            schema.agentToolsTable.mcpServerId,
-          ),
-        ),
-        asc(schema.toolsTable.id),
-      );
-
-    return mcpTools;
+    return readConfig(
+      `assigned-mcp-tools\0${agentId}\0${JSON.stringify(toolNames)}`,
+      () => ToolModel.loadMcpToolsAssignedToAgent(toolNames, agentId),
+    );
   }
 
   /**
@@ -2357,7 +2330,10 @@ class ToolModel {
    * Powers the server-scoped Apps run path: building `tools/list` and gating
    * `tools/call` on `_meta.ui.visibility`.
    */
-  static async findByCatalogIdWithMeta(catalogId: string): Promise<
+  static async findByCatalogIdWithMeta(
+    catalogId: string,
+    reader: GatedCaller,
+  ): Promise<
     Array<{
       id: string;
       name: string;
@@ -2366,6 +2342,7 @@ class ToolModel {
       meta: Record<string, unknown> | null;
     }>
   > {
+    if (!(await mayUseCatalog(catalogId, reader))) return [];
     return db
       .select({
         id: schema.toolsTable.id,
@@ -2476,7 +2453,11 @@ class ToolModel {
   }
 
   /** Tool-picker metadata without parameter bodies or assignment fan-out. */
-  static async findPickerToolsByCatalogId(catalogId: string) {
+  static async findPickerToolsByCatalogId(
+    catalogId: string,
+    reader: GatedCaller,
+  ) {
+    if (!(await mayUseCatalog(catalogId, reader))) return [];
     const tools = await db
       .select({
         id: schema.toolsTable.id,
@@ -2500,7 +2481,10 @@ class ToolModel {
     }));
   }
 
-  static async findByCatalogId(catalogId: string): Promise<
+  static async findByCatalogId(
+    catalogId: string,
+    reader: GatedCaller,
+  ): Promise<
     Array<{
       id: string;
       name: string;
@@ -2517,6 +2501,7 @@ class ToolModel {
       assignedAgents: Array<{ id: string; name: string }>;
     }>
   > {
+    if (!(await mayUseCatalog(catalogId, reader))) return [];
     const allTools = await db
       .select({
         id: schema.toolsTable.id,
@@ -2569,7 +2554,12 @@ class ToolModel {
       assignmentsByTool.set(toolId, []);
     }
 
+    const hidden = await hiddenAgentsAmong(
+      assignments.map((assignment) => assignment.agentId),
+      reader,
+    );
     for (const assignment of assignments) {
+      if (hidden.has(assignment.agentId)) continue;
       const toolAssignments = assignmentsByTool.get(assignment.toolId) || [];
       toolAssignments.push({
         id: assignment.agentId,
@@ -3606,6 +3596,7 @@ class ToolModel {
     };
     filters?: ToolFilters;
     userId?: string;
+    organizationId?: string;
     isAgentAdmin?: boolean;
   }): Promise<PaginatedResult<ToolWithAssignments>> {
     const {
@@ -3618,6 +3609,13 @@ class ToolModel {
 
     // Build WHERE conditions for tools
     const toolWhereConditions: ReturnType<typeof sql>[] = [];
+    const gatedFence = userId
+      ? await gatedCatalogToolsFence({
+          userId,
+          organizationId: params.organizationId,
+        })
+      : undefined;
+    if (gatedFence) toolWhereConditions.push(gatedFence);
 
     // A soft-deleted catalog's tools are ghosts — keep them out of the listing.
     toolWhereConditions.push(notDeleted(schema.toolsTable));
@@ -4077,6 +4075,58 @@ class ToolModel {
       TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
     );
     return tools.filter((t) => t.name !== brandedKnowledgeToolName);
+  }
+
+  private static async loadMcpToolsAssignedToAgent(
+    toolNames: string[],
+    agentId: string,
+  ): Promise<McpToolAssignment[]> {
+    // Environment isolation: never resolve (and therefore never execute) a tool
+    // whose catalog belongs to a different environment than the agent's.
+    const agentEnvironmentId = await AgentModel.findEnvironmentId(agentId);
+
+    const mcpTools = await db
+      .select({
+        toolName: schema.toolsTable.name,
+        rawName: schema.toolsTable.rawName,
+        mcpServerId: schema.agentToolsTable.mcpServerId,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+        catalogId: schema.toolsTable.catalogId,
+        catalogName: schema.internalMcpCatalogTable.name,
+        meta: schema.toolsTable.meta,
+        parameters: schema.toolsTable.parameters,
+      })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          inArray(schema.toolsTable.name, toolNames),
+          isNotNull(schema.toolsTable.catalogId), // Only MCP tools (have catalogId)
+          toolInEnvironmentPredicate(agentEnvironmentId),
+          notDisabledAppLaunchTool(),
+          // A soft-deleted catalog's tools must not resolve for execution.
+          notDeleted(schema.toolsTable),
+        ),
+      )
+      .orderBy(
+        desc(
+          ToolModel.hasHealthyMcpServerInstall(
+            schema.agentToolsTable.mcpServerId,
+          ),
+        ),
+        asc(schema.toolsTable.id),
+      );
+
+    return mcpTools;
   }
 
   /**

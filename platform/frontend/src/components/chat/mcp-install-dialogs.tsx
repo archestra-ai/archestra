@@ -1,10 +1,10 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import type { McpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
+import type { McpInstallOrchestrator } from "@/lib/mcp/use-mcp-install-orchestrator";
 import { preloadableLazy } from "@/lib/utils/preloadable-lazy";
 
-const dialogs = preloadableLazy(() => import("./mcp-install-dialogs.impl"));
+const dialogs = preloadableLazy(() => import("./mcp-install-dialogs-content"));
 
 /**
  * The MCP install dialogs an orchestrator drives. Their code (the registry's

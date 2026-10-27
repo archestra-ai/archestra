@@ -44,6 +44,11 @@ import {
 import QuickLRU from "quick-lru";
 import { unavailableThirdPartyToolMessage } from "@/archestra-mcp-server/tool-recovery-messages";
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
+import {
+  assertMayConnect,
+  callerOf,
+  type GatedCaller,
+} from "@/auth/permission-gated";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
@@ -82,6 +87,7 @@ import {
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import { discoverOAuthEndpoints, refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
+import { llmProxyTiming } from "@/server/llm-proxy-timing";
 import {
   type AgentToolExclusionSets,
   agentToolExclusionsService,
@@ -142,6 +148,7 @@ import {
   isTimeoutErrno,
 } from "@/utils/network-errors";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
+import { ConnectionLimiter } from "./connection-limiter";
 import { K8sAttachTransport } from "./k8s-attach-transport";
 import {
   configureMcpElicitation,
@@ -403,67 +410,6 @@ type ToolCallAuthInfo = {
   llmSessionId?: string;
   llmToolCallId?: string;
 };
-
-/**
- * Simple async queue to serialize operations per connection
- * Prevents concurrent MCP calls to the same server (important for stdio transport)
- */
-type QueueState = {
-  activeCount: number;
-  queue: Array<() => void>;
-};
-
-class ConnectionLimiter {
-  private states = new Map<string, QueueState>();
-
-  /**
-   * Execute a function with a per-connection concurrency limit.
-   */
-  runWithLimit<T>(
-    connectionKey: string,
-    limit: number,
-    fn: () => Promise<T>,
-  ): Promise<T> {
-    if (limit <= 0) {
-      return fn();
-    }
-
-    const state = this.states.get(connectionKey) ?? {
-      activeCount: 0,
-      queue: [],
-    };
-    this.states.set(connectionKey, state);
-
-    return new Promise<T>((resolve, reject) => {
-      const execute = () => {
-        state.activeCount += 1;
-        // Adopt the complete operation, including its recursive retries, before
-        // releasing this lease. A retry must not acquire a second limiter slot.
-        Promise.resolve()
-          .then(fn)
-          .then(resolve, reject)
-          .finally(() => {
-            state.activeCount -= 1;
-            const next = state.queue.shift();
-            if (next) {
-              next();
-              return;
-            }
-            if (state.activeCount === 0) {
-              this.states.delete(connectionKey);
-            }
-          });
-      };
-
-      if (state.activeCount < limit) {
-        execute();
-        return;
-      }
-
-      state.queue.push(execute);
-    });
-  }
-}
 
 type TransportKind = "stdio" | "http";
 
@@ -736,12 +682,9 @@ class McpClient {
       owner.type === "agent" &&
       !isToolCatalogAccessible(
         tool,
-        await getCallerAccessibleCatalogIds({
-          userId: tokenAuth?.serviceAccountId
-            ? serviceAccountUserId(tokenAuth.serviceAccountId)
-            : tokenAuth?.userId,
-          organizationId: tokenAuth?.organizationId,
-        }),
+        await getCallerAccessibleCatalogIds(callerOf(tokenAuth), [
+          tool.catalogId,
+        ]),
       )
     ) {
       const message = unavailableThirdPartyToolMessage(toolCall.name);
@@ -1221,20 +1164,22 @@ class McpClient {
           // the timeout even though nobody is waiting on it.
           const upstreamTimeoutMs =
             options?.upstreamTimeoutMs ?? config.mcpGateway.toolCallTimeoutMs;
-          const result = await callWhileServerAnswers({
-            client,
-            timeoutMs: upstreamTimeoutMs,
-            signal: options?.abortSignal,
-            request: (signal) =>
-              client.callTool(
-                {
-                  name: targetToolName,
-                  arguments: toolCall.arguments,
-                },
-                undefined,
-                { signal, timeout: upstreamTimeoutMs },
-              ),
-          });
+          const result = await llmProxyTiming.hijackedUpstream(() =>
+            callWhileServerAnswers({
+              client,
+              timeoutMs: upstreamTimeoutMs,
+              signal: options?.abortSignal,
+              request: (signal) =>
+                client.callTool(
+                  {
+                    name: targetToolName,
+                    arguments: toolCall.arguments,
+                  },
+                  undefined,
+                  { signal, timeout: upstreamTimeoutMs },
+                ),
+            }),
+          );
 
           const isOAuthServer = !!catalogItem.oauthConfig;
           const toolResultAuthError = isAuthRelatedToolResult(result);
@@ -1539,6 +1484,7 @@ class McpClient {
             return await executeToolCall(
               () =>
                 this.getTransport(
+                  callerOf(tokenAuth),
                   catalogItem,
                   targetMcpServerId,
                   resetSecrets,
@@ -1635,6 +1581,7 @@ class McpClient {
         return executeToolCall(
           () =>
             this.getTransport(
+              callerOf(tokenAuth),
               catalogItem,
               targetMcpServerId,
               secrets,
@@ -1680,6 +1627,7 @@ class McpClient {
             }
 
             return this.getTransportWithKind(
+              callerOf(tokenAuth),
               catalogItem,
               targetMcpServerId,
               resolvedSecrets,
@@ -2271,7 +2219,9 @@ class McpClient {
     }
 
     // Get catalog item
-    const catalogItem = await InternalMcpCatalogModel.findById(tool.catalogId);
+    const catalogItem = await InternalMcpCatalogModel.findForToolCall(
+      tool.catalogId,
+    );
     if (!catalogItem) {
       return {
         error: await this.createErrorResult({
@@ -2538,6 +2488,12 @@ class McpClient {
     serverLookup?: ListingServerLookup;
   }): Promise<TargetInstall | { refusal: TargetInstallRefusal }> {
     const fallbackName = tool.catalogName || "unknown";
+    if (
+      PlaywrightRuntimeModel.isManagedCatalogConfig(catalogItem) &&
+      !(await PlaywrightRuntimeModel.isEnabled())
+    ) {
+      return { refusal: "browser_runtime_unavailable" };
+    }
 
     if (isPlaywrightCatalogItem(catalogItem.id)) {
       const server = await PlaywrightRuntimeModel.findForOwner(owner);
@@ -2835,6 +2791,7 @@ class McpClient {
   }
 
   private async getTransportWithKind(
+    caller: GatedCaller,
     catalogItem: InternalMcpCatalog,
     targetMcpServerId: string,
     secrets: Record<string, unknown>,
@@ -2846,6 +2803,14 @@ class McpClient {
       headerValue: string;
     },
   ): Promise<Transport> {
+    await assertMayConnect(catalogItem.id, caller);
+    // Also covers queued calls and retry paths that bypass getTransport().
+    if (
+      PlaywrightRuntimeModel.isManagedCatalogConfig(catalogItem) &&
+      !(await PlaywrightRuntimeModel.isEnabled())
+    ) {
+      throw new Error("The built-in browser MCP is disabled");
+    }
     if (transportKind === "http") {
       if (catalogItem.serverType === "local") {
         const url =
@@ -3184,6 +3149,7 @@ class McpClient {
   }
 
   private async getTransport(
+    caller: GatedCaller,
     catalogItem: InternalMcpCatalog,
     targetMcpServerId: string,
     secrets: Record<string, unknown>,
@@ -3195,6 +3161,12 @@ class McpClient {
       headerValue: string;
     },
   ): Promise<Transport> {
+    if (
+      PlaywrightRuntimeModel.isManagedCatalogConfig(catalogItem) &&
+      !(await PlaywrightRuntimeModel.isEnabled())
+    ) {
+      throw new Error("The built-in browser MCP is disabled");
+    }
     const resolvedSecrets = await this.resolveSecretsForTransport({
       catalogItem,
       secrets,
@@ -3215,6 +3187,7 @@ class McpClient {
       targetMcpServerId,
     );
     return this.getTransportWithKind(
+      caller,
       catalogItem,
       targetMcpServerId,
       resolvedSecrets,
@@ -3546,6 +3519,7 @@ class McpClient {
       // Create new transport with updated secrets
       const getUpdatedTransport = () =>
         this.getTransport(
+          callerOf(tokenAuth),
           catalogItem,
           targetMcpServerId,
           updatedSecret,
@@ -4261,6 +4235,12 @@ class McpClient {
       enterpriseTransportCredential,
     } = params;
 
+    if (
+      PlaywrightRuntimeModel.isManagedCatalogConfig(catalogItem) &&
+      !(await PlaywrightRuntimeModel.isEnabled())
+    ) {
+      throw new Error("The built-in browser MCP is disabled");
+    }
     // Local stdio servers can report a ready pod before the MCP process accepts
     // JSON-RPC, especially while the runtime is still pulling or starting Node.
     const maxRetries = catalogItem.serverType === "local" ? 6 : 1;
@@ -4273,6 +4253,7 @@ class McpClient {
       try {
         // Get the appropriate transport using the existing helper
         const transport = await this.getTransport(
+          { kind: "internal", purpose: "tool-discovery" },
           catalogItem,
           mcpServerId,
           secrets,
@@ -4416,6 +4397,7 @@ class McpClient {
    * Connect to a running MCP server and list tools or call a tool.
    */
   async inspectServer(params: {
+    caller: GatedCaller;
     catalogItem: InternalMcpCatalog;
     mcpServerId: string;
     secrets: Record<string, unknown>;
@@ -4439,6 +4421,7 @@ class McpClient {
 
     const runInspection = async (): Promise<unknown> => {
       const transport = await this.getTransport(
+        params.caller,
         catalogItem,
         mcpServerId,
         secrets,
@@ -4540,7 +4523,8 @@ class McpClient {
   private async withDirectServerClient<T>(
     mcpServerId: string,
     run: (client: Client, session: DirectServerSession) => Promise<T>,
-    options?: {
+    options: {
+      caller: GatedCaller;
       clientName?: string;
       capabilities?: ClientCapabilitiesWithExtensions;
       owner?: ToolOwner;
@@ -4576,6 +4560,7 @@ class McpClient {
             })
           : null);
       const transport = await this.getTransport(
+        options.caller,
         catalogItem,
         mcpServerId,
         secrets,
@@ -4625,6 +4610,7 @@ class McpClient {
 
   /** Fresh source-scoped session for Skills discovery and live reads. */
   async withSkillsSession<T>(params: {
+    caller: GatedCaller;
     mcpServerId: string;
     run: (client: Client, session: DirectServerSession) => Promise<T>;
     owner?: ToolOwner;
@@ -4632,6 +4618,7 @@ class McpClient {
     enterpriseTransportCredential?: ResolvedEnterpriseTransportCredential;
   }): Promise<T> {
     return this.withDirectServerClient(params.mcpServerId, params.run, {
+      caller: params.caller,
       clientName: "archestra-skills-client",
       capabilities: {
         extensions: MCP_SKILLS_CLIENT_EXTENSION_CAPABILITIES,
@@ -4644,6 +4631,7 @@ class McpClient {
 
   /** Read a UI (`ui://`) resource directly from one installed server. */
   async readResourceForServer(params: {
+    caller: GatedCaller;
     mcpServerId: string;
     uri: string;
   }): Promise<unknown> {
@@ -4651,35 +4639,42 @@ class McpClient {
       uri: params.uri,
       mcpServerId: params.mcpServerId,
       read: () =>
-        this.withDirectServerClient(params.mcpServerId, (client) =>
-          this.raceWithTimeout(
-            client.readResource({ uri: params.uri }),
-            30000,
-            "Read resource timeout",
-          ),
+        this.withDirectServerClient(
+          params.mcpServerId,
+          (client) =>
+            this.raceWithTimeout(
+              client.readResource({ uri: params.uri }),
+              30000,
+              "Read resource timeout",
+            ),
+          { caller: params.caller },
         ),
     });
   }
 
   /** Call a tool directly on one installed server (server-scoped run path). */
   async callToolForServer(params: {
+    caller: GatedCaller;
     mcpServerId: string;
     name: string;
     arguments?: Record<string, unknown>;
   }): Promise<unknown> {
-    return this.withDirectServerClient(params.mcpServerId, (client) =>
-      this.raceWithTimeout(
-        client.callTool(
-          {
-            name: params.name,
-            arguments: params.arguments ?? {},
-          },
-          undefined,
-          { timeout: config.mcpGateway.toolCallTimeoutMs },
+    return this.withDirectServerClient(
+      params.mcpServerId,
+      (client) =>
+        this.raceWithTimeout(
+          client.callTool(
+            {
+              name: params.name,
+              arguments: params.arguments ?? {},
+            },
+            undefined,
+            { timeout: config.mcpGateway.toolCallTimeoutMs },
+          ),
+          config.mcpGateway.toolCallTimeoutMs,
+          "Tool call timeout",
         ),
-        config.mcpGateway.toolCallTimeoutMs,
-        "Tool call timeout",
-      ),
+      { caller: params.caller },
     );
   }
 
@@ -5178,13 +5173,15 @@ class McpClient {
       (await agentToolExclusionsService.getActiveExclusionSets(agentId));
     // An assigned tool whose catalog the calling user cannot see does not
     // resolve the resource either (its server is not theirs to read from).
-    const accessibleCatalogIds = await getCallerAccessibleCatalogIds({
-      userId: tokenAuth?.userId,
-      organizationId: tokenAuth?.organizationId,
-    });
-    const matchingTools = (
-      await ToolModel.findToolsByUiResourceUri(agentId, uri)
-    ).filter(
+    const uriTools = await ToolModel.findToolsByUiResourceUri(agentId, uri);
+    const accessibleCatalogIds = await getCallerAccessibleCatalogIds(
+      {
+        userId: tokenAuth?.userId,
+        organizationId: tokenAuth?.organizationId,
+      },
+      uriTools.map(({ catalogId }) => catalogId),
+    );
+    const matchingTools = uriTools.filter(
       (match) =>
         !isToolRowExcluded(match.tool, effectiveExclusions) &&
         isToolCatalogAccessible(match, accessibleCatalogIds),
@@ -5288,6 +5285,7 @@ class McpClient {
       }
 
       const transport = await this.getTransport(
+        callerOf(tokenAuth),
         catalogItem,
         server.id,
         secrets,
@@ -5559,6 +5557,7 @@ class McpClient {
           execute: async <T>(operation: (client: Client) => Promise<T>) => {
             const connectAndRun = async () => {
               const transport = await this.getTransport(
+                callerOf(tokenAuth),
                 catalogItem,
                 targetMcpServerId,
                 secretResult.secrets,

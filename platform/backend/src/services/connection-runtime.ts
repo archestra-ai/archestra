@@ -1,7 +1,7 @@
 import {
   isIntegrationHidden,
-  OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   OPENCODE_PRIMARY_PROVIDERS,
+  openCodePassthroughProviders,
 } from "@archestra/shared";
 import { INSTALLER_CLIENT_LABELS } from "@archestra/shared/connection-setup";
 import { userHasPermission } from "@/auth";
@@ -107,9 +107,7 @@ export async function loadManagedRuntimeCatalog(
   const passthrough =
     installation.authMode === "primary-providers" ||
     installation.authMode === "provider-key"
-      ? OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(
-          (route) => route.provider,
-        ).filter(
+      ? openCodePassthroughProviders().filter(
           (provider) =>
             !isIntegrationHidden(organization.modelProviderOverrides, provider),
         )

@@ -1,3 +1,4 @@
+import { isKnownTimeZone } from "@archestra/shared/time-zone";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -7,7 +8,6 @@ import { z } from "zod";
 import { schema } from "@/database";
 import {
   createCron,
-  isValidTimezone,
   normalizeCronExpression,
   normalizeTimezone,
 } from "@/utils/schedule-trigger";
@@ -169,7 +169,7 @@ function validateScheduleTriggerFields(
     return;
   }
 
-  if (!isValidTimezone(timezone)) {
+  if (!isKnownTimeZone(timezone)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Timezone must be a valid IANA timezone",

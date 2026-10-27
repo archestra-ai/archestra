@@ -290,7 +290,7 @@ const { mockUseMcpInstallOrchestrator } = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock("@/lib/mcp/mcp-install-orchestrator.hook", () => ({
+vi.mock("@/lib/mcp/use-mcp-install-orchestrator", () => ({
   useMcpInstallOrchestrator: mockUseMcpInstallOrchestrator,
 }));
 

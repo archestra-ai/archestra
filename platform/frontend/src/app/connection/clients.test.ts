@@ -5,6 +5,7 @@ import {
   OPENCODE_CLIENT_ID,
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   openCodePassthroughBaseUrl,
+  openCodePassthroughProviders,
 } from "@archestra/shared";
 import {
   INSTALLER_CLIENT_IDS,
@@ -335,7 +336,7 @@ describe("OpenCode connection client", () => {
       throw new Error("OpenCode custom proxy support is missing");
     }
     expect(client.proxy.supportedProviders).toEqual(
-      OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(({ provider }) => provider),
+      openCodePassthroughProviders(),
     );
   });
 

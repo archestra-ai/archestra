@@ -8,6 +8,7 @@ import {
   inArray,
   ne,
   notExists,
+  notInArray,
   or,
   sql,
 } from "drizzle-orm";
@@ -450,6 +451,86 @@ class MemberModel {
   }
 
   /**
+   * The given users' details, limited to members of the organization that
+   * match `search` against name or email. Unordered.
+   */
+  static async findUsersInOrganization(params: {
+    organizationId: string;
+    userIds: string[];
+    search?: string;
+  }): Promise<MemberUser[]> {
+    if (params.userIds.length === 0) return [];
+    return db
+      .select(memberUserSelection)
+      .from(schema.membersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.membersTable.userId, schema.usersTable.id),
+      )
+      .where(
+        and(
+          eq(schema.membersTable.organizationId, params.organizationId),
+          inArray(schema.membersTable.userId, params.userIds),
+          memberUserSearchFilter(params.search),
+        ),
+      );
+  }
+
+  /** How many members of the organization match `search` on name or email. */
+  static async countUsersInOrganization(params: {
+    organizationId: string;
+    search?: string;
+  }): Promise<number> {
+    const [row] = await db
+      .select({ count: count() })
+      .from(schema.membersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.membersTable.userId, schema.usersTable.id),
+      )
+      .where(
+        and(
+          eq(schema.membersTable.organizationId, params.organizationId),
+          memberUserSearchFilter(params.search),
+        ),
+      );
+    return row?.count ?? 0;
+  }
+
+  /**
+   * A name-ordered page of the organization's members matching `search`,
+   * skipping `excludeUserIds`. Ordered by the `user_name_idx` btree so a page
+   * never sorts the whole roster.
+   */
+  static async findUsersInOrganizationPage(params: {
+    organizationId: string;
+    search?: string;
+    excludeUserIds: string[];
+    limit: number;
+    offset: number;
+  }): Promise<MemberUser[]> {
+    return db
+      .select(memberUserSelection)
+      .from(schema.membersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.membersTable.userId, schema.usersTable.id),
+      )
+      .where(
+        and(
+          eq(schema.membersTable.organizationId, params.organizationId),
+          memberUserSearchFilter(params.search),
+          params.excludeUserIds.length > 0
+            ? notInArray(schema.membersTable.userId, params.excludeUserIds)
+            : undefined,
+        ),
+      )
+      .orderBy(schema.usersTable.name, schema.usersTable.id)
+      .limit(params.limit)
+      .offset(params.offset);
+  }
+
+  /**
    * Get paginated members of an organization with optional filters
    */
   static async findAllPaginated(params: {
@@ -780,6 +861,27 @@ class MemberModel {
         .limit(1)
         .prepare("archestra_member_by_user_and_organization"),
   );
+}
+
+type MemberUser = {
+  userId: string;
+  name: string;
+  email: string;
+  image: string | null;
+};
+
+const memberUserSelection = {
+  userId: schema.membersTable.userId,
+  name: schema.usersTable.name,
+  email: schema.usersTable.email,
+  image: schema.usersTable.image,
+};
+
+function memberUserSearchFilter(search: string | undefined) {
+  return buildTokenizedSearchFilter({
+    query: search,
+    columns: [schema.usersTable.name, schema.usersTable.email],
+  });
 }
 
 export default MemberModel;

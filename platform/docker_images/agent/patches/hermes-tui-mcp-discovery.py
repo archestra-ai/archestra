@@ -1,60 +1,63 @@
 """Require completed gateway discovery before the Hermes TUI builds an agent.
 
-The running entry module must share its thread handle with server._make_agent.
-A bounded join alone still races slow discovery after the bound expires. Check
-completion and gateway connection outside Hermes's best-effort wait handlers,
-so startup failure cannot silently become a model request without MCP tools.
-The build fails when upstream anchors move; upgrades require reviewing this
-patch and running the real-client startup tests.
+Hermes waits for MCP discovery before it snapshots an agent's tools, but
+swallows every failure and builds the agent with whatever tools exist, and no
+config key makes a server required. Replace that wait with one bounded join
+and a gateway connection check, so startup failure cannot silently become a
+model request without MCP tools. The build fails when upstream anchors move;
+upgrades require reviewing this patch and running the real-client startup
+tests.
 """
 
 import importlib.util
 import sys
 from pathlib import Path
 
-ENTRY_ANCHOR = "def main():\n"
-ENTRY_PATCH = (
-    "def main():\n"
-    "    # Archestra image patch: see docker_images/agent/patches/hermes-tui-mcp-discovery.py\n"
-    "    if __name__ == \"__main__\":\n"
-    "        sys.modules[\"tui_gateway.entry\"] = sys.modules[__name__]\n"
+ANCHOR = (
+    '    for _mod in ("hermes_cli.mcp_startup", "tui_gateway.entry"):\n'
+    "        with contextlib.suppress(Exception):\n"
+    "            importlib.import_module(_mod).wait_for_mcp_discovery()\n"
+    "    cfg = _load_cfg()\n"
 )
-SERVER_ANCHOR = "    cfg = _load_cfg()\n    agent_cfg = cfg.get(\"agent\") or {}\n"
-WAIT_START = "    # MCP tool discovery runs in a background daemon thread at startup so a\n"
-WAIT_END = "    cfg = _load_cfg()\n"
-SERVER_PATCH = '''    # The Archestra gateway is required before the tool snapshot is built.
-    from tui_gateway.entry import join_mcp_discovery
-    from hermes_cli.mcp_startup import _resolve_discovery_timeout
-    from tools.mcp_tool import get_mcp_status
-    import subprocess
+# Replaces upstream's wait, which can run up to twice the discovery timeout
+# before this check would start.
+PATCH = '''    # Archestra image patch: see docker_images/agent/patches/hermes-tui-mcp-discovery.py
+    from hermes_cli import mcp_startup as _archestra_mcp
+    from tools.mcp_tool_discovery import get_mcp_status as _archestra_mcp_status
 
-    def reject_gateway(message):
+    def _archestra_reject(message):
         subprocess.run(["archestra-mcp-startup-failure"], check=False)
         raise RuntimeError(message)
 
-    if not join_mcp_discovery(timeout=_resolve_discovery_timeout(None)):
-        reject_gateway("Archestra MCP gateway discovery timed out. Retry when the gateway is available.")
-    gateway = next((s for s in get_mcp_status() if s["name"] == "archestra"), None)
-    if not gateway or not gateway["connected"]:
-        reject_gateway("Archestra MCP gateway discovery failed. Check gateway availability and access, then retry.")
+    # An agent can be built before the deferred discovery thread starts.
+    # Joining an absent thread reports success without discovering any tools.
+    _archestra_mcp.start_background_mcp_discovery(
+        logger=logger, thread_name="archestra-mcp-discovery"
+    )
+    if not _archestra_mcp.join_mcp_discovery(
+        timeout=_archestra_mcp._resolve_discovery_timeout(None)
+    ):
+        _archestra_reject("Archestra MCP gateway discovery timed out. Retry when the gateway is available.")
+    _archestra_gateway = next(
+        (s for s in _archestra_mcp_status() if s.get("name") == "archestra"), None
+    )
+    if not _archestra_gateway or not _archestra_gateway.get("connected"):
+        _archestra_reject("Archestra MCP gateway discovery failed. Check gateway availability and access, then retry.")
+    cfg = _load_cfg()
+'''
 
-''' + SERVER_ANCHOR
-
-# Locate without importing: importing entry runs its startup code.
-entry = Path(importlib.util.find_spec("tui_gateway.entry").origin)
-server = entry.with_name("server.py")
-entry_source = entry.read_text()
+# Locate without importing: importing these modules runs startup code.
+server = Path(importlib.util.find_spec("tui_gateway").origin).with_name("server.py")
+mcp_startup = Path(importlib.util.find_spec("hermes_cli").origin).with_name("mcp_startup.py")
+discovery = Path(importlib.util.find_spec("tools").origin).with_name("mcp_tool_discovery.py")
 server_source = server.read_text()
 if (
-    entry_source.count(ENTRY_ANCHOR) != 1
-    or "_mcp_discovery_thread = _mcp_thread" not in entry_source
-    or server_source.count(SERVER_ANCHOR) != 1
-    or "def join_mcp_discovery(" not in entry_source
-    or server_source.count(WAIT_START) != 1
+    server_source.count(ANCHOR) != 1
+    or "\nimport subprocess\n" not in server_source
+    or "def join_mcp_discovery(" not in mcp_startup.read_text()
+    or "def start_background_mcp_discovery(" not in mcp_startup.read_text()
+    or "def _resolve_discovery_timeout(" not in mcp_startup.read_text()
+    or "def get_mcp_status(" not in discovery.read_text()
 ):
     sys.exit(f"Hermes TUI startup changed; review {Path(__file__).name}")
-entry.write_text(entry_source.replace(ENTRY_ANCHOR, ENTRY_PATCH))
-wait_start = server_source.index(WAIT_START)
-wait_end = server_source.index(WAIT_END, wait_start)
-server_source = server_source[:wait_start] + server_source[wait_end:]
-server.write_text(server_source.replace(SERVER_ANCHOR, SERVER_PATCH))
+server.write_text(server_source.replace(ANCHOR, PATCH))

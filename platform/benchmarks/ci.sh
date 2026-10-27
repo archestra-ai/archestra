@@ -98,10 +98,13 @@ for ((i=0; i<120; i++)); do
 done
 if [[ "$ready" != true ]]; then echo "Backend did not become ready" >&2; exit 1; fi
 benchmark_virtual_key=$(node benchmarks/seed.mjs "$port_offset")
+read -r mcp_agent_id mcp_tool mcp_token < <(node benchmarks/seed.mjs "$port_offset" mcp)
 if [[ "$cpu_profile" == true ]]; then
   docker compose -p "$project" "${compose_files[@]}" exec -T postgres \
     psql -U benchmark -d benchmark -Atc 'SELECT pg_stat_statements_reset()' > /dev/null
 fi
-ARCHESTRA_BENCHMARK_VIRTUAL_KEY="$benchmark_virtual_key" node benchmarks/run.mjs "--output=$output" \
+ARCHESTRA_BENCHMARK_VIRTUAL_KEY="$benchmark_virtual_key" ARCHESTRA_BENCHMARK_MCP_TOKEN="$mcp_token" \
+  node benchmarks/run.mjs "--output=$output" \
   "--proxy-url=http://127.0.0.1:$backend_port/v1/openai/chat/completions" \
-  "--mock-url=http://127.0.0.1:$mock_port/v1/chat/completions" "${runner_args[@]}"
+  "--mock-url=http://127.0.0.1:$mock_port/v1/chat/completions" \
+  "--mcp-url=http://127.0.0.1:$backend_port/v1/mcp/$mcp_agent_id" "--mcp-tool=$mcp_tool" "${runner_args[@]}"

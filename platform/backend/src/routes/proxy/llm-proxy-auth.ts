@@ -13,6 +13,7 @@ import {
   LLM_PROXY_OAUTH_SCOPE,
   perUserCredentialLabel,
   type SupportedProvider,
+  stripClaudeContextVariantSuffix,
 } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -32,6 +33,7 @@ import {
   ManagedOauthClientModel as LlmOauthClientModel,
   LlmProviderApiKeyModel,
   MemberModel,
+  ModelPoolModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
   OrganizationModel,
@@ -43,6 +45,7 @@ import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { validateExternalIdpToken } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import { configCache } from "@/services/config-cache";
 import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -54,6 +57,7 @@ import {
   type ProviderKeySelection,
   selectMappedProviderKey,
 } from "@/utils/provider-key-mappings";
+import { type ModelPoolCaller, mayUseModelPool } from "./model-pool-failover";
 import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
 
 export function isJwtLike(token: string): boolean {
@@ -90,25 +94,7 @@ function requestedModelFromBody(request: FastifyRequest): string | null {
 export async function resolveAgent(
   agentId: string | undefined,
 ): Promise<GatewayAgent> {
-  if (agentId) {
-    const agent = await AgentModel.findGatewayAgentById(agentId);
-    if (!agent) {
-      throw new ApiError(404, `Agent with ID ${agentId} not found`);
-    }
-    if (agent.agentType === "llm_proxy" || agent.agentType === "profile") {
-      if (agent.agentType === "llm_proxy" && agent.isDefault) {
-        return agent;
-      }
-      return AgentModel.getOrgLlmProxy(agent.organizationId);
-    }
-    return agent;
-  }
-
-  const llmProxy = await AgentModel.getDeploymentLlmProxy();
-  if (!llmProxy) {
-    throw new ApiError(503, "No organization exists yet.");
-  }
-  return llmProxy;
+  return configCache.read(`agent:${agentId ?? ""}`, () => readAgent(agentId));
 }
 
 // =========================================================================
@@ -128,6 +114,11 @@ export interface VirtualKeyValidationResult {
   virtualKeyAuthorId?: string | null;
   /** Team the key's spend is charged to, when it has one. */
   billingTeamId?: string;
+  /**
+   * The key maps no key of this provider and passed only because it may use
+   * the pool the requested model names. No provider key is resolved.
+   */
+  modelPoolId?: string;
 }
 
 export interface PassthroughVirtualKeyResult {
@@ -188,6 +179,12 @@ export async function validateVirtualApiKey(params: {
    */
   requestedModel?: string | null;
   providerKeySelection?: ProviderKeySelection;
+  /**
+   * Set by callers that can serve a model pool. A key that maps no key of
+   * this provider then still passes when it may use the pool the requested
+   * model names.
+   */
+  allowModelPool?: boolean;
 }): Promise<VirtualKeyValidationResult> {
   const { tokenValue, expectedProvider, expectedOrganizationId } = params;
   const resolved = await validateVirtualApiKeyToken(tokenValue);
@@ -211,16 +208,36 @@ export async function validateVirtualApiKey(params: {
       "Passthrough virtual keys carry no provider credential — send them in the X-Archestra-Virtual-Key header, not Authorization.",
     );
   }
+  const mappings = await resolveVirtualKeyProviderMappings(
+    resolved.virtualKey.id,
+  );
   const mappedProviderKey = isSupportedProvider(expectedProvider)
     ? await selectMappedProviderKey({
-        mappings: await resolveVirtualKeyProviderMappings(
-          resolved.virtualKey.id,
-        ),
+        mappings,
         provider: expectedProvider,
         modelId: params.requestedModel,
         selection: params.providerKeySelection,
       })
     : undefined;
+  const modelPoolId =
+    !mappedProviderKey && params.allowModelPool
+      ? await usableModelPoolId({
+          organizationId: resolved.virtualKey.organizationId,
+          caller: {
+            virtualKeyId: resolved.virtualKey.id,
+            providerApiKeyIds: mappings.map(
+              (mapping) => mapping.providerApiKeyId,
+            ),
+          },
+          requestedModel: params.requestedModel,
+        })
+      : undefined;
+  if (modelPoolId) {
+    return {
+      ...(await virtualKeyIdentity(resolved.virtualKey)),
+      modelPoolId,
+    };
+  }
   if (!mappedProviderKey) {
     throw new ApiError(
       400,
@@ -302,14 +319,37 @@ export async function validateVirtualApiKey(params: {
     apiKey,
     baseUrl: mappedProviderKey.baseUrl ?? undefined,
     chatApiKeyId: mappedProviderKey.providerApiKeyId,
-    virtualKeyId: resolved.virtualKey.id,
-    virtualKeyIsPersonal: await VirtualApiKeyModel.isPersonal(
-      resolved.virtualKey,
-    ),
-    virtualKeyAuthorId: resolved.virtualKey.authorId,
-    serviceAccountId:
-      resolved.virtualKey.createdByServiceAccountId ?? undefined,
-    billingTeamId: resolved.virtualKey.billingTeamId ?? undefined,
+    ...(await virtualKeyIdentity(resolved.virtualKey)),
+  };
+}
+
+async function usableModelPoolId(params: {
+  organizationId: string;
+  caller: ModelPoolCaller;
+  requestedModel?: string | null;
+}): Promise<string | undefined> {
+  if (!config.llmProxy.modelPoolsEnabled || !params.requestedModel)
+    return undefined;
+  const pool = await ModelPoolModel.findByName({
+    organizationId: params.organizationId,
+    name: stripClaudeContextVariantSuffix(params.requestedModel),
+  });
+  return pool && mayUseModelPool({ pool, caller: params.caller })
+    ? pool.id
+    : undefined;
+}
+
+async function virtualKeyIdentity(
+  virtualKey: Awaited<
+    ReturnType<typeof validateVirtualApiKeyToken>
+  >["virtualKey"],
+) {
+  return {
+    virtualKeyId: virtualKey.id,
+    virtualKeyIsPersonal: await VirtualApiKeyModel.isPersonal(virtualKey),
+    virtualKeyAuthorId: virtualKey.authorId,
+    serviceAccountId: virtualKey.createdByServiceAccountId ?? undefined,
+    billingTeamId: virtualKey.billingTeamId ?? undefined,
   };
 }
 
@@ -327,10 +367,36 @@ export async function validateVirtualApiKey(params: {
  * Throws ApiError on validation failure (401 invalid/expired, 400 wrong key
  * type, 403 no proxy access).
  */
+/**
+ * Prefetch the gateway and credential rows; the caller must still rate-limit
+ * and validate. The rows can come from the proxy configuration cache: the
+ * token is still compared with its stored secret, and expiry and membership
+ * are still checked, on every request.
+ */
+export async function readPassthroughAuthenticationSnapshot(params: {
+  tokenValue: string;
+  oauthTokenCandidate?: string;
+}) {
+  const oauthTokenHash = params.oauthTokenCandidate
+    ? OAuthAccessTokenModel.hashTokenForLookup(params.oauthTokenCandidate)
+    : undefined;
+  return configCache.read(
+    `credential:${VirtualApiKeyModel.tokenStartOf(params.tokenValue)}:${oauthTokenHash ?? ""}`,
+    () =>
+      VirtualApiKeyModel.readDeploymentProxyAndTokenOwner(
+        params.tokenValue,
+        oauthTokenHash,
+      ),
+  );
+}
+
 export async function validatePassthroughVirtualKey(params: {
   tokenValue: string;
   agent: GatewayAgent;
   oauthTokenCandidate?: string;
+  authenticationSnapshot?: Awaited<
+    ReturnType<typeof readPassthroughAuthenticationSnapshot>
+  >;
 }): Promise<PassthroughVirtualKeyResult> {
   const { tokenValue, agent } = params;
 
@@ -340,6 +406,11 @@ export async function validatePassthroughVirtualKey(params: {
   const resolved = await VirtualApiKeyModel.validateTokenWithOwner(
     tokenValue,
     oauthTokenHash,
+    params.authenticationSnapshot?.agent.id === agent.id &&
+      params.authenticationSnapshot.agent.organizationId ===
+        agent.organizationId
+      ? params.authenticationSnapshot
+      : undefined,
   );
   if (!resolved) {
     throw new ApiError(401, "Invalid passthrough virtual key");
@@ -736,10 +807,16 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
  * promptly, long enough to cover a client's ordinary request cadence.
  */
 const RECENTLY_VALIDATED_TTL_MS = 5 * 60_000;
-// Coalesce bookkeeping only: every request still reads the distributed failure
-// buckets and validates its credential. A busy credential's exemption is
-// refreshed at most once per second per process (up to one second less TTL).
+// Coalesce bookkeeping only. A busy credential's exemption is refreshed at most
+// once per second per process (up to one second less TTL).
 const VALIDATION_MARK_REFRESH_MS = 1_000;
+/**
+ * How long this process skips the distributed bucket read for a credential it
+ * just validated. Every request still validates its credential; only the
+ * failure-count read is skipped, and any failure for the credential ends the
+ * skip. Guessed credentials never validate, so they always read the buckets.
+ */
+const LOCAL_VALIDATION_TTL_MS = RATE_LIMIT_WINDOW_MS;
 
 interface RateLimitEntry {
   count: number;
@@ -802,15 +879,37 @@ export class VirtualKeyRateLimiter {
     }),
   );
 
+  /**
+   * Credentials this process validated recently. A credential below its
+   * failure limit when it validated cannot have reached the limit since
+   * without failing here (which clears the mark) or failing elsewhere, and a
+   * failure elsewhere only costs one more validation before this process
+   * reads the buckets again. Validated credentials are exempt from the
+   * IP-wide bucket, so neither bucket can reject them.
+   */
+  private readonly locallyValidated = registerProcessLocalCache(
+    new LRUCacheManager<true>({
+      maxSize: 10_000,
+      defaultTtl: LOCAL_VALIDATION_TTL_MS,
+    }),
+  );
+
   constructor(cache: RateLimitCache) {
     this.cache = cache;
   }
 
+  /** Rate-limit bookkeeping only; this never proves current authorization. */
+  hasRecentValidation(credential: string): boolean {
+    return this.locallyValidated.has(localKey(credential));
+  }
+
   /**
-   * Reads both buckets and the credential's validation mark in one statement.
+   * Reads both buckets and the credential's validation mark in one statement,
+   * unless this process validated the credential recently.
    */
   async check(params: { ip: string; credential?: string }): Promise<void> {
     const { ip, credential } = params;
+    if (credential && this.hasRecentValidation(credential)) return;
     const now = Date.now();
     const credentialKey = this.credentialKey(ip, credential);
     const ipKey = this.ipKey(ip);
@@ -848,6 +947,7 @@ export class VirtualKeyRateLimiter {
     credential?: string;
   }): Promise<void> {
     const { ip, credential } = params;
+    if (credential) this.locallyValidated.delete(localKey(credential));
     await this.cache.incrementFixedWindows({
       keys: [this.credentialKey(ip, credential), this.ipKey(ip)],
       windowMs: RATE_LIMIT_WINDOW_MS,
@@ -865,6 +965,7 @@ export class VirtualKeyRateLimiter {
   async recordSuccess(params: { credential?: string }): Promise<void> {
     const { credential } = params;
     if (!credential) return;
+    this.locallyValidated.set(localKey(credential), true);
     const key = this.validatedKey(credential);
     const pending = this.successWrites.get(key);
     if (pending) return pending;
@@ -1201,6 +1302,13 @@ const CREDENTIAL_FINGERPRINT_KEY = createSecretKey(
  *
  * Requests that present no credential at all share the "none" bucket.
  */
+/** Full-length digest: a process-local key must never collide with a guess. */
+function localKey(credential: string): string {
+  return createHmac("sha256", CREDENTIAL_FINGERPRINT_KEY)
+    .update(credential)
+    .digest("base64url");
+}
+
 function fingerprintCredential(credential: string | undefined): string {
   if (!credential) return "none";
   const hmac = createHmac("sha256", CREDENTIAL_FINGERPRINT_KEY);
@@ -1421,4 +1529,26 @@ function stripAuthenticatedBearer(request: FastifyRequest, token: string) {
         (retained.length ? `?${retained.join("&")}` : "");
     }
   }
+}
+
+async function readAgent(agentId: string | undefined): Promise<GatewayAgent> {
+  if (agentId) {
+    const agent = await AgentModel.findGatewayAgentById(agentId);
+    if (!agent) {
+      throw new ApiError(404, `Agent with ID ${agentId} not found`);
+    }
+    if (agent.agentType === "llm_proxy" || agent.agentType === "profile") {
+      if (agent.agentType === "llm_proxy" && agent.isDefault) {
+        return agent;
+      }
+      return AgentModel.getOrgLlmProxy(agent.organizationId);
+    }
+    return agent;
+  }
+
+  const llmProxy = await AgentModel.getDeploymentLlmProxy();
+  if (!llmProxy) {
+    throw new ApiError(503, "No organization exists yet.");
+  }
+  return llmProxy;
 }

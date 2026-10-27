@@ -121,6 +121,15 @@ export function getAgentCatalogTemplates(
       platformName: appName,
       image: images.grok,
     }),
+    template({
+      id: "kimi",
+      name: AGENT_CATALOG_TEMPLATE_NAMES.kimi,
+      summary: "Kimi's coding agent. Runs on a Kimi Code membership.",
+      icon: CATALOG_AGENT_ICONS.kimi,
+      description: `Kimi's coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
+      platformName: appName,
+      image: images.kimi,
+    }),
   ] as const;
 }
 

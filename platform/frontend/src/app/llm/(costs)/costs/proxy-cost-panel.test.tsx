@@ -21,10 +21,11 @@ const totals = {
   outputTokens: 500,
   cacheReadTokens: 100,
   cacheWriteTokens: 40,
-  // Unestimated input + output + cache read + cache write, not input + output.
-  totalTokens: 1640,
+  // Uncached input + output + cache write. Cache reads stay out of the total.
+  totalTokens: 1540,
   billedCost: 3.5,
   subscriptionCost: 7,
+  failedOverAttempts: 0,
 };
 const data: archestraApiTypes.GetProxyCostStatisticsResponses["200"] = {
   totals,

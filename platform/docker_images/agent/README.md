@@ -12,6 +12,7 @@ non-root working directory and the invoking user's Agent-scoped MCP gateway endp
 | `agent-hermes` | `archestra-hermes` | OpenAI Chat Completions |
 | `agent-openclaw` | `archestra-openclaw` | OpenAI Chat Completions or OpenAI Responses |
 | `agent-grok` | `archestra-grok` | OpenAI Chat Completions |
+| `agent-kimi` | `archestra-kimi` | OpenAI Chat Completions |
 
 All targets inherit the same tools from `agent-base`:
 
@@ -75,7 +76,7 @@ docker build -f docker_images/agent/Dockerfile --target agent-codex -t agent-cod
 ```
 
 Tilt pulls the public GAR images by default. Set
-`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG=dev` to build all six targets locally and
+`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG=dev` to build all seven targets locally and
 use them for Agent Runtime workspaces.
 
 The native wrappers create client configuration at run time under `/var/run/archestra`. Credentials are never baked into images. On the provider path, the runtime receives a temporary virtual key and routes inference through the Agent-scoped LLM proxy. The upstream provider credential stays in the backend.
@@ -88,7 +89,7 @@ Delegated Claude Code assignments stay open until registered background work fin
 
 Maintained clients send `ARCHESTRA_AGENT_RUNTIME_TASK_ID` as `X-Archestra-Run-Id` to label one turn. They send `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` as both `X-Archestra-Session-Id` and `X-Appa-Session-ID` to keep the conversation together across turns and follow-ups. New wrappers must use the same stable session ID on proxy and MCP gateway requests; see the [runtime image contract](runtime-contract.md#runtime-environment).
 
-All six targets also export their native message and tool history to
+All seven targets also export their native message and tool history to
 `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json`. The control plane
 validates and persists this provider-neutral artifact independently of the
 terminal recording. Custom images can opt into the same completed-run view by
@@ -134,9 +135,15 @@ Grok Build differs from the other clients in three ways:
   Grok's Agent Client Protocol server (`grok agent stdio`) instead.
 - Grok drops every MCP tool whose name contains `__`, and every gateway tool
   does. `archestra-grok-mcp` connects Grok to the gateway over stdio and shows
-  `__` as `--` in tool names. The model calls gateway tools through Grok's
-  `use_tool` dispatcher, so the LLM proxy sees `use_tool` calls. The gateway
-  still applies policy to each tool call.
+  `__` as `--` in tool names.
+- Grok offers the model MCP tools only through its `search_tool` and `use_tool`
+  pair, so a model request would declare no gateway tool and the LLM proxy
+  could deliver no remedy for a blocked call. `archestra-grok-llm` listens on
+  loopback between Grok and the proxy: it declares the gateway tools the bridge
+  listed (as the gateway sent them, attestation included) in place of the pair,
+  shows earlier `use_tool` calls as the gateway calls they made, and turns the
+  model's gateway calls back into `use_tool` calls for Grok to run. The proxy
+  sees the same wire as from Hermes; Grok runs the same tools as before.
 - Title, summary and suggestion calls use the Agent's model through the proxy.
   Telemetry, auto-update, remote configuration and xAI-hosted tools are off.
 - A turn the model itself ended early (output limit, request limit, refusal,
@@ -145,6 +152,68 @@ Grok Build differs from the other clients in three ways:
   server sent a malformed reply fails with `grok_turn_failed` and quotes the
   reason `protocol_error` in its message.
 
-The six public catalog targets are built for development deployments and
+Kimi Code differs from the other clients in these ways:
+
+- Kimi waits for its MCP catalog before its first model request, but a gateway
+  whose initialize or tools/list fails is only logged, and the turn runs
+  without the gateway's tools. `archestra-kimi-mcp` connects Kimi to the
+  gateway over stdio, relays every message unchanged, and records the answer
+  Kimi's own catalog request received. The task is sent, and each prompt runs
+  (a `UserPromptSubmit` hook), only when that record shows the catalog loaded;
+  otherwise the run fails with `mcp_startup`.
+- Kimi shows the model a gateway tool as `mcp__archestra__<tool>`, with each
+  run of underscores in a name part shortened to one (`archestra_yell`), and
+  shortens names longer than 64 characters with a hash. Descriptions reach the
+  model unchanged, so the LLM proxy resolves each tool by its attestation
+  marker; calls reach the gateway under the gateway's own names.
+- Before each request Kimi shortens tool-call IDs to 64 characters. The
+  proxy's signed tool-call IDs are longer, and a session's IDs share their
+  first 64 characters, so shortened IDs no longer match their calls: the proxy
+  withholds released results and reads applied remedies as not run. The image
+  removes the limit (`patches/kimi-long-tool-call-ids.py`); the proxy restores
+  the provider's own IDs before a request reaches the model.
+- Agent Runtime steers by typing a message and Enter. While a turn runs, Kimi
+  queues that message for the next turn and offers Ctrl-S to send it now. In a
+  delegated run `archestra-kimi-tui-start` presses Ctrl-S while a turn runs, so
+  the message reaches the running turn. An interactive session keeps Kimi's
+  queue, and the person chooses when to steer.
+- The runtime requires a Kimi Code model (the Kimi Code provider, a Kimi Code
+  membership key). The provider is `type = "kimi"`, which adds Kimi's thinking
+  switch. Kimi Code matches thinking support by model name only
+  for its own catalog, so the launcher declares it for `k3`, `k3.1` and
+  `kimi-for-coding` models; K3.1 Pro refuses a request without thinking.
+- Kimi ends a turn cut off by the output limit as completed. The `Stop` hook,
+  which Kimi runs before it records the turn's end, reads the last step's
+  finish reason and fails such a turn with `kimi_turn_failed`. A failed turn is
+  classified by the error code Kimi records: only connection errors, rate
+  limits, an overloaded provider and server errors give the retriable
+  `kimi_unavailable`; a rejected credential or model, an overflowing context,
+  the step limit, a filtered response or a cancelled turn give
+  `kimi_turn_failed`. Plain runs use print mode (`kimi -p`), which has the same
+  outcomes.
+- The working directory is trusted so the TUI does not stop on its folder-trust
+  dialog and the repository's own `AGENTS.md` and skills load. Kimi would then
+  also start the repository's MCP servers (`.mcp.json`, `.kimi-code/mcp.json`),
+  with the run's credentials in their environment, so the image patches Kimi
+  to read MCP servers only from its user `mcp.json`
+  (`patches/kimi-user-mcp-only.py`).
+- Telemetry, auto-update, the feedback survey and session titles are off. The binding header reaches the proxy through
+  `KIMI_CODE_CUSTOM_HEADERS`, never through a file.
+
+The seven public catalog targets are built for development deployments and
 releases. Keep native CLI versions exact and review their published package
 scripts before updating them.
+
+The daily `agent-runtime` job in `.github/workflows/update-client-versions.yml`
+proposes those updates as one pull request on `automation/agent-runtime-clis`.
+It runs `pnpm --dir backend update:agent-runtime-clis`, which picks each CLI's
+newest stable release that has been public for 7 days, and refreshes the
+OpenClaw lockfile. The pull request does not merge itself: merge it once the
+`Validate agent-*` builds pass. A new catalog target fails that script until it
+is registered there. Every CLI's own update check is off in the image, so an
+older session never stops on an update prompt.
+
+Hermes no longer publishes to PyPI. The image builds a GitHub release from
+source, the way upstream's own image does: Python, uv, and every package come
+from the versions locked in that checkout. Its pin is a `hermes_version` and
+`hermes_commit` pair, and the build fails unless the tag resolves to that commit.

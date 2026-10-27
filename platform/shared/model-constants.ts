@@ -26,6 +26,7 @@ export const SupportedProvidersSchema = z.enum([
   "deepseek",
   "minimax",
   "kimi",
+  "kimi-code",
   "azure",
   "github-copilot",
   "microsoft-365-copilot",
@@ -66,6 +67,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "deepseek:chatCompletions",
   "minimax:chatCompletions",
   "kimi:chatCompletions",
+  "kimi-code:chatCompletions",
   "azure:chatCompletions",
   "azure:responses",
   "azure:images",
@@ -102,6 +104,37 @@ export const OCR_PDF_INPUT_PROVIDERS: readonly SupportedProvider[] = [
   "vllm",
 ];
 export type SupportedProvider = z.infer<typeof SupportedProvidersSchema>;
+
+/**
+ * Providers whose shared keys can be model pool members. Per-user providers
+ * (Copilot) and subscription-only ones are left out: their credential belongs
+ * to one user. Gemini and Cohere have no translator to or from the wires
+ * pooled clients speak.
+ */
+export const MODEL_POOL_PROVIDERS = [
+  "anthropic",
+  "bedrock",
+  "openai",
+  "azure",
+  "cerebras",
+  "deepseek",
+  "groq",
+  "minimax",
+  "mistral",
+  "ollama",
+  "openrouter",
+  "perplexity",
+  "vllm",
+  "xai",
+  "zhipuai",
+] as const satisfies readonly SupportedProvider[];
+export type ModelPoolProvider = (typeof MODEL_POOL_PROVIDERS)[number];
+
+export function isModelPoolProvider(
+  provider: SupportedProvider,
+): provider is ModelPoolProvider {
+  return (MODEL_POOL_PROVIDERS as readonly string[]).includes(provider);
+}
 
 /**
  * The wire formats a single provider can serve one model catalog over, spelled
@@ -193,6 +226,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   deepseek: "DeepSeek",
   minimax: "MiniMax",
   kimi: "Moonshot (Kimi)",
+  "kimi-code": "Kimi Code",
   azure: "Azure AI Foundry",
   "github-copilot": "GitHub Copilot",
   "microsoft-365-copilot": "Microsoft 365 Copilot",
@@ -487,6 +521,8 @@ export const MODEL_ROUTER_SUPPORTED_PROVIDERS = [
   "cerebras",
   "deepseek",
   "groq",
+  "kimi",
+  "kimi-code",
   "minimax",
   "mistral",
   "ollama",
@@ -515,6 +551,28 @@ export function isModelRouterSupportedProvider(
   );
 }
 
+/**
+ * Router providers served over Chat Completions only. Their thinking models
+ * return `reasoning_content` that must be sent back on every tool-call turn,
+ * and the router's Responses translation keeps neither the reasoning in the
+ * output nor the field on the replayed assistant message, so a tool loop
+ * breaks on its second turn. The router refuses them on `/responses`, and the
+ * runtime compatibility checks below refuse them for Responses images, so the
+ * picker, the launch preflight and the router agree.
+ */
+export const CHAT_COMPLETIONS_ONLY_ROUTER_PROVIDERS = [
+  "kimi",
+  "kimi-code",
+] as const satisfies ReadonlyArray<SupportedProvider>;
+
+export function isChatCompletionsOnlyRouterProvider(
+  provider: SupportedProvider,
+): boolean {
+  return (CHAT_COMPLETIONS_ONLY_ROUTER_PROVIDERS as readonly string[]).includes(
+    provider,
+  );
+}
+
 /** Protocols supported by the maintained runtime entrypoint, or all for custom images. */
 export function getAgentRuntimeAllowedProtocols(
   runtimeCommand?: readonly string[] | null,
@@ -524,8 +582,10 @@ export function getAgentRuntimeAllowedProtocols(
       return ["anthropic"];
     case "archestra-codex":
       return ["openai_responses", "openai_chat"];
-    // Grok Build supports only Chat Completions on a custom model endpoint.
+    // Grok Build and Kimi Code support only Chat Completions on a custom
+    // model endpoint.
     case "archestra-grok":
+    case "archestra-kimi":
       return ["openai_chat"];
     default:
       return ["openai_responses", "openai_chat", "anthropic"];
@@ -570,6 +630,12 @@ export function getAgentRuntimeProviderCompatibility(params: {
       message: `The maintained Codex runtime requires an OpenAI model, but the Agent's selected model uses ${providerDisplayNames[params.provider]}.`,
     };
   }
+  if (runtimeCommand === "archestra-kimi" && params.provider !== "kimi-code") {
+    return {
+      compatible: false,
+      message: `The maintained Kimi Code runtime requires a Kimi Code model, but the Agent's selected model uses ${providerDisplayNames[params.provider]}.`,
+    };
+  }
   if (
     params.inferenceProtocol === "anthropic" &&
     params.provider !== "anthropic"
@@ -586,6 +652,15 @@ export function getAgentRuntimeProviderCompatibility(params: {
     return {
       compatible: false,
       message: `${providerDisplayNames[params.provider]} models are not available through the OpenAI-compatible model router used by this Agent Runtime image.`,
+    };
+  }
+  if (
+    params.inferenceProtocol === "openai_responses" &&
+    isChatCompletionsOnlyRouterProvider(params.provider)
+  ) {
+    return {
+      compatible: false,
+      message: `${providerDisplayNames[params.provider]} models are available through the model router's Chat Completions endpoint only. Choose an Agent Runtime image that uses OpenAI Chat Completions.`,
     };
   }
   return { compatible: true };
@@ -831,6 +906,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   deepseek: "https://api.deepseek.com",
   minimax: "https://api.minimax.io/v1",
   kimi: "https://api.moonshot.ai/v1",
+  "kimi-code": "https://api.kimi.ai/coding/v1",
   azure: "https://<resource>.openai.azure.com/openai",
   "github-copilot": "https://api.githubcopilot.com",
   "microsoft-365-copilot": "https://graph.microsoft.com/beta",
@@ -941,6 +1017,7 @@ export const PROVIDER_MODEL_TIERS: Record<
   },
   minimax: { normal: "MiniMax-M3" },
   kimi: { normal: "kimi-k3.1-pro" },
+  "kimi-code": { normal: "k3.1-pro" },
   azure: { normal: "gpt-5.5" },
   "github-copilot": {
     // Copilot has no Haiku 5.5 yet, and older Claude is not worth defaulting to.
@@ -1045,12 +1122,14 @@ export function stripClaudeContextVariantSuffix(modelId: string): string {
  * - "pro" reasoning models: `/chat/completions` returns `api_not_found_error`
  *   ("not a chat model"). "pro" is matched as a hyphen/slash-delimited token,
  *   so dated snapshots (`gpt-5.5-pro-2026-01-01`) are covered.
- * - the gpt-5.6 family (sol/terra/luna): reasoning is on by default and
- *   `/chat/completions` rejects function tools with any reasoning effort
- *   (400 api_validation_error: "use /v1/responses or set reasoning_effort to
- *   'none'"). Disabling reasoning would degrade the model, so route the whole
- *   family to Responses. "gpt-5.6" is matched up to a `-`/`.`/end boundary so
- *   tiers and dated snapshots are covered without matching e.g. `gpt-5.61`.
+ * - every gpt-5.6 and gpt-6 model (sol/terra/luna/astra and any other
+ *   variant): reasoning is on by default and `/chat/completions` rejects
+ *   function tools with any reasoning effort (400 api_validation_error: "use
+ *   /v1/responses or set reasoning_effort to 'none'"). Disabling reasoning
+ *   would degrade the model, so route both whole families to Responses,
+ *   including calls without tools. "gpt-5.6" and "gpt-6" are matched up to a
+ *   `-`/`.`/end boundary so tiers, point releases (`gpt-6.1-sol`) and dated
+ *   snapshots are covered without matching e.g. `gpt-5.61` or `gpt-60`.
  * - Codex models: OpenAI serves the coding-specialized `gpt-*-codex` family
  *   through Responses rather than Chat Completions. The suffix boundary also
  *   covers variants such as `-mini`, `-max`, and dated snapshots.
@@ -1058,7 +1137,7 @@ export function stripClaudeContextVariantSuffix(modelId: string): string {
 export function requiresOpenAiResponsesApi(modelId: string): boolean {
   return (
     /(?:^|[-/])pro(?:[-/]|$)/i.test(modelId) ||
-    /(?:^|\/)gpt-5\.6(?:$|[-.])/i.test(modelId) ||
+    /(?:^|\/)gpt-(?:5\.6|6)(?:$|[-.])/i.test(modelId) ||
     /(?:^|\/)gpt-[^/]+-codex(?:$|[-.])/i.test(modelId)
   );
 }
@@ -1183,6 +1262,10 @@ export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
     llama: "openai",
     deepseek: "deepseek",
     moonshotai: "kimi",
+    // Kimi Code membership plans list their model ids (k3.1-pro,
+    // kimi-for-coding, ...) at $0; both regions list the same ids.
+    "kimi-code-plan-global": "kimi-code",
+    "kimi-code-plan-cn": "kimi-code",
     groq: "groq",
     "fireworks-ai": "openai",
     togetherai: "openai",

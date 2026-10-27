@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import config from "@/config";
 import logger from "@/logging";
+import { infrastructureSpansEnabled } from "@/observability/tracing/infrastructure-spans";
 import {
   installDbErrorSafetyNet,
   withTransactionRetry,
@@ -183,7 +184,9 @@ async function doInitializeDatabase(): Promise<void> {
       schema,
     });
 
-    instrumentDrizzleClient(newDb, { dbSystem: "postgresql" });
+    // Query spans are infrastructure spans, like the pg instrumentation.
+    if (infrastructureSpansEnabled())
+      instrumentDrizzleClient(newDb, { dbSystem: "postgresql" });
     installDbErrorSafetyNet();
 
     nativeDatabaseConnectionString = config.database.url;

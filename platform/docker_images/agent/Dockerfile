@@ -1,6 +1,8 @@
 # Curated Agent catalog images. The build context is platform/ so every native
 # CLI shares one hardened execution base.
 FROM ghcr.io/astral-sh/uv:0.9.17@sha256:5cb6b54d2bc3fe2eb9a8483db958a0b9eebf9edff68adedb369df8e7b98711a2 AS uv
+# The uv release Hermes locks its environment with.
+FROM ghcr.io/astral-sh/uv:0.12.3@sha256:2d890623d310b57771ce840f0da5eed5fc6d657da05ffaa45d82797b53fa3abc AS uv-hermes
 
 # One Rust toolchain both builds the review engine and ships in the runtime, so
 # projects with native code (Archestra's addons included) compile in place.
@@ -19,10 +21,14 @@ RUN apt-get update -qq \
 FROM node:24-bookworm-slim AS agent-base
 ARG TARGETARCH
 
+# CVE-2026-84782: require the fixed OpenSSL packages and refresh cached apt layers.
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
       build-essential ca-certificates curl ffmpeg fonts-dejavu-core git jq less libssl-dev libssl3 \
-      openssh-client pkg-config procps python3 python3-venv ripgrep tmux \
+      openssh-client openssl pkg-config procps python3 python3-venv ripgrep tmux \
+ && for package in openssl libssl3 libssl-dev; do \
+      dpkg --compare-versions "$(dpkg-query -W -f='${Version}' "$package")" ge '3.0.22-1~deb12u2' || exit 1; \
+    done \
  && rm -rf /var/lib/apt/lists/*
 
 # A local PostgreSQL with pgvector for projects that need a database. Debian's
@@ -133,6 +139,7 @@ RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/workspace-files.py \
  && python3 /tmp/agent-image-tests/interactive-resume.py \
+ && python3 /tmp/agent-image-tests/tui-exec.py \
  && python3 /tmp/agent-image-tests/development-tools.py \
  && node /tmp/agent-image-tests/npm-http.cjs
 
@@ -193,24 +200,58 @@ RUN --network=none \
     python3 /tmp/agent-image-tests/mcp-startup.py opencode
 
 FROM agent-base AS agent-hermes
+ARG TARGETARCH
 USER root
-# Hermes 0.19.0 pins vulnerable versions; override its transitive packages
-# until upstream publishes a fixed release. The startup tests below exercise
-# the resulting runtime, including gateway discovery.
-RUN python3 -m venv /opt/hermes \
- && /opt/hermes/bin/pip install --no-cache-dir 'hermes-agent[mcp]==0.19.0' \
- && /opt/hermes/bin/pip install --no-cache-dir \
-      Pillow==13.0.0 PyJWT==2.14.0 certifi==2026.10.19 \
-      cryptography==50.0.0 mcp==1.28.1 starlette==1.3.1 \
-      jaraco-context==6.1.0 wheel==0.46.2 \
- && HERMES_SITE_PACKAGES=$(/opt/hermes/bin/python -c 'import site; print(site.getsitepackages()[0])') \
- && printf '%s\n' docker > "${HERMES_SITE_PACKAGES}/.install_method" \
- && ln -s /opt/hermes/bin/hermes /usr/local/bin/hermes \
+# Hermes ships only from source (PyPI stopped at 0.19.0): build the release
+# commit the way upstream's own image does. Python, uv, and every Python
+# package come from the hash-locked versions in the checkout. Pillow, PyJWT,
+# certifi, and urllib3 are raised past the lock's vulnerable versions; the startup
+# tests below exercise the resulting runtime, including gateway discovery.
+COPY --from=uv-hermes /uv /usr/local/bin/uv-hermes
+RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
+    hermes_version=0.22.2 \
+ && hermes_commit=d923a5eb487a17c0a68801bba9ef0f56c81040a8 \
+ && git clone --quiet --depth 1 --branch "v${hermes_version}" https://github.com/NousResearch/hermes-agent /opt/hermes \
+ && test "$(git -C /opt/hermes rev-parse HEAD)" = "${hermes_commit}" \
+ && case "${TARGETARCH}" in amd64) python_target=linux-x64 ;; arm64) python_target=linux-arm64 ;; *) exit 1 ;; esac \
+ && set -- $(python3 -c 'import json, sys; a = json.load(open("/opt/hermes/pm/lock.json"))["packages"]["python"]["artifacts"][sys.argv[1]]; print(a["url"], a["sha256"])' "${python_target}") \
+ && curl -fsSL "$1" -o /tmp/hermes-python.tgz \
+ && echo "$2  /tmp/hermes-python.tgz" | sha256sum -c - \
+ && mkdir -p /opt/hermes-python \
+ && tar -xzf /tmp/hermes-python.tgz -C /opt/hermes-python --strip-components=1 \
+ && rm /tmp/hermes-python.tgz \
+ && /opt/hermes-python/bin/python3 -c 'import sqlite3, sys; assert sys.version_info[:2] == (3, 14); assert sqlite3.sqlite_version_info >= (3, 51, 3), sqlite3.sqlite_version' \
+ && cd /opt/hermes \
+ # Upstream's source package uses 0.0.0; stamp the verified release into its metadata.
+ && python3 /tmp/agent-image-patches/hermes-release-version.py /opt/hermes "${hermes_version}" \
+ && UV_NO_CONFIG=1 UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy uv-hermes sync --quiet --frozen --no-default-groups --extra mcp \
+      --python /opt/hermes-python/bin/python3 --compile-bytecode \
+ && UV_NO_CONFIG=1 uv-hermes pip install --quiet --python /opt/hermes/.venv/bin/python \
+      Pillow==13.0.0 PyJWT==2.14.0 certifi==2026.10.19 urllib3==2.8.0 \
+ && LEFTHOOK=0 npm_config_install_links=false node scripts/build/node-deps.mjs --source /opt/hermes --workspace ui-tui \
+ && node scripts/build/tui.mjs --source /opt/hermes --out /opt/hermes-tui \
+ && rm -rf node_modules ui-tui/node_modules /root/.npm /root/.cache \
+      website apps tests tests-js evals \
+ && .venv/bin/python scripts/write_install_stamp.py --output install-stamp.json \
+      --commit "${hermes_commit}" --base-version "${hermes_version}" --distance 0 \
+      --source docker --distribution docker --update-mechanism external \
+ && printf '%s\n' docker > .install_method \
+ # Discard superseded wheels and build-only installers, including pip's vendored packages.
+ && rm -rf .git /home/node/.cache/uv /usr/local/bin/uv-hermes \
+      /opt/hermes-python/lib/python3.14/site-packages/pip \
+      /opt/hermes-python/lib/python3.14/site-packages/pip-*.dist-info \
+      /opt/hermes-python/lib/python3.14/ensurepip \
+      /opt/hermes-python/bin/pip* \
+ && ln -s /opt/hermes/.venv/bin/hermes /usr/local/bin/hermes \
  && hermes --version \
  && chown -R 1000:1000 /home/node
+ENV HERMES_TUI_DIR=/opt/hermes-tui
+ENV HERMES_NODE=/usr/local/bin/node
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
-    /opt/hermes/bin/python /tmp/agent-image-patches/hermes-tui-mcp-discovery.py
+    /opt/hermes/.venv/bin/python /tmp/agent-image-patches/hermes-tui-mcp-discovery.py \
+ && /opt/hermes/.venv/bin/python /tmp/agent-image-patches/hermes-mcp-sdk-import.py \
+ && /opt/hermes/.venv/bin/python /tmp/agent-image-patches/hermes-no-first-contact-note.py
 USER 1000:1000
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
@@ -223,6 +264,8 @@ RUN --network=none \
 FROM agent-base AS agent-openclaw
 USER root
 COPY docker_images/agent/openclaw /opt/agent-openclaw
+# The image pins OpenClaw; skip its startup update checks and notices.
+ENV OPENCLAW_NO_AUTO_UPDATE=1
 RUN pnpm --dir /opt/agent-openclaw install --frozen-lockfile \
  && ln -s /opt/agent-openclaw/node_modules/.bin/openclaw /usr/local/bin/openclaw \
  && openclaw --version \
@@ -266,3 +309,33 @@ USER 1000:1000
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/mcp-startup.py grok
+
+# The npm package's postinstall only renames a previous Python kimi shim on
+# global installs. Install the checksummed tarball without lifecycle scripts.
+# Kimi finds ripgrep and fd on PATH instead of downloading its own copies.
+FROM agent-base AS agent-kimi
+USER root
+# Set before the version check below so no Kimi process looks for updates.
+ENV KIMI_CODE_NO_AUTO_UPDATE=1 KIMI_CLI_NO_AUTO_UPDATE=1 KIMI_DISABLE_TELEMETRY=1
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends fd-find \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /tmp/kimi \
+ && cd /tmp/kimi \
+ && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.3.3)" kimi-code.tgz \
+ && echo "dd5f1bc9cb9c7fd2a03d11f6ed2f037b6bb48a9f38fd1cb7169367ea08b9cfd266a041edf6fc626071d9aa231dc837f99cf9b86eff98286c0a1102f8a18a514f  kimi-code.tgz" | sha512sum -c - \
+ && npm install --global --prefix /opt/kimi --ignore-scripts --no-audit --no-fund ./kimi-code.tgz \
+ && ln -s /opt/kimi/bin/kimi /usr/local/bin/kimi \
+ && cd / && rm -rf /tmp/kimi /root/.npm \
+ && HOME=/tmp/kimi-version KIMI_CODE_HOME=/tmp/kimi-version kimi --version \
+ && rm -rf /tmp/kimi-version \
+ && chown -R 1000:1000 /home/node
+RUN --network=none \
+    --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
+    python3 /tmp/agent-image-patches/kimi-user-mcp-only.py \
+ && python3 /tmp/agent-image-patches/kimi-long-tool-call-ids.py
+USER 1000:1000
+
+RUN --network=none \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
+    python3 /tmp/agent-image-tests/mcp-startup.py kimi

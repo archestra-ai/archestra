@@ -7,6 +7,7 @@ import type { BrowserUserContext } from "@/features/browser-stream/services/brow
 import { browserStateManager } from "@/features/browser-stream/services/browser-stream.state-manager";
 import logger from "@/logging";
 import { AgentModel, ConversationModel } from "@/models";
+import PlaywrightRuntimeModel from "@/models/playwright-runtime";
 
 const SCREENSHOT_INTERVAL_MS = 2_000; // Stream at ~0.5 FPS (every 2 seconds)
 // After an input is sent, wait this long before a quick frame so it shows the
@@ -100,7 +101,10 @@ export class BrowserStreamSocketClientContext {
         ? payload.conversationId
         : "";
 
-    if (!this.isBrowserStreamEnabled()) {
+    if (
+      !this.isBrowserStreamEnabled() ||
+      !(await PlaywrightRuntimeModel.isEnabled())
+    ) {
       this.sendToClient(ws, {
         type: "browser_stream_error",
         payload: {
@@ -334,6 +338,17 @@ export class BrowserStreamSocketClientContext {
       const subscription = this.browserSubscriptions.get(ws);
       if (!subscription) return;
       if (subscription.isSending) return;
+      if (!(await PlaywrightRuntimeModel.isEnabled())) {
+        this.unsubscribeBrowserStream(ws);
+        this.sendToClient(ws, {
+          type: "browser_stream_error",
+          payload: {
+            conversationId,
+            error: "The built-in browser MCP is disabled",
+          },
+        });
+        return;
+      }
 
       // Skip screenshot while subagents are using the browser to prevent
       // flickering — the preview holds the last good screenshot instead.

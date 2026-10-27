@@ -12,6 +12,7 @@ import {
   limitEntitiesCondition,
   limitEntityParameters,
 } from "./limit-entity-scope";
+import { throughputRuleCondition } from "./llm-throughput";
 
 type TraceTeam = Pick<Team, "id" | "name"> & { labels: LabelWithDetails[] };
 
@@ -109,8 +110,13 @@ export default class ProxyRequestContextModel {
       }),
     });
     if (!row) throw new Error("Proxy request snapshot returned no row");
-    const { limitRows, defaultUserLimitRow, runtimeCandidates, ...context } =
-      row;
+    const {
+      limitRows,
+      throughputRows,
+      defaultUserLimitRow,
+      runtimeCandidates,
+      ...context
+    } = row;
     return {
       ...context,
       runtimeSnapshot: params.includeRuntime
@@ -140,6 +146,9 @@ export default class ProxyRequestContextModel {
           ? defaultRowCodec.decode(defaultUserLimitRow)
           : null,
       },
+      // The same billing entities' throughput rules, so admission need not
+      // look them up again before taking its locks.
+      throughputRules: throughputRows.map((raw) => limitRowCodec.decode(raw)),
     };
   }
 
@@ -204,6 +213,13 @@ export default class ProxyRequestContextModel {
             limitEntitiesCondition({ team: teamArray }),
             or(eq(limits.limitType, "token_cost"), scopedCleanupDueCondition()),
           )}) AS request_limits
+      )`,
+      throughputRows: sql<Array<Record<string, unknown>>>`(
+        SELECT coalesce(jsonb_agg(to_jsonb(request_rules) ORDER BY request_rules.id), '[]'::jsonb)
+        FROM (SELECT ${limitRowCodec.selection} FROM ${limits} WHERE ${and(
+          limitEntitiesCondition({ team: teamArray }),
+          throughputRuleCondition(),
+        )}) AS request_rules
       )`,
       defaultUserLimitRow: sql<Record<string, unknown> | null>`(
         SELECT to_jsonb(request_default) FROM (

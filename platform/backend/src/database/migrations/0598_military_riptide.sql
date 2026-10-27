@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "playwright_mcp_enabled" boolean DEFAULT true NOT NULL;

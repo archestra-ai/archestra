@@ -228,7 +228,7 @@ test("workflow selects release updates and benchmark changes without loading unr
   );
   const script = workflow
     .split("          script: |\n")[1]
-    .split("\n  benchmark:")[0]
+    .split("\n      #")[0]
     .split("\n")
     .map((line) => line.slice(12))
     .join("\n");
@@ -261,10 +261,11 @@ test("workflow selects release updates and benchmark changes without loading unr
       ],
     },
   });
-  // Release PRs can contain benchmark code changes from before the docs commit.
+  // The coordinator owns loop prevention. A selected legacy generated head
+  // still needs a measurement artifact; skipping here would strand publication.
   f.github.paginate = async () => [{ filename: "platform/benchmarks/run.mjs" }];
   await execute(f.github, f.context, core);
-  assert.deepEqual(output, { run: "false", release: "true" });
+  assert.deepEqual(output, { run: "true", release: "true" });
   const generatedCommit = await f.github.rest.repos.getCommit();
   generatedCommit.data.files.push({
     filename: "platform/backend/src/server.ts",
@@ -324,8 +325,8 @@ test("release comments compare every percentile and numeric cell with the publis
     body,
     /10.00 \(-50.0%\) \/ 20.00 \(-50.0%\) \/ 30.00 \(-50.0%\)/,
   );
-  assert.match(body, /— \(unmeasured\)/);
-  assert.match(body, /platform-v1.5.0-rc.3/);
+  assert.match(body, /\| — \|\n/);
+  assert.match(body, /Percentages compare with `platform-v1.5.0-rc.3`/);
   assert.match(body, /archestra-llm-proxy-benchmark-data:v1:/);
 });
 
@@ -477,4 +478,98 @@ test("a release outside the base ancestry is skipped before selecting its benchm
   });
   await findReleaseBenchmark(f);
   assert.deepEqual(f.lookups, ["platform-v1.5.0-rc.3"]);
+});
+
+test("a release squashed on top of later commits still supplies its measured baseline", async () => {
+  const f = fixture();
+  savePrevious(f);
+  // The release commit's tree includes a change merged after the release
+  // PR was measured; the measured revision's tree matches the saved one.
+  const trees = { [f.previousPr.head.sha]: "1".repeat(40) };
+  f.github.rest.repos.getCommit = async ({ ref }) => {
+    f.lookups.push(ref);
+    return {
+      data: {
+        sha: "e".repeat(40),
+        commit: { tree: { sha: trees[ref] ?? "2".repeat(40) } },
+      },
+    };
+  };
+  f.github.rest.git.getTree = async ({ tree_sha }) => ({
+    data: {
+      tree: [
+        {
+          path: "platform",
+          type: "tree",
+          sha: tree_sha === "1".repeat(40) ? "c".repeat(40) : "9".repeat(40),
+        },
+      ],
+    },
+  });
+  const baseline = await findReleaseBenchmark(f);
+  assert.equal(baseline.state, "available");
+  assert.equal(baseline.tag, "platform-v1.5.0-rc.3");
+});
+
+test("the first release of a new track and a new major version compare with the release before them", async () => {
+  const f = fixture();
+  // release/1.6 has no 1.6 stable release yet: it was cut from 1.6.0-rc.3.
+  f.context.payload.pull_request.base.ref = "release/1.6";
+  f.releases.length = 0;
+  f.releases.push({
+    tag_name: "platform-v1.6.0-rc.3",
+    draft: false,
+    prerelease: true,
+    published_at: "2026-10-20T00:00:00Z",
+  });
+  await findReleaseBenchmark(f);
+  assert.deepEqual(f.lookups, ["platform-v1.6.0-rc.3"]);
+
+  const main = fixture();
+  main.releases.length = 0;
+  main.releases.push({
+    tag_name: "platform-v1.9.4",
+    draft: false,
+    prerelease: false,
+    published_at: "2026-10-20T00:00:00Z",
+  });
+  // A 2.0.0 release PR on main.
+  await findReleaseBenchmark(main);
+  assert.deepEqual(main.lookups, ["platform-v1.9.4"]);
+});
+
+test("the previous release measured again on this runner is the baseline", async () => {
+  const f = fixture();
+  savePrevious(f, (s) => {
+    s.rows[0].p99Ms = 300;
+    return s;
+  });
+  const remeasured = structuredClone(f.summary);
+  remeasured.gitCommit = "e".repeat(40); // The release tag's commit.
+  remeasured.platformTree = "c".repeat(40);
+  remeasured.rows[0].p99Ms = 60;
+  await publishBenchmarkComment({ ...f, remeasured });
+  const body = f.comments[0].body;
+  assert.match(body, /measured again on this runner/);
+  assert.match(body, /30.00 \(-50.0%\)/);
+});
+
+test("a re-measurement of another revision or source tree falls back to saved metrics", async () => {
+  for (const change of [
+    { gitCommit: "0".repeat(40) },
+    { platformTree: "0".repeat(40) },
+    { complete: false },
+  ]) {
+    const f = fixture();
+    savePrevious(f);
+    const remeasured = {
+      ...structuredClone(f.summary),
+      gitCommit: "e".repeat(40),
+      platformTree: "c".repeat(40),
+      ...change,
+    };
+    const baseline = await findReleaseBenchmark({ ...f, remeasured });
+    assert.equal(baseline.state, "available");
+    assert.equal(baseline.sameRunner, undefined, JSON.stringify(change));
+  }
 });

@@ -7,6 +7,7 @@ import {
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   type OpenCodeFamilyDescriptor,
   openCodePassthroughBaseUrl,
+  openCodePassthroughProviders,
   PI_MARK,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -18,6 +19,7 @@ import {
   CLAUDE_MARK,
   GROK_MARK,
   HERMES_AGENT_MARK,
+  KIMI_MARK,
   OPENAI_MARK,
   OPENCLAW_MARK,
 } from "@/components/client-marks";
@@ -294,6 +296,12 @@ const POPULAR_GENERIC_CLIENTS: (Pick<
     label: "Hermes Agent",
     sub: "Nous Research agent",
     ...markFields(HERMES_AGENT_MARK),
+  },
+  {
+    id: "kimi-code",
+    label: "Kimi Code",
+    sub: "Kimi coding agent",
+    ...markFields(KIMI_MARK),
   },
   {
     id: "kiro",
@@ -1069,9 +1077,7 @@ function openCodeFamilyTile(
     },
     proxy: {
       kind: "custom",
-      supportedProviders: OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(
-        ({ provider }) => provider,
-      ),
+      supportedProviders: openCodePassthroughProviders(),
       build: ({ provider, url, appName }) => {
         const rootUrl = url.replace(new RegExp(`/${provider}$`), "");
         const selectedRoute = OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.find(

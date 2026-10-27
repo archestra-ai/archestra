@@ -26,6 +26,8 @@ const limitsTable = pgTable(
     // 2. Initialization: Create limit_model_usage records for each model on limit creation
     // 3. Validation: Check if incoming interaction's model is within limit scope
     model: jsonb("model").$type<string[] | null>(),
+    /** Why an admin set this limit, e.g. for a custom per-user limit. */
+    reason: text("reason"),
     cleanupInterval: varchar("cleanup_interval")
       .$type<LimitCleanupInterval>()
       .notNull()

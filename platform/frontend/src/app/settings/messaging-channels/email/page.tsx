@@ -14,11 +14,11 @@ import config from "@/lib/config/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { CredentialField } from "../_components/credential-field";
-import { ExternalDocsLink } from "../_components/external-docs-link";
-import { SetupSection } from "../_components/setup-section";
-import { SetupStep } from "../_components/setup-step";
-import { useTriggerStatuses } from "../_components/use-trigger-statuses";
+import { CredentialField } from "../_parts/credential-field";
+import { ExternalDocsLink } from "../_parts/external-docs-link";
+import { SetupSection } from "../_parts/setup-section";
+import { SetupStep } from "../_parts/setup-step";
+import { useTriggerStatuses } from "../_parts/use-trigger-statuses";
 import { EmailSetupDialog } from "./email-setup-dialog";
 import {
   formatIncomingEmailExpiry,

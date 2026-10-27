@@ -6,6 +6,7 @@ import {
   type ResourcePermissionAction,
 } from "@archestra/shared";
 import { and, eq, inArray, isNull, or, type SQL, sql } from "drizzle-orm";
+import { dropHiddenCatalogIds } from "@/auth/permission-gated";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
@@ -74,7 +75,10 @@ class McpCatalogTeamModel {
           principal ? McpCatalogTeamModel.readCondition(principal) : undefined,
         ),
       );
-    return rows.map((row) => row.id);
+    return dropHiddenCatalogIds(
+      rows.map((row) => row.id),
+      { userId, organizationId },
+    );
   }
 
   /**

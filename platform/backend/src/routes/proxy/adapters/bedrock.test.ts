@@ -739,6 +739,37 @@ describe("Bedrock stream reasoning delta forwarding", () => {
     expect(result.sseData).toBeNull();
     expect(adapter.state.toolCalls[0].arguments).toBe('{"city":"Berlin"}');
   });
+
+  test("records a tool called with no input as an empty object", () => {
+    const adapter = bedrockAdapterFactory.createStreamAdapter(
+      createConverseRequest(),
+    );
+
+    // Bedrock streams a no-argument call as one empty `input` delta.
+    adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        contentBlockStart: {
+          contentBlockIndex: 0,
+          start: { toolUse: { toolUseId: "tooluse_1", name: "get_tests" } },
+        },
+      }),
+    );
+    adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { toolUse: { input: "" } },
+        },
+      }),
+    );
+    adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        contentBlockStop: { contentBlockIndex: 0 },
+      }),
+    );
+
+    expect(adapter.state.toolCalls[0].arguments).toBe("{}");
+  });
 });
 
 describe("Bedrock DeepSeek DSML sentinel filtering", () => {

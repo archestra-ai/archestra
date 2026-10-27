@@ -110,6 +110,17 @@ describe("requiresOpenAiResponsesApi", () => {
     expect(requiresOpenAiResponsesApi("openai/gpt-5.6-sol")).toBe(true);
   });
 
+  test("matches the gpt-6 family, including point releases", () => {
+    expect(requiresOpenAiResponsesApi("gpt-6")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-6-luna")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-6-sol")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-6-astra")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-6.1-sol")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-6.1-terra")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-6-sol-2026-09-01")).toBe(true);
+    expect(requiresOpenAiResponsesApi("openai/gpt-6.1-sol")).toBe(true);
+  });
+
   test("matches Codex models and their variants", () => {
     expect(requiresOpenAiResponsesApi("gpt-5.3-codex")).toBe(true);
     expect(requiresOpenAiResponsesApi("gpt-5.2-codex-mini")).toBe(true);
@@ -122,6 +133,7 @@ describe("requiresOpenAiResponsesApi", () => {
     expect(requiresOpenAiResponsesApi("gpt-4o")).toBe(false);
     expect(requiresOpenAiResponsesApi("babbage-002")).toBe(false);
     expect(requiresOpenAiResponsesApi("gpt-5.61")).toBe(false);
+    expect(requiresOpenAiResponsesApi("gpt-60")).toBe(false);
     expect(requiresOpenAiResponsesApi("gpt-5.3-codexical")).toBe(false);
   });
 });
@@ -160,6 +172,31 @@ describe("getAgentRuntimeModelCompatibility", () => {
       compatible: false,
       message: expect.stringContaining("Codex runtime requires an OpenAI"),
     });
+  });
+
+  test("runs the maintained Kimi Code runtime on Kimi Code models only", () => {
+    const runtime = {
+      inferenceProtocol: "openai_chat" as const,
+      runtimeCommand: ["archestra-kimi"],
+    };
+    expect(
+      getAgentRuntimeModelCompatibility({
+        ...runtime,
+        provider: "kimi-code",
+        modelId: "k3.1-pro",
+      }),
+    ).toEqual({ compatible: true });
+    // A Kimi API Platform key is the Moonshot (Kimi) provider, not Kimi Code.
+    for (const provider of ["kimi", "gemini"] as const) {
+      expect(
+        getAgentRuntimeProviderCompatibility({ ...runtime, provider }),
+      ).toMatchObject({
+        compatible: false,
+        message: expect.stringContaining(
+          "Kimi Code runtime requires a Kimi Code model",
+        ),
+      });
+    }
   });
 
   test("allows only Claude Bedrock models for the maintained Claude Code runtime", () => {
@@ -221,6 +258,41 @@ describe("getAgentRuntimeModelCompatibility", () => {
           modelId: "gemini-2.5-pro",
         }),
       ).toEqual({ compatible: true });
+    }
+  });
+
+  test("serves Chat Completions-only router providers on Chat Completions images only", () => {
+    // The router refuses Kimi on /responses because its translation drops
+    // the reasoning Kimi thinking models replay on tool-call turns, so the
+    // picker and the launch preflight must refuse the same pairing.
+    for (const provider of ["kimi", "kimi-code"] as const) {
+      for (const runtimeCommand of [null, ["archestra-opencode"]] as const) {
+        expect(
+          getAgentRuntimeModelCompatibility({
+            inferenceProtocol: "openai_responses",
+            runtimeCommand,
+            provider,
+            modelId: "k3.1-pro",
+          }),
+        ).toMatchObject({
+          compatible: false,
+          message: expect.stringContaining("Chat Completions endpoint only"),
+        });
+      }
+      for (const runtimeCommand of [
+        null,
+        ["archestra-hermes"],
+        ["archestra-grok"],
+      ] as const) {
+        expect(
+          getAgentRuntimeModelCompatibility({
+            inferenceProtocol: "openai_chat",
+            runtimeCommand,
+            provider,
+            modelId: "k3.1-pro",
+          }),
+        ).toEqual({ compatible: true });
+      }
     }
   });
 
@@ -492,6 +564,9 @@ describe("getAgentRuntimeAllowedProtocols", () => {
       "openai_chat",
     ]);
     expect(getAgentRuntimeAllowedProtocols(["archestra-grok"])).toEqual([
+      "openai_chat",
+    ]);
+    expect(getAgentRuntimeAllowedProtocols(["archestra-kimi"])).toEqual([
       "openai_chat",
     ]);
     for (const command of [

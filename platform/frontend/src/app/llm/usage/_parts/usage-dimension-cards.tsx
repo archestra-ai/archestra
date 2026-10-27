@@ -64,6 +64,7 @@ type UsageRow = {
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
+  cacheWriteTokens: number;
   totalTokens: number;
   percentage: number;
   billedCost: number;
@@ -164,9 +165,14 @@ function UsageDimensionCard({
                             <div>
                               Output: {row.outputTokens.toLocaleString()}
                             </div>
+                            <div>
+                              Cache writes:{" "}
+                              {row.cacheWriteTokens.toLocaleString()}
+                            </div>
                             <div className="text-muted-foreground">
                               Cache reads:{" "}
-                              {row.cacheReadTokens.toLocaleString()}
+                              {row.cacheReadTokens.toLocaleString()} (not
+                              counted in the total)
                             </div>
                           </div>
                         </TooltipContent>

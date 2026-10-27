@@ -11,7 +11,7 @@ import {
   useChatAgentReferences,
   useChatAgents,
 } from "./agent.query";
-import { useInitialChatModelState } from "./chat/use-initial-chat-model-state.hook";
+import { useInitialChatModelState } from "./chat/use-initial-chat-model-state";
 
 const origin = "http://localhost:9000";
 const server = setupServer();

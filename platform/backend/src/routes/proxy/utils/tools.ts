@@ -2,6 +2,7 @@ import { isAgentTool } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
 import { ToolModel, ToolObservationModel } from "@/models";
+import { configCache } from "@/services/config-cache";
 
 /**
  * Persist tools if present in the request
@@ -49,8 +50,10 @@ export const persistTools = async ({
   }
 
   // Get names of tools that already exist in the database (any type: catalog, proxy, etc.)
-  const existingToolNames = await ToolModel.getExistingToolNames(
-    tools.map((t) => t.toolName),
+  const toolNames = tools.map((t) => t.toolName);
+  const existingToolNames = await configCache.read(
+    `tool-names:${JSON.stringify(toolNames)}`,
+    () => ToolModel.getExistingToolNames(toolNames),
   );
   const existingToolNamesSet = new Set(existingToolNames);
   logger.debug(

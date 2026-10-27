@@ -10,6 +10,7 @@ export { default as GithubCopilot } from "./github-copilot";
 export { default as Groq } from "./groq";
 export { default as Jev } from "./jev";
 export { default as Kimi } from "./kimi";
+export { default as KimiCode } from "./kimi-code";
 export { default as Microsoft365Copilot } from "./microsoft-365-copilot";
 export { default as Minimax } from "./minimax";
 export { default as Mistral } from "./mistral";

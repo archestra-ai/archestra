@@ -112,6 +112,38 @@ test("maps primary providers and the user's own sign-ins to the client's provide
   expect(payload.appName).toBe("Acme");
 });
 
+test("serves both Kimi Code plan catalogs on the Kimi Code route", () => {
+  const payload = openCodePrimaryConfig(
+    {
+      ...PROXY,
+      passthroughProviders: [],
+      primaryProviders: [
+        {
+          provider: "kimi-code",
+          name: "Kimi Code",
+          models: [
+            { id: "k3.1-pro", name: "K3.1 Pro", context: null, output: null },
+          ],
+        },
+      ],
+    },
+    "Acme",
+  );
+  expect(payload.catalog).toEqual({
+    routes: {
+      "kimi-code-plan-global": "https://proxy.example/v1/kimi-code",
+      "kimi-code-plan-cn": "https://proxy.example/v1/kimi-code",
+    },
+    managed: {
+      "kimi-code-plan-global": ["k3.1-pro"],
+      "kimi-code-plan-cn": ["k3.1-pro"],
+    },
+    passthrough: [],
+    // An earlier pin keeps the first catalog.
+    legacy: { "archestra-kimi-code": "kimi-code-plan-global" },
+  });
+});
+
 test("the runtime catalog addresses the installation's agent on ordinary proxy routes", () => {
   expect(
     publicManagedCatalog({
@@ -325,6 +357,35 @@ test("Kilo Code gets the key file and state under its own names", () => {
     expect(existsSync(path.join(home, ".archestra/kilo-primary.key"))).toBe(
       false,
     );
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test.each([
+  OPENCODE_CLIENT,
+  KILO_CLIENT,
+])("$label primary setup and disconnect accept a BOM without losing preferences", (client) => {
+  const home = mkdtempSync(path.join(tmpdir(), "primary-bom-"));
+  const configPath = path.join(home, ".config", client.dir, client.configFile);
+  const original = {
+    model: "anthropic/claude-test",
+    instructions: ["custom.md"],
+  };
+  const script = openCodePrimaryConfigScript(client);
+  try {
+    mkdirSync(path.dirname(configPath), { recursive: true });
+    writeFileSync(configPath, `\uFEFF${JSON.stringify(original)}`);
+    runScript(script, home, openCodePrimaryConfig(PROXY, "Acme"));
+    expect(JSON.parse(readFileSync(configPath, "utf8"))).toEqual(original);
+    writeFileSync(configPath, `\uFEFF${readFileSync(configPath, "utf8")}`);
+    runScript(script, home, null);
+    expect(JSON.parse(readFileSync(configPath, "utf8"))).toEqual(original);
+    expect(
+      existsSync(
+        path.join(home, ".archestra", `${client.stateName}-primary.key`),
+      ),
+    ).toBe(false);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

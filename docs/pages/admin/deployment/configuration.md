@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 5
-lastUpdated: 2026-10-24
+lastUpdated: 2026-10-26
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -80,6 +80,7 @@ Archestra reads these environment variables at startup. Pass them with `-e` to `
   - Default: `false`
   - Values: `true`, `false`
   - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
+  - Also turns on [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_MODEL_POOLS_ENABLED) when it is left blank. Set to `false`, it stays off.
 
 - **`ARCHESTRA_QUICKSTART`** - Runs MCP servers in a small Kubernetes (KinD) cluster inside the Docker container.
   - Default: `false`
@@ -537,6 +538,9 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_KIMI_BASE_URL`** - Base URL for Kimi (Moonshot AI) API requests.
   - Default: `https://api.moonshot.ai/v1`
 
+- **`ARCHESTRA_KIMI_CODE_BASE_URL`** - Base URL for Kimi Code API requests. Set it to `https://api.kimi.com/coding/v1` to use the endpoint for China.
+  - Default: `https://api.kimi.ai/coding/v1`
+
 - **`ARCHESTRA_MINIMAX_BASE_URL`** - Base URL for MiniMax API requests.
   - Default: `https://api.minimax.io/v1`
 
@@ -584,6 +588,10 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Values: `true`, `false` (all traffic is metered)
   - Archestra records Anthropic requests paid from extra usage credits, after the subscription allowance runs out, as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost).
 
+- **`ARCHESTRA_LLM_MODEL_POOLS_ENABLED`** - Turns on beta model pools: a model name served by several provider keys, with failover between them.
+  - Default: unset (follows [`ARCHESTRA_BETA`](/docs/admin/deployment/configuration#ARCHESTRA_BETA))
+  - Values: `true`, `false`. While it is off, the Model Pools page and its API are hidden, and requests for a pool's name are not routed to the pool. Saved pools are kept.
+
 ## Chat
 
 ### Provider API Keys
@@ -622,6 +630,9 @@ At startup, Archestra creates an organization-wide key from each `ARCHESTRA_CHAT
   - Default: unset
 
 - **`ARCHESTRA_CHAT_KIMI_API_KEY`** - Kimi (Moonshot AI) API key.
+  - Default: unset
+
+- **`ARCHESTRA_CHAT_KIMI_CODE_API_KEY`** - Kimi Code membership API key.
   - Default: unset
 
 - **`ARCHESTRA_CHAT_MINIMAX_API_KEY`** - MiniMax API key.
@@ -686,7 +697,7 @@ At startup, Archestra creates an organization-wide key from each `ARCHESTRA_CHAT
 
 ### Active Run Updates
 
-Chat streams and A2A task streams wake through PostgreSQL `LISTEN/NOTIFY` across replicas, with polling as a fallback. Change these only to tune database load or to work behind a connection pooler.
+Chat streams, A2A task streams and LLM proxy settings stay in sync across replicas through PostgreSQL `LISTEN/NOTIFY`, with polling as a fallback. While notifications arrive, the LLM proxy keeps gateway, credential and limit settings in memory, so a revoked key or a changed limit reaches every replica within seconds. Change these only to tune database load or to work behind a connection pooler.
 
 - **`ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS`** - How often a reconnecting client checks for new events of a running chat, in milliseconds.
   - Default: `500`
@@ -698,7 +709,7 @@ Chat streams and A2A task streams wake through PostgreSQL `LISTEN/NOTIFY` across
   - Default: [`ARCHESTRA_DATABASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_URL)
   - Set it when regular traffic uses PgBouncer transaction pooling, which cannot hold a listener. Point it at a direct or session-pooled connection.
 
-- **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Turns off the `LISTEN/NOTIFY` listener, so chat and A2A task streams use polling only.
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Turns off the `LISTEN/NOTIFY` listener, so chat and A2A task streams use polling only and the LLM proxy reads its settings from the database on every request.
   - Default: `false`
   - Values: `true`, `false`
   - Archestra detects an endpoint that cannot deliver notifications and polls faster on its own. Set this only to avoid opening a listener connection that cannot work.
@@ -841,6 +852,22 @@ Chat streams and A2A task streams wake through PostgreSQL `LISTEN/NOTIFY` across
   - Default: set by the Helm chart. Set it yourself only when you deploy without the chart.
   - When unset, those objects are not created.
 
+## SRE Agent
+
+The [SRE agent](/docs/admin/deployment/diagnostics#sre-agent) investigates the installation's pods, logs, and events through a read-only Kubernetes MCP server. The Helm chart sets these from `archestra.sre`.
+
+- **`ARCHESTRA_SRE_AGENT_ENABLED`** - Installs the read-only Kubernetes MCP server, its **SRE** environment, and the **SRE** agent.
+  - Default: `false`
+  - Setting it back to `false` removes all three.
+
+- **`ARCHESTRA_SRE_K8S_SERVICE_ACCOUNT`** - ServiceAccount the MCP server pod runs as.
+  - Default: unset. The Helm chart creates a read-only `-sre` account for it and sets it when `archestra.orchestrator.kubernetes.mcpServerRbac.create` is `true`.
+  - Required: without it, nothing is installed.
+
+- **`ARCHESTRA_SRE_APISERVER_CIDRS`** - Kubernetes API server endpoint CIDRs the MCP server may reach, added to the organization's default egress policy.
+  - Default: unset (the environment uses the organization's default egress policy)
+  - Values: comma-separated IPv4 or IPv6 CIDRs, for example `172.16.0.2/32`. Invalid entries are ignored and logged.
+
 ## MCP Apps Sandbox
 
 MCP Apps render in sandboxed iframes. Without a sandbox domain, apps still work. They cannot use `localStorage`, cookies, or origin-restricted APIs. See [Deployment](/docs/admin/deployment) for setup.
@@ -942,7 +969,7 @@ Archestra creates one Dagger engine per organization and per environment. Each e
 
 Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox controller installed. Agents can override the settings described as defaults. See [Agent Runtime](/docs/agents/runtime) for cluster setup.
 
-- **`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`** - Registry the maintained Claude Code, Codex, OpenCode, Hermes, OpenClaw, and Grok Build images are pulled from.
+- **`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`** - Registry the maintained Claude Code, Codex, OpenCode, Hermes, OpenClaw, Grok Build, and Kimi Code images are pulled from.
   - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public`
   - Set it when you mirror these images to a private registry.
 

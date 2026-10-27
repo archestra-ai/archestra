@@ -77,3 +77,50 @@ test("unsupported streams, errors, non-proxy routes and overlapping calls never 
     await app.close();
   }
 });
+
+test("a hijacked response carries timing for upstream calls made while it is handled", async () => {
+  let clock = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => clock);
+  const app = Fastify();
+  llmProxyTiming.register(app);
+  app.post("/v1/hijacked", async (_request, reply) => {
+    reply.hijack();
+    await llmProxyTiming.hijacked(reply, async () => {
+      clock += 4;
+      // The upstream call is made deep in the handler, without the reply.
+      await new Promise((resolve) => setImmediate(resolve));
+      await llmProxyTiming.hijackedUpstream(async () => {
+        clock += 20;
+      });
+      clock += 6;
+      reply.raw
+        .writeHead(200, { "content-type": "application/json" })
+        .end("{}");
+    });
+  });
+  app.post("/v1/hijacked-error", async (_request, reply) => {
+    reply.hijack();
+    await llmProxyTiming.hijacked(reply, async () => {
+      await llmProxyTiming.hijackedUpstream(async () => {});
+      reply.raw.writeHead(500).end();
+    });
+  });
+  try {
+    const response = await app.inject({ method: "POST", url: "/v1/hijacked" });
+    expect(response.headers["content-type"]).toBe("application/json");
+    expect(response.headers["server-timing"]).toBe(
+      "archestra_gateway;dur=30.000, archestra_upstream;dur=20.000, archestra_overhead;dur=10.000",
+    );
+    const failed = await app.inject({
+      method: "POST",
+      url: "/v1/hijacked-error",
+    });
+    expect(failed.headers["server-timing"]).toBeUndefined();
+    // Outside a hijacked response the call simply runs.
+    expect(await llmProxyTiming.hijackedUpstream(async () => "ran")).toBe(
+      "ran",
+    );
+  } finally {
+    await app.close();
+  }
+});

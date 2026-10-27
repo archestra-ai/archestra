@@ -19,38 +19,27 @@ export default class InteractionUserActivityModel {
     values: typeof schema.interactionsTable.$inferInsert,
     tx?: Transaction,
   ) {
-    const columns = interactionColumns;
-    const payload: Record<string, string | null> = {};
-    for (const key of runtimeDefaultColumns) {
-      if (values[key as keyof typeof values] === undefined) {
-        throw new Error(`Unsupported interaction runtime default: ${key}`);
-      }
-    }
-    for (const [key, value] of Object.entries(values)) {
-      if (value === undefined) continue;
-      if (!Object.hasOwn(columns, key)) {
-        throw new Error(`Unsupported interaction column: ${key}`);
-      }
-      const column = columns[key as keyof typeof columns];
-      const encoded = value === null ? null : column.mapToDriverValue(value);
-      if (
-        encoded !== null &&
-        typeof encoded !== "string" &&
-        typeof encoded !== "number" &&
-        typeof encoded !== "boolean" &&
-        typeof encoded !== "bigint"
-      ) {
-        throw new Error(`Unsupported interaction encoding: ${key}`);
-      }
-      payload[column.name] = encoded === null ? null : String(encoded);
-    }
     // An explicit transaction must keep its own session. The common standalone
     // path reuses only the compiled statement, with fresh payload and results.
     const query = tx
       ? InteractionUserActivityModel.prepareAppend(tx)
       : InteractionUserActivityModel.appendQuery.get();
     const [interaction] = await query.execute({
-      payload: JSON.stringify(payload),
+      payload: encodeAppendPayload(values),
+    });
+    return interaction;
+  }
+
+  /** {@link append} for callers that need only the row's key columns. */
+  static async appendReturningKey(
+    values: typeof schema.interactionsTable.$inferInsert,
+    tx?: Transaction,
+  ) {
+    const query = tx
+      ? InteractionUserActivityModel.prepareAppendReturningKey(tx)
+      : InteractionUserActivityModel.appendKeyQuery.get();
+    const [interaction] = await query.execute({
+      payload: encodeAppendPayload(values),
     });
     return interaction;
   }
@@ -435,6 +424,26 @@ export default class InteractionUserActivityModel {
     InteractionUserActivityModel.prepareAppend(database),
   );
 
+  private static readonly appendKeyQuery = new PreparedQuery((database) =>
+    InteractionUserActivityModel.prepareAppendReturningKey(database),
+  );
+
+  private static prepareAppendReturningKey(
+    database: Pick<typeof db, "select">,
+  ) {
+    const t = schema.interactionsTable;
+    return database
+      .select({
+        id: sql`interactions.id`.mapWith(t.id),
+        profileId: sql`interactions.profile_id`.mapWith(t.profileId),
+        createdAt: sql`interactions.created_at`.mapWith(t.createdAt),
+      })
+      .from(
+        sql`interaction_user_activity_append(${sql.placeholder("payload")}::jsonb) AS interactions`,
+      )
+      .prepare("archestra_interaction_user_activity_append_key");
+  }
+
   private static prepareAppend(database: Pick<typeof db, "select">) {
     const columns = getTableColumns(schema.interactionsTable);
     const selected = Object.fromEntries(
@@ -701,3 +710,34 @@ const runtimeDefaultColumns = Object.entries(interactionColumns)
     ([, column]) => column.defaultFn || (!column.default && column.onUpdateFn),
   )
   .map(([key]) => key);
+
+function encodeAppendPayload(
+  values: typeof schema.interactionsTable.$inferInsert,
+): string {
+  const columns = interactionColumns;
+  const payload: Record<string, string | null> = {};
+  for (const key of runtimeDefaultColumns) {
+    if (values[key as keyof typeof values] === undefined) {
+      throw new Error(`Unsupported interaction runtime default: ${key}`);
+    }
+  }
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined) continue;
+    if (!Object.hasOwn(columns, key)) {
+      throw new Error(`Unsupported interaction column: ${key}`);
+    }
+    const column = columns[key as keyof typeof columns];
+    const encoded = value === null ? null : column.mapToDriverValue(value);
+    if (
+      encoded !== null &&
+      typeof encoded !== "string" &&
+      typeof encoded !== "number" &&
+      typeof encoded !== "boolean" &&
+      typeof encoded !== "bigint"
+    ) {
+      throw new Error(`Unsupported interaction encoding: ${key}`);
+    }
+    payload[column.name] = encoded === null ? null : String(encoded);
+  }
+  return JSON.stringify(payload);
+}

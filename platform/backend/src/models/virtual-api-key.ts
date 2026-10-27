@@ -20,12 +20,16 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import db, { schema, withDbTransaction } from "@/database";
+import type { SelectedFields } from "drizzle-orm/pg-core";
+import db, { type getDb, schema, withDbTransaction } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { PaginatedResult } from "@/database/utils/pagination";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { qualified } from "@/database/utils/qualified-column";
+import { LRUCacheManager } from "@/in-memory-lru-cache";
 import logger from "@/logging";
+import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { secretManager } from "@/secrets-manager";
 import type {
   CredentialBilling,
@@ -39,6 +43,7 @@ import { trackBackgroundWork } from "@/utils/background-work";
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel from "./created-by";
 import { VirtualApiKeyLabelModel } from "./entity-labels";
+import { gatewayAgentSelection } from "./gateway-agent-selection";
 import LimitModel from "./limit";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
@@ -61,6 +66,12 @@ const FORCE_DB = true;
  * burst into at most one write.
  */
 const LAST_USED_REFRESH_INTERVAL_MS = 60_000;
+const recentLastUsedRefreshes = registerProcessLocalCache(
+  new LRUCacheManager<true>({
+    maxSize: 10_000,
+    defaultTtl: LAST_USED_REFRESH_INTERVAL_MS,
+  }),
+);
 
 type TeamInfo = { id: string; name: string };
 type ProviderApiKeyInput = {
@@ -1026,17 +1037,50 @@ class VirtualApiKeyModel {
     );
   }
 
+  /** Read only; credential and access validation still happen after rate limiting. */
+  /** The non-secret prefix a credential lookup is keyed by. */
+  static tokenStartOf(tokenValue: string): string {
+    return getTokenStart(tokenValue);
+  }
+
+  static async readDeploymentProxyAndTokenOwner(
+    tokenValue: string,
+    oauthTokenHash?: string,
+  ) {
+    const tokenStart = getTokenStart(tokenValue);
+    const rows = await VirtualApiKeyModel.withDeploymentProxy.get().execute({
+      tokenStart,
+      oauthTokenHash: oauthTokenHash ?? null,
+    });
+    const agent = rows[0]?.deploymentProxy;
+    if (!agent) return undefined;
+    return {
+      agent,
+      tokenStart,
+      oauthTokenHash,
+      candidates: rows.map(
+        ({ deploymentProxy: _agent, ...candidate }) => candidate,
+      ),
+    };
+  }
+
   /** Read a passthrough credential and its current owner's membership together. */
   static async validateTokenWithOwner(
     tokenValue: string,
     oauthTokenHash?: string,
+    snapshot?: Awaited<
+      ReturnType<typeof VirtualApiKeyModel.readDeploymentProxyAndTokenOwner>
+    >,
   ) {
-    const candidates = await VirtualApiKeyModel.byTokenStartWithOwner
-      .get()
-      .execute({
-        tokenStart: getTokenStart(tokenValue),
-        oauthTokenHash: oauthTokenHash ?? null,
-      });
+    const tokenStart = getTokenStart(tokenValue);
+    const candidates =
+      snapshot?.tokenStart === tokenStart &&
+      snapshot.oauthTokenHash === oauthTokenHash
+        ? snapshot.candidates
+        : await VirtualApiKeyModel.byTokenStartWithOwner.get().execute({
+            tokenStart,
+            oauthTokenHash: oauthTokenHash ?? null,
+          });
     return VirtualApiKeyModel.validateCandidates(tokenValue, candidates);
   }
 
@@ -1061,11 +1105,14 @@ class VirtualApiKeyModel {
       if (storedToken && constantTimeEqual(storedToken, tokenValue)) {
         // The row we just read already tells us when the conditional UPDATE
         // would be a no-op. Avoid occupying a pool connection for that no-op.
+        // Cached rows keep an old timestamp, so also remember refreshes here.
         if (
-          !virtualKey.lastUsedAt ||
-          virtualKey.lastUsedAt.getTime() <
-            Date.now() - LAST_USED_REFRESH_INTERVAL_MS
+          (!virtualKey.lastUsedAt ||
+            virtualKey.lastUsedAt.getTime() <
+              Date.now() - LAST_USED_REFRESH_INTERVAL_MS) &&
+          !recentLastUsedRefreshes.has(virtualKey.id)
         ) {
+          recentLastUsedRefreshes.set(virtualKey.id, true);
           trackBackgroundWork(
             VirtualApiKeyModel.updateLastUsed(virtualKey.id).catch((error) => {
               logger.warn(
@@ -1368,49 +1415,87 @@ class VirtualApiKeyModel {
     };
   }
 
+  private static ownerQuery<T extends SelectedFields>(
+    database: ReturnType<typeof getDb>,
+    extra: T,
+  ) {
+    const keys = schema.virtualApiKeysTable;
+    const members = schema.membersTable;
+    const users = schema.usersTable;
+    const membership = database
+      .select()
+      .from(members)
+      .where(
+        and(
+          eq(members.userId, keys.authorId),
+          eq(members.organizationId, keys.organizationId),
+        ),
+      )
+      .orderBy(members.createdAt, members.id)
+      .limit(1)
+      .as("proxy_key_owner_membership");
+    return database
+      .select({
+        ...extra,
+        virtualKey: getTableColumns(keys),
+        // Only a negative result is reused. Present OAuth tokens still take
+        // their existing fresh lookup and full validation path.
+        oauthTokenAbsent: sql<boolean>`CASE WHEN ${sql.placeholder("oauthTokenHash")}::text IS NOT NULL THEN
+          NOT EXISTS (SELECT 1 FROM ${schema.oauthAccessTokensTable}
+            WHERE ${qualified(schema.oauthAccessTokensTable.token)} = ${sql.placeholder("oauthTokenHash")})
+          ELSE false END`,
+        user: { id: users.id, email: users.email, name: users.name },
+        membership: {
+          id: membership.id,
+          organizationId: membership.organizationId,
+          userId: membership.userId,
+          role: membership.role,
+          createdAt: membership.createdAt,
+          defaultAgentId: membership.defaultAgentId,
+          defaultModelId: membership.defaultModelId,
+          defaultChatApiKeyId: membership.defaultChatApiKeyId,
+        },
+      })
+      .from(keys)
+      .leftJoin(users, eq(users.id, keys.authorId))
+      .leftJoinLateral(membership, sql`true`)
+      .where(eq(keys.tokenStart, sql.placeholder("tokenStart")));
+  }
+
   private static readonly byTokenStartWithOwner = new PreparedQuery(
+    (database) =>
+      VirtualApiKeyModel.ownerQuery(database, {}).prepare(
+        "archestra_virtual_key_with_owner_by_token_start",
+      ),
+  );
+
+  private static readonly withDeploymentProxy = new PreparedQuery(
     (database) => {
-      const keys = schema.virtualApiKeysTable;
-      const members = schema.membersTable;
-      const users = schema.usersTable;
-      const membership = database
-        .select()
-        .from(members)
+      const agents = schema.agentsTable;
+      const proxyId = database
+        .select({ id: agents.id })
+        .from(agents)
         .where(
           and(
-            eq(members.userId, keys.authorId),
-            eq(members.organizationId, keys.organizationId),
+            eq(
+              agents.organizationId,
+              database
+                .select({ id: schema.organizationsTable.id })
+                .from(schema.organizationsTable)
+                .orderBy(asc(schema.organizationsTable.createdAt))
+                .limit(1),
+            ),
+            eq(agents.agentType, "llm_proxy"),
+            eq(agents.isDefault, true),
+            notDeleted(agents),
           ),
         )
-        .orderBy(members.createdAt, members.id)
-        .limit(1)
-        .as("proxy_key_owner_membership");
-      return database
-        .select({
-          virtualKey: getTableColumns(keys),
-          // Only a negative result is reused. Present OAuth tokens still take
-          // their existing fresh lookup and full validation path.
-          oauthTokenAbsent: sql<boolean>`CASE WHEN ${sql.placeholder("oauthTokenHash")}::text IS NOT NULL THEN
-            NOT EXISTS (SELECT 1 FROM ${schema.oauthAccessTokensTable}
-              WHERE ${qualified(schema.oauthAccessTokensTable.token)} = ${sql.placeholder("oauthTokenHash")})
-            ELSE false END`,
-          user: { id: users.id, email: users.email, name: users.name },
-          membership: {
-            id: membership.id,
-            organizationId: membership.organizationId,
-            userId: membership.userId,
-            role: membership.role,
-            createdAt: membership.createdAt,
-            defaultAgentId: membership.defaultAgentId,
-            defaultModelId: membership.defaultModelId,
-            defaultChatApiKeyId: membership.defaultChatApiKeyId,
-          },
-        })
-        .from(keys)
-        .leftJoin(users, eq(users.id, keys.authorId))
-        .leftJoinLateral(membership, sql`true`)
-        .where(eq(keys.tokenStart, sql.placeholder("tokenStart")))
-        .prepare("archestra_virtual_key_with_owner_by_token_start");
+        .limit(1);
+      return VirtualApiKeyModel.ownerQuery(database, {
+        deploymentProxy: gatewayAgentSelection(),
+      })
+        .leftJoin(agents, eq(agents.id, proxyId))
+        .prepare("archestra_proxy_and_virtual_key_owner");
     },
   );
 

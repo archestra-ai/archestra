@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { MCP_SKILLS_EXTENSION_ID } from "@archestra/shared";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { z } from "zod";
+import { callerOf } from "@/auth/permission-gated";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import type { DirectServerSession } from "@/clients/mcp-server-extensions";
 import config from "@/config";
@@ -64,6 +65,7 @@ async function syncMcpCatalogSkillMetadata(params: {
   const generation = await McpCatalogSkillModel.beginRefresh(params.catalogId);
   if (generation === null) return;
   const skills = await mcpClient.withSkillsSession({
+    caller: { kind: "internal", purpose: "skills-discovery" },
     mcpServerId: params.mcpServerId,
     enterpriseTransportCredential: params.enterpriseTransportCredential,
     owner: params.owner,
@@ -123,6 +125,7 @@ export async function readExternalMcpSkill(params: {
     throw new ApiError(404, "Skills over MCP is not enabled");
   }
   return mcpClient.withSkillsSession({
+    caller: callerOf(params.tokenAuth),
     mcpServerId: params.mcpServerId,
     owner: params.owner,
     tokenAuth: params.tokenAuth,

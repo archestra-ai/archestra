@@ -1,5 +1,5 @@
 {
-  "id": "a6804938-4464-4d33-876b-da0b4f6c4661",
+  "id": "4bcf8244-9ffd-41fd-a96d-ecab757d6b76",
   "prevId": "4b3388ce-99a7-4717-89ab-4fb3ae64c453",
   "version": "7",
   "dialect": "postgresql",
@@ -23142,6 +23142,289 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.routing_backfills": {
+      "name": "routing_backfills",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "phase": {
+          "name": "phase",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cutoff": {
+          "name": "cutoff",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "window_start": {
+          "name": "window_start",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scanned_at": {
+          "name": "scanned_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scorer_version_id": {
+          "name": "scorer_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_sessions": {
+          "name": "max_sessions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_cost_usd": {
+          "name": "max_cost_usd",
+          "type": "numeric(10, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reserved_cost_usd": {
+          "name": "reserved_cost_usd",
+          "type": "numeric(12, 6)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "spent_cost_usd": {
+          "name": "spent_cost_usd",
+          "type": "numeric(12, 6)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "population_sessions": {
+          "name": "population_sessions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "population_tokens": {
+          "name": "population_tokens",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "breakdown": {
+          "name": "breakdown",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "cursor_profile_id": {
+          "name": "cursor_profile_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cursor_created_at": {
+          "name": "cursor_created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cursor_id": {
+          "name": "cursor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_owner": {
+          "name": "lease_owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_expires_at": {
+          "name": "lease_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_epoch": {
+          "name": "lease_epoch",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "consecutive_failures": {
+          "name": "consecutive_failures",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "started_by": {
+          "name": "started_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "routing_backfills_one_active_per_org_uidx": {
+          "name": "routing_backfills_one_active_per_org_uidx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"routing_backfills\".\"status\" IN ('running', 'scanned')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "routing_backfills_org_created_at_idx": {
+          "name": "routing_backfills_org_created_at_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "routing_backfills_organization_id_organization_id_fk": {
+          "name": "routing_backfills_organization_id_organization_id_fk",
+          "tableFrom": "routing_backfills",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "routing_backfills_scorer_version_id_routing_scorer_versions_id_fk": {
+          "name": "routing_backfills_scorer_version_id_routing_scorer_versions_id_fk",
+          "tableFrom": "routing_backfills",
+          "tableTo": "routing_scorer_versions",
+          "columnsFrom": [
+            "scorer_version_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "routing_backfills_started_by_user_id_fk": {
+          "name": "routing_backfills_started_by_user_id_fk",
+          "tableFrom": "routing_backfills",
+          "tableTo": "user",
+          "columnsFrom": [
+            "started_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "routing_backfills_status_check": {
+          "name": "routing_backfills_status_check",
+          "value": "\"routing_backfills\".\"status\" IN ('running', 'scanned', 'done', 'failed', 'cancelled', 'superseded')"
+        },
+        "routing_backfills_phase_check": {
+          "name": "routing_backfills_phase_check",
+          "value": "\"routing_backfills\".\"phase\" IN ('scan', 'score')"
+        },
+        "routing_backfills_score_check": {
+          "name": "routing_backfills_score_check",
+          "value": "\"routing_backfills\".\"phase\" = 'scan' OR (\"routing_backfills\".\"scorer_version_id\" IS NOT NULL AND \"routing_backfills\".\"max_sessions\" IS NOT NULL AND \"routing_backfills\".\"max_cost_usd\" IS NOT NULL AND \"routing_backfills\".\"scanned_at\" IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.routing_decisions": {
       "name": "routing_decisions",
       "schema": "",
@@ -23387,6 +23670,375 @@
           "value": "\"routing_decisions\".\"reason\" <> 'scorer_error' OR \"routing_decisions\".\"features\" IS NULL"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.routing_history_scores": {
+      "name": "routing_history_scores",
+      "schema": "",
+      "columns": {
+        "history_session_id": {
+          "name": "history_session_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scorer_version_id": {
+          "name": "scorer_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "features": {
+          "name": "features",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scorer_cost": {
+          "name": "scorer_cost",
+          "type": "numeric(13, 10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "routing_history_scores_history_session_id_routing_history_sessions_id_fk": {
+          "name": "routing_history_scores_history_session_id_routing_history_sessions_id_fk",
+          "tableFrom": "routing_history_scores",
+          "tableTo": "routing_history_sessions",
+          "columnsFrom": [
+            "history_session_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "routing_history_scores_scorer_version_id_routing_scorer_versions_id_fk": {
+          "name": "routing_history_scores_scorer_version_id_routing_scorer_versions_id_fk",
+          "tableFrom": "routing_history_scores",
+          "tableTo": "routing_scorer_versions",
+          "columnsFrom": [
+            "scorer_version_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "routing_history_scores_history_session_id_scorer_version_id_pk": {
+          "name": "routing_history_scores_history_session_id_scorer_version_id_pk",
+          "columns": [
+            "history_session_id",
+            "scorer_version_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "routing_history_scores_status_check": {
+          "name": "routing_history_scores_status_check",
+          "value": "\"routing_history_scores\".\"status\" IN ('scored', 'no_text', 'failed')"
+        },
+        "routing_history_scores_features_check": {
+          "name": "routing_history_scores_features_check",
+          "value": "(\"routing_history_scores\".\"features\" IS NOT NULL) = (\"routing_history_scores\".\"status\" = 'scored')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.routing_history_sessions": {
+      "name": "routing_history_sessions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "backfill_id": {
+          "name": "backfill_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_key": {
+          "name": "session_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_source": {
+          "name": "session_source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "api_shape": {
+          "name": "api_shape",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "client": {
+          "name": "client",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_activity_at": {
+          "name": "last_activity_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "interactions": {
+          "name": "interactions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "total_tokens": {
+          "name": "total_tokens",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sample_rank": {
+          "name": "sample_rank",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "first_interaction_id": {
+          "name": "first_interaction_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "routing_history_sessions_org_session_uidx": {
+          "name": "routing_history_sessions_org_session_uidx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "session_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "routing_history_sessions_org_rank_idx": {
+          "name": "routing_history_sessions_org_rank_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sample_rank",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "routing_history_sessions_backfill_idx": {
+          "name": "routing_history_sessions_backfill_idx",
+          "columns": [
+            {
+              "expression": "backfill_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "routing_history_sessions_organization_id_organization_id_fk": {
+          "name": "routing_history_sessions_organization_id_organization_id_fk",
+          "tableFrom": "routing_history_sessions",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "routing_history_sessions_backfill_id_routing_backfills_id_fk": {
+          "name": "routing_history_sessions_backfill_id_routing_backfills_id_fk",
+          "tableFrom": "routing_history_sessions",
+          "tableTo": "routing_backfills",
+          "columnsFrom": [
+            "backfill_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.routing_history_usage": {
+      "name": "routing_history_usage",
+      "schema": "",
+      "columns": {
+        "interaction_id": {
+          "name": "interaction_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "history_session_id": {
+          "name": "history_session_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "input": {
+          "name": "input",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cache_read": {
+          "name": "cache_read",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cache_write": {
+          "name": "cache_write",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cache_write_1h": {
+          "name": "cache_write_1h",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "output": {
+          "name": "output",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "routing_history_usage_session_idx": {
+          "name": "routing_history_usage_session_idx",
+          "columns": [
+            {
+              "expression": "history_session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "routing_history_usage_history_session_id_routing_history_sessions_id_fk": {
+          "name": "routing_history_usage_history_session_id_routing_history_sessions_id_fk",
+          "tableFrom": "routing_history_usage",
+          "tableTo": "routing_history_sessions",
+          "columnsFrom": [
+            "history_session_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.routing_plans": {

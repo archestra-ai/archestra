@@ -179,17 +179,15 @@ describe("EditConnectorDialog - GitHub repository settings", () => {
     return connector;
   }
 
+  async function advanced(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+  }
   async function openRow(
     user: ReturnType<typeof userEvent.setup>,
-    repository: string,
+    repository = "example-org/repo-a",
   ) {
     const row = within(
-      screen.getByRole("group", {
-        name:
-          repository === "All repositories"
-            ? repository
-            : `Repository ${repository}`,
-      }),
+      screen.getByRole("group", { name: `Repository ${repository}` }),
     );
     await user.click(
       row.getByRole("button", {
@@ -198,28 +196,154 @@ describe("EditConnectorDialog - GitHub repository settings", () => {
     );
     return row;
   }
-  it("shows concrete production controls and preserves untouched legacy representation", async () => {
-    const user = userEvent.setup();
-    renderDialog(legacyConnector());
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
-    const row = await openRow(user, "repo-a");
-    expect(
-      row
-        .getAllByRole("switch")
-        .map((element) => element.getAttribute("aria-checked")),
-    ).toEqual(["false", "true", "true"]);
-    expect(row.getByLabelText("Folders (optional)")).toHaveValue("docs");
-    expect(row.getByLabelText("Exclude paths")).toHaveValue("docs/internal");
-    expect(screen.queryByText("Repository defaults")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", {
-        name: /Customize|Reset|Edit repository|Done/,
-      }),
-    ).not.toBeInTheDocument();
-    expect(row.queryByRole("combobox")).not.toBeInTheDocument();
+  async function save(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
     await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
-    const config = mockMutateAsync.mock.calls[0][0].body.config;
+    return mockMutateAsync.mock.calls[0][0].body.config;
+  }
+
+  it("starts Selected empty and gives new cards standard settings despite nondefault All policies", async () => {
+    const user = userEvent.setup();
+    renderDialog(
+      entryConnector(
+        [],
+        [
+          {
+            repository: "repo-new",
+            includeIssues: false,
+            includePaths: ["retained-all"],
+          },
+        ],
+      ),
+    );
+    await advanced(user);
+    await user.click(
+      screen.getByRole("radio", { name: "Selected repositories" }),
+    );
+    expect(
+      screen.queryByRole("group", { name: /Repository / }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add repository" }));
+    const row = within(
+      screen.getByRole("group", { name: "Repository New repository" }),
+    );
+    fireEvent.change(row.getByLabelText("Repository"), {
+      target: { value: "example-org/repo-new" },
+    });
+    expect(row.getByRole("switch", { name: "Include Issues" })).toBeChecked();
+    expect(
+      row.getByRole("switch", { name: "Include Pull Requests" }),
+    ).toBeChecked();
+    expect(
+      row.getByRole("switch", { name: "Include Repository Files" }),
+    ).not.toBeChecked();
+    expect(row.getByLabelText("Labels to Skip (optional)")).toHaveValue("");
+    const config = await save(user);
+    expect(config).toMatchObject({
+      repos: ["example-org/repo-new"],
+      repositoryOverrides: [
+        {
+          repository: "example-org/repo-new",
+          includeIssues: true,
+          includePullRequests: true,
+          includeRepositoryFiles: false,
+          labelsToSkip: [],
+          fileTypes: [],
+          includePaths: [],
+          excludePaths: [],
+        },
+      ],
+    });
+  });
+  it.each([
+    "mode",
+    "owner",
+  ])("keeps an unfinished owned rename associated across %s changes", async (boundary) => {
+    const user = userEvent.setup();
+    renderDialog(loadedOverridesConnector());
+    await advanced(user);
+    const row = await openRow(user);
+    fireEvent.change(row.getByLabelText("Repository"), {
+      target: { value: "" },
+    });
+    if (boundary === "mode") {
+      await user.click(
+        screen.getByRole("radio", { name: "All accessible repositories" }),
+      );
+      await user.click(
+        screen.getByRole("radio", { name: "Selected repositories" }),
+      );
+    } else {
+      await user.click(screen.getByRole("button", { name: /General/ }));
+      fireEvent.change(screen.getByLabelText(/^Owner$/), {
+        target: { value: "other-owner" },
+      });
+      await advanced(user);
+    }
+    const draft = within(
+      screen.getByRole("group", { name: "Repository New repository" }),
+    );
+    fireEvent.change(draft.getByLabelText("Repository"), {
+      target: { value: "example-org/repo-c" },
+    });
+    const config = await save(user);
+    expect(config.repositoryOverrides).toEqual([
+      {
+        repository: "example-org/repo-c",
+        includeIssues: false,
+        includePaths: ["custom-docs"],
+      },
+    ]);
+  });
+
+  it("qualifies a bare owned rule when restoring its original name after an interrupted Owner change", async () => {
+    const user = userEvent.setup();
+    renderDialog(loadedOverridesConnector());
+    await advanced(user);
+    const row = await openRow(user);
+    fireEvent.change(row.getByLabelText("Repository"), {
+      target: { value: "" },
+    });
+    await user.click(screen.getByRole("button", { name: /General/ }));
+    fireEvent.change(screen.getByLabelText(/^Owner$/), {
+      target: { value: "other-owner" },
+    });
+    await advanced(user);
+    const draft = within(
+      screen.getByRole("group", { name: "Repository New repository" }),
+    );
+    fireEvent.change(draft.getByLabelText("Repository"), {
+      target: { value: "example-org/repo-a" },
+    });
+    expect(
+      draft.getByRole("switch", { name: "Include Issues" }),
+    ).not.toBeChecked();
+    const config = await save(user);
+    expect(config.owner).toBe("other-owner");
+    expect(config.repos).toEqual(["example-org/repo-a", "example-org/repo-b"]);
+    expect(config.repositoryOverrides).toEqual([
+      {
+        repository: "example-org/repo-a",
+        includeIssues: false,
+        includePaths: ["custom-docs"],
+      },
+    ]);
+  });
+
+  it("qualifies legacy displays without rewriting untouched raw identities or policies", async () => {
+    const user = userEvent.setup();
+    renderDialog(legacyConnector());
+    await advanced(user);
+    const row = await openRow(user);
+    expect(row.getByLabelText("Repository")).toHaveValue("example-org/repo-a");
+    expect(
+      row.getByRole("switch", { name: "Include Issues" }),
+    ).not.toBeChecked();
+    expect(row.getByLabelText("Folders (optional)")).toHaveValue("docs");
+    expect(
+      screen.queryByText(/Issues:|Pull Requests:|Repository Files:/),
+    ).not.toBeInTheDocument();
+    const config = await save(user);
     expect(config).toMatchObject({
       repos: ["repo-a", "repo-b"],
       includeIssues: false,
@@ -240,114 +364,70 @@ describe("EditConnectorDialog - GitHub repository settings", () => {
     expect(config.repositoryOverrides[0]).not.toHaveProperty("includeIssues");
     expect(config).not.toHaveProperty("repositoryEntries");
   });
-  it("changes one repository's switches and explicit empty lists without altering another", async () => {
+  it("does not rewrite an untouched legacy bare rule when its qualified input loses focus", async () => {
     const user = userEvent.setup();
-    renderDialog(loadedOverridesConnector());
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
-    const row = await openRow(user, "repo-a");
-    expect(
-      row.getByRole("switch", { name: "Include Issues" }),
-    ).not.toBeChecked();
-    await user.click(row.getByRole("switch", { name: "Include Issues" }));
-    fireEvent.change(row.getByLabelText("Folders (optional)"), {
-      target: { value: "" },
-    });
-    fireEvent.change(row.getByLabelText("Labels to Skip (optional)"), {
-      target: { value: "" },
-    });
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
-    expect(mockMutateAsync.mock.calls[0][0].body.config).toMatchObject({
-      includeIssues: true,
-      includePaths: ["docs"],
-      repositoryOverrides: [
-        {
-          repository: "repo-a",
-          includeIssues: true,
-          includePaths: [],
-          labelsToSkip: [],
-        },
-      ],
-    });
+    renderDialog(legacyConnector());
+    await advanced(user);
+    const row = await openRow(user);
+    await user.click(row.getByLabelText("Repository"));
+    await user.tab();
+    const config = await save(user);
+    expect(config.repos).toEqual(["repo-a", "repo-b"]);
+    expect(config.repositoryOverrides[0].repository).toBe("repo-a");
   });
-  it("keeps settings attached through a blank intermediate rename", async () => {
+  it("writes new and renamed repository identities as owner/repo", async () => {
     const user = userEvent.setup();
     renderDialog(loadedOverridesConnector());
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
-    const row = await openRow(user, "repo-a");
+    await advanced(user);
+    const row = await openRow(user);
     fireEvent.change(row.getByLabelText("Repository"), {
       target: { value: "" },
     });
     fireEvent.change(row.getByLabelText("Repository"), {
-      target: { value: "repo-c" },
+      target: { value: "different-org/repo-c" },
     });
     await user.tab();
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
-    expect(mockMutateAsync.mock.calls[0][0].body.config).toMatchObject({
-      repos: ["repo-c", "repo-b"],
+    const config = await save(user);
+    expect(config).toMatchObject({
+      repos: ["different-org/repo-c", "repo-b"],
       repositoryOverrides: [
         {
-          repository: "repo-c",
+          repository: "different-org/repo-c",
           includeIssues: false,
           includePaths: ["custom-docs"],
         },
       ],
     });
   });
-  it.each([
-    "REPO-A",
-    "Example-Org/repo-a",
-  ])("rejects equivalent selected repository %s", async (duplicate) => {
-    const user = userEvent.setup();
-    renderDialog(entryConnector(["repo-a"], []));
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
-    await user.click(screen.getByRole("button", { name: "Add repository" }));
-    fireEvent.change(
-      within(
-        screen.getByRole("group", { name: "Repository New repository" }),
-      ).getByLabelText("Repository"),
-      {
-        target: { value: duplicate },
-      },
-    );
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    expect(
-      (await screen.findAllByText("Each repository can be selected only once"))
-        .length,
-    ).toBeGreaterThan(0);
-    expect(mockMutateAsync).not.toHaveBeenCalled();
-  });
-  it.each([
-    "",
-    "invalid/owner/repo",
-    "repo-a,repo-b",
-  ])("keeps invalid repository %s visible on save", async (name) => {
-    const user = userEvent.setup();
-    renderDialog(entryConnector(["repo-a"], []));
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
-    await user.click(screen.getByRole("button", { name: "Add repository" }));
-    fireEvent.change(
-      within(
-        screen.getByRole("group", { name: "Repository New repository" }),
-      ).getByLabelText("Repository"),
-      {
-        target: { value: name },
-      },
-    );
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    expect(
-      await screen.findByText(
-        name ? "Use a repository name or owner/repo" : "Repository is required",
-      ),
-    ).toBeVisible();
-    expect(mockMutateAsync).not.toHaveBeenCalled();
-  });
-  it("uses qualified precedence and re-evaluates settings when owner changes", async () => {
+  it("retains displayed repository identity after Owner changes", async () => {
     const user = userEvent.setup();
     renderDialog(
       entryConnector(
         ["repo-a"],
+        [{ repository: "repo-a", includeIssues: true }],
+      ),
+    );
+    fireEvent.change(screen.getByLabelText(/^Owner$/), {
+      target: { value: "new-owner" },
+    });
+    await advanced(user);
+    const row = await openRow(user);
+    expect(row.getByLabelText("Repository")).toHaveValue("example-org/repo-a");
+    expect(
+      row.getByRole("switch", { name: "Include Issues" }),
+    ).not.toBeChecked();
+    const config = await save(user);
+    expect(config).toMatchObject({
+      owner: "new-owner",
+      repos: ["example-org/repo-a"],
+      repositoryOverrides: [{ repository: "repo-a", includeIssues: true }],
+    });
+  });
+  it("keeps qualified precedence and changes one repository without altering another", async () => {
+    const user = userEvent.setup();
+    renderDialog(
+      entryConnector(
+        ["repo-a", "repo-b"],
         [
           { repository: "repo-a", includeIssues: false },
           {
@@ -358,64 +438,102 @@ describe("EditConnectorDialog - GitHub repository settings", () => {
         ],
       ),
     );
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
-    let row = await openRow(user, "repo-a");
+    await advanced(user);
+    const row = await openRow(user);
     expect(row.getByRole("switch", { name: "Include Issues" })).toBeChecked();
-    expect(row.getByLabelText("Folders (optional)")).toHaveValue("docs");
-    await user.click(screen.getByRole("button", { name: /General/ }));
-    fireEvent.change(screen.getByLabelText(/^Owner$/), {
-      target: { value: "new-owner" },
+    await user.click(row.getByRole("switch", { name: "Include Issues" }));
+    fireEvent.change(row.getByLabelText("Folders (optional)"), {
+      target: { value: "" },
     });
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
-    row = within(screen.getByRole("group", { name: "Repository repo-a" }));
-    expect(
-      row.getByRole("switch", { name: "Include Issues" }),
-    ).not.toBeChecked();
-    expect(row.getByLabelText("Folders (optional)")).toHaveValue("legacy");
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
-    expect(
-      mockMutateAsync.mock.calls[0][0].body.config.repositoryOverrides,
-    ).toHaveLength(2);
+    const config = await save(user);
+    expect(config).toMatchObject({
+      repos: ["repo-a", "repo-b"],
+      repositoryOverrides: [
+        { repository: "repo-a", includeIssues: false },
+        {
+          repository: "example-org/repo-a",
+          includeIssues: false,
+          includePaths: [],
+        },
+      ],
+    });
   });
-  it("adopts retained inactive settings when adding or renaming an unconfigured repository", async () => {
+  it.each([
+    "",
+    "repo-a",
+    "invalid/owner/repo",
+    "org/repo-a,org/repo-b",
+  ])("requires a qualified repository name for %s", async (name) => {
     const user = userEvent.setup();
-    renderDialog(
-      entryConnector(
-        ["repo-a"],
-        [{ repository: "repo-b", includeIssues: false }],
-      ),
+    renderDialog(entryConnector(["repo-a"], []));
+    await advanced(user);
+    await user.click(screen.getByRole("button", { name: "Add repository" }));
+    const row = within(
+      screen.getByRole("group", { name: "Repository New repository" }),
     );
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
-    const row = await openRow(user, "repo-a");
     fireEvent.change(row.getByLabelText("Repository"), {
-      target: { value: "repo-b" },
+      target: { value: name },
     });
-    expect(
-      row.getByRole("switch", { name: "Include Issues" }),
-    ).not.toBeChecked();
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
-    expect(mockMutateAsync.mock.calls[0][0].body.config).toMatchObject({
-      repos: ["repo-b"],
-      repositoryOverrides: [{ repository: "repo-b", includeIssues: false }],
-    });
+    expect(
+      await screen.findByText(
+        name ? "Use owner/repo" : "Repository is required",
+      ),
+    ).toBeVisible();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
   });
-  it("guards a rename that would collide with retained qualified settings", async () => {
+  it("rejects case-insensitive duplicate qualified names", async () => {
+    const user = userEvent.setup();
+    renderDialog(entryConnector(["repo-a"], []));
+    await advanced(user);
+    await user.click(screen.getByRole("button", { name: "Add repository" }));
+    const row = within(
+      screen.getByRole("group", { name: "Repository New repository" }),
+    );
+    fireEvent.change(row.getByLabelText("Repository"), {
+      target: { value: "EXAMPLE-ORG/REPO-A" },
+    });
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(
+      (await screen.findAllByText("Each repository can be selected only once"))
+        .length,
+    ).toBeGreaterThan(0);
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+  it("keeps inherited legacy folder scope when editing only one exclusion field", async () => {
+    const user = userEvent.setup();
+    renderDialog(entryConnector(["repo-a"], []));
+    await advanced(user);
+    const row = await openRow(user);
+    expect(row.getByLabelText("Folders (optional)")).toHaveValue("legacy");
+    fireEvent.change(row.getByLabelText("Exclude paths"), {
+      target: { value: "generated" },
+    });
+    const config = await save(user);
+    expect(config).toMatchObject({
+      repos: ["repo-a"],
+      includePaths: ["legacy"],
+      repositoryOverrides: [
+        { repository: "example-org/repo-a", excludePaths: ["generated"] },
+      ],
+    });
+    expect(config.repositoryOverrides[0]).not.toHaveProperty("includePaths");
+  });
+  it("blocks renaming owned settings onto a retained qualified destination", async () => {
     const user = userEvent.setup();
     renderDialog(
       entryConnector(
         ["repo-a"],
         [
-          { repository: "repo-a", includeIssues: true },
-          { repository: "example-org/repo-b", includeIssues: false },
+          { repository: "repo-a", includeIssues: false },
+          { repository: "example-org/repo-b", includeIssues: true },
         ],
       ),
     );
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
-    const row = await openRow(user, "repo-a");
+    await advanced(user);
+    const row = await openRow(user);
     fireEvent.change(row.getByLabelText("Repository"), {
-      target: { value: "repo-b" },
+      target: { value: "example-org/repo-b" },
     });
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
     expect(
@@ -425,173 +543,252 @@ describe("EditConnectorDialog - GitHub repository settings", () => {
     ).toBeVisible();
     expect(mockMutateAsync).not.toHaveBeenCalled();
   });
-  it("removes only a shadowed saved rule without deleting the qualified active rule", async () => {
+
+  it("keeps inactive rules off the selected list and preserves them on save", async () => {
     const user = userEvent.setup();
     renderDialog(
       entryConnector(
         ["repo-a"],
-        [
-          { repository: "repo-a", includeIssues: false },
-          { repository: "example-org/repo-a", includeIssues: true },
-        ],
+        [{ repository: "repo-b", includePaths: ["archive"] }],
       ),
     );
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
-    await user.click(
-      screen.getByRole("button", { name: "Remove saved settings for repo-a" }),
-    );
-    const row = await openRow(user, "repo-a");
-    expect(row.getByRole("switch", { name: "Include Issues" })).toBeChecked();
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    await advanced(user);
     expect(
-      mockMutateAsync.mock.calls[0][0].body.config.repositoryOverrides,
-    ).toEqual([{ repository: "example-org/repo-a", includeIssues: true }]);
+      screen.queryByRole("group", { name: /repo-b/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Remove saved/ }),
+    ).not.toBeInTheDocument();
+    const config = await save(user);
+    expect(config.repositoryOverrides).toEqual([
+      { repository: "repo-b", includePaths: ["archive"] },
+    ]);
   });
-
-  it("preserves a shared legacy rule while removing one equivalent selection", async () => {
+  it("starts fresh instead of adopting retained All settings when a repository is newly added", async () => {
+    const user = userEvent.setup();
+    renderDialog(
+      entryConnector(
+        ["repo-a"],
+        [{ repository: "repo-b", includeIssues: false }],
+      ),
+    );
+    await advanced(user);
+    await user.click(screen.getByRole("button", { name: "Add repository" }));
+    const row = within(
+      screen.getByRole("group", { name: "Repository New repository" }),
+    );
+    fireEvent.change(row.getByLabelText("Repository"), {
+      target: { value: "example-org/repo-b" },
+    });
+    expect(row.getByRole("switch", { name: "Include Issues" })).toBeChecked();
+    const config = await save(user);
+    expect(config.repos).toEqual(["repo-a", "example-org/repo-b"]);
+    expect(config.repositoryOverrides).toEqual([
+      {
+        repository: "example-org/repo-b",
+        includeIssues: true,
+        includePullRequests: true,
+        includeRepositoryFiles: false,
+        labelsToSkip: [],
+        fileTypes: [],
+        includePaths: [],
+        excludePaths: [],
+      },
+    ]);
+  });
+  it("preserves a shared legacy rule when one equivalent selection is removed", async () => {
     const user = userEvent.setup();
     renderDialog(
       entryConnector(
         ["repo-a", "example-org/repo-a"],
-        [{ repository: "repo-a", includeIssues: false }],
+        [{ repository: "repo-a", includeIssues: true }],
       ),
     );
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await advanced(user);
     await user.click(
-      screen.getByRole("button", { name: "Remove repository repo-a" }),
+      screen.getAllByRole("button", {
+        name: "Remove repository example-org/repo-a",
+      })[0],
     );
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
-    expect(mockMutateAsync.mock.calls[0][0].body.config).toMatchObject({
+    const config = await save(user);
+    expect(config).toMatchObject({
       repos: ["example-org/repo-a"],
-      repositoryOverrides: [{ repository: "repo-a", includeIssues: false }],
+      repositoryOverrides: [{ repository: "repo-a", includeIssues: true }],
     });
   });
-  it("preserves unrelated inactive settings when removing a selected repository", async () => {
+  it("does not turn removing the final selected repository into discovery", async () => {
     const user = userEvent.setup();
-    renderDialog(
-      entryConnector(
-        ["repo-a", "repo-b"],
-        [
-          { repository: "repo-a", includeIssues: false },
-          { repository: "repo-c", includePaths: ["archive"] },
-        ],
-      ),
-    );
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    renderDialog(entryConnector(["repo-a"], []));
+    await advanced(user);
     await user.click(
-      screen.getByRole("button", { name: "Remove repository repo-a" }),
+      screen.getByRole("button", {
+        name: "Remove repository example-org/repo-a",
+      }),
     );
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
-    expect(mockMutateAsync.mock.calls[0][0].body.config).toMatchObject({
-      repos: ["repo-b"],
+    expect(
+      await screen.findByText(
+        "Add at least one repository or choose All accessible repositories.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("radio", { name: "Selected repositories" }),
+    ).toBeChecked();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+  it("preserves loaded All overrides until shared controls are explicitly edited", async () => {
+    const user = userEvent.setup();
+    renderDialog(
+      entryConnector([], [{ repository: "repo-a", includeIssues: true }]),
+    );
+    await advanced(user);
+    expect(
+      screen.getByRole("switch", { name: "Include Issues" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/Existing repository-specific settings are preserved/),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("group", { name: /Repository / }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Add repository" }),
+    ).not.toBeInTheDocument();
+    const config = await save(user);
+    expect(config).toMatchObject({
+      repos: [],
+      repositoryOverrides: [{ repository: "repo-a", includeIssues: true }],
+    });
+  });
+  it("applies shared All settings uniformly on edit", async () => {
+    const user = userEvent.setup();
+    renderDialog(
+      entryConnector([], [{ repository: "repo-a", includeIssues: true }]),
+    );
+    await advanced(user);
+    await user.click(
+      screen.getByRole("switch", { name: "Include Pull Requests" }),
+    );
+    const config = await save(user);
+    expect(config).toMatchObject({
+      repos: [],
+      includePullRequests: false,
+      repositoryOverrides: [],
+    });
+    expect(config).not.toHaveProperty("repositoryApplyShared");
+  });
+  it("explicitly switching to All clears saved overrides on save", async () => {
+    const user = userEvent.setup();
+    renderDialog(loadedOverridesConnector());
+    await advanced(user);
+    await user.click(
+      screen.getByRole("radio", { name: "All accessible repositories" }),
+    );
+    expect(
+      screen.getByRole("switch", { name: "Include Issues" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Add repository" }),
+    ).not.toBeInTheDocument();
+    const config = await save(user);
+    expect(config).toMatchObject({ repos: [], repositoryOverrides: [] });
+  });
+  it("keeps independent shared and selected settings drafts before save", async () => {
+    const user = userEvent.setup();
+    renderDialog(loadedOverridesConnector());
+    await advanced(user);
+    const row = await openRow(user);
+    expect(row.getByLabelText("Labels to Skip (optional)")).toHaveValue("skip");
+    await user.click(
+      screen.getByRole("radio", { name: "All accessible repositories" }),
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Labels to Skip (optional)" }),
+      { target: { value: "all-only" } },
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Folders (optional)" }),
+      { target: { value: "all-folders" } },
+    );
+    await user.click(
+      screen.getByRole("radio", { name: "Selected repositories" }),
+    );
+    const manual = within(
+      screen.getByRole("group", { name: "Repository example-org/repo-a" }),
+    );
+    expect(manual.getByLabelText("Labels to Skip (optional)")).toHaveValue(
+      "skip",
+    );
+    expect(manual.getByLabelText("Folders (optional)")).toHaveValue(
+      "custom-docs",
+    );
+    await user.click(
+      screen.getByRole("radio", { name: "All accessible repositories" }),
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Labels to Skip (optional)" }),
+    ).toHaveValue("all-only");
+    expect(
+      screen.getByRole("textbox", { name: "Folders (optional)" }),
+    ).toHaveValue("all-folders");
+    await user.click(
+      screen.getByRole("radio", { name: "Selected repositories" }),
+    );
+    const config = await save(user);
+    expect(config.labelsToSkip).toEqual(["skip"]);
+    expect(config.includePaths).toEqual(["docs"]);
+    expect(config).not.toHaveProperty("repositorySharedSettings");
+  });
+
+  it("retains selected drafts across mode switches before save", async () => {
+    const user = userEvent.setup();
+    renderDialog(loadedOverridesConnector());
+    await advanced(user);
+    const row = await openRow(user);
+    fireEvent.change(row.getByLabelText("Folders (optional)"), {
+      target: { value: "manual-draft" },
+    });
+    await user.click(
+      screen.getByRole("radio", { name: "All accessible repositories" }),
+    );
+    await user.click(
+      screen.getByRole("radio", { name: "Selected repositories" }),
+    );
+    expect(
+      within(
+        screen.getByRole("group", { name: "Repository example-org/repo-a" }),
+      ).getByLabelText("Folders (optional)"),
+    ).toHaveValue("manual-draft");
+    const config = await save(user);
+    expect(config).toMatchObject({
+      repos: ["repo-a", "repo-b"],
       repositoryOverrides: [
-        { repository: "repo-c", includePaths: ["archive"] },
+        {
+          repository: "repo-a",
+          includeIssues: false,
+          includePaths: ["manual-draft"],
+        },
       ],
     });
   });
-  it("reconciles discovery names when returning to selected repositories", async () => {
-    const user = userEvent.setup();
-    renderDialog(
-      entryConnector(
-        ["repo-a"],
-        [{ repository: "repo-a", includeIssues: false }],
-      ),
-    );
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
-    await user.click(
-      screen.getByRole("combobox", { name: "Repository selection" }),
-    );
-    await user.click(
-      screen.getByRole("option", { name: "All accessible repositories" }),
-    );
-    const row = await openRow(user, "repo-a");
-    fireEvent.change(row.getByLabelText("Repository"), {
-      target: { value: "repo-b" },
-    });
-    await user.click(
-      screen.getByRole("combobox", { name: "Repository selection" }),
-    );
-    await user.click(
-      screen.getByRole("option", { name: "Selected repositories" }),
-    );
-    await openRow(user, "repo-a");
-    expect(
-      within(
-        screen.getByRole("group", { name: "Repository repo-a" }),
-      ).getByRole("switch", { name: "Include Issues" }),
-    ).not.toBeChecked();
-    expect(
-      screen.getByRole("group", { name: "Repository repo-b (inactive)" }),
-    ).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
-    expect(mockMutateAsync.mock.calls[0][0].body.config).toMatchObject({
-      repos: ["repo-a"],
-      repositoryOverrides: [{ repository: "repo-b", includeIssues: false }],
-    });
-  });
-  it("keeps unnamed repository controls disabled and permits deliberate discovery", async () => {
+  it("allows deliberate All after an invalid selected draft without leaking it", async () => {
     const user = userEvent.setup();
     renderDialog(entryConnector(["repo-a"], []));
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await advanced(user);
     await user.click(screen.getByRole("button", { name: "Add repository" }));
     const row = within(
       screen.getByRole("group", { name: "Repository New repository" }),
     );
     expect(row.getByRole("switch", { name: "Include Issues" })).toBeDisabled();
-    await user.click(row.getByRole("switch", { name: "Include Issues" }));
     await user.click(
-      screen.getByRole("combobox", { name: "Repository selection" }),
+      screen.getByRole("radio", { name: "All accessible repositories" }),
     );
-    await user.click(
-      screen.getByRole("option", { name: "All accessible repositories" }),
-    );
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
-    expect(mockMutateAsync.mock.calls[0][0].body.config).toMatchObject({
-      repos: [],
-      repositoryOverrides: [],
-    });
+    const config = await save(user);
+    expect(config).toMatchObject({ repos: [], repositoryOverrides: [] });
   });
-
-  it("allows deliberate discovery after an unfinished selected entry", async () => {
+  it("restores saved manual settings and mode after cancel and reopen", async () => {
     const user = userEvent.setup();
-    renderDialog(entryConnector(["repo-a"], []));
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
-    await user.click(screen.getByRole("button", { name: "Add repository" }));
-    await user.click(
-      screen.getByRole("combobox", { name: "Repository selection" }),
-    );
-    await user.click(
-      screen.getByRole("option", { name: "All accessible repositories" }),
-    );
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
-    expect(mockMutateAsync.mock.calls[0][0].body.config.repos).toEqual([]);
-  });
-  it("shows the All repositories production controls without changing discovery on untouched save", async () => {
-    const user = userEvent.setup();
-    renderDialog(entryConnector([], []));
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
-    const row = await openRow(user, "All repositories");
-    expect(
-      row.getByRole("switch", { name: "Include Issues" }),
-    ).not.toBeChecked();
-    expect(row.getByLabelText("Folders (optional)")).toHaveValue("legacy");
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
-    expect(mockMutateAsync.mock.calls[0][0].body.config).toMatchObject({
-      repos: [],
-      repositoryOverrides: [],
-      includePaths: ["legacy"],
-    });
-  });
-  it("discards repository changes on cancel and restores saved controls on reopen", async () => {
-    const user = userEvent.setup();
-    const connector = legacyConnector();
+    const connector = loadedOverridesConnector();
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -613,26 +810,19 @@ describe("EditConnectorDialog - GitHub repository settings", () => {
         <Harness />
       </QueryClientProvider>,
     );
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
-    const row = await openRow(user, "repo-a");
-    await user.click(row.getByRole("switch", { name: "Include Issues" }));
-    fireEvent.change(row.getByLabelText("Repository"), {
-      target: { value: "unsaved" },
-    });
+    await advanced(user);
     await user.click(
-      screen.getByRole("button", { name: "Remove repository repo-b" }),
+      screen.getByRole("radio", { name: "All accessible repositories" }),
     );
+    await user.click(screen.getByRole("switch", { name: "Include Issues" }));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     await user.click(screen.getByRole("button", { name: "Reopen connector" }));
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
-    const restored = await openRow(user, "repo-a");
+    await advanced(user);
+    const row = await openRow(user);
     expect(
-      restored.getByRole("switch", { name: "Include Issues" }),
+      row.getByRole("switch", { name: "Include Issues" }),
     ).not.toBeChecked();
-    expect(restored.getByLabelText("Folders (optional)")).toHaveValue("docs");
-    expect(
-      screen.getByRole("button", { name: "Remove repository repo-b" }),
-    ).toBeVisible();
+    expect(row.getByLabelText("Folders (optional)")).toHaveValue("custom-docs");
     expect(mockMutateAsync).not.toHaveBeenCalled();
   });
 });

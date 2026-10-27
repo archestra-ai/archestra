@@ -19,6 +19,19 @@ export function joinIfArray(value: unknown): string {
     : ((value as string) ?? "");
 }
 
+/** Complete settings for a newly added repository, independent of shared legacy values. */
+export function githubRepositoryStandardSettingsDraft() {
+  return {
+    includeIssues: true,
+    includePullRequests: true,
+    includeRepositoryFiles: false,
+    labelsToSkip: [],
+    fileTypes: [],
+    includePaths: [],
+    excludePaths: [],
+  };
+}
+
 const GITHUB_INHERITABLE_OVERRIDE_FIELDS = new Set([
   "includeIssues",
   "includePullRequests",
@@ -84,13 +97,100 @@ export function transformConfigArrayFields(
       )
         ? "selected"
         : "all");
-    if (mode === "selected")
+    if (mode === "selected") {
       result.repos = config.repositoryEntries.map(
-        (entry: { repository: string }) => entry.repository.trim(),
+        (entry: {
+          repository: string;
+          originalRepository?: string;
+          originalDisplayRepository?: string;
+          originalOwner?: string;
+        }) => {
+          const name = entry.repository.trim();
+          const owner =
+            typeof config.owner === "string" ? config.owner.trim() : "";
+          if (
+            entry.originalRepository !== undefined &&
+            name === entry.originalDisplayRepository &&
+            owner.toLowerCase() === entry.originalOwner?.trim().toLowerCase()
+          )
+            return entry.originalRepository;
+          return name.includes("/") || !owner ? name : `${owner}/${name}`;
+        },
       );
+      const freshEntries = config.repositoryEntries.filter(
+        (entry: { isNew?: boolean }) => entry.isNew,
+      );
+      if (freshEntries.length > 0) {
+        const owner =
+          typeof config.owner === "string"
+            ? config.owner.trim().toLowerCase()
+            : "";
+        const identity = (repository: string) =>
+          repository.trim().toLowerCase().includes("/")
+            ? repository.trim().toLowerCase()
+            : `${owner}/${repository.trim().toLowerCase()}`;
+        const freshNames = new Set(
+          freshEntries.map((entry: { repository: string }) =>
+            identity(entry.repository),
+          ),
+        );
+        const existing = Array.isArray(result.repositoryOverrides)
+          ? (result.repositoryOverrides as Record<string, unknown>[])
+          : [];
+        result.repositoryOverrides = [
+          ...existing.filter(
+            (override) =>
+              typeof override.repository !== "string" ||
+              !freshNames.has(identity(override.repository)),
+          ),
+          ...freshEntries.map(
+            (entry: {
+              repository: string;
+              settings?: Record<string, unknown>;
+            }) => {
+              const standard =
+                githubRepositoryStandardSettingsDraft() as Record<
+                  string,
+                  unknown
+                >;
+              return transformConfigArrayFields({
+                repository: entry.repository.trim(),
+                ...Object.fromEntries(
+                  [...GITHUB_INHERITABLE_OVERRIDE_FIELDS].map((field) => [
+                    field,
+                    entry.settings?.[field] ?? standard[field],
+                  ]),
+                ),
+              });
+            },
+          ),
+        ];
+      }
+    }
   }
+  const selectedMode =
+    config.repositorySelectionMode === "selected" ||
+    (config.repositorySelectionMode === undefined &&
+      (Array.isArray(config.repos)
+        ? config.repos.length > 0
+        : typeof config.repos === "string" && config.repos.trim() !== ""));
+  if (!selectedMode && config.repositoryApplyShared === true) {
+    result.repos = [];
+    result.repositoryOverrides = [];
+    delete result.repositoryPathFilters;
+    if (
+      config.repositorySharedSettings &&
+      typeof config.repositorySharedSettings === "object"
+    ) {
+      const shared = config.repositorySharedSettings as Record<string, unknown>;
+      for (const field of GITHUB_INHERITABLE_OVERRIDE_FIELDS)
+        if (shared[field] !== undefined) result[field] = shared[field];
+    }
+  }
+  delete result.repositorySharedSettings;
   delete result.repositoryEntries;
   delete result.repositorySelectionMode;
+  delete result.repositoryApplyShared;
 
   // String array fields: split by comma, trim, filter empty
   const stringArrayFields = [

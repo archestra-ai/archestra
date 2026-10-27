@@ -3,6 +3,126 @@ import { describe, expect, it } from "vitest";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
 describe("transformConfigArrayFields", () => {
+  it("materializes fresh repository defaults independently and replaces only matching retained policies", () => {
+    const result = transformConfigArrayFields({
+      type: "github",
+      owner: "org",
+      repos: [],
+      includeIssues: false,
+      includeRepositoryFiles: true,
+      includePaths: ["legacy"],
+      repositorySelectionMode: "selected",
+      repositoryEntries: [
+        {
+          repository: "org/repo-a",
+          isNew: true,
+          settings: {
+            includePullRequests: false,
+            labelsToSkip: "",
+            unexpected: "private-draft",
+          },
+        },
+      ],
+      repositoryOverrides: [
+        { repository: "repo-a", includeIssues: false },
+        { repository: "other/repo-a", includeIssues: false },
+        { repository: "inactive", includePaths: ["keep"] },
+      ],
+    });
+    expect(result.repositoryOverrides).toEqual([
+      { repository: "other/repo-a", includeIssues: false },
+      { repository: "inactive", includePaths: ["keep"] },
+      {
+        repository: "org/repo-a",
+        includeIssues: true,
+        includePullRequests: false,
+        includeRepositoryFiles: false,
+        labelsToSkip: [],
+        fileTypes: [],
+        includePaths: [],
+        excludePaths: [],
+      },
+    ]);
+    expect(result.repos).toEqual(["org/repo-a"]);
+    expect(result.includePaths).toEqual(["legacy"]);
+    expect(result).not.toHaveProperty("repositoryEntries");
+  });
+  it("preserves untouched raw legacy identities only in the original owner context", () => {
+    const original = {
+      type: "github",
+      owner: "org",
+      repos: ["repo-a"],
+      repositoryEntries: [
+        {
+          repository: "org/repo-a",
+          originalRepository: "repo-a",
+          originalDisplayRepository: "org/repo-a",
+          originalOwner: "org",
+        },
+      ],
+    };
+    expect(transformConfigArrayFields(original)).toEqual({
+      type: "github",
+      owner: "org",
+      repos: ["repo-a"],
+    });
+    expect(
+      transformConfigArrayFields({ ...original, owner: "other" }).repos,
+    ).toEqual(["org/repo-a"]);
+    expect(
+      transformConfigArrayFields({
+        ...original,
+        repositoryEntries: [
+          { ...original.repositoryEntries[0], repository: "other/renamed" },
+        ],
+      }).repos,
+    ).toEqual(["other/renamed"]);
+  });
+  it("applies All shared drafts uniformly only when explicitly requested", () => {
+    const config = {
+      type: "github",
+      owner: "org",
+      repos: [],
+      includeIssues: true,
+      repositoryOverrides: [{ repository: "repo-a", includeIssues: true }],
+      repositoryPathFilters: [{ repository: "legacy" }],
+      repositorySharedSettings: {
+        includeIssues: false,
+        includePaths: "",
+        labelsToSkip: "skip",
+      },
+    };
+    expect(transformConfigArrayFields(config).repositoryOverrides).toEqual([
+      { repository: "repo-a", includeIssues: true },
+    ]);
+    const shared = transformConfigArrayFields({
+      ...config,
+      repositorySelectionMode: "all",
+      repositoryApplyShared: true,
+    });
+    expect(shared).toEqual({
+      type: "github",
+      owner: "org",
+      repos: [],
+      includeIssues: false,
+      includePaths: [],
+      labelsToSkip: ["skip"],
+      repositoryOverrides: [],
+    });
+    const manual = transformConfigArrayFields({
+      ...config,
+      repositorySelectionMode: "selected",
+      repositoryApplyShared: true,
+      repositoryEntries: [{ repository: "org/repo-b" }],
+    });
+    expect(manual.includeIssues).toBe(true);
+    expect(manual.repositoryOverrides).toEqual([
+      { repository: "repo-a", includeIssues: true },
+    ]);
+    expect(manual).not.toHaveProperty("repositorySharedSettings");
+    expect(manual).not.toHaveProperty("repositoryApplyShared");
+  });
+
   it("serializes explicit entry names without leaking UI association or mode fields", () => {
     const result = transformConfigArrayFields({
       type: "github",

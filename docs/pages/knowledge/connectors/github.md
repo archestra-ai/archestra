@@ -21,7 +21,7 @@ Let agents answer from your GitHub repositories: "Why did we drop Redis?" finds 
 | Field                 | Description                                                                                     |
 | --------------------- | ----------------------------------------------------------------------------------------------- |
 | GitHub API URL        | API endpoint (e.g., `https://api.github.com` for GitHub.com, or your GHE API URL)               |
-| Owner                 | GitHub organization or username that owns the repositories                                      |
+| Owner                 | GitHub organization or username used for automatic repository discovery                          |
 | Credential | Saved organization secret or GitHub App from **Settings → Credentials** |
 | Repository selection | Choose **Selected repositories** or **All accessible repositories** in **Advanced**. |
 
@@ -29,14 +29,14 @@ Let agents answer from your GitHub repositories: "Why did we drop Redis?" finds 
 
 Sync issues from one repository and selected documentation from another, with separate settings in each repository card.
 
-1. Open **Advanced** and choose **Selected repositories**. Click **Add repository** and enter a name or `owner/repo` in its card. Choose **All accessible repositories** to use automatic discovery instead.
-2. Open a repository card. Set **Include Issues**, **Include Pull Requests**, **Include Repository Files** and **Labels to Skip** for that repository.
-3. When repository files are enabled, set **File Types**, **Folders** and **Exclude paths** in the same card. Add or remove repository cards as needed.
-4. Save the connector, reopen **Advanced**, and check each repository's settings. In discovery mode, the **All repositories** card configures discovered repositories; named cards configure individual exceptions.
+1. Open **Advanced** and choose a repository selection mode.
+2. With **All accessible repositories**, configure the shared issues, pull requests, files and labels settings directly. Those settings apply to every repository the connector discovers.
+3. Switching from **All accessible repositories** to **Selected repositories** does not add cards automatically. Click **Add repository**, enter its full `owner/repo` name, and configure its settings. New cards use standard settings; they do not copy the shared form.
+4. When repository files are enabled, set **File Types**, **Folders** and **Exclude paths**. Save the connector, reopen **Advanced**, and check its mode and settings.
 
-- Removing the last selected repository does not enable discovery; add a repository or choose **All accessible repositories** explicitly. Existing settings prefill the cards. A qualified `owner/repo` rule takes precedence over a bare name under **Owner**.
+- Removing the last selected repository does not enable discovery; add a repository or choose **All accessible repositories** explicitly. Switching modes keeps each unsaved draft. Saving applies the active form; saving all repositories replaces individual repository customizations with shared settings.
 - Blank **Folders** means the whole repository; blank **Exclude paths** or **Labels to Skip** means none. Blank **File Types** uses `.md`, `.mdx`, `.yaml` and `.yml`; `*` includes every text file. Paths are repository-relative, not globs: `docs` includes `docs/guide.md`, not `docs-internal/guide.md`. Exclusions win and affect files only.
-- Changing selection or filters affects later syncs; it does not automatically remove previously indexed documents.
+- Existing populated repository lists open as cards with their previous effective settings; existing blank lists open the shared form. Saving either mode keeps one connector. Changing selection or filters affects later syncs; it does not automatically remove previously indexed documents.
 
 ## GitHub Auto-Sync Permissions
 

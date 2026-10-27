@@ -145,7 +145,7 @@ export function CopilotOrganizationConnectDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={title}
-      description="Use your GitHub organization's Copilot plan. Members use it without their own seat."
+      description="Connect your enterprise GitHub Copilot plan. Members use it without their own seat."
       action={
         step === "start" ? (
           <StartStep

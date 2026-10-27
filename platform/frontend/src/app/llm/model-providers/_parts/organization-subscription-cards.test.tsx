@@ -66,7 +66,7 @@ describe("OrganizationSubscriptionCards", () => {
 
     expect(screen.getByText("GitHub Copilot")).toBeInTheDocument();
     expect(
-      screen.getByText("Use your GitHub organization's Copilot plan."),
+      screen.getByText("Connect your enterprise GitHub Copilot plan."),
     ).toBeInTheDocument();
     expect(screen.getByText("Not connected")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Connect" }));

@@ -44,7 +44,7 @@ export function OrganizationSubscriptionCards({
           kind="github-copilot"
           provider="github-copilot"
           name="GitHub Copilot"
-          description="Use your GitHub organization's Copilot plan."
+          description="Connect your enterprise GitHub Copilot plan."
           isLoading={isLoading}
           status="not-connected"
           onConnect={onConnect}

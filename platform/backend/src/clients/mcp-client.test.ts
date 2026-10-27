@@ -493,6 +493,7 @@ describe("McpClient", () => {
     ).rejects.toThrow("disabled");
     await expect(
       mcpClient.inspectServer({
+        caller: { kind: "caller" },
         catalogItem: catalog,
         mcpServerId: server.id,
         secrets: {},
@@ -928,6 +929,7 @@ describe("McpClient", () => {
     mockClose.mockResolvedValueOnce(undefined);
 
     await mcpClient.inspectServer({
+      caller: { kind: "caller" },
       catalogItem: {
         ...catalogItem,
         serverType: "remote",
@@ -980,6 +982,7 @@ describe("McpClient", () => {
       .mockResolvedValueOnce({ tools: [{ name: "list_repos" }] });
 
     const result = await mcpClient.inspectServer({
+      caller: { kind: "caller" },
       catalogItem: {
         ...catalogItem,
         serverType: "remote",
@@ -1003,6 +1006,7 @@ describe("McpClient", () => {
 
     await expect(
       mcpClient.inspectServer({
+        caller: { kind: "caller" },
         catalogItem: {
           ...catalogItem,
           serverType: "remote",
@@ -2793,6 +2797,7 @@ describe("McpClient", () => {
         });
 
         await mcpClient.callToolForServer({
+          caller: { kind: "caller" },
           mcpServerId: localMcpServerId,
           name: "test_tool",
         });
@@ -10571,6 +10576,7 @@ describe("readResource (assignment + all-tools dynamic access, end to end)", () 
       try {
         await expect(
           mcpClient.readResourceForServer({
+            caller: { kind: "caller" },
             mcpServerId: randomUUID(),
             uri: RESOURCE_URI,
           }),
@@ -10601,6 +10607,7 @@ describe("readResource (assignment + all-tools dynamic access, end to end)", () 
 
       try {
         const read = mcpClient.readResourceForServer({
+          caller: { kind: "caller" },
           mcpServerId: randomUUID(),
           uri: RESOURCE_URI,
         });

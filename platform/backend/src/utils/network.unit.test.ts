@@ -6,8 +6,36 @@ import {
   isLoopbackRedirectUri,
   isLoopbackRequest,
   isPrivateOrLoopbackHostname,
+  isValidCidr,
   loopbackRedirectUriMatchesIgnoringPort,
 } from "./network";
+
+describe("isValidCidr", () => {
+  test.each([
+    "10.0.0.0/8",
+    "203.0.113.7/32",
+    "0.0.0.0/0",
+    "2001:db8::/32",
+    "fd00::/8",
+    "::/0",
+  ])("accepts %s", (cidr) => {
+    expect(isValidCidr(cidr)).toBe(true);
+  });
+
+  test.each([
+    "10.0.0.0",
+    "10.0.0.0/33",
+    "10.0.0.0/8/8",
+    "010.0.0.0/8",
+    "256.0.0.0/8",
+    "2001:db8::/129",
+    "2001:db8:::/32",
+    "api.example.com/32",
+    "10.0.0.0/x",
+  ])("rejects %s", (cidr) => {
+    expect(isValidCidr(cidr)).toBe(false);
+  });
+});
 
 describe("isLoopbackRequest", () => {
   test("returns true for a loopback socket peer", () => {

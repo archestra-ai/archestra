@@ -85,9 +85,19 @@ export function UserLimitsOverview({
 }: {
   limitsTable: ReactNode;
 }) {
-  const { data: defaults = [] } = useDefaultUserLimits();
-  const { data: environmentList } = useEnvironments();
+  const { data: defaults = [], isPending: defaultsPending } =
+    useDefaultUserLimits();
+  const { data: canReadEnvironments, isPending: environmentAccessPending } =
+    useHasPermissions({ environment: ["read"] });
+  const { data: environmentList, isPending: environmentsPending } =
+    useEnvironments();
   const environments = environmentList?.environments ?? [];
+  // Until both have loaded, "No limit" and the no-environments hint would
+  // flash in ahead of the real defaults and overrides.
+  const defaultsLoading =
+    defaultsPending ||
+    environmentAccessPending ||
+    (Boolean(canReadEnvironments) && environmentsPending);
   const { data: top } = useUserLimitUsageTop(MAX_STACK);
   const { data: canUpdate } = useHasPermissions({ llmLimit: ["update"] });
   const { data: canCreate } = useHasPermissions({ llmLimit: ["create"] });
@@ -171,32 +181,38 @@ export function UserLimitsOverview({
                 </h2>
                 <PrecedenceHint />
               </div>
-              <EnvironmentOverrides
-                overrides={overrides}
-                orgDefault={orgDefault}
-                canAdd={canAddOverride && Boolean(canCreate)}
-                canEdit={Boolean(canUpdate)}
-                canDelete={Boolean(canDelete)}
-                hasEnvironments={environments.length > 0}
-                open={overridesOpen}
-                onOpenChange={setOverridesOpen}
-                onView={(environmentId) => openRoster({ environmentId })}
-                onEdit={editDefault}
-                onDelete={setDeleteTarget}
-                onAdd={() => newDefault(undefined)}
-              />
+              {defaultsLoading ? null : (
+                <EnvironmentOverrides
+                  overrides={overrides}
+                  orgDefault={orgDefault}
+                  canAdd={canAddOverride && Boolean(canCreate)}
+                  canEdit={Boolean(canUpdate)}
+                  canDelete={Boolean(canDelete)}
+                  hasEnvironments={environments.length > 0}
+                  open={overridesOpen}
+                  onOpenChange={setOverridesOpen}
+                  onView={(environmentId) => openRoster({ environmentId })}
+                  onEdit={editDefault}
+                  onDelete={setDeleteTarget}
+                  onAdd={() => newDefault(undefined)}
+                />
+              )}
             </div>
 
-            <OrgLimit
-              orgDefault={orgDefault}
-              summary={summary}
-              canCreate={Boolean(canCreate)}
-              canEdit={Boolean(canUpdate)}
-              onEdit={editDefault}
-              onSet={() => newDefault(null)}
-              onOpenCustom={() => openRoster({ filter: "custom" })}
-              onOpenUncapped={() => openRoster({ filter: "none" })}
-            />
+            {defaultsLoading ? (
+              <OrgLimitSkeleton />
+            ) : (
+              <OrgLimit
+                orgDefault={orgDefault}
+                summary={summary}
+                canCreate={Boolean(canCreate)}
+                canEdit={Boolean(canUpdate)}
+                onEdit={editDefault}
+                onSet={() => newDefault(null)}
+                onOpenCustom={() => openRoster({ filter: "custom" })}
+                onOpenUncapped={() => openRoster({ filter: "none" })}
+              />
+            )}
           </section>
 
           <WhoIsAffected
@@ -333,6 +349,8 @@ type EnvironmentOverride = {
 
 /** Avatars before "+N", sized so the counts still fit on the same row. */
 const MAX_STACK = 4;
+/** Larger "+N" counts overflow the avatar-sized chip; show "99+" instead. */
+const MAX_HIDDEN_LABEL = 99;
 
 /** Above this many overrides the overrides list gets a search field. */
 const SEARCH_THRESHOLD = 4;
@@ -677,7 +695,7 @@ function StatusCount({
         aria-hidden
         className={cn("size-2 rounded-full", STATUS_META[status].dot)}
       />
-      <span className="font-medium">{count}</span>
+      <span className="font-medium">{count.toLocaleString("en-US")}</span>
       <span className="sr-only">{STATUS_META[status].label.toLowerCase()}</span>
     </span>
   );
@@ -694,6 +712,17 @@ function RowAction({ tip, children }: { tip: string; children: ReactNode }) {
 
 // ===
 // The organization default (read-only; edits go through the dialog)
+
+function OrgLimitSkeleton() {
+  return (
+    <div aria-hidden className="space-y-3">
+      <div className="flex min-h-9 items-center">
+        <div className="h-8 w-40 animate-pulse rounded-md bg-muted" />
+      </div>
+      <div className="h-4 w-48 animate-pulse rounded bg-muted" />
+    </div>
+  );
+}
 
 function OrgLimit({
   orgDefault,
@@ -866,11 +895,17 @@ function WhoIsAffected({
   const unlimited = summary?.none ?? 0;
   const allUnlimited = total > 0 && unlimited === total;
   const spent = summary?.spent ?? 0;
+  const spenders = summary?.spenders ?? 0;
 
   const stack = allUnlimited
     ? rows.filter((row) => row.spent > 0)
     : rows.filter((row) => row.status !== "ok");
-  const hidden = Math.max((allUnlimited ? total : flagged) - stack.length, 0);
+  // The avatars stand for spenders (or flagged users), never the whole roster:
+  // "All N" in the header already counts everyone.
+  const hidden = Math.max(
+    (allUnlimited ? spenders : flagged) - stack.length,
+    0,
+  );
 
   const resetsItem: DotItem | null = summary?.resetsAt
     ? {
@@ -930,8 +965,12 @@ function WhoIsAffected({
             aria-hidden
             className={cn("size-2 rounded-full", UNLIMITED_DOT)}
           />
-          <span className="font-medium tabular-nums">{unlimited}</span>
-          <span className="text-muted-foreground">without a limit</span>
+          <span className="font-medium tabular-nums">
+            {spenders.toLocaleString("en-US")}
+          </span>
+          <span className="text-muted-foreground">
+            spending without a limit
+          </span>
         </UnstyledButton>
       </>
     );
@@ -1052,10 +1091,10 @@ function AvatarStack({
       {hidden > 0 ? (
         <UnstyledButton
           onClick={() => onOpen({})}
-          aria-label={`${hidden} more users`}
+          aria-label={`${hidden.toLocaleString("en-US")} more users`}
           className="relative flex size-8 items-center justify-center rounded-full border-2 border-card bg-muted text-xs font-medium tabular-nums hover:bg-accent focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
-          {`+${hidden}`}
+          {hidden > MAX_HIDDEN_LABEL ? `${MAX_HIDDEN_LABEL}+` : `+${hidden}`}
         </UnstyledButton>
       ) : null}
     </div>
@@ -1082,7 +1121,9 @@ function StatusLink({
         aria-hidden
         className={cn("size-2 rounded-full", STATUS_META[status].dot)}
       />
-      <span className="font-medium tabular-nums">{count}</span>
+      <span className="font-medium tabular-nums">
+        {count.toLocaleString("en-US")}
+      </span>
       <span className="text-muted-foreground">{label}</span>
     </UnstyledButton>
   );

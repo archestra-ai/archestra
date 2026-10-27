@@ -316,6 +316,7 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       await validateGatewayConfig({
         organizationId,
+        userId: user.id,
         scopes: body.scopes,
         ids: body.allowedGatewayIds ?? [],
       });
@@ -439,6 +440,7 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // SPDX-SnippetEnd
       await validateGatewayConfig({
         organizationId,
+        userId: user.id,
         scopes: body.scopes,
         ids: body.allowedGatewayIds ?? existing.allowedGatewayIds,
       });
@@ -690,11 +692,12 @@ async function validateLlmOauthClientConfig(params: {
 
 async function validateGatewayConfig(params: {
   organizationId: string;
+  userId: string;
   scopes: Array<"mcp" | "a2a" | "llm:proxy">;
   ids: string[];
 }) {
   for (const id of params.ids) {
-    const agent = await AgentModel.findById(id);
+    const agent = await AgentModel.findById(id, params.userId, true);
     if (
       !agent ||
       agent.organizationId !== params.organizationId ||

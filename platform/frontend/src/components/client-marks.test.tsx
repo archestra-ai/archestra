@@ -15,6 +15,7 @@ const CONNECT_CLIENT_ID: Record<AgentCatalogId, string> = {
   hermes: "hermes-agent",
   openclaw: "openclaw",
   grok: "grok-build",
+  kimi: "kimi-code",
 };
 
 /** What a viewer sees of a drawn logo: its tile colour and its glyph. */

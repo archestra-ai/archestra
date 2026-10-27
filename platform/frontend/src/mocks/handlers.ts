@@ -422,6 +422,7 @@ export const handlers: HttpHandler[] = [
       environmentDefault: 0,
       flaggedCustom: 0,
       spent: 0,
+      spenders: 0,
       resetsAt: null,
       environments: [],
     },

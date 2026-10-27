@@ -1,3 +1,4 @@
+import { TOOL_SEARCH_TOOLS_FULL_NAME } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -7,6 +8,7 @@ import {
 import {
   AgentConnectorAssignmentModel,
   AgentKnowledgeBaseModel,
+  TeamModel,
   UserTokenModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -25,6 +27,107 @@ describe("MCP gateway tools/list query budget", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("search shares authorization reads within a request and observes revoked team access on the next request", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+    makeAgentTool,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      access: "org",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+    for (let index = 0; index < 3; index++) {
+      const catalog = await makeInternalMcpCatalog({
+        name: `search-budget-${index}`,
+        organizationId: org.id,
+        serverType: "remote",
+        serverUrl: `https://budget.example/search-${index}`,
+        access: { teams: [team.id], level: "use" },
+      });
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        serverType: "remote",
+        scope: "personal",
+        ownerId: user.id,
+      });
+      const tool = await makeTool({
+        name: `search-budget-${index}__lookup`,
+        catalogId: catalog.id,
+      });
+      await makeAgentTool(agent.id, tool.id, { mcpServerId: server.id });
+    }
+    const token = await UserTokenModel.create(user.id, org.id);
+    const search = () =>
+      app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${token.value}`,
+        },
+        payload: {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: {
+            name: TOOL_SEARCH_TOOLS_FULL_NAME,
+            arguments: { query: "search-budget", limit: 20 },
+          },
+        },
+      });
+    const { result: response, statements } = await recordQueries(search);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().result.isError).not.toBe(true);
+    expect(
+      response
+        .json()
+        .result.structuredContent.tools.map(
+          (tool: { toolName: string }) => tool.toolName,
+        ),
+    ).toEqual(
+      expect.arrayContaining([
+        "search-budget-0__lookup",
+        "search-budget-2__lookup",
+      ]),
+    );
+    expect(
+      statements.filter(
+        (query) =>
+          query.includes('from "team_member"') ||
+          query.includes("subject_teams"),
+      ),
+    ).toHaveLength(1);
+
+    await TeamModel.removeMember(team.id, user.id);
+    const revoked = await search();
+    expect(revoked.statusCode).toBe(200);
+    expect(revoked.json().result.isError).not.toBe(true);
+    const revokedNames = revoked
+      .json()
+      .result.structuredContent.tools.map(
+        (tool: { toolName: string }) => tool.toolName,
+      );
+    for (let index = 0; index < 3; index++) {
+      expect(revokedNames).not.toContain(`search-budget-${index}__lookup`);
+    }
   });
 
   test("member tools/list", async ({

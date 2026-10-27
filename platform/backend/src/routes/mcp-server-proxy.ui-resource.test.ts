@@ -191,6 +191,7 @@ describe("external UI server served as an MCP App (POST /api/mcp/server/:id)", (
     // The read is delegated to THIS installed server, bound from the route.
     expect(readSpy).toHaveBeenCalledWith({
       mcpServerId: server.id,
+      caller: { kind: "caller", userId: user.id, organizationId: org.id },
       uri: UI_RESOURCE_URI,
     });
   });
@@ -283,6 +284,7 @@ describe("external UI server served as an MCP App (POST /api/mcp/server/:id)", (
     expect(res.json().result.content[0].text).toBe("12:00");
     expect(callSpy).toHaveBeenCalledWith({
       mcpServerId: server.id,
+      caller: { kind: "caller", userId: user.id, organizationId: org.id },
       name: "show_clock",
       arguments: {},
     });

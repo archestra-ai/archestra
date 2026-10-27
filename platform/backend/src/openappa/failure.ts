@@ -166,7 +166,7 @@ const RuntimeFailureCode = z.enum([
   "invalid_input",
   "panicked",
 ]);
-type RuntimeFailureCode = z.infer<typeof RuntimeFailureCode>;
+export type RuntimeFailureCode = z.infer<typeof RuntimeFailureCode>;
 
 type Failure = {
   statusCode: 400 | 409 | 500 | 503;

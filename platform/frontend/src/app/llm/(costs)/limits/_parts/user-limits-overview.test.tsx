@@ -108,6 +108,34 @@ describe("UserLimitsOverview", () => {
     expect(screen.getByRole("button", { name: "1 custom" })).toBeVisible();
   });
 
+  it("waits for defaults and environments before showing either", async () => {
+    defaults = [];
+    let releaseEnvironments = () => {};
+    const environmentsHeld = new Promise<void>((resolve) => {
+      releaseEnvironments = resolve;
+    });
+    server.use(
+      http.get(`${API}/api/environments`, async () => {
+        await environmentsHeld;
+        return HttpResponse.json({ environments: [], resourceDefaults: {} });
+      }),
+    );
+    renderOverview();
+
+    // Defaults and usage have loaded; environments have not.
+    expect(await screen.findByText(/at limit/)).toBeVisible();
+    expect(screen.queryByText("No limit")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Per-environment limits" }),
+    ).not.toBeInTheDocument();
+
+    releaseEnvironments();
+    expect(await screen.findByText("No limit")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Per-environment limits" }),
+    ).toBeVisible();
+  });
+
   it("resets a blocked user's usage from the at-limit list", async () => {
     const user = userEvent.setup();
     renderOverview();
@@ -168,6 +196,44 @@ describe("UserLimitsOverview", () => {
         name: "2 users can spend without a cap",
       }),
     ).toBeVisible();
+  });
+
+  it("counts spenders, not the whole roster, when no one has a limit", async () => {
+    defaults = [];
+    rows = ["Ana", "Ben", "Cleo", "Dee"].map((name, index) =>
+      row({
+        userId: `u-${index}`,
+        name,
+        spent: 40 - index,
+        source: "none",
+        limitValue: null,
+      }),
+    );
+    server.use(
+      http.get(`${API}/api/default-user-limits/users`, () => {
+        const response = usageResponse(rows, null);
+        return HttpResponse.json({
+          ...response,
+          summary: {
+            ...response.summary,
+            total: 65_013,
+            none: 65_013,
+            spenders: 250,
+          },
+        });
+      }),
+    );
+    renderOverview();
+
+    expect(
+      await screen.findByRole("button", {
+        name: /^250\s*spending without a limit$/,
+      }),
+    ).toBeVisible();
+    // 246 other spenders would overflow the avatar-sized chip.
+    expect(
+      screen.getByRole("button", { name: "246 more users" }),
+    ).toHaveTextContent("99+");
   });
 });
 
@@ -255,6 +321,7 @@ function usageResponse(all: UsageRow[], status: string | null): UsageResponse {
       environmentDefault: 0,
       flaggedCustom: 0,
       spent: all.reduce((sum, r) => sum + r.spent, 0),
+      spenders: all.filter((r) => r.spent > 0).length,
       resetsAt: "2026-11-01T00:00:00.000Z",
       environments: [],
     },

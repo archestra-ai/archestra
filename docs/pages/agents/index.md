@@ -2,7 +2,7 @@
 title: Agents
 description: Build agents with instructions, tools, skills, subagents, and triggers
 order: 2
-lastUpdated: 2026-10-10
+lastUpdated: 2026-10-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -86,6 +86,7 @@ You help {{user.name}}. Today is {{currentDate}}.
 | `{{user.role}}` | Their organization role |
 | `{{user.teams}}` | Their team names, as a list |
 | `{{currentDate}}`, `{{currentTime}}` | The date and time in UTC, such as `2026-03-12` and `14:30:00 UTC` |
+| `{{archestraVersion}}` | The version of the running platform, such as `1.4.0` |
 
 What to know:
 

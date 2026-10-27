@@ -29,6 +29,7 @@ import McpOauthClientModel from "@/models/mcp-oauth-client";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
+import ModelCostBackfillModel from "@/models/model-cost-backfill";
 import ModelPoolModel from "@/models/model-pool";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
@@ -1086,6 +1087,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/llm-models/:id": {
     resourceType: "llmModel",
     fetchById: (id, orgId) => ModelModel.findByIdForAudit(id, orgId),
+  },
+  // Before/after are the model's latest cost backfill, so the record shows the
+  // range and prices the recompute was started with.
+  "/api/llm-models/:id/cost-backfill": {
+    resourceType: "llmModel",
+    action: "llmModel.cost_backfill_started",
+    fetchById: (id, _orgId) => ModelCostBackfillModel.findLatestForAudit(id),
   },
 
   // Internal catalog

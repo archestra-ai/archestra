@@ -11,7 +11,7 @@ import {
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
 import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
-import { channelDisplayName } from "@/app/settings/messaging-channels/_components/channel-details-dialog";
+import { channelDisplayName } from "@/app/settings/messaging-channels/_parts/channel-details-dialog";
 import { ChannelIcon } from "@/components/channel-icon";
 import { SettingsLink } from "@/components/settings-link";
 import { SlackBotEditDialog } from "@/components/slack-bot-edit-dialog";

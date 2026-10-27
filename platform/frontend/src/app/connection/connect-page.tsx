@@ -680,7 +680,9 @@ function ConnectArea({
     tools: choices.tools && data.partsFor(client).tools,
   });
   // After copying: the status card under the band. A changed pick or choice
-  // sends it back to idle, except once connected.
+  // sends it back to idle, except once connected: the connected card stays
+  // through other choices for the same agent and shows only while that agent
+  // is selected.
   const setupKey = [
     client.id,
     script,
@@ -699,7 +701,10 @@ function ConnectArea({
     serverName,
   });
   const phase =
-    run.phase === "connected" || run.key === setupKey ? run.phase : "idle";
+    (run.phase === "connected" && run.client.id === client.id) ||
+    run.key === setupKey
+      ? run.phase
+      : "idle";
   const setPhase = (next: AfterConnectPhase) =>
     setRun({ phase: next, key: setupKey, client, script, serverName });
   // Only a copied prompt or command starts it: Manual setup and Claude

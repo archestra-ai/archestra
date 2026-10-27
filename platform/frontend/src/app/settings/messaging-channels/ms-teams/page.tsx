@@ -15,15 +15,15 @@ import config from "@/lib/config/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { CredentialField } from "../_components/credential-field";
-import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
-import { ModeTile } from "../_components/mode-tile";
-import { NgrokStatus } from "../_components/ngrok-status";
-import { ProviderChannels } from "../_components/provider-channels";
-import { SetupSection } from "../_components/setup-section";
-import { SetupStep } from "../_components/setup-step";
-import { useReachabilityMode } from "../_components/use-reachability-mode";
-import { useTriggerStatuses } from "../_components/use-trigger-statuses";
+import { CredentialField } from "../_parts/credential-field";
+import { LlmKeySetupStep } from "../_parts/llm-key-setup-step";
+import { ModeTile } from "../_parts/mode-tile";
+import { NgrokStatus } from "../_parts/ngrok-status";
+import { ProviderChannels } from "../_parts/provider-channels";
+import { SetupSection } from "../_parts/setup-section";
+import { SetupStep } from "../_parts/setup-step";
+import { useReachabilityMode } from "../_parts/use-reachability-mode";
+import { useTriggerStatuses } from "../_parts/use-trigger-statuses";
 import { GroupChatFilesSetting } from "./group-chat-files-setting";
 
 export default function MsTeamsPage() {

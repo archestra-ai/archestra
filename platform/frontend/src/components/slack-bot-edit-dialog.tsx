@@ -2,7 +2,7 @@
 
 import { ArrowUpRight, Hash, Lock, Search } from "lucide-react";
 import { useState } from "react";
-import { ChannelDetailsDialog } from "@/app/settings/messaging-channels/_components/channel-details-dialog";
+import { ChannelDetailsDialog } from "@/app/settings/messaging-channels/_parts/channel-details-dialog";
 import { AgentSelector } from "@/components/agent-selector";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";

@@ -5,7 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { KeyRound, Plus, Trash2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { AccountPageAction } from "@/app/account/_components/account-page-action";
+import { AccountPageAction } from "@/app/account/_parts/account-page-action";
 import { CopyButton } from "@/components/copy-button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";

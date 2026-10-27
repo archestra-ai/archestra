@@ -38,6 +38,7 @@ import type {
   AgentTypeListPermissionChecker,
   AgentTypePermissionChecker,
 } from "@/auth/agent-type-permissions";
+import { canUseAgent } from "@/auth/permission-gated";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
@@ -86,6 +87,7 @@ import {
   assertCanAssignEnvironment,
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
+import { assertGitHubActionsAccessChange } from "@/services/github-actions-access";
 import { estimateMcpToolTokens } from "@/services/mcp-tool-token-estimate";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -1415,7 +1417,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply,
     ) => {
       const agent = await AgentModel.findGatewayAgentById(id);
-      if (!agent || agent.organizationId !== organizationId) {
+      if (
+        !agent ||
+        agent.organizationId !== organizationId ||
+        !(await canUseAgent(id, { userId: user.id, organizationId }))
+      ) {
         throw new ApiError(404, "Agent not found");
       }
 
@@ -2186,6 +2192,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         checker,
         agentType: existingAgent.agentType,
       });
+      await assertGitHubActionsAccessChange({
+        organizationId,
+        userId: user.id,
+        agentType: existingAgent.agentType,
+        previous: existingAgent.githubActionsAccess ?? null,
+        next: body.githubActionsAccess,
+      });
 
       // Validate knowledgeBaseIds if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
@@ -2839,7 +2852,7 @@ export async function getAgentDefaultSuggestedPrompts(params: {
   // Only the agent's own prompts matter here, not the full agent.
   const agent = await requireReadableAgent({
     ...params,
-    load: AgentModel.findByIdForAccess,
+    load: (id) => AgentModel.findByIdForAccess(id, params.userId),
   });
   const suggestedPrompts =
     (await AgentSuggestedPromptModel.getForAgents([agent.id])).get(agent.id) ??
@@ -2872,7 +2885,11 @@ async function requireReadableAgent<
   const agent = params.load
     ? await params.load(params.id)
     : ((await AgentModel.findById(params.id, params.userId, true)) as T | null);
-  if (!agent || agent.organizationId !== params.organizationId) {
+  if (
+    !agent ||
+    agent.organizationId !== params.organizationId ||
+    !(await canUseAgent(agent.id, params))
+  ) {
     throw new ApiError(404, "Agent not found");
   }
 

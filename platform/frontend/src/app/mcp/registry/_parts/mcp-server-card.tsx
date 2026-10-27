@@ -179,7 +179,6 @@ export function McpServerCard({
   const { startChatById, isCreating: isChatCreating } =
     useChatWithCatalogItem();
 
-  const isByosEnabled = useFeature("byosEnabled");
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
@@ -239,11 +238,8 @@ export function McpServerCard({
       teams?.filter((t) => !teamsWithInstallation.includes(t.id)) ?? [];
 
     // Can create new installation if:
-    // - Personal installation not yet created AND byos is not enabled
     // - There are teams available without this server
-    return (
-      (!hasPersonalInstallation && !isByosEnabled) || availableTeams.length > 0
-    );
+    return !hasPersonalInstallation || availableTeams.length > 0;
   })();
 
   // Dialog state

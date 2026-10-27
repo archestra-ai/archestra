@@ -25,12 +25,6 @@ export async function addCustomSelfHostedCatalogItem({
     key: string;
     promptOnInstallation: boolean;
     isSecret?: boolean;
-    vaultSecret?: {
-      name: string;
-      key: string;
-      value: string;
-      teamName: string;
-    };
   };
 }) {
   await goToPage(page, "/mcp/registry");
@@ -90,54 +84,14 @@ export async function addCustomSelfHostedCatalogItem({
       await page.getByRole("option", { name: "Secret" }).click();
     }
 
-    // Scope is now a 3-option dropdown (installation/preset/static),
-    // defaulting to "installation". The PromptOnInstallationCheckbox
-    // testid is reused on the dropdown trigger for backwards compat.
-    //
-    // Logic inversion vs. the old checkbox: the old default was "not
-    // prompted" (checkbox unchecked) and the helper toggled IT ON for
-    // prompted envs. The new default is "Prompt at installation", so we
-    // only need to act when the caller wants something other than that
-    // — i.e. when promptOnInstallation is false (we want Static) or
-    // when a vault reference is being set (vault picker only appears
-    // for static-scoped secret values).
-    const wantsStaticScope =
-      !envVars.promptOnInstallation || !!envVars.vaultSecret;
+    // The scope picker defaults to prompting at installation. Select Static
+    // when the catalog supplies the value.
+    const wantsStaticScope = !envVars.promptOnInstallation;
     if (wantsStaticScope) {
       await envVarDialog
         .getByTestId(E2eTestId.PromptOnInstallationCheckbox)
         .click();
       await page.getByRole("option", { name: "Static" }).click();
-    }
-
-    if (envVars.vaultSecret) {
-      // The control is labelled "Set secret"; the dialog it opens is
-      // "Set external secret".
-      await envVarDialog.getByRole("button", { name: /^Set secret$/i }).click();
-      const externalSecretDialog = page.getByRole("dialog", {
-        name: /Set external secret/i,
-      });
-      await expect(externalSecretDialog).toBeVisible({ timeout: 15_000 });
-      await externalSecretDialog
-        .getByTestId(E2eTestId.ExternalSecretSelectorTeamTrigger)
-        .click();
-      await page
-        .getByRole("option", { name: envVars.vaultSecret.teamName })
-        .click();
-      await externalSecretDialog
-        .getByTestId(E2eTestId.ExternalSecretSelectorSecretTrigger)
-        .click();
-      await page
-        .getByRole("option", { name: envVars.vaultSecret.name })
-        .click();
-      await externalSecretDialog
-        .getByTestId(E2eTestId.ExternalSecretSelectorSecretTriggerKey)
-        .click();
-      await page.getByRole("option", { name: envVars.vaultSecret.key }).click();
-      await externalSecretDialog
-        .getByRole("button", { name: "Confirm" })
-        .click();
-      await expect(externalSecretDialog).not.toBeVisible({ timeout: 15_000 });
     }
 
     // Confirm and close the env-var sub-dialog so the parent "Add MCP

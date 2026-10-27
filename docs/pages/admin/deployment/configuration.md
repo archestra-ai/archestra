@@ -234,11 +234,11 @@ Archestra reads these environment variables at startup. Pass them with `-e` to `
 
 - **`ARCHESTRA_SECRETS_MANAGER`** - Where Archestra stores secrets such as API keys and tokens.
   - Default: `DB`
-  - Values: `DB`, `VAULT`, `READONLY_VAULT`. Both Vault values require an enterprise license.
+  - Values: `DB`, `VAULT`. Vault requires an enterprise license.
   - With an invalid Vault configuration or no license, Archestra logs a warning and uses `DB`. See [Credentials and Secrets](/docs/admin/credentials#secrets-storage).
 
 - **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - Address of the HashiCorp Vault server.
-  - Required when: [`ARCHESTRA_SECRETS_MANAGER=VAULT`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_MANAGER) or `READONLY_VAULT`
+  - Required when: [`ARCHESTRA_SECRETS_MANAGER=VAULT`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_MANAGER)
   - Values: a URL, for example `https://vault.example.com:8200`
 
 - **`ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD`** - How Archestra authenticates to Vault.
@@ -283,11 +283,6 @@ Archestra reads these environment variables at startup. Pass them with `-e` to `
 - **`ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH`** - Path prefix for KV v2 list and delete operations.
   - Default: [`ARCHESTRA_HASHICORP_VAULT_SECRET_PATH`](/docs/admin/deployment/configuration#ARCHESTRA_HASHICORP_VAULT_SECRET_PATH) with `/data/` replaced by `/metadata/`
   - Set it only when your paths do not follow that pattern.
-
-- **`ARCHESTRA_DATABASE_URL_VAULT_REF`** - Reads the database connection string from Vault instead of [`ARCHESTRA_DATABASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_DATABASE_URL).
-  - Default: unset
-  - Values: `path:key`, for example `secret/data/archestra/database:connection_string`
-  - Used only when [`ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT`](/docs/admin/deployment/configuration#ARCHESTRA_SECRETS_MANAGER).
 
 ## LLM Providers
 

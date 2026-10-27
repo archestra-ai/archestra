@@ -1,9 +1,7 @@
 import {
   getProvidersWithOptionalApiKey,
   isCredentialLevelSubscriptionProvider,
-  isVaultReference,
   PROVIDERS_REQUIRING_BASE_URL,
-  parseVaultReference,
   providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
   type ResourcePermissionGrant,
@@ -274,7 +272,6 @@ class LlmProviderApiKeyModel {
         apiKey: schema.llmProviderApiKeysTable,
         secret: schema.secretsTable.secret,
         secretIsVault: schema.secretsTable.isVault,
-        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.llmProviderApiKeysTable)
       .leftJoin(
@@ -293,7 +290,7 @@ class LlmProviderApiKeyModel {
         secretId: row.apiKey.secretId,
         secret: row.secret,
         secretIsVault: row.secretIsVault,
-        secretIsByosVault: row.secretIsByosVault,
+
         credentialKind: row.apiKey.credentialKind,
       },
     ]);
@@ -438,7 +435,6 @@ class LlmProviderApiKeyModel {
         credentialKind: schema.llmProviderApiKeysTable.credentialKind,
         secret: schema.secretsTable.secret,
         secretIsVault: schema.secretsTable.isVault,
-        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.llmProviderApiKeysTable)
       .leftJoin(
@@ -511,7 +507,6 @@ class LlmProviderApiKeyModel {
         secretId: schema.llmProviderApiKeysTable.secretId,
         secret: schema.secretsTable.secret,
         secretIsVault: schema.secretsTable.isVault,
-        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.llmProviderApiKeysTable)
       .leftJoin(
@@ -610,7 +605,6 @@ class LlmProviderApiKeyModel {
         credentialKind: schema.llmProviderApiKeysTable.credentialKind,
         secret: schema.secretsTable.secret,
         secretIsVault: schema.secretsTable.isVault,
-        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.llmProviderApiKeysTable)
       .leftJoin(
@@ -942,7 +936,7 @@ class LlmProviderApiKeyModel {
           ? await getSecretValueForLlmProviderApiKey(candidate.apiKey.secretId)
           : undefined;
       } catch (error) {
-        // A stale/inaccessible Vault reference must not prevent a later valid
+        // An unavailable stored credential must not prevent a later valid
         // personal credential from satisfying the shared-agent substitution.
         // Listing metadata follows the same fail-soft rule.
         logger.warn(
@@ -1022,7 +1016,6 @@ class LlmProviderApiKeyModel {
         credentialKind: schema.llmProviderApiKeysTable.credentialKind,
         secret: schema.secretsTable.secret,
         secretIsVault: schema.secretsTable.isVault,
-        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.llmProviderApiKeysTable)
       .leftJoin(
@@ -1585,55 +1578,33 @@ class LlmProviderApiKeyModel {
   }
 }
 
-/**
- * Maps a list-query row (key + joined secret columns) to the response shape,
- * deriving the vault reference and dropping the secret columns.
- *
- * The secret is decrypted only for BYOS-vault rows, whose stored value is the
- * "path#key" reference to surface (the BYOS manager is the only writer of
- * vault references, and it always sets `isByosVault`). The subscription kind
- * comes from the recorded credential kind; no secret is read for it.
- */
 function toApiKeyWithScopeInfo<
   T extends {
     provider: string;
     secretId: string | null;
     secret: SecretValue | null;
     secretIsVault: boolean | null;
-    secretIsByosVault: boolean | null;
+
     credentialKind: LlmProviderCredentialKind | null;
   },
 >(
   key: T,
   subscriptionKind: SubscriptionCredentialKind | null,
-): Omit<
-  T,
-  "secret" | "secretIsVault" | "secretIsByosVault" | "credentialKind"
-> & {
-  vaultSecretPath: string | null;
-  vaultSecretKey: string | null;
+): Omit<T, "secret" | "secretIsVault" | "credentialKind"> & {
   secretStorageType: SecretStorageType;
   subscriptionKind: SubscriptionCredentialKind | null;
 } {
-  const vaultRef = key.secretIsByosVault
-    ? parseVaultReferenceFromApiKey(decryptApiKeyValue(key.secret))
-    : null;
   const {
     secret: _secret,
     secretIsVault,
-    secretIsByosVault,
+
     credentialKind: _credentialKind,
     ...rest
   } = key;
   return {
     ...rest,
-    vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
-    vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
-    secretStorageType: computeSecretStorageType(
-      key.secretId,
-      secretIsVault,
-      secretIsByosVault,
-    ),
+
+    secretStorageType: computeSecretStorageType(key.secretId, secretIsVault),
     subscriptionKind,
   };
 }
@@ -1705,7 +1676,7 @@ async function resolveCredentialKinds(
     secretId: string | null;
     secret: SecretValue | null;
     secretIsVault: boolean | null;
-    secretIsByosVault: boolean | null;
+
     credentialKind: LlmProviderCredentialKind | null;
   }>,
 ): Promise<Map<string, LlmProviderCredentialKind | null>> {
@@ -1719,7 +1690,7 @@ async function resolveCredentialKinds(
       let value: string | null;
       try {
         value =
-          key.secretId && (key.secretIsVault || key.secretIsByosVault)
+          key.secretId && key.secretIsVault
             ? ((await getSecretValueForLlmProviderApiKey(key.secretId)) ?? null)
             : // A secret that cannot be decrypted (for example after a key
               // rotation) is unreadable, not empty: never store a guess.
@@ -1777,7 +1748,7 @@ async function withoutOthersPerUserCredentials<
     secretId: string | null;
     secret: SecretValue | null;
     secretIsVault: boolean | null;
-    secretIsByosVault: boolean | null;
+
     credentialKind: LlmProviderCredentialKind | null;
   },
 >(keys: T[], userId: string): Promise<T[]> {
@@ -1787,36 +1758,6 @@ async function withoutOthersPerUserCredentials<
   );
 }
 
-/**
- * Decrypts a stored secret and returns its `apiKey` string (LLM provider key
- * secrets are `{ apiKey: "..." }`), or null when absent/non-string.
- * {@link toApiKeyWithScopeInfo} calls this at most once per key and derives
- * metadata from the returned value — the value itself is never included in a
- * response.
- *
- * Callers only use the value for optional metadata (vault reference,
- * ChatGPT-subscription marker), so an undecryptable secret — e.g. one
- * encrypted under a previous ARCHESTRA_AUTH_SECRET — degrades to null instead
- * of throwing; otherwise a single stale secret would break key listing for
- * everyone.
- */
-function decryptApiKeyValue(secret: SecretValue | null): string | null {
-  try {
-    return readApiKeyValue(secret);
-  } catch (error) {
-    logger.warn(
-      { error },
-      "Failed to decrypt LLM provider API key secret while deriving key metadata; treating the value as unreadable",
-    );
-    return null;
-  }
-}
-
-/**
- * Like {@link decryptApiKeyValue}, but a secret that cannot be decrypted
- * throws instead of reading as "no value", so a caller can tell the two
- * apart.
- */
 function readApiKeyValue(secret: SecretValue | null): string | null {
   if (!secret || typeof secret !== "object") return null;
   const decrypted = isEncryptedSecret(secret)
@@ -1824,23 +1765,6 @@ function readApiKeyValue(secret: SecretValue | null): string | null {
     : secret;
   const apiKeyValue = (decrypted as Record<string, unknown>).apiKey;
   return typeof apiKeyValue === "string" ? apiKeyValue : null;
-}
-
-/**
- * Helper to parse a vault reference from a decrypted apiKey value
- * ("path#key" format).
- */
-function parseVaultReferenceFromApiKey(
-  apiKeyValue: string | null,
-): { vaultSecretPath: string; vaultSecretKey: string } | null {
-  if (apiKeyValue && isVaultReference(apiKeyValue)) {
-    const parsed = parseVaultReference(apiKeyValue);
-    return {
-      vaultSecretPath: parsed.path,
-      vaultSecretKey: parsed.key,
-    };
-  }
-  return null;
 }
 
 /**

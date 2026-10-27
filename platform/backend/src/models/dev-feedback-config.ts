@@ -7,7 +7,7 @@ import SecretModel from "./secret";
  * Which chatops Slack bot the UI feedback overlay posts as, and to which
  * channel. Kept in the secret store beside the chatops config it points into
  * (always the database, for the same reason as chatops: it is platform
- * config, and a read-only customer Vault cannot take writes). It holds no
+ * config). It holds no
  * credential itself: the bot's token stays in the chatops config.
  */
 class DevFeedbackConfigModel {

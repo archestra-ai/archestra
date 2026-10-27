@@ -81,21 +81,12 @@ export async function assertCanChangeMcpRuntimeConfig(params: {
   requested: Partial<Record<(typeof MCP_RUNTIME_FIELDS)[number], unknown>>;
   current: Partial<Record<(typeof MCP_RUNTIME_FIELDS)[number], unknown>>;
   /** Secret references stored in a vault, by name; each replaces a stored value. */
-  requestedVaultReferences?: Record<string, string | undefined>;
 }): Promise<void> {
-  const changed =
-    Object.values(params.requestedVaultReferences ?? {}).some(
-      (reference) => reference !== undefined,
-    ) ||
-    MCP_RUNTIME_FIELDS.some(
-      (field) =>
-        params.requested[field] !== undefined &&
-        !sameRuntimeValue(
-          field,
-          params.requested[field],
-          params.current[field],
-        ),
-    );
+  const changed = MCP_RUNTIME_FIELDS.some(
+    (field) =>
+      params.requested[field] !== undefined &&
+      !sameRuntimeValue(field, params.requested[field], params.current[field]),
+  );
   if (!changed) return;
   if (
     (await userHasPermission(

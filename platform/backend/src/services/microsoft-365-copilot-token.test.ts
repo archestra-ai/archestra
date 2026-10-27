@@ -266,34 +266,6 @@ describe("microsoft365CopilotTokenManager.getAccessToken", () => {
     expect(findByIdMock).toHaveBeenCalledWith(providerApiKeyId);
   });
 
-  test("skips persistence for vault-referenced keys", async () => {
-    const refreshToken = uniqueRefreshToken();
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(redemptionResponse({ refreshToken: "rotated-rt" })),
-    );
-    findByIdMock.mockResolvedValue({ secretId: "secret-1" } as Awaited<
-      ReturnType<typeof LlmProviderApiKeyModel.findById>
-    >);
-    getSecretValueMock.mockResolvedValue("secret/data/team#apiKey");
-    const updateSecret = vi.fn();
-    secretManagerMock.mockReturnValue({ updateSecret } as unknown as ReturnType<
-      typeof secretManager
-    >);
-
-    await microsoft365CopilotTokenManager.getAccessToken({
-      refreshToken,
-      providerApiKeyId: uniqueKeyId(),
-    });
-
-    await vi.waitFor(() => {
-      expect(getSecretValueMock).toHaveBeenCalled();
-    });
-    expect(updateSecret).not.toHaveBeenCalled();
-  });
-
   test("skips persistence when the stored secret value is unreadable", async () => {
     const refreshToken = uniqueRefreshToken();
     vi.stubGlobal(

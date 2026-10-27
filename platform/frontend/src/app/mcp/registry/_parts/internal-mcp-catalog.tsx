@@ -68,7 +68,6 @@ import {
   setOAuthTeamId,
 } from "@/lib/auth/oauth-session";
 import { reportBulkOutcome } from "@/lib/bulk-action";
-import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
@@ -226,7 +225,6 @@ export function InternalMCPCatalog() {
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const { data: environmentList } = useEnvironments();
-  const byosEnabled = Boolean(useFeature("byosEnabled"));
 
   // The order lives in the URL with the filters, as the API's sortBy and
   // sortDirection, so a shared link reopens the same page.
@@ -525,7 +523,6 @@ export function InternalMCPCatalog() {
         name: localServerCatalogItem.name,
         environmentValues: installResult.environmentValues,
         userConfigValues: installResult.userConfigValues,
-        isByosVault: installResult.isByosVault,
       });
 
       closeDialog("local-install");
@@ -567,7 +564,6 @@ export function InternalMCPCatalog() {
               name: catalogItemName,
               environmentValues: installResult.environmentValues,
               userConfigValues: installResult.userConfigValues,
-              isByosVault: installResult.isByosVault,
             }),
           ),
         );
@@ -717,9 +713,6 @@ export function InternalMCPCatalog() {
     const hasPromptedUserConfig = Object.values(
       catalogItem.userConfig ?? {},
     ).some((field) => field.promptOnInstallation !== false);
-    const hasSensitivePromptedUserConfig = Object.values(
-      catalogItem.userConfig ?? {},
-    ).some((field) => field.sensitive && field.promptOnInstallation !== false);
 
     const dialogTargets = flagged.length > 0 ? flagged : [installedServer];
     const flaggedForDecision = dialogTargets.map((s) => ({
@@ -734,18 +727,10 @@ export function InternalMCPCatalog() {
           (env) => env.promptOnInstallation !== false,
         ) ??
           false);
-      const hasSecretPromptedEnv =
-        !catalogItem.multitenant &&
-        (catalogItem.localConfig?.environment?.some(
-          (env) => env.promptOnInstallation !== false && env.type === "secret",
-        ) ??
-          false);
 
       const dialogKind = decideReinstallDialog({
         hasPromptedFields: hasPromptedEnv || hasPromptedUserConfig,
-        byosCollectsSecrets:
-          byosEnabled &&
-          (hasSecretPromptedEnv || hasSensitivePromptedUserConfig),
+
         flaggedInstalls: flaggedForDecision,
       });
 
@@ -765,7 +750,7 @@ export function InternalMCPCatalog() {
     } else if (
       decideReinstallDialog({
         hasPromptedFields: hasPromptedUserConfig,
-        byosCollectsSecrets: byosEnabled && hasSensitivePromptedUserConfig,
+
         flaggedInstalls: flaggedForDecision,
       }) === "collect-input"
     ) {

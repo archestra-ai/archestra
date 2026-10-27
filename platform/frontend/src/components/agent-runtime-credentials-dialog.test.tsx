@@ -165,10 +165,7 @@ function show(
 }
 
 describe("credential setup deep links", () => {
-  it.each([
-    false,
-    true,
-  ])("authorizes GitHub user connections instead of requesting a secret (Vault: %s)", async (byosEnabled) => {
+  it("authorizes GitHub user connections instead of requesting a secret", async () => {
     configured = ["SERVICE_TOKEN"];
     const authorizationUrl =
       "https://github.com/login/oauth/authorize?state=test-flow";
@@ -176,7 +173,7 @@ describe("credential setup deep links", () => {
     let starts = 0;
     server.use(
       http.get(`${origin}/api/config`, () =>
-        HttpResponse.json(makeConfig({ features: { byosEnabled } })),
+        HttpResponse.json(makeConfig({ features: {} })),
       ),
       http.get(`${origin}/api/credentials`, () =>
         HttpResponse.json([
@@ -205,7 +202,6 @@ describe("credential setup deep links", () => {
     expect(
       screen.queryByPlaceholderText("Paste secret"),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText("Select Vault secret")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Save credentials" }),
     ).not.toBeInTheDocument();
@@ -448,24 +444,6 @@ describe("credential setup deep links", () => {
       2,
     );
     expect(writes).toEqual([]);
-  });
-
-  it("uses Vault selection for every credential when external secrets are enabled", async () => {
-    server.use(
-      http.get(`${origin}/api/config`, () =>
-        HttpResponse.json(makeConfig({ features: { byosEnabled: true } })),
-      ),
-    );
-    show();
-    expect(
-      await screen.findByRole("button", { name: "GitHub token" }),
-    ).toHaveTextContent("Select Vault secret");
-    expect(
-      screen.getByRole("button", { name: "Service token" }),
-    ).toHaveTextContent("Select Vault secret");
-    expect(
-      screen.queryByPlaceholderText("Paste secret"),
-    ).not.toBeInTheDocument();
   });
 
   it("lets an administrator configure a missing organization connection", async () => {

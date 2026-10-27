@@ -17,9 +17,7 @@ function makeValues(
     inferenceBaseUrl: null,
     extraHeaders: [],
     shared: false,
-    teamId: null,
-    vaultSecretPath: null,
-    vaultSecretKey: null,
+
     isPrimary: false,
     bedrockAuthMethod: "api-key",
     awsAccessKeyId: null,

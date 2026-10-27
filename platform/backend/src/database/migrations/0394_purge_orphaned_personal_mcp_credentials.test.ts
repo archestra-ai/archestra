@@ -19,8 +19,16 @@ async function runMigration() {
     throw new Error("Migration statements not found");
   }
 
-  for (const statement of statements) {
-    await db.execute(sql.raw(statement));
+  // Exercise the historical SQL against its original table shape.
+  await db.execute(
+    sql`ALTER TABLE secret ADD COLUMN is_byos_vault boolean NOT NULL DEFAULT false`,
+  );
+  try {
+    for (const statement of statements) {
+      await db.execute(sql.raw(statement));
+    }
+  } finally {
+    await db.execute(sql`ALTER TABLE secret DROP COLUMN is_byos_vault`);
   }
 }
 

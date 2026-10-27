@@ -11,7 +11,7 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
-import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { secretManager } from "@/secrets-manager";
 import { loadOAuthCatalogForCaller } from "@/services/mcp-oauth-access";
 import {
   getMcpOAuthCallerBinding,
@@ -1586,8 +1586,6 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Create secret entry with the OAuth tokens
-      // Use forceDB=true when BYOS is enabled because OAuth tokens are generated values,
-      // not user-provided vault references
       // Store entire OAuth response to preserve provider-specific fields (scope, id_token, etc.)
       const secretPayload = {
         ...tokenData,
@@ -1606,7 +1604,6 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       logger.info(
         {
           secretPayloadKeys: Object.keys(secretPayload),
-          isByosEnabled: isByosEnabled(),
         },
         "OAuth callback: creating secret with payload",
       );
@@ -1614,7 +1611,6 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const secret = await secretManager().createSecret(
         secretPayload,
         `${catalogItem.name}-oauth`,
-        isByosEnabled(), // forceDB: store in DB when BYOS is enabled
       );
 
       try {

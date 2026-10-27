@@ -33,12 +33,7 @@ test("keeps a measured placeholder when a wrapped block leaves the scroll viewpo
   terminal.dispose();
   const { container } = render(
     <div data-testid="terminal-playback-viewport">
-      <TerminalRecordingBlock
-        lines={lines}
-        wrapLines
-        runPadding={null}
-        virtualize
-      />
+      <TerminalRecordingBlock lines={lines} wrapLines virtualize />
     </div>,
   );
   const block = container.querySelector(
@@ -81,27 +76,21 @@ test("reserves xterm's cell width for emoji and CJK in original layout", async (
     <TerminalRecordingBlock
       lines={lines}
       wrapLines={false}
-      runPadding={null}
       virtualize={false}
     />,
   );
   expect(screen.getByText("😀").style.width).toBe("1ch");
   expect(screen.getByText("界").style.width).toBe("2ch");
   rerender(
-    <TerminalRecordingBlock
-      lines={lines}
-      wrapLines
-      runPadding={null}
-      virtualize={false}
-    />,
+    <TerminalRecordingBlock lines={lines} wrapLines virtualize={false} />,
   );
   expect(screen.getByText("😀").style.width).toBe("");
 });
 
-test("a highlighted run fills its line in both layouts", async () => {
+test("highlights and line-drawing characters fill their rows", async () => {
   const terminal = new Terminal();
   await new Promise<void>((resolve) =>
-    terminal.write("\x1b[48;5;237m> prompt\x1b[0m", resolve),
+    terminal.write("\x1b[48;5;237m> prompt\x1b[0m \u2502", resolve),
   );
   const lines = snapshotTerminalRecording(terminal).lines.map((line) => ({
     ...line,
@@ -115,23 +104,16 @@ test("a highlighted run fills its line in both layouts", async () => {
     <TerminalRecordingBlock
       lines={lines}
       wrapLines={false}
-      runPadding="0.02em"
       virtualize={false}
     />,
   );
   const grid = screen.getByText("> prompt");
   expect(grid.style.display).toBe("inline-block");
   expect(grid.style.verticalAlign).toBe("top");
-  expect(grid.style.paddingBlock).toBe("");
+  // A divider drawn with box-drawing characters joins from row to row.
+  expect(screen.getByText("\u2502").style.transform).toBe("scaleY(1.1)");
   rerender(
-    <TerminalRecordingBlock
-      lines={lines}
-      wrapLines
-      runPadding="0.02em"
-      virtualize={false}
-    />,
+    <TerminalRecordingBlock lines={lines} wrapLines virtualize={false} />,
   );
-  const wrapped = screen.getByText("> prompt");
-  expect(wrapped.style.display).toBe("");
-  expect(wrapped.style.paddingBlock).toBe("0.02em");
+  expect(screen.getByText("> prompt").style.display).toBe("");
 });

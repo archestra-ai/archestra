@@ -78,12 +78,6 @@ chmod 0600 "${mcp_config}"
 # was invisible until delegated runs started using the TUI — and then the
 # session sat on the dialog with nobody able to answer, burning the whole run.
 # Merged rather than written, because Claude Code rewrites this file as it runs.
-#
-# Claude Code also opens its diff panel beside the transcript on the first
-# edit once the terminal is 144 columns wide, and the browser that views the
-# run sets the pane's width. A wide browser then left the transcript two
-# thirds of the screen, live and in the recording. The panel stays closed
-# unless the config already holds a choice; /diff still opens it.
 claude_json="${CLAUDE_CONFIG_DIR:-${HOME}}/.claude.json"
 mkdir -p "$(dirname "${claude_json}")"
 workspace="$(pwd)"
@@ -91,10 +85,9 @@ trust_patch="$(jq -n --arg dir "${workspace}" \
   '{hasCompletedOnboarding:true,bypassPermissionsModeAccepted:true,
     projects:{($dir):{hasTrustDialogAccepted:true}}}')"
 if [[ -s "${claude_json}" ]] && jq -e . "${claude_json}" >/dev/null 2>&1; then
-  merged="$(jq --argjson patch "${trust_patch}" \
-    '{diffSidebarOpen:false} + . * $patch' "${claude_json}")"
+  merged="$(jq --argjson patch "${trust_patch}" '. * $patch' "${claude_json}")"
 else
-  merged="$(jq '{diffSidebarOpen:false} + .' <<<"${trust_patch}")"
+  merged="${trust_patch}"
 fi
 printf '%s\n' "${merged}" > "${claude_json}"
 chmod 0600 "${claude_json}"

@@ -219,16 +219,8 @@ export function TerminalPlayback({
   // while the reader is at the end. A reader who has scrolled up keeps their
   // place through later output and seeks.
   const viewportRef = useRef<HTMLDivElement>(null);
-  const cellProbeRef = useRef<HTMLSpanElement>(null);
   const glyphProbeRef = useRef<HTMLSpanElement>(null);
-  const runPadding = useRunPadding(glyphProbeRef);
-  const fontSize = useFittedFontSize({
-    viewportRef,
-    cellProbeRef,
-    cols: snapshot?.cols,
-    rows: snapshot?.rows,
-    enabled: !wrapLines,
-  });
+  const rowHeight = useRowHeight(glyphProbeRef);
   const openedAtEnd = useRef(false);
   const atEnd = useRef(true);
   useEffect(() => {
@@ -242,14 +234,13 @@ export function TerminalPlayback({
     viewport.addEventListener("scroll", track);
     return () => viewport.removeEventListener("scroll", track);
   }, []);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a fitted font size resizes the document, which stays at its end
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport || !snapshot?.lines.length) return;
     if (openedAtEnd.current && !atEnd.current) return;
     openedAtEnd.current = true;
     viewport.scrollTop = viewport.scrollHeight;
-  }, [snapshot, fontSize]);
+  }, [snapshot]);
 
   return (
     <div
@@ -267,29 +258,25 @@ export function TerminalPlayback({
         data-testid="terminal-playback"
         data-recorded-cols={snapshot?.cols}
         data-recorded-rows={snapshot?.rows}
-        style={
-          wrapLines
-            ? undefined
+        style={{
+          ...(rowHeight ? { lineHeight: rowHeight } : {}),
+          ...(wrapLines
+            ? {}
             : {
                 minWidth: snapshot ? `max(100%, ${snapshot.cols}ch)` : "100%",
-                ...(fontSize ? { fontSize } : {}),
-              }
-        }
+              }),
+        }}
       >
-        <span
-          ref={cellProbeRef}
-          aria-hidden
-          className="pointer-events-none invisible absolute"
-          style={{ width: `${CELL_PROBE_CELLS}ch`, fontSize: BASE_FONT_PX }}
-        >
-          <span ref={glyphProbeRef}>M</span>
+        <span aria-hidden className="pointer-events-none invisible absolute">
+          <span ref={glyphProbeRef} style={{ fontSize: BASE_FONT_PX }}>
+            M
+          </span>
         </span>
         {blocks.map((block) => (
           <TerminalRecordingBlock
             key={block[0].row}
             lines={block}
             wrapLines={wrapLines}
-            runPadding={runPadding}
             virtualize={virtualize}
           />
         ))}
@@ -305,97 +292,27 @@ const RETAINED_SCROLLBACK_LINES = 1_000_000;
 const MAX_REPLAY_RETRIES = 2;
 /** How close to the end still counts as "at the end" for following output. */
 const FOLLOW_END_SLACK_PX = 10;
-/** The document's `text-xs` and `leading-[1.2]`. */
+/** The document's `text-xs`. */
 const BASE_FONT_PX = 12;
-const LINE_HEIGHT_EM = 1.2;
-/** A fitted screen stays legible, and a small one is not blown up. */
-const MIN_FITTED_FONT_PX = 10;
-const MAX_FITTED_FONT_PX = 16;
-const CELL_PROBE_CELLS = 10;
 
 type TerminalRecording = ReturnType<typeof prepareTerminalRecording>;
 
 /**
- * The font size at which the recorded screen fills the viewport, as the live
- * terminal fills it by resizing the pane. A recording keeps the pane's size:
- * a run nobody watched stays at the runtime's 120x40, and drawn at the base
- * size a full-screen client's screen sat in a corner of a wide panel. The
- * last screen is fitted to the width and the height available, within
- * bounds; below the smallest size the grid scrolls. Null until measured.
+ * The row height of xterm's own renderer: the font's glyph box. The
+ * document's 1.2 line height is taller than that box, and an inline
+ * background or a line-drawing character covers only the box, so a
+ * highlighted block showed dark seams between its rows and borders and
+ * dividers broke into dashes. Null until measured.
  */
-function useFittedFontSize({
-  viewportRef,
-  cellProbeRef,
-  cols,
-  rows,
-  enabled,
-}: {
-  viewportRef: RefObject<HTMLDivElement | null>;
-  cellProbeRef: RefObject<HTMLSpanElement | null>;
-  cols: number | undefined;
-  rows: number | undefined;
-  enabled: boolean;
-}): number | null {
-  const [fontSize, setFontSize] = useState<number | null>(null);
-  useLayoutEffect(() => {
-    const viewport = viewportRef.current;
-    const probe = cellProbeRef.current;
-    if (!enabled || !viewport || !probe || !cols || !rows) {
-      setFontSize(null);
-      return;
-    }
-    const fit = () => {
-      const style = getComputedStyle(viewport);
-      const width =
-        viewport.clientWidth -
-        Number.parseFloat(style.paddingLeft) -
-        Number.parseFloat(style.paddingRight);
-      const height =
-        viewport.clientHeight -
-        Number.parseFloat(style.paddingTop) -
-        Number.parseFloat(style.paddingBottom);
-      // A cell's width in em, from the probe's cells at the base size.
-      const cell =
-        probe.getBoundingClientRect().width / CELL_PROBE_CELLS / BASE_FONT_PX;
-      if (width <= 0 || height <= 0 || cell <= 0) return;
-      const fitted = Math.min(
-        width / (cols * cell),
-        height / (rows * LINE_HEIGHT_EM),
-      );
-      // Quarter pixels, rounded down, so the grid never overflows by a hair.
-      setFontSize(
-        Math.floor(
-          Math.min(MAX_FITTED_FONT_PX, Math.max(MIN_FITTED_FONT_PX, fitted)) *
-            4,
-        ) / 4,
-      );
-    };
-    fit();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(fit);
-    observer.observe(viewport);
-    return () => observer.disconnect();
-  }, [viewportRef, cellProbeRef, cols, rows, enabled]);
-  return fontSize;
-}
-
-/**
- * The block padding, in em, that stretches an inline run's background over
- * its whole line. An inline background covers only the font's glyph box,
- * which is shorter than the line height, so wrapped lines showed a dark seam
- * between the rows of a highlighted block. Vertical padding on an inline
- * box does not move the lines. Null until measured.
- */
-function useRunPadding(
+function useRowHeight(
   glyphProbeRef: RefObject<HTMLSpanElement | null>,
 ): string | null {
-  const [padding, setPadding] = useState<string | null>(null);
+  const [height, setHeight] = useState<string | null>(null);
   useLayoutEffect(() => {
     const probe = glyphProbeRef.current;
     if (!probe) return;
     const glyph = probe.getBoundingClientRect().height / BASE_FONT_PX;
-    if (glyph > 0 && glyph < LINE_HEIGHT_EM)
-      setPadding(`${(LINE_HEIGHT_EM - glyph) / 2}em`);
+    if (glyph > 0) setHeight(`${glyph}em`);
   }, [glyphProbeRef]);
-  return padding;
+  return height;
 }

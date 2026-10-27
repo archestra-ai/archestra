@@ -13,13 +13,10 @@ type DisplayLine = Omit<SnapshotLine, "runs"> & {
 export function TerminalRecordingBlock({
   lines,
   wrapLines,
-  runPadding,
   virtualize,
 }: {
   lines: DisplayLine[];
   wrapLines: boolean;
-  /** Block padding that fills a wrapped run's line; see `useRunPadding`. */
-  runPadding: string | null;
   virtualize: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null);
@@ -102,9 +99,7 @@ export function TerminalRecordingBlock({
       ref={root}
       data-recording-block={lines[0].row}
       style={
-        visible
-          ? undefined
-          : { height: measuredHeight ?? `${estimatedRows * 1.2}em` }
+        visible ? undefined : { height: measuredHeight ?? estimatedRows * 14.4 }
       }
     >
       {visible &&
@@ -112,7 +107,7 @@ export function TerminalRecordingBlock({
           <div
             key={line.row}
             data-terminal-row={line.row}
-            className="min-h-[1.2em]"
+            className="min-h-[1lh]"
             style={
               wrapLines
                 ? undefined
@@ -120,11 +115,10 @@ export function TerminalRecordingBlock({
             }
           >
             {line.runs.map((run) => {
-              // Every run fills its row. An inline background covers only the
-              // font's glyph box, so a coloured block (a client's highlighted
-              // prompt) showed dark seams between its rows. On the grid a run
-              // is an inline block, as in xterm's own DOM renderer; a wrapped
-              // run stays inline, padded to its line.
+              // On the grid every run is an inline block of the row's height,
+              // as in xterm's own DOM renderer, so a coloured block keeps no
+              // gap between its rows even where a glyph falls back to a font
+              // with other metrics.
               const style = {
                 ...run.style,
                 ...(!wrapLines
@@ -133,10 +127,13 @@ export function TerminalRecordingBlock({
                       verticalAlign: "top",
                       ...(run.fixedWidth ? { width: `${run.cells}ch` } : {}),
                     }
-                  : runPadding
-                    ? { paddingBlock: runPadding }
-                    : {}),
+                  : {}),
               };
+              const text = joinsAdjacentRows(run.text) ? (
+                <span style={STRETCHED_GLYPH_STYLE}>{run.text}</span>
+              ) : (
+                run.text
+              );
               return run.url ? (
                 <a
                   key={run.key}
@@ -153,11 +150,11 @@ export function TerminalRecordingBlock({
                       : `underline ${style.textDecorationLine ?? ""}`,
                   }}
                 >
-                  {run.text}
+                  {text}
                 </a>
               ) : (
                 <span key={run.key} style={style}>
-                  {run.text}
+                  {text}
                 </span>
               );
             })}
@@ -165,4 +162,23 @@ export function TerminalRecordingBlock({
         ))}
     </div>
   );
+}
+
+// ===================== internals =====================
+
+/**
+ * Fonts draw box-drawing and block characters to their own ascent and
+ * descent, which the browser rounds, so they stop a fraction of a pixel short
+ * of the row and a divider, a border or a logo showed as dashes. Stretched a
+ * little past the row, as xterm's own glyphs fill their cell, they join.
+ */
+const STRETCHED_GLYPH_STYLE = {
+  display: "inline-block",
+  verticalAlign: "top",
+  transform: "scaleY(1.1)",
+} as const;
+
+function joinsAdjacentRows(text: string): boolean {
+  const code = text.codePointAt(0) ?? 0;
+  return text.length === 1 && code >= 0x2500 && code <= 0x259f;
 }

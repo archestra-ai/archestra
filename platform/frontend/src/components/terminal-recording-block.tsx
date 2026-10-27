@@ -13,10 +13,13 @@ type DisplayLine = Omit<SnapshotLine, "runs"> & {
 export function TerminalRecordingBlock({
   lines,
   wrapLines,
+  runPadding,
   virtualize,
 }: {
   lines: DisplayLine[];
   wrapLines: boolean;
+  /** Block padding that fills a wrapped run's line; see `useRunPadding`. */
+  runPadding: string | null;
   virtualize: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null);
@@ -117,10 +120,11 @@ export function TerminalRecordingBlock({
             }
           >
             {line.runs.map((run) => {
-              // On the grid every run fills its row, as in xterm's own DOM
-              // renderer. An inline background covers only the font's glyph
-              // box, so a coloured block (a client's highlighted prompt)
-              // showed dark seams between its rows.
+              // Every run fills its row. An inline background covers only the
+              // font's glyph box, so a coloured block (a client's highlighted
+              // prompt) showed dark seams between its rows. On the grid a run
+              // is an inline block, as in xterm's own DOM renderer; a wrapped
+              // run stays inline, padded to its line.
               const style = {
                 ...run.style,
                 ...(!wrapLines
@@ -129,7 +133,9 @@ export function TerminalRecordingBlock({
                       verticalAlign: "top",
                       ...(run.fixedWidth ? { width: `${run.cells}ch` } : {}),
                     }
-                  : {}),
+                  : runPadding
+                    ? { paddingBlock: runPadding }
+                    : {}),
               };
               return run.url ? (
                 <a

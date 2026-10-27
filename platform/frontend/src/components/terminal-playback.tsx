@@ -220,6 +220,8 @@ export function TerminalPlayback({
   // place through later output and seeks.
   const viewportRef = useRef<HTMLDivElement>(null);
   const cellProbeRef = useRef<HTMLSpanElement>(null);
+  const glyphProbeRef = useRef<HTMLSpanElement>(null);
+  const runPadding = useRunPadding(glyphProbeRef);
   const fontSize = useFittedFontSize({
     viewportRef,
     cellProbeRef,
@@ -279,12 +281,15 @@ export function TerminalPlayback({
           aria-hidden
           className="pointer-events-none invisible absolute"
           style={{ width: `${CELL_PROBE_CELLS}ch`, fontSize: BASE_FONT_PX }}
-        />
+        >
+          <span ref={glyphProbeRef}>M</span>
+        </span>
         {blocks.map((block) => (
           <TerminalRecordingBlock
             key={block[0].row}
             lines={block}
             wrapLines={wrapLines}
+            runPadding={runPadding}
             virtualize={virtualize}
           />
         ))}
@@ -372,4 +377,25 @@ function useFittedFontSize({
     return () => observer.disconnect();
   }, [viewportRef, cellProbeRef, cols, rows, enabled]);
   return fontSize;
+}
+
+/**
+ * The block padding, in em, that stretches an inline run's background over
+ * its whole line. An inline background covers only the font's glyph box,
+ * which is shorter than the line height, so wrapped lines showed a dark seam
+ * between the rows of a highlighted block. Vertical padding on an inline
+ * box does not move the lines. Null until measured.
+ */
+function useRunPadding(
+  glyphProbeRef: RefObject<HTMLSpanElement | null>,
+): string | null {
+  const [padding, setPadding] = useState<string | null>(null);
+  useLayoutEffect(() => {
+    const probe = glyphProbeRef.current;
+    if (!probe) return;
+    const glyph = probe.getBoundingClientRect().height / BASE_FONT_PX;
+    if (glyph > 0 && glyph < LINE_HEIGHT_EM)
+      setPadding(`${(LINE_HEIGHT_EM - glyph) / 2}em`);
+  }, [glyphProbeRef]);
+  return padding;
 }

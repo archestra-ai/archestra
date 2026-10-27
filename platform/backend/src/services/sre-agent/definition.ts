@@ -1,5 +1,6 @@
 import { SYSTEM_PROMPT_HELPER_EXPRESSIONS } from "@archestra/shared/system-prompt-template";
 import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
+import { ARCHESTRA_SOURCE_REF_EXPRESSION } from "@/templating";
 import type { LocalConfig } from "@/types";
 
 export const SRE_CATALOG_ID = "00000000-0000-4000-8000-000000000510";
@@ -42,9 +43,12 @@ export const SRE_AGENT_TOOL_NAMES = [
   "resources_list",
 ] as const;
 
-/** Where the source is cloned from; its tags are `platform-v<version>`. */
 const SRE_SOURCE_REPOSITORY = "https://github.com/archestra-ai/archestra";
 const SRE_SOURCE_CHECKOUT = `${SKILL_SANDBOX_HOME}/archestra`;
+/** `checkout` takes both a release tag and a commit SHA; `clone --branch` takes only the tag. */
+export const SRE_SOURCE_CLONE = `git clone --filter=blob:none --no-checkout ${SRE_SOURCE_REPOSITORY} ${SRE_SOURCE_CHECKOUT} && git -C ${SRE_SOURCE_CHECKOUT} checkout ${ARCHESTRA_SOURCE_REF_EXPRESSION}`;
+/** What early installs seeded; `SreAgentService.seed` rewrites it to `SRE_SOURCE_CLONE`. */
+export const SRE_LEGACY_SOURCE_CLONE = `git clone --filter=blob:none --branch platform-v${SYSTEM_PROMPT_HELPER_EXPRESSIONS.archestraVersion} ${SRE_SOURCE_REPOSITORY} ${SRE_SOURCE_CHECKOUT}`;
 
 export function sreAgentSystemPrompt(params: {
   appName: string;
@@ -57,7 +61,7 @@ export function sreAgentSystemPrompt(params: {
     ? `
 
 Reading the source: to map an error or a stack trace to code, read ${appName}'s source for the running version in your sandbox. Once per conversation, unless ${SRE_SOURCE_CHECKOUT} already exists, run:
-git clone --filter=blob:none --branch platform-v${SYSTEM_PROMPT_HELPER_EXPRESSIONS.archestraVersion} ${SRE_SOURCE_REPOSITORY} ${SRE_SOURCE_CHECKOUT}
+${SRE_SOURCE_CLONE}
 Then search it with \`git grep -n\` and \`git log -S\`, and cite code as path:line. If the clone fails, say so and continue without the source.`
     : "";
   return `You are ${appName}'s on-cluster SRE. You investigate problems with this ${appName} installation in Kubernetes namespace "${namespace}".

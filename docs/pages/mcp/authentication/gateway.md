@@ -97,7 +97,7 @@ Before you start:
 Then:
 
 1. On the gateway's **Settings** tab, turn on **Accept GitHub Actions tokens** under **GitHub Actions**.
-2. Pick the App, add the repositories (`owner/*` covers every repository of an owner, including new ones), and add each trusted workflow as GitHub names it in the token's `job_workflow_ref` claim, such as `acme/review/.github/workflows/review.yml@refs/heads/main`.
+2. Pick the App, add the repositories (`owner/*` covers every repository of an owner, including new ones, so install the App on all of them), and add each trusted workflow as GitHub names it in the token's `job_workflow_ref` claim, such as `acme/review/.github/workflows/review.yml@refs/heads/main`.
 3. In the workflow, grant `id-token: write`, request a GitHub OIDC token whose audience is your [`ARCHESTRA_FRONTEND_URL`](/docs/admin/deployment/configuration#ARCHESTRA_FRONTEND_URL), and send it:
 
    ```http

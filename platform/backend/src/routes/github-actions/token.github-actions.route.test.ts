@@ -34,6 +34,7 @@ vi.mock("@/logging");
 
 const GITHUB_ISSUER = "https://token.actions.githubusercontent.com";
 const REPOSITORY = "acme/widgets";
+const REPOSITORY_ID = 7_000_001;
 const WORKFLOW =
   "acme/review-workflows/.github/workflows/review.yml@refs/heads/main";
 const AUTHOR = { id: 4242, login: "octo-author" };
@@ -71,10 +72,10 @@ const server = useMswServer(
   http.post(ACCESS_TOKENS_URL, async ({ request }) => {
     const text = await request.text();
     const body = text ? JSON.parse(text) : {};
-    if (body.repositories) scopedTokenRequests.push(body);
+    if (body.repository_ids) scopedTokenRequests.push(body);
     return HttpResponse.json(
       {
-        token: body.repositories
+        token: body.repository_ids
           ? SCOPED_GITHUB_TOKEN
           : "ghs_installation_wide",
         expires_at: new Date(Date.now() + HOUR).toISOString(),
@@ -207,7 +208,7 @@ describe("POST /api/github-actions/token", () => {
     );
     expect(scopedTokenRequests).toEqual([
       {
-        repositories: ["widgets"],
+        repository_ids: [REPOSITORY_ID],
         permissions: {
           pull_requests: "write",
           contents: "read",
@@ -401,6 +402,20 @@ describe("POST /api/github-actions/token", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().github_login).toBe(AUTHOR.login);
+    // The GitHub token is for the repository the run came from, by its id.
+    expect(scopedTokenRequests).toMatchObject([
+      { repository_ids: [REPOSITORY_ID] },
+    ]);
+  });
+
+  test("refuses an OIDC token without a repository id", async () => {
+    const response = await exchange({
+      token: await oidcToken({ claims: { repository_id: undefined } }),
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error).toBe("invalid_token");
+    expect(scopedTokenRequests).toHaveLength(0);
   });
 
   test("refuses a repository of another owner under owner/*", async ({
@@ -860,6 +875,7 @@ async function oidcToken(
     event_name: "pull_request",
     ref: "refs/pull/42/merge",
     repository: REPOSITORY,
+    repository_id: String(REPOSITORY_ID),
     repository_owner: "acme",
     job_workflow_ref: WORKFLOW,
     // The pull request's author started the run, unless a test says otherwise.

@@ -218,9 +218,11 @@ export async function exchangeGitHubActionsToken(params: {
     gatewayToken = await mintGatewayAccessToken({ gatewayId, userId });
     let githubToken: { token: string; expiresAt: number };
     try {
+      // By id: a name can belong to another account once an owner is
+      // renamed and its old name taken, and must never reach its repository.
       githubToken = await createRepositoryInstallationToken({
         ...app,
-        repository: repository.slice(repository.indexOf("/") + 1),
+        repositoryId: claims.repository_id,
         permissions: GITHUB_TOKEN_PERMISSIONS,
       });
     } catch (error) {
@@ -344,6 +346,13 @@ const OidcClaimsSchema = z.object({
   event_name: z.string(),
   ref: z.string(),
   repository: z.string(),
+  /**
+   * GitHub's id of the repository, which a rename or a reused owner name
+   * cannot change; GitHub sends it as a string.
+   */
+  repository_id: z
+    .union([z.string().regex(/^\d+$/), z.number().int().positive()])
+    .transform(Number),
   job_workflow_ref: z.string(),
   /** Who started the run; GitHub sends the numeric id as a string. */
   actor_id: z.union([z.string().min(1), z.number()]).transform(String),

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   GitHubActionsAccessSchema,
   gitHubRepositoryMatches,
+  StoredGitHubActionsAccessSchema,
 } from "./github-actions-access";
 
 describe("gitHubRepositoryMatches", () => {
@@ -14,6 +15,8 @@ describe("gitHubRepositoryMatches", () => {
     expect(gitHubRepositoryMatches("Acme/*", "acme/new-repo")).toBe(true);
     expect(gitHubRepositoryMatches("acme/*", "acme-labs/widgets")).toBe(false);
     expect(gitHubRepositoryMatches("acme/*", "other/widgets")).toBe(false);
+    expect(gitHubRepositoryMatches("acme/*", "acme/")).toBe(false);
+    expect(gitHubRepositoryMatches("acme/*", "acme/widgets/extra")).toBe(false);
   });
 });
 
@@ -29,7 +32,7 @@ describe("GitHubActionsAccessSchema", () => {
     expect(
       GitHubActionsAccessSchema.safeParse({
         ...access,
-        repositories: ["acme/widgets", "acme/*"],
+        repositories: ["acme/*", "other/widgets"],
       }).success,
     ).toBe(true);
     for (const repository of ["*/*", "acme/wid*", "*"]) {
@@ -40,5 +43,29 @@ describe("GitHubActionsAccessSchema", () => {
         }).success,
       ).toBe(false);
     }
+  });
+
+  test("refuses an owner/name entry that an owner/* entry covers", () => {
+    const result = GitHubActionsAccessSchema.safeParse({
+      ...access,
+      repositories: ["Acme/widgets", "acme/*"],
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe(
+      "An owner/* entry already covers that owner's repositories",
+    );
+  });
+});
+
+describe("StoredGitHubActionsAccessSchema", () => {
+  test("reads a stored entry that the entry rules refuse", () => {
+    const stored = {
+      githubAppCredentialKey: "review-app",
+      repositories: ["acme/*", "acme/widgets", "acme/wid*"],
+      workflows: [
+        "acme/.github/.github/workflows/review.yml@refs/pull/1/merge",
+      ],
+    };
+    expect(StoredGitHubActionsAccessSchema.parse(stored)).toEqual(stored);
   });
 });

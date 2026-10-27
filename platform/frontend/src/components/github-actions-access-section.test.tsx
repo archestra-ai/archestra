@@ -1,7 +1,7 @@
 import {
   archestraApiClient,
   type archestraApiTypes,
-  GITHUB_REPOSITORY_FULL_NAME_MESSAGE,
+  GITHUB_ACTIONS_REPOSITORY_MESSAGE,
   type GitHubActionsAccess,
   GitHubActionsAccessSchema,
 } from "@archestra/shared";
@@ -105,7 +105,7 @@ describe("GitHubActionsAccessSection", () => {
     const workflows = screen.getByLabelText("Trusted workflows");
 
     await user.type(repositories, "widgets{Enter}");
-    expect(screen.getByText(GITHUB_REPOSITORY_FULL_NAME_MESSAGE)).toBeVisible();
+    expect(screen.getByText(GITHUB_ACTIONS_REPOSITORY_MESSAGE)).toBeVisible();
     await user.clear(repositories);
     await user.type(repositories, "acme/widgets{Enter}");
     await user.type(repositories, "ACME/Widgets{Enter}");
@@ -132,6 +132,35 @@ describe("GitHubActionsAccessSection", () => {
     });
     expect(GitHubActionsAccessSchema.safeParse(saved).success).toBe(true);
     expect(gitHubActionsAccessError(saved)).toBeNull();
+  });
+
+  it("takes owner/* and says when it already covers a listed repository", async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderSection({
+      githubAppCredentialKey: "review-app",
+      repositories: ["acme/widgets"],
+      workflows: [WORKFLOW],
+    });
+
+    await user.type(screen.getByLabelText("Repositories"), "acme/*{Enter}");
+
+    expect(onChange.mock.lastCall?.[0]?.repositories).toEqual([
+      "acme/widgets",
+      "acme/*",
+    ]);
+    expect(
+      screen.getByText(
+        "An owner/* entry already covers that owner's repositories",
+        { selector: "[role=alert]" },
+      ),
+    ).toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", { name: "Remove acme/widgets" }),
+    );
+
+    expect(onChange.mock.lastCall?.[0]?.repositories).toEqual(["acme/*"]);
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("says what is still missing before the setting can be saved", () => {

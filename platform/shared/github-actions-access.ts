@@ -10,10 +10,11 @@ import { GITHUB_COM_API_URL } from "./github";
 export const GITHUB_ACTIONS_ACCESS_MAX_ENTRIES = 50;
 
 /**
- * `owner/name`, as GitHub spells a repository's full name, or `owner/*` for
- * every repository of that owner, including ones created later.
+ * An entry of `repositories`: `owner/name`, as GitHub spells a repository's
+ * full name, or `owner/*` for every repository of that owner, including ones
+ * created later. Not a repository name: it can hold a wildcard.
  */
-export const GITHUB_REPOSITORY_FULL_NAME_REGEX =
+export const GITHUB_ACTIONS_REPOSITORY_REGEX =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/(?:[A-Za-z0-9._-]{1,100}|\*)$/;
 
 /**
@@ -24,7 +25,7 @@ export const GITHUB_REPOSITORY_FULL_NAME_REGEX =
 export const GITHUB_JOB_WORKFLOW_REF_REGEX =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}\/\.github\/workflows\/[A-Za-z0-9._/-]+\.ya?ml@(?:refs\/heads\/[^\s@]+|refs\/tags\/[^\s@]+|[0-9a-f]{40})$/;
 
-export const GITHUB_REPOSITORY_FULL_NAME_MESSAGE =
+export const GITHUB_ACTIONS_REPOSITORY_MESSAGE =
   "Enter a repository as owner/name, or owner/* for all of an owner's repositories";
 export const GITHUB_JOB_WORKFLOW_REF_MESSAGE =
   "Enter a workflow as owner/repo/.github/workflows/<file>.yml@<ref>, where <ref> is refs/heads/<branch>, refs/tags/<tag>, or a full commit SHA";
@@ -35,8 +36,8 @@ export const GitHubActionsAccessSchema = z.object({
   /** Repositories whose pull-request jobs may ask; matched case-insensitively. */
   repositories: z
     .array(
-      z.string().max(140).regex(GITHUB_REPOSITORY_FULL_NAME_REGEX, {
-        message: GITHUB_REPOSITORY_FULL_NAME_MESSAGE,
+      z.string().max(140).regex(GITHUB_ACTIONS_REPOSITORY_REGEX, {
+        message: GITHUB_ACTIONS_REPOSITORY_MESSAGE,
       }),
     )
     .min(1, { message: "Add at least one repository" })
@@ -46,6 +47,21 @@ export const GitHubActionsAccessSchema = z.object({
         new Set(repositories.map((repository) => repository.toLowerCase()))
           .size === repositories.length,
       { message: "Each repository can be listed once" },
+    )
+    .refine(
+      (repositories) => {
+        const owners = new Set(
+          repositories
+            .filter((repository) => repository.endsWith("/*"))
+            .map((repository) => repositoryOwner(repository)),
+        );
+        return repositories.every(
+          (repository) =>
+            repository.endsWith("/*") ||
+            !owners.has(repositoryOwner(repository)),
+        );
+      },
+      { message: "An owner/* entry already covers that owner's repositories" },
     ),
   /** Trusted `job_workflow_ref` claim values; matched exactly. */
   workflows: z
@@ -63,6 +79,17 @@ export const GitHubActionsAccessSchema = z.object({
 export type GitHubActionsAccess = z.infer<typeof GitHubActionsAccessSchema>;
 
 /**
+ * A stored setting as reads return it. The entries are not checked again, so
+ * a row that a later or earlier version saved with other rules still loads;
+ * saving it goes through `GitHubActionsAccessSchema`.
+ */
+export const StoredGitHubActionsAccessSchema = z.object({
+  githubAppCredentialKey: z.string(),
+  repositories: z.array(z.string()),
+  workflows: z.array(z.string()),
+});
+
+/**
  * Whether a listed entry admits a repository: the same `owner/name`, or
  * `owner/*` for any repository of that owner. Case-insensitive, as GitHub is.
  */
@@ -70,11 +97,17 @@ export function gitHubRepositoryMatches(
   allowed: string,
   repository: string,
 ): boolean {
-  const entry = allowed.toLowerCase();
-  const name = repository.toLowerCase();
-  if (!entry.endsWith("/*")) return entry === name;
-  const owner = entry.slice(0, -1);
-  return name.startsWith(owner) && !name.slice(owner.length).includes("/");
+  const [allowedOwner, allowedName] = allowed.toLowerCase().split("/");
+  const parts = repository.toLowerCase().split("/");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return false;
+  return (
+    parts[0] === allowedOwner &&
+    (allowedName === "*" || parts[1] === allowedName)
+  );
+}
+
+function repositoryOwner(repository: string): string {
+  return repository.slice(0, repository.indexOf("/")).toLowerCase();
 }
 
 /**

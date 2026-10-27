@@ -22,7 +22,7 @@ Install Archestra on Kubernetes with Helm. You need a cluster, Helm 3 or later, 
    ```bash
    export ARCHESTRA_VERSION="1.5.0-rc.11" # x-release-please-version
    helm show values \
-     oci://ghcr.io/archestra-ai/helm-charts/archestra-platform \
+     oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
      --version "$ARCHESTRA_VERSION" > values.yaml
    ```
 
@@ -31,11 +31,13 @@ Install Archestra on Kubernetes with Helm. You need a cluster, Helm 3 or later, 
 
    ```bash
    helm upgrade archestra-platform \
-     oci://ghcr.io/archestra-ai/helm-charts/archestra-platform \
+     oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
      --version "$ARCHESTRA_VERSION" \
      --install --namespace archestra --create-namespace \
      --values values.yaml --wait
    ```
+
+If you mirror images into an internal registry, import each release’s images from `ghcr.io/archestra-ai` and keep your internal registry overrides in the Helm values.
 
 The chart generates and preserves authentication and credential-encryption keys. Back them up with your database. To supply existing keys, set `archestra.authSecret.existingSecretName` and `existingSecretKey`; the same Secret must contain `session-secret` and `secrets-encryption-secret`.
 

@@ -21,11 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write # Create only the migration's release packages.
+      packages: write # Create only the migration's CI packages.
     strategy:
       fail-fast: false
       matrix:
-        image: [platform, mcp-server-base, sandbox-base, p4-shim, agent-claude-code, agent-codex, agent-opencode, agent-hermes, agent-openclaw, agent-grok, agent-kimi, helm-charts/archestra-platform]
+        image: [platform, mcp-server-base, sandbox-base, p4-shim, agent-claude-code, agent-codex, agent-opencode, agent-hermes, agent-openclaw, agent-grok, agent-kimi, bench-runner]
     steps:
       - name: Log in to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -36,7 +36,7 @@ jobs:
 
       - name: Provision package with an unused marker tag
         env:
-          IMAGE: ghcr.io/archestra-ai/${{ matrix.image }}
+          IMAGE: ghcr.io/archestra-ai/ci/${{ matrix.image }}
           BOOTSTRAP_TAG: registry-bootstrap-${{ github.run_id }}
         run: |
           mkdir -p "$RUNNER_TEMP/ghcr-bootstrap"
@@ -44,34 +44,15 @@ jobs:
           cat > "$RUNNER_TEMP/ghcr-bootstrap/Dockerfile" <<'DOCKERFILE'
           FROM scratch
           LABEL org.opencontainers.image.source="https://github.com/archestra-ai/archestra"
-          LABEL org.opencontainers.image.description="Release registry provisioning marker; never use this tag to run Archestra"
+          LABEL org.opencontainers.image.description="CI image and build cache; release artifacts use a separate package"
           COPY marker /registry-bootstrap-marker
           DOCKERFILE
           docker build --tag "$IMAGE:$BOOTSTRAP_TAG" "$RUNNER_TEMP/ghcr-bootstrap"
           docker push "$IMAGE:$BOOTSTRAP_TAG"
 
-      - name: Verify Helm OCI push and anonymous pull
-        if: ${{ matrix.image == 'helm-charts/archestra-platform' }}
-        env:
-          GHCR_TOKEN: ${{ github.token }}
-          GHCR_USER: ${{ github.actor }}
-          CHART_VERSION: 0.0.0-registry-check.${{ github.run_id }}.${{ github.run_attempt }}
-        run: |
-          # A separate prerelease tag proves the actual Helm media types and
-          # blob download path; it can never collide with a release version.
-          chart_dir="$RUNNER_TEMP/helm-registry-check"
-          mkdir -p "$chart_dir/source/templates" "$chart_dir/anonymous"
-          printf 'apiVersion: v2\nname: archestra-platform\nversion: %s\n' "$CHART_VERSION" > "$chart_dir/source/Chart.yaml"
-          printf 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: registry-check\n' > "$chart_dir/source/templates/marker.yaml"
-          printf '%s' "$GHCR_TOKEN" | helm registry login ghcr.io --username "$GHCR_USER" --password-stdin
-          helm package "$chart_dir/source" --destination "$chart_dir"
-          helm push "$chart_dir/archestra-platform-$CHART_VERSION.tgz" oci://ghcr.io/archestra-ai/helm-charts
-          HELM_REGISTRY_CONFIG="$chart_dir/anonymous/config.json" helm pull oci://ghcr.io/archestra-ai/helm-charts/archestra-platform --version "$CHART_VERSION" --destination "$chart_dir/anonymous"
-          cmp "$chart_dir/archestra-platform-$CHART_VERSION.tgz" "$chart_dir/anonymous/archestra-platform-$CHART_VERSION.tgz"
-
       - name: Verify anonymous registry access
         env:
-          IMAGE: ghcr.io/archestra-ai/${{ matrix.image }}
+          IMAGE: ghcr.io/archestra-ai/ci/${{ matrix.image }}
           BOOTSTRAP_TAG: registry-bootstrap-${{ github.run_id }}
         run: |
           # Fresh config must not inherit the writer's logged-in credentials.

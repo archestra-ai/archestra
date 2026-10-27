@@ -209,7 +209,7 @@ gh() {
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout.splitlines(), [
                     "helm push archestra-platform-1.4.0.tgz "
-                    "oci://ghcr.io/archestra-ai/helm-charts",
+                    "oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts",
                     f"docker buildx imagetools create --tag registry.example.invalid/relocated/mcp:latest {mcp_image}",
                 ])
 

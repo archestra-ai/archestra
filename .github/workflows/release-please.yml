@@ -490,7 +490,6 @@ jobs:
       - release-please
     permissions:
       contents: write # Required to publish Helm chart metadata from the repository.
-      packages: write # Publish the new release chart to GHCR.
       id-token: write # Required for Workload Identity Federation.
     with:
       version: ${{ needs.release-please.outputs.platform_version }}
@@ -520,7 +519,8 @@ jobs:
       - publish-platform-helm-chart
     permissions:
       contents: write # Attach the saved chart and publish the release.
-      packages: write # Publish GHCR release images and OCI chart.
+      packages: write # Publish new release images to GHCR.
+      id-token: write # Keep publishing the Helm chart at its existing GAR URL.
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -565,6 +565,14 @@ jobs:
           path: release-images
           merge-multiple: true
 
+      - name: Authenticate to artifact registry
+        if: ${{ github.ref_name != 'main' }}
+        uses: archestra-ai/.github/actions/google-auth@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        with:
+          service_account: ${{ vars.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          registry: europe-west1-docker.pkg.dev
+
       - name: Log in to GHCR
         uses: $/.github/actions/docker-login
         with:
@@ -572,18 +580,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Log in to GHCR for Helm
-        env:
-          GHCR_TOKEN: ${{ github.token }}
-          GHCR_USER: ${{ github.actor }}
-        run: printf '%s' "$GHCR_TOKEN" | helm registry login ghcr.io --username "$GHCR_USER" --password-stdin
-
       - name: Publish stable artifacts without rebuilding
         if: ${{ github.ref_name != 'main' }}
         shell: bash
         run: |
           test -s release-images/mcp-server-base
-          helm push "archestra-platform-${VERSION}.tgz" oci://ghcr.io/archestra-ai/helm-charts
+          helm push "archestra-platform-${VERSION}.tgz" oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts
           for file in release-images/*; do
             [ "${file##*/}" = platform ] && continue
             IMAGE=$(cat "$file")

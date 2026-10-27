@@ -34,9 +34,9 @@ A session is routed once, on its first request, and keeps that model for its who
 A new plan needs about 1000 finished sessions. Past traffic can supply them instead of waiting for `auto` traffic.
 
 1. **Find past sessions.** Runs on its own when you first enable auto routing, or from the Overview page. It reads the last 35 days of proxy logs and counts the sessions a plan can learn from, by API and client. It costs nothing.
-2. **Score them.** You start this. Archestra sends the opening prompt of a sample of those sessions to the Jev scorer, up to the cost ceiling you set, then fits a plan.
+2. **Score them.** You start this. Archestra sends the opening prompt of a sample of those sessions to the Jev scorer, up to the spending limit you set (calls already in flight can take it a few calls over), then fits a plan.
 
-Only sessions with a client-supplied session id are used. Sessions whose content was not logged or is end-to-end encrypted are skipped. After a scorer change the page offers to score the same sessions again.
+Only sessions with a client-supplied session id that began inside the window are used. Sessions whose content was not logged or is end-to-end encrypted are skipped. After a scorer change the page offers to score the same sessions again.
 
 ## When It Falls Back to the Normal Model
 

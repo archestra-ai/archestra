@@ -26,11 +26,11 @@ To use the agent, your role needs [`sre:read`](/docs/reference/permissions#sre:r
 
 3. After the rollout, open **Chat**, pick the **SRE** agent, and ask "Why did a pod restart in the last hour?" If the agent is missing, check your role's [`sre:read`](/docs/reference/permissions#sre:read) permission, then check **MCP Registry → Kubernetes** for a startup error.
 
-What to know:
+The MCP server's egress is your organization's [default network policy](/docs/admin/environments) plus `apiServerCidrs`. A change applies when the **Kubernetes** MCP server's pod restarts.
 
-- The MCP server's egress is your organization's [default network policy](/docs/admin/environments) plus `apiServerCidrs`. A change applies when the **Kubernetes** MCP server's pod restarts.
-- With the [code sandbox](/docs/agents#code-sandbox) on, the agent clones the source of the running Archestra version from GitHub to tie errors to code, so the default policy must allow GitHub.
-- Setting `enabled: false` deletes the agent, its MCP server, and its environment, including your changes to the agent.
+With the [code sandbox](/docs/agents#code-sandbox) on, the agent clones the source of the running Archestra version from GitHub to tie errors to code, so the default policy must allow GitHub.
+
+Setting `enabled: false` deletes the agent, its MCP server, and its environment, including your changes to the agent.
 
 ## Collect a Support Bundle
 
@@ -45,9 +45,7 @@ bash support-bundle.sh <namespace> <release>
 
 It prints the path of the `.tar.gz` it wrote.
 
-What to know:
+The bundle leaves out Secrets, ConfigMaps, environment values, container arguments, probe headers, and every Helm value except a fixed list of non-secret settings. Logs are copied as written, so read the bundle before you share it.
 
-- It leaves out Secrets, ConfigMaps, environment values, container arguments, probe headers, and every Helm value except a fixed list of non-secret settings.
-- Logs are copied as written, so read the bundle before you share it.
-- A step that fails or times out leaves its error in the bundle, and the rest is still collected. To change the 20-second timeout per `kubectl` call, set `KUBECTL_REQUEST_TIMEOUT`.
+A step that fails or times out leaves its error in the bundle, and the rest is still collected. To change the 20-second timeout per `kubectl` call, set `KUBECTL_REQUEST_TIMEOUT`.
 

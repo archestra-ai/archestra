@@ -1,5 +1,8 @@
+import { planFormatVersion } from "@archestra/router-rs";
+import { eq } from "drizzle-orm";
 import { activeSourceVersion } from "@/auto-routing/signals";
 import config from "@/config";
+import db, { schema } from "@/database";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import RoutingPlanModel from "@/models/routing-plan";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -67,6 +70,23 @@ describe("POST /api/auto-routing/replan", () => {
     expect(
       await RoutingPlanModel.findHistory(ctx.organizationId, 10),
     ).toHaveLength(1);
+  });
+
+  test("a re-plan over a plan of an older format fits a new plan", async () => {
+    const trio = await configureAutoRouting(ctx.organizationId);
+    await seedHistory(ctx.organizationId, trio[2].id, 40);
+    const first = (await replan()).json();
+    await db
+      .update(schema.routingPlansTable)
+      .set({ planFormatVersion: planFormatVersion() - 1 })
+      .where(eq(schema.routingPlansTable.id, first.fit.planId));
+
+    const response = await replan();
+
+    expect(response.statusCode, response.body).toBe(200);
+    const body = response.json();
+    expect(body.fit).toMatchObject({ status: "active" });
+    expect(body.fit.planId).not.toBe(first.fit.planId);
   });
 
   test("a re-plan after new usage fits a new plan", async () => {

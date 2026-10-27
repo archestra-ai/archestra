@@ -142,6 +142,7 @@ export async function fitInputsUnchanged(
 ): Promise<boolean> {
   const scorerVersion = await activeSourceVersion();
   if (
+    plan.planFormatVersion !== planFormatVersion() ||
     plan.generation !== settings.generation ||
     plan.scorerVersionId !== scorerVersion.id ||
     settings.scorerVersionId !== scorerVersion.id

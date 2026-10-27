@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [platform, mcp-server-base, sandbox-base, p4-shim, agent-claude-code, agent-codex, agent-opencode, agent-hermes, agent-openclaw, agent-grok, agent-kimi]
+        image: [platform, mcp-server-base, sandbox-base, p4-shim, agent-claude-code, agent-codex, agent-opencode, agent-hermes, agent-openclaw, agent-grok, agent-kimi, bench-runner]
     steps:
       - name: Log in to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0

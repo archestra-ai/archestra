@@ -8,32 +8,32 @@ beta: "Set [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED=true`](/docs/admin/deployment/con
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Keep a model answering when one provider key hits its rate limit or goes down. A model pool serves one model name, such as `glm-5.3`, from several provider keys: Zhipu AI first, and Bedrock when Zhipu AI fails. Clients keep asking for `glm-5.3` with the key they already have. Archestra picks the key, spreads the load, and moves to the next key before the client sees an error.
+Keep a model answering when one provider key hits its rate limit or goes down. A model pool serves one model name, such as `claude-sonnet-4-6`, from several provider keys: Anthropic first, and Bedrock when Anthropic fails. Clients keep asking for `claude-sonnet-4-6` with the key they already have, and Archestra moves to the next key before they see an error.
 
 ```mermaid
 flowchart LR
-    Client["Claude Code · Your apps"] -->|"glm-5.3"| Pool["Model pool"]
-    Pool --> Order1["Order 1: two Zhipu AI keys"]
+    Client["Claude Code · Your apps"] -->|"claude-sonnet-4-6"| Pool["Model pool"]
+    Pool --> Order1["Order 1: Anthropic key"]
     Pool -.->|"If order 1 is unavailable"| Order2["Order 2: Bedrock key"]
     class Pool accent
 ```
 
 ## Create a Pool
 
-A pool is a model name and its members. Each member is a shared provider key and the model ID that key uses, since providers spell the same model differently: Bedrock calls `glm-5.3` `us.zai.glm-5.3`.
+A pool is a model name and its members. Each member is a shared provider key and the model ID that key uses, since providers spell the same model differently: Bedrock calls `claude-sonnet-4-6` `us.anthropic.claude-sonnet-4-6`.
 
 Before you start, add a shared key for each provider on [Model Providers](/docs/llm-proxy/providers). Personal and subscription keys can't be members. Creating a pool needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
 
 1. Go to **LLM → Model Pools** and click **Create pool**.
 2. Under **Model name**, pick or type the name clients ask for.
-3. Under **Members**, click **Add member**. Pick a **Provider key**, then the **Model** that key serves the model as. If the key has no synced models, type the model ID.
+3. Under **Members**, click **Add member**. Pick a **Provider key**, then the **Model** ID that key uses for this model. If the key has no synced models, type the ID.
 4. Click **Add member** inside the same order to share its traffic. Click **Add order** to add a fallback.
 5. Click **Create pool**.
 
-The dialog then shows that the pool is ready, with a request you can copy. Send it, and the answer carries `x-archestra-pool: glm-5.3` and `x-archestra-attempts: 1` headers.
+The dialog then shows that the pool is ready, with a request you can copy. Send it, and the answer carries `x-archestra-pool: claude-sonnet-4-6` and `x-archestra-attempts: 1` headers.
 
-- **Name it after the model.** When the name matches a model ID, such as `claude-sonnet-4-6`, every request for that model from a caller who can use the pool goes to the pool. Deleting the pool sends those requests back to the caller's own key.
-- **Switch a member off** to stop sending it traffic and keep it in the pool.
+- A pool named after a model ID takes over that model: every request for `claude-sonnet-4-6` from a caller who can use the pool goes to the pool. Deleting the pool sends those requests back to the caller's own key.
+- Switch a member off to stop sending it traffic and keep it in the pool.
 
 ## Order and Weight
 
@@ -42,7 +42,7 @@ Order sets which members a request tries first, and weight splits traffic betwee
 - **Order:** requests go to order 1. They go to order 2 only when every member of order 1 has failed or is cooling down. Drag a member into another order to move it, or between two orders to give it an order of its own.
 - **Weight:** members of one order share its traffic by weight.
 
-For example, a pool with two Zhipu AI keys of weight 3 and 1 in order 1, and a Bedrock key in order 2, sends 75% of requests to the first Zhipu AI key and 25% to the second. Bedrock answers only while both Zhipu AI keys are unavailable.
+For example, a `gpt-5.4` pool with an OpenAI key of weight 3 and an Azure AI Foundry key of weight 1 in order 1 sends 75% of requests to OpenAI and 25% to Azure. Add an Azure key in another region as order 2, and it answers only while both are unavailable.
 
 ## When a Member Fails
 
@@ -83,7 +83,7 @@ Point a client at any of these endpoints and ask for the pool's name as the mode
 | **Anthropic API** | `https://<archestra-host>/v1/anthropic` | Claude Code and the Anthropic SDK |
 | **OpenAI API** | `https://<archestra-host>/v1/openai` | The OpenAI SDK, on Chat Completions |
 
-To use a pool from Claude Code, pick it as the model, for example `claude --model glm-5.3`. A pool named after a Claude model needs nothing.
+Claude Code needs nothing for a pool named after a Claude model. For any other pool, pick it as the model, for example `claude --model gpt-5.4`.
 
 - **Context window:** Claude Code assumes a 200k context window for a model name it doesn't know. Set `CLAUDE_CODE_MAX_CONTEXT_TOKENS` to the smallest context window among the pool's members.
 - **Members on another API:** Claude Code and OpenAI clients reach every member, whatever API its provider speaks. Archestra translates the request. Anthropic-only features, such as prompt caching hints and thinking blocks, are dropped on the way to a member that doesn't speak Anthropic's API. Claude models on Bedrock keep them.
@@ -98,7 +98,7 @@ Each attempt is priced as the member that made it, with that member's provider a
 - An attempt that was cut off for being silent carries an estimated input cost, because the provider read the prompt and bills it.
 - A member's model with no price in the catalog falls back to the default price. Set its price under **Models**, as for [custom models](/docs/llm-proxy/costs-and-limits#where-token-prices-come-from).
 
-## Limits in the Beta
+## Limits
 
 - Clients on the OpenAI Responses API, such as OpenCode, can't use pools yet. That includes `/responses` on the Model Router.
 - Members can be keys for Anthropic, AWS Bedrock, OpenAI, Azure AI Foundry, and OpenAI-compatible providers such as vLLM, OpenRouter, and Mistral AI. Gemini and Vertex AI keys can't be members yet.

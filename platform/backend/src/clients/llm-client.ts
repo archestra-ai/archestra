@@ -693,9 +693,30 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       const client = createOpenAI({ apiKey, baseURL, headers, fetch });
       // "pro" reasoning models are Responses-API-only; routing them through
       // .chat() hits /chat/completions and 404s. See requiresOpenAiResponsesApi.
-      return requiresOpenAiResponsesApi(modelName)
-        ? client.responses(modelName)
-        : client.chat(modelName);
+      if (!requiresOpenAiResponsesApi(modelName)) {
+        return client.chat(modelName);
+      }
+      // Every Responses-routed model reasons, but the SDK recognizes reasoning
+      // models by name and misses newer ones (gpt-6). For those it would not
+      // request encrypted reasoning under store:false, so the next tool step
+      // resends reasoning by id alone and OpenAI rejects it. It would also
+      // drop reasoningSummary and keep sampling parameters.
+      return wrapLanguageModel({
+        model: client.responses(modelName),
+        middleware: {
+          specificationVersion: "v3",
+          transformParams: async ({ params }) => ({
+            ...params,
+            providerOptions: {
+              ...params.providerOptions,
+              openai: {
+                forceReasoning: true,
+                ...params.providerOptions?.openai,
+              },
+            },
+          }),
+        },
+      });
     },
     defaultBaseUrl: config.llm.openai.baseUrl,
     apiKeyRequiredMessage:

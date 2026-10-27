@@ -109,6 +109,17 @@ describe("requiresOpenAiResponsesApi", () => {
     expect(requiresOpenAiResponsesApi("openai/gpt-5.6-sol")).toBe(true);
   });
 
+  test("matches the gpt-6 family, including point releases", () => {
+    expect(requiresOpenAiResponsesApi("gpt-6")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-6-luna")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-6-sol")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-6-astra")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-6.1-sol")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-6.1-terra")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-6-sol-2026-09-01")).toBe(true);
+    expect(requiresOpenAiResponsesApi("openai/gpt-6.1-sol")).toBe(true);
+  });
+
   test("matches Codex models and their variants", () => {
     expect(requiresOpenAiResponsesApi("gpt-5.3-codex")).toBe(true);
     expect(requiresOpenAiResponsesApi("gpt-5.2-codex-mini")).toBe(true);
@@ -121,6 +132,7 @@ describe("requiresOpenAiResponsesApi", () => {
     expect(requiresOpenAiResponsesApi("gpt-4o")).toBe(false);
     expect(requiresOpenAiResponsesApi("babbage-002")).toBe(false);
     expect(requiresOpenAiResponsesApi("gpt-5.61")).toBe(false);
+    expect(requiresOpenAiResponsesApi("gpt-60")).toBe(false);
     expect(requiresOpenAiResponsesApi("gpt-5.3-codexical")).toBe(false);
   });
 });

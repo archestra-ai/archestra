@@ -398,7 +398,7 @@ mod tests {
     }
 
     #[test]
-    fn a_weighted_session_counts_as_that_many_copies() {
+    fn weighted_cohorts_plan_as_their_expanded_population() {
         let mut varied = input(4.0);
         for (i, row) in varied.history.iter_mut().enumerate() {
             row.features.p_long = Probability::new((i % 3) as f64 / 2.0).unwrap();
@@ -407,12 +407,18 @@ mod tests {
         let unit = plan(varied.clone()).unwrap();
         let mut weighted = varied.clone();
         let mut copied = varied;
+        // Two cohorts sampled at different rates, as live and past sessions are.
         let tripled = copied.history[..10].to_vec();
+        let doubled = copied.history[10..15].to_vec();
         for row in &mut weighted.history[..10] {
             row.weight = SessionWeight::new(3.0).unwrap();
         }
+        for row in &mut weighted.history[10..15] {
+            row.weight = SessionWeight::new(2.0).unwrap();
+        }
         copied.history.extend(tripled.iter().cloned());
         copied.history.extend(tripled);
+        copied.history.extend(doubled);
         let (weighted, copied) = (plan(weighted).unwrap(), plan(copied).unwrap());
         let close = |a: &[f64], b: &[f64]| {
             a.iter()

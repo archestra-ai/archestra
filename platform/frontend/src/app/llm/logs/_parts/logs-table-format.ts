@@ -61,10 +61,10 @@ export function describeModelOrigin(params: {
   interactionType: string | null | undefined;
 }): ModelOrigin {
   const servedBy = params.interactionType?.split(":")[0];
-  // Kimi Code serves only Moonshot's models, under plan ids (k3.1-pro, k3, ...).
+  // Kimi Code serves Moonshot's models under plan ids (k3.1-pro, k3, ...).
   const maker =
     makerProviderForModel(params.model) ??
-    (servedBy === "kimi-code" ? "kimi" : null);
+    (servedBy === "kimi-code" && /^k\d/i.test(params.model) ? "kimi" : null);
   if (maker) {
     return { kind: "maker", provider: maker, name: MODEL_MAKER_NAMES[maker] };
   }

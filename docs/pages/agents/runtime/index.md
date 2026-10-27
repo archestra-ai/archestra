@@ -57,7 +57,7 @@ Each run gets a temporary virtual key. Provider keys stay in Archestra.
 
 What to know:
 
-- Each person connects their own subscription before their first run. Subscription usage shows in the logs, but it does not count toward cost limits.
+- Each person connects their own Claude, ChatGPT or SuperGrok subscription before their first run. Subscription usage, Kimi Code included, shows in the logs, but it does not count toward cost limits.
 - Claude subscription runs use Opus unless you select another **Model**. **Claude account default** follows Claude Code's choice for your account.
 - Tools run with the permissions of the person who started the run.
 

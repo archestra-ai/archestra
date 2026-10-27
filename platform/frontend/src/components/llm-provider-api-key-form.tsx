@@ -387,7 +387,7 @@ const PROVIDER_CONFIG: Record<
   },
   "kimi-code": {
     name: "Kimi Code",
-    icon: "/agent-logos/kimi.svg",
+    icon: "/model-logos/kimi-code.svg",
     placeholder: "sk-kimi-...",
     enabled: true,
     consoleUrl: "https://www.kimi.ai/code/console",

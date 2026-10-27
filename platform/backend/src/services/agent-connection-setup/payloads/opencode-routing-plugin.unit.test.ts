@@ -549,6 +549,79 @@ describe("OpenCode routing plugin", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  test("OpenCode 2 variant sends a Kimi Code China catalog request to the global plan route", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "opencode-plugin-v2-kimi-"));
+    const file = path.join(root, "archestra-llm-proxy.mjs");
+    const route = "https://example.com/v1/kimi-code";
+    const passthroughHeaders = {
+      "X-Archestra-Virtual-Key": "arch_passthroughcafe",
+    };
+    try {
+      await writeFile(
+        file,
+        renderOpenCodeRoutingPluginV2({
+          routes: {},
+          headers: { "X-Archestra-Agent-Id": "opencode" },
+          routeHeaders: { "kimi-code-plan-global": passthroughHeaders },
+          catalog: {
+            routes: { "kimi-code-plan-global": route },
+            managed: {},
+            passthrough: ["kimi-code-plan-global"],
+            legacy: { "kimi-code-plan-cn": "kimi-code-plan-global" },
+          },
+        }),
+      );
+      const { default: plugin } = await import(
+        `${pathToFileURL(file).href}?t=${Date.now()}`
+      );
+      const providers: Record<string, { id: string; activation: string }> = {
+        "kimi-code-plan-global": {
+          id: "kimi-code-plan-global",
+          activation: "auto",
+        },
+        "kimi-code-plan-cn": { id: "kimi-code-plan-cn", activation: "auto" },
+      };
+      let modelRequest: ((event: ModelRequest) => void) | undefined;
+      await plugin.setup({
+        provider: {
+          transform: async (
+            callback: (editor: Record<string, unknown>) => void,
+          ) => {
+            callback({
+              list: () =>
+                Object.values(providers).map((provider) => ({ provider })),
+              update: (
+                id: string,
+                update: (provider: { activation: string }) => void,
+              ) => update(providers[id]),
+            });
+            return { dispose: async () => {} };
+          },
+        },
+        session: {
+          hook: async (name: string, callback: typeof modelRequest) => {
+            if (name === "model.request") modelRequest = callback;
+            return { dispose: async () => {} };
+          },
+        },
+      });
+
+      // The client lists the plan's models once, under the global catalog.
+      expect(providers["kimi-code-plan-global"].activation).toBe("auto");
+      expect(providers["kimi-code-plan-cn"].activation).toBe("disabled");
+
+      const pinned = modelEvent(
+        "kimi-code-plan-cn",
+        "https://api.kimi.com/coding/v1",
+      );
+      modelRequest?.(pinned);
+      expect(pinned.baseURL).toBe(route);
+      expect(pinned.headers).toMatchObject(passthroughHeaders);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 interface ModelRequest {

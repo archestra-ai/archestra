@@ -56,6 +56,13 @@ describe("describeModelOrigin", () => {
         interactionType: "kimi-code:chatCompletions",
       }),
     ).toEqual({ kind: "maker", provider: "kimi", name: "Moonshot" });
+    // Only plan ids are Moonshot's.
+    expect(
+      describeModelOrigin({
+        model: "llama3.1",
+        interactionType: "kimi-code:chatCompletions",
+      }),
+    ).toEqual({ kind: "unknown", name: "Meta" });
     // Another vendor's k-numbered model is not Moonshot's.
     expect(
       describeModelOrigin({

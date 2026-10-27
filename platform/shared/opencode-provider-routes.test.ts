@@ -1,10 +1,17 @@
 import { describe, expect, test } from "vitest";
 import {
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
+  OPENCODE_PRIMARY_PROVIDERS,
   openCodePassthroughBaseUrl,
 } from "./opencode-provider-routes";
 
 describe("OpenCode passthrough provider routes", () => {
+  test("accepts an organization's Kimi and Kimi Code keys as primary providers", () => {
+    expect(OPENCODE_PRIMARY_PROVIDERS).toEqual(
+      expect.arrayContaining(["kimi", "kimi-code"]),
+    );
+  });
+
   test("preserves native provider ids and maps each wire to its proxy base URL", () => {
     expect(
       Object.fromEntries(

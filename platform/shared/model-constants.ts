@@ -1109,12 +1109,13 @@ export function stripClaudeContextVariantSuffix(modelId: string): string {
  * - "pro" reasoning models: `/chat/completions` returns `api_not_found_error`
  *   ("not a chat model"). "pro" is matched as a hyphen/slash-delimited token,
  *   so dated snapshots (`gpt-5.5-pro-2026-01-01`) are covered.
- * - the gpt-5.6 family (sol/terra/luna): reasoning is on by default and
- *   `/chat/completions` rejects function tools with any reasoning effort
- *   (400 api_validation_error: "use /v1/responses or set reasoning_effort to
- *   'none'"). Disabling reasoning would degrade the model, so route the whole
- *   family to Responses. "gpt-5.6" is matched up to a `-`/`.`/end boundary so
- *   tiers and dated snapshots are covered without matching e.g. `gpt-5.61`.
+ * - the gpt-5.6 and gpt-6 families (sol/terra/luna/astra): reasoning is on by
+ *   default and `/chat/completions` rejects function tools with any reasoning
+ *   effort (400 api_validation_error: "use /v1/responses or set
+ *   reasoning_effort to 'none'"). Disabling reasoning would degrade the model,
+ *   so route both families to Responses. "gpt-5.6" and "gpt-6" are matched up
+ *   to a `-`/`.`/end boundary so tiers, point releases (`gpt-6.1-sol`) and
+ *   dated snapshots are covered without matching e.g. `gpt-5.61` or `gpt-60`.
  * - Codex models: OpenAI serves the coding-specialized `gpt-*-codex` family
  *   through Responses rather than Chat Completions. The suffix boundary also
  *   covers variants such as `-mini`, `-max`, and dated snapshots.
@@ -1122,7 +1123,7 @@ export function stripClaudeContextVariantSuffix(modelId: string): string {
 export function requiresOpenAiResponsesApi(modelId: string): boolean {
   return (
     /(?:^|[-/])pro(?:[-/]|$)/i.test(modelId) ||
-    /(?:^|\/)gpt-5\.6(?:$|[-.])/i.test(modelId) ||
+    /(?:^|\/)gpt-(?:5\.6|6)(?:$|[-.])/i.test(modelId) ||
     /(?:^|\/)gpt-[^/]+-codex(?:$|[-.])/i.test(modelId)
   );
 }

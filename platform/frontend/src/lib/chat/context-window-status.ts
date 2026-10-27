@@ -111,17 +111,31 @@ export function reconcileContextWindowBreakdown(
     (sum, s) => sum + s.tokens,
     0,
   );
-  const scaledSegments =
-    usedTokens !== breakdown.usedTokens && originalTotal > 0
-      ? breakdown.segments.map((s) => ({
-          ...s,
-          tokens: Math.round((s.tokens / originalTotal) * usedTokens),
-          items: s.items?.map((item) => ({
-            ...item,
-            tokens: Math.round((item.tokens / originalTotal) * usedTokens),
-          })),
-        }))
-      : breakdown.segments;
+  let scaledSegments = breakdown.segments;
+  if (usedTokens !== breakdown.usedTokens && originalTotal > 0) {
+    scaledSegments = breakdown.segments.map((s) => ({
+      ...s,
+      tokens: Math.round((s.tokens / originalTotal) * usedTokens),
+      items: s.items?.map((item) => ({
+        ...item,
+        tokens: Math.round((item.tokens / originalTotal) * usedTokens),
+      })),
+    }));
+    const roundedTotal = scaledSegments.reduce((sum, s) => sum + s.tokens, 0);
+    const remainder = usedTokens - roundedTotal;
+    if (remainder !== 0 && scaledSegments.length > 0) {
+      let largestIndex = 0;
+      for (let i = 1; i < scaledSegments.length; i++) {
+        if (scaledSegments[i].tokens > scaledSegments[largestIndex].tokens) {
+          largestIndex = i;
+        }
+      }
+      scaledSegments[largestIndex] = {
+        ...scaledSegments[largestIndex],
+        tokens: Math.max(0, scaledSegments[largestIndex].tokens + remainder),
+      };
+    }
+  }
 
   return {
     ...breakdown,

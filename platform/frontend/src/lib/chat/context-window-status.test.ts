@@ -175,4 +175,25 @@ describe("reconcileContextWindowBreakdown", () => {
     expect(reconciled.segments.map((s) => s.tokens)).toEqual([3_400, 16_000]);
     expect(reconciled.segments[1]?.items?.[0]?.tokens).toBe(16_000);
   });
+
+  it("distributes rounding remainder to the largest segment so segment sum equals usedTokens", () => {
+    const breakdown = sampleBreakdown({
+      usedTokens: 1_000,
+      segments: [
+        { category: "system_prompt", tokens: 333 },
+        { category: "tools", tokens: 333 },
+        { category: "messages", tokens: 334 },
+      ],
+    });
+    const reconciled = reconcileContextWindowBreakdown(breakdown, {
+      tokensUsed: 1_001,
+    });
+
+    const segmentSum = reconciled.segments.reduce(
+      (sum, s) => sum + s.tokens,
+      0,
+    );
+    expect(segmentSum).toBe(1_001);
+    expect(reconciled.segments.map((s) => s.tokens)).toEqual([333, 333, 335]);
+  });
 });

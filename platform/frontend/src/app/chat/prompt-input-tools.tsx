@@ -16,6 +16,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -365,11 +366,15 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
 
   // Context usage follows the model picker when the pickers are inline, and
   // sits beside the attachment button when they collapse into the menu.
-  const resolvedContextUsage = resolveContextWindowUsage({
-    tokensUsed,
-    maxTokens: maxContextLength,
-    breakdown: contextWindow ?? null,
-  });
+  const resolvedContextUsage = useMemo(
+    () =>
+      resolveContextWindowUsage({
+        tokensUsed,
+        maxTokens: maxContextLength,
+        breakdown: contextWindow ?? null,
+      }),
+    [tokensUsed, maxContextLength, contextWindow],
+  );
   const contextUsage = resolvedContextUsage.tokensUsed > 0 &&
     resolvedContextUsage.maxTokens && (
       <ContextWindowDialog

@@ -1,4 +1,8 @@
-import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
+import {
+  AUTO_ROUTING_BACKFILL_MAX_COST_USD,
+  archestraApiClient,
+  type archestraApiTypes,
+} from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -791,9 +795,12 @@ describe("past sessions", () => {
     progress: null,
     error: null,
     completedAt: null,
+    awaitingFit: false,
     ...overrides,
   });
   const offer = {
+    backfillId: "00000000-0000-4000-8000-000000000301",
+    scorerVersionId: "00000000-0000-4000-8000-000000000009",
     sessions: 240,
     remaining: 240,
     estimatedCostUsd: 0.24,
@@ -801,11 +808,15 @@ describe("past sessions", () => {
     rescore: false,
   };
 
-  function serveBackfill(state: AutoRoutingBackfillState) {
+  /** Serves `states` in turn, the last one from then on. */
+  function serveBackfill(
+    ...states: [AutoRoutingBackfillState, ...AutoRoutingBackfillState[]]
+  ) {
     const scores: unknown[] = [];
+    let reads = 0;
     server.use(
       http.get(`${API_ORIGIN}/api/auto-routing/backfill`, () =>
-        HttpResponse.json(state),
+        HttpResponse.json(states[Math.min(reads++, states.length - 1)]),
       ),
       http.post(
         `${API_ORIGIN}/api/auto-routing/backfill/score`,
@@ -821,28 +832,94 @@ describe("past sessions", () => {
     return scores;
   }
 
-  it("shows what a scan found against what the plan needs", async () => {
-    settings = makeSettings({
-      status: {
-        ...makeSettings().status,
-        coldStart: { ...makeSettings().status.coldStart, required: 1000 },
-      },
-    });
+  it("lists what a scan found by request shape and client", async () => {
     serveBackfill({ backfill: scanned(), scoreOffer: offer });
     renderPage();
 
     const section = await screen.findByTestId("auto-routing-past-sessions");
-    expect(
-      within(section).getByTestId("auto-routing-past-sessions-eligible"),
-    ).toHaveTextContent(/^240 eligible .* needs 1,000;/);
     expect(within(section).getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("accepts a spending limit up to the API's bound and no further", async () => {
+    serveBackfill({ backfill: scanned(), scoreOffer: offer });
+    const user = userEvent.setup();
+    renderPage();
+    const ceiling = await screen.findByLabelText("Spending limit (USD)");
+    const action = () =>
+      screen.getByRole("button", { name: /^Score 240 sessions/ });
+
+    await user.clear(ceiling);
+    await user.type(ceiling, String(AUTO_ROUTING_BACKFILL_MAX_COST_USD));
+    expect(action()).toBeEnabled();
+    expect(ceiling).toHaveAttribute("aria-invalid", "false");
+    await user.type(ceiling, ".01");
+    expect(action()).toBeDisabled();
+    expect(ceiling).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("refuses a stale offer, closes the confirmation and shows the current offer", async () => {
+    const replaced = "00000000-0000-4000-8000-000000000302";
+    let refused = 0;
+    serveBackfill(
+      { backfill: scanned(), scoreOffer: offer },
+      {
+        backfill: scanned({ id: replaced }),
+        scoreOffer: { ...offer, backfillId: replaced, remaining: 90 },
+      },
+    );
+    server.use(
+      http.post(`${API_ORIGIN}/api/auto-routing/backfill/score`, () => {
+        refused++;
+        return HttpResponse.json(
+          { error: { message: "stale", type: "api_conflict_error" } },
+          { status: 409 },
+        );
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: /^Score 240 sessions/ }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: /sessions$/ }));
+
+    expect(
+      await screen.findByRole("button", { name: /^Score 90 sessions/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(refused).toBe(1);
+  });
+
+  it("keeps polling after a backfill until the fit it requested is published", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const done = scanned({ status: "done", phase: "score" });
+      serveBackfill(
+        { backfill: { ...done, awaitingFit: true }, scoreOffer: null },
+        { backfill: { ...done, awaitingFit: true }, scoreOffer: null },
+        { backfill: done, scoreOffer: null },
+      );
+      renderPage();
+      await screen.findByTestId("auto-routing-past-sessions");
+      settings = withActivePlan(makeSettings());
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      // The fit has not published yet: nothing re-read the settings.
+      expect(screen.queryByText(/Active plan from/)).not.toBeInTheDocument();
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(await screen.findByText(/Active plan from/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("scores only after the confirmation, with the ceiling the admin set", async () => {
     const scores = serveBackfill({ backfill: scanned(), scoreOffer: offer });
     const user = userEvent.setup();
     renderPage();
-    const ceiling = await screen.findByLabelText("Cost ceiling (USD)");
+    const ceiling = await screen.findByLabelText("Spending limit (USD)");
     await user.clear(ceiling);
     await user.type(ceiling, "2.5");
     await user.click(
@@ -854,7 +931,14 @@ describe("past sessions", () => {
     await user.click(within(dialog).getByRole("button", { name: /sessions$/ }));
 
     await waitFor(() =>
-      expect(scores).toEqual([{ maxSessions: 240, maxCostUsd: 2.5 }]),
+      expect(scores).toEqual([
+        {
+          backfillId: offer.backfillId,
+          scorerVersionId: offer.scorerVersionId,
+          maxSessions: 240,
+          maxCostUsd: 2.5,
+        },
+      ]),
     );
   });
 
@@ -885,7 +969,14 @@ describe("past sessions", () => {
     );
 
     await waitFor(() =>
-      expect(scores).toEqual([{ maxSessions: 240, maxCostUsd: 1 }]),
+      expect(scores).toEqual([
+        {
+          backfillId: offer.backfillId,
+          scorerVersionId: offer.scorerVersionId,
+          maxSessions: 240,
+          maxCostUsd: 1,
+        },
+      ]),
     );
   });
 

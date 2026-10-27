@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  AUTO_ROUTING_BACKFILL_MAX_COST_USD,
+  AUTO_ROUTING_BACKFILL_SCORER_CALLS,
+} from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -160,11 +164,21 @@ function ScoreAction({
   backfill: Backfill;
   offer: ScoreOffer;
 }) {
-  const [open, setOpen] = useState(false);
+  // What the admin confirms, frozen while the dialog is open.
+  const [confirming, setConfirming] = useState<{
+    backfill: Backfill;
+    offer: ScoreOffer;
+    maxCostUsd: number;
+  } | null>(null);
   const [ceiling, setCeiling] = useState(String(offer.suggestedMaxCostUsd));
   const score = useScoreAutoRoutingBackfill();
   const maxCostUsd = Number(ceiling);
-  const valid = Number.isFinite(maxCostUsd) && maxCostUsd > 0;
+  const ceilingError =
+    !Number.isFinite(maxCostUsd) || maxCostUsd <= 0
+      ? "Enter a positive amount."
+      : maxCostUsd > AUTO_ROUTING_BACKFILL_MAX_COST_USD
+        ? `At most ${formatCurrency(AUTO_ROUTING_BACKFILL_MAX_COST_USD)}.`
+        : null;
   const verb = offer.rescore ? "Re-score" : "Score";
 
   return (
@@ -177,65 +191,93 @@ function ScoreAction({
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
           <Label htmlFor="auto-routing-backfill-ceiling">
-            Cost ceiling (USD)
+            Spending limit (USD)
           </Label>
           <Input
             id="auto-routing-backfill-ceiling"
             type="number"
             min={0}
+            max={AUTO_ROUTING_BACKFILL_MAX_COST_USD}
             step="0.01"
             value={ceiling}
+            aria-invalid={ceilingError !== null}
+            aria-describedby="auto-routing-backfill-ceiling-hint"
             onChange={(event) => setCeiling(event.target.value)}
             className="w-32"
           />
         </div>
-        <Button size="sm" disabled={!valid} onClick={() => setOpen(true)}>
+        <Button
+          size="sm"
+          disabled={ceilingError !== null}
+          onClick={() => setConfirming({ backfill, offer, maxCostUsd })}
+        >
           {verb} {offer.remaining.toLocaleString("en-US")} sessions (≤{" "}
-          {valid ? formatCurrency(maxCostUsd) : "?"})
+          {ceilingError === null ? formatCurrency(maxCostUsd) : "?"})
         </Button>
         <span className="text-sm text-muted-foreground">
           Estimated {formatCurrency(offer.estimatedCostUsd)}
         </span>
       </div>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{verb} past sessions?</DialogTitle>
-            <DialogDescription>
-              The opening prompts of these sessions are sent to the Jev session
-              scorer.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogBody>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-              <dt className="text-muted-foreground">Window</dt>
-              <dd>
-                {formatDate({ date: backfill.windowStart })} to{" "}
-                {formatDate({ date: backfill.cutoff })}
-              </dd>
-              <dt className="text-muted-foreground">Sessions</dt>
-              <dd>{offer.remaining.toLocaleString("en-US")}</dd>
-              <dt className="text-muted-foreground">Cost ceiling</dt>
-              <dd>{formatCurrency(maxCostUsd)}</dd>
-            </dl>
-          </DialogBody>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={score.isPending}
-              onClick={() =>
-                score.mutate(
-                  { maxSessions: offer.sessions, maxCostUsd },
-                  { onSuccess: () => setOpen(false) },
-                )
-              }
-            >
-              {verb} sessions
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+      <p
+        id="auto-routing-backfill-ceiling-hint"
+        className={
+          ceilingError
+            ? "text-sm text-destructive"
+            : "text-sm text-muted-foreground"
+        }
+      >
+        {ceilingError ??
+          `May be exceeded by at most ${AUTO_ROUTING_BACKFILL_SCORER_CALLS} × the per-call cost of calls in flight.`}
+      </p>
+      <Dialog
+        open={confirming !== null}
+        onOpenChange={(open) => !open && setConfirming(null)}
+      >
+        {confirming && (
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{verb} past sessions?</DialogTitle>
+              <DialogDescription>
+                The opening prompts of these sessions are sent to the Jev
+                session scorer.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogBody>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+                <dt className="text-muted-foreground">Window</dt>
+                <dd>
+                  {formatDate({ date: confirming.backfill.windowStart })} to{" "}
+                  {formatDate({ date: confirming.backfill.cutoff })}
+                </dd>
+                <dt className="text-muted-foreground">Sessions</dt>
+                <dd>{confirming.offer.remaining.toLocaleString("en-US")}</dd>
+                <dt className="text-muted-foreground">Spending limit</dt>
+                <dd>{formatCurrency(confirming.maxCostUsd)}</dd>
+              </dl>
+            </DialogBody>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirming(null)}>
+                Cancel
+              </Button>
+              <Button
+                disabled={score.isPending}
+                onClick={() =>
+                  score.mutate(
+                    {
+                      backfillId: confirming.offer.backfillId,
+                      scorerVersionId: confirming.offer.scorerVersionId,
+                      maxSessions: confirming.offer.sessions,
+                      maxCostUsd: confirming.maxCostUsd,
+                    },
+                    { onSettled: () => setConfirming(null) },
+                  )
+                }
+              >
+                {verb} sessions
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
       </Dialog>
     </div>
   );

@@ -190,7 +190,10 @@ const SIMULATION_RETRY_DELAY_MS = 1000;
 
 const BACKFILL_POLL_MS = 5000;
 
-/** The organization's latest historical backfill, polled while it runs. */
+/**
+ * The organization's latest historical backfill, polled while it runs and
+ * then until the fit its completion requested has an outcome.
+ */
 export function useAutoRoutingBackfill() {
   const queryClient = useQueryClient();
   return useQuery({
@@ -201,10 +204,10 @@ export function useAutoRoutingBackfill() {
       const previous = queryClient.getQueryData<AutoRoutingBackfillState>(
         autoRoutingKeys.backfill(),
       );
-      // A finished backfill bumps the generation and re-fits.
       if (
-        previous?.backfill?.status === "running" &&
-        data?.backfill?.status !== "running"
+        previous?.backfill &&
+        (previous.backfill.status !== data?.backfill?.status ||
+          previous.backfill.awaitingFit !== data?.backfill?.awaitingFit)
       ) {
         await Promise.all([
           queryClient.invalidateQueries({
@@ -215,10 +218,12 @@ export function useAutoRoutingBackfill() {
       }
       return data ?? null;
     },
-    refetchInterval: (query) =>
-      query.state.data?.backfill?.status === "running"
+    refetchInterval: (query) => {
+      const backfill = query.state.data?.backfill;
+      return backfill?.status === "running" || backfill?.awaitingFit
         ? BACKFILL_POLL_MS
-        : false,
+        : false;
+    },
   });
 }
 
@@ -247,6 +252,9 @@ export function useScoreAutoRoutingBackfill() {
       queryClient.setQueryData(autoRoutingKeys.backfill(), data);
       toast.success("Scoring past sessions");
     },
+    // A refused offer is stale: show the current one.
+    onError: () =>
+      queryClient.invalidateQueries({ queryKey: autoRoutingKeys.backfill() }),
   });
 }
 

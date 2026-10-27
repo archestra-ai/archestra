@@ -91,7 +91,13 @@ describe("Disconnect agent instructions", () => {
       "configLibrary/aa157426-f6a9-5ac5-8471-3b30b42bbe8f.json",
     );
     expect(instructions).toContain("claude-appa-permissions.json");
-    expect(instructions).toContain("mcp__SERVER_NAME__");
+    expect(instructions).toContain(
+      "$CLAUDE_CONFIG_DIR/.archestra/claude-appa-permissions.json",
+    );
+    expect(instructions).toContain(
+      "Read the SERVER_NAME entry from ~/.archestra/claude-appa-permissions.json",
+    );
+    expect(instructions).toContain("rules from permissions.allow");
     expect(instructions).toContain("do not change anything there");
     expect(instructions).toContain("Do not force it to close.");
   });

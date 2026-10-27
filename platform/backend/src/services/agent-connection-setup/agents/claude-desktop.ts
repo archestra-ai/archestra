@@ -230,9 +230,9 @@ def prepare_appa_permissions(mcp, old_servers):
         desired = [f'mcp__{server}__{prefix}{tool}' for tool in APPA_TOOLS]
         legacy = [n for n in (mcp.get('legacyServerNames') or []) if isinstance(n, str)]
         names = [server, *legacy, *old_servers]
-    settings_raw = settings_path.read_text(encoding='utf-8') if settings_path.exists() else ''
+    settings_raw = settings_path.read_text(encoding='utf-8-sig') if settings_path.exists() else ''
     settings = json.loads(settings_raw) if settings_raw.strip() else {}
-    state = json.loads(state_path.read_text(encoding='utf-8')) if state_path.exists() else {}
+    state = json.loads(state_path.read_text(encoding='utf-8-sig')) if state_path.exists() else {}
     if not isinstance(settings, dict) or not isinstance(state, dict):
         raise ValueError('Claude settings and APPA permission state must be JSON objects')
     permissions = settings.setdefault('permissions', {})

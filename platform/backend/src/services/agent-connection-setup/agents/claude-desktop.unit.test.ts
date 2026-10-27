@@ -366,11 +366,11 @@ initial_settings = {
         'deny': ['Bash(rm -rf *)'],
     },
 }
-settings_path.write_text(json.dumps(initial_settings))
-state_path.write_text(json.dumps({
+settings_path.write_text('\ufeff' + json.dumps(initial_settings), encoding='utf-8')
+state_path.write_text('\ufeff' + json.dumps({
     'legacy_gw': ['mcp__legacy_gw__archestra__run_tool'],
     'other_gw': ['mcp__other_gw__archestra__run_tool'],
-}))
+}), encoding='utf-8')
 calls = []
 def native(args, **kwargs):
     calls.append(args)
@@ -378,7 +378,7 @@ def native(args, **kwargs):
 with patch('sys.platform', 'darwin'), patch('subprocess.Popen') as desktop_process, patch('time.sleep'), patch('pathlib.Path.home', return_value=home), patch('subprocess.run', side_effect=native):
     desktop_process.return_value.wait.return_value = 0
     runpy.run_path(str(root / 'installer.py'))
-    assert json.loads(settings_path.with_name('settings.json.archestra-backup').read_text()) == initial_settings
+    assert json.loads(settings_path.with_name('settings.json.archestra-backup').read_text(encoding='utf-8-sig')) == initial_settings
     updated_settings = json.loads(settings_path.read_text())
     assert updated_settings['theme'] == 'dark'
     assert updated_settings['permissions']['deny'] == ['Bash(rm -rf *)']

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { EXTERNAL_AGENT_ID_HEADER } from "@archestra/shared/consts";
 import { isClaudeDesktopClientAgentId } from "@archestra/shared/interactions/client";
 import { verifyChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
@@ -137,6 +138,7 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     return `Run /mcp in Claude Code. If "${serverName}" is still connecting, wait for it. If it needs authentication, select it and sign in. If it is not listed, connect Claude Code again and start a new session. Then send your message again.`;
   }
   matches(context: AppaMatchContext): boolean {
+    if (isClaudeDesktopSignal(context)) return false;
     const userAgent = (
       readHeader(context.headers, "user-agent") ?? ""
     ).toLowerCase();
@@ -457,21 +459,41 @@ export class AppaClaudeDesktopAdapter extends AppaClaudeCodeAdapter {
   }
 
   override matches(context: AppaMatchContext): boolean {
-    const userAgent = (
-      readHeader(context.headers, "user-agent") ?? ""
-    ).toLowerCase();
     return (
-      isClaudeDesktopClientAgentId(
-        readHeader(context.headers, EXTERNAL_AGENT_ID_HEADER),
-      ) ||
-      userAgent.includes("claude-desktop") ||
-      hasClaudeDesktopBillingEntrypoint(context.requestBody)
+      isClaudeDesktopSignal(context) &&
+      (context.trustedContext !== undefined ||
+        this.extractSessionIdentity(context) !== undefined)
     );
+  }
+
+  override extractSessionIdentity(
+    context: AppaMatchContext,
+  ): AppaSessionIdentity | undefined {
+    const native = super.extractSessionIdentity(context);
+    if (native) return native;
+    const chatSessionId = extractDesktopChatSessionId(context.requestBody);
+    return chatSessionId
+      ? { sessionId: chatSessionId, provenance: this.provenance.metadata }
+      : undefined;
   }
 }
 
 const CLAUDE_DESKTOP_BILLING_ENTRYPOINT_RE =
   /cc_entrypoint=(?:cowork|claude-desktop(?:-3p)?|local[-_]agent|remote[-_](?:cowork(?:_trigger)?|desktop)|claude-coworker(?:-terminal)?)(?=[;\s]|$)/i;
+
+function isClaudeDesktopSignal(context: AppaMatchContext): boolean {
+  const userAgent = (
+    readHeader(context.headers, "user-agent") ?? ""
+  ).toLowerCase();
+  return (
+    isClaudeDesktopClientAgentId(
+      readHeader(context.headers, EXTERNAL_AGENT_ID_HEADER),
+    ) ||
+    userAgent.includes("claude-desktop") ||
+    userAgent.includes("claudedesktop") ||
+    hasClaudeDesktopBillingEntrypoint(context.requestBody)
+  );
+}
 
 function hasClaudeDesktopBillingEntrypoint(requestBody: unknown): boolean {
   const system = asRecord(requestBody)?.system;
@@ -487,6 +509,66 @@ function hasClaudeDesktopBillingEntrypoint(requestBody: unknown): boolean {
     text.toLowerCase().includes("x-anthropic-billing-header") &&
     CLAUDE_DESKTOP_BILLING_ENTRYPOINT_RE.test(text)
   );
+}
+
+/**
+ * Derives a stable, isolated per-conversation session ID for headerless Claude
+ * Desktop Chat conversations from the system prompt and opening user message.
+ * Strips `cache_control` breakpoints so subsequent turns in the same
+ * conversation resolve to the same root. Returns `undefined` when no opening
+ * user turn is present.
+ */
+function extractDesktopChatSessionId(requestBody: unknown): string | undefined {
+  const body = asRecord(requestBody);
+  if (!body) return undefined;
+  const messages = body.messages;
+  if (!Array.isArray(messages) || messages.length === 0) return undefined;
+  const firstMessage = asRecord(messages[0]);
+  if (firstMessage?.role !== "user") return undefined;
+  const firstUserContent = normalizeDesktopChatMessageContent(
+    firstMessage.content,
+  );
+  if (!firstUserContent) return undefined;
+  const system = normalizeDesktopChatSystemContent(body.system);
+  const digest = createHash("sha256")
+    .update(JSON.stringify({ system, firstUserContent }))
+    .digest("hex")
+    .slice(0, 32);
+  return `desktop-chat-${digest}`;
+}
+
+function normalizeDesktopChatMessageContent(
+  content: unknown,
+): unknown[] | undefined {
+  if (typeof content === "string") {
+    const trimmed = content.trim();
+    return trimmed.length > 0 ? [{ type: "text", text: trimmed }] : undefined;
+  }
+  if (!Array.isArray(content)) return undefined;
+  const parts = content.flatMap((part) => {
+    if (typeof part === "string") {
+      const trimmed = part.trim();
+      return trimmed.length > 0 ? [{ type: "text", text: trimmed }] : [];
+    }
+    const record = asRecord(part);
+    if (!record || record.type === "tool_result") return [];
+    if (record.type === "text" || typeof record.text === "string") {
+      const text = stringField(record.text)?.trim() ?? "";
+      return text.length > 0 ? [{ type: "text", text }] : [];
+    }
+    const { cache_control: _cacheControl, ...rest } = record;
+    return Object.keys(rest).length > 0 ? [rest] : [];
+  });
+  return parts.length > 0 ? parts : undefined;
+}
+
+function normalizeDesktopChatSystemContent(system: unknown): string {
+  if (typeof system === "string") return system.trim();
+  if (!Array.isArray(system)) return "";
+  return system
+    .map((block) => stringField(asRecord(block)?.text)?.trim() ?? "")
+    .filter((text) => text.length > 0)
+    .join("\n");
 }
 
 /**

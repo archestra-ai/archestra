@@ -295,8 +295,9 @@ Desktop folder: ~/Library/Application Support/Claude-3p on macOS,
 - claude_desktop_config.json: deploymentMode, which the setup set. Files ending in
   .before-archestra hold the state from before the first setup.
 - ~/.claude/settings.json (or $CLAUDE_CONFIG_DIR/settings.json) and
-  ~/.archestra/claude-appa-permissions.json: permissions.allow rules for the gateway's
-  SERVER_NAME from managedMcpServers.
+  ~/.archestra/claude-appa-permissions.json (or
+  $CLAUDE_CONFIG_DIR/.archestra/claude-appa-permissions.json): permissions.allow rules
+  recorded under the gateway's SERVER_NAME from managedMcpServers.
 - local-agent-mode-sessions/*/*/cowork_plugins/marketplaces/local-desktop-app-uploads/archestra-appa-permissions:
   local Cowork plugin auto-allowing internal guardrails tools, registered in
   cowork_plugins/installed_plugins.json and cowork_settings.json.`,
@@ -306,9 +307,10 @@ Desktop folder: ~/Library/Application Support/Claude-3p on macOS,
 - In claude_desktop_config.json, set deploymentMode to its value in
   claude_desktop_config.json.before-archestra, or remove the key if the backup has none
   or does not exist.
-- In ~/.claude/settings.json (or $CLAUDE_CONFIG_DIR/settings.json) permissions.allow,
-  remove the rules that start with mcp__SERVER_NAME__, and remove SERVER_NAME from
-  ~/.archestra/claude-appa-permissions.json.
+- Read the SERVER_NAME entry from ~/.archestra/claude-appa-permissions.json (or
+  $CLAUDE_CONFIG_DIR/.archestra/claude-appa-permissions.json), remove only those recorded
+  rules from permissions.allow in ~/.claude/settings.json (or $CLAUDE_CONFIG_DIR/settings.json),
+  and then remove SERVER_NAME from claude-appa-permissions.json.
 - Under local-agent-mode-sessions/*/*, delete
   cowork_plugins/marketplaces/local-desktop-app-uploads/archestra-appa-permissions and
   remove archestra-appa-permissions@local-desktop-app-uploads from

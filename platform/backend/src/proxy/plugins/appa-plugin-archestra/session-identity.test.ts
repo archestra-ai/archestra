@@ -295,6 +295,90 @@ describe("client trajectory identity", () => {
         }),
       ).toBe(CLAUDE_SESSION);
     });
+
+    test("recognizes the advertised ClaudeDesktop/ User-Agent without installer headers", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {
+            metadata: {
+              user_id: JSON.stringify({ session_id: CLAUDE_SESSION }),
+            },
+          },
+          headers: { "user-agent": "ClaudeDesktop/1.0.0" },
+        }),
+      ).toMatchObject({
+        sessionId: CLAUDE_SESSION,
+        provenance: "claude-desktop-metadata",
+      });
+    });
+
+    test("derives stable, isolated per-conversation identities for headerless Desktop Chat conversations and leaves unidentifiable requests unmatched", () => {
+      const chatOneTurnOne = extractAppaSessionIdentity({
+        family: "anthropic:messages",
+        body: {
+          system: "You are Claude.",
+          messages: [{ role: "user", content: "Summarize Q1 report" }],
+        },
+        headers: { "user-agent": "ClaudeDesktop/1.0.0" },
+      });
+      const chatOneTurnTwo = extractAppaSessionIdentity({
+        family: "anthropic:messages",
+        body: {
+          system: [
+            {
+              type: "text",
+              text: "You are Claude.",
+              cache_control: { type: "ephemeral" },
+            },
+          ],
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Summarize Q1 report",
+                  cache_control: { type: "ephemeral" },
+                },
+              ],
+            },
+            { role: "assistant", content: "Here is the summary." },
+            { role: "user", content: "Now export it" },
+          ],
+        },
+        headers: { "user-agent": "ClaudeDesktop/1.0.0" },
+      });
+      const chatTwo = extractAppaSessionIdentity({
+        family: "anthropic:messages",
+        body: {
+          system: "You are Claude.",
+          messages: [{ role: "user", content: "Summarize Q2 report" }],
+        },
+        headers: { "user-agent": "ClaudeDesktop/1.0.0" },
+      });
+
+      expect(chatOneTurnOne).toMatchObject({
+        sessionId: expect.stringMatching(/^desktop-chat-[0-9a-f]{32}$/),
+        provenance: "claude-desktop-metadata",
+      });
+      expect(chatOneTurnTwo.sessionId).toBe(chatOneTurnOne.sessionId);
+      expect(chatTwo).toMatchObject({
+        sessionId: expect.stringMatching(/^desktop-chat-[0-9a-f]{32}$/),
+        provenance: "claude-desktop-metadata",
+      });
+      expect(chatTwo.sessionId).not.toBe(chatOneTurnOne.sessionId);
+
+      expect(
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: { messages: [] },
+          headers: { "user-agent": "ClaudeDesktop/1.0.0" },
+        }),
+      ).toMatchObject({
+        provenance: "none",
+      });
+    });
   });
 
   describe("Codex", () => {

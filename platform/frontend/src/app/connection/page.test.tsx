@@ -532,6 +532,11 @@ describe("ConnectPage saved agent order", () => {
 });
 
 describe("ConnectPage guardrails chip", () => {
+  const api = setupServer();
+  beforeAll(() => api.listen({ onUnhandledRequest: "bypass" }));
+  afterEach(() => api.resetHandlers());
+  afterAll(() => api.close());
+
   function renderPage(
     clientId: string,
     deployment: {
@@ -599,14 +604,51 @@ describe("ConnectPage guardrails chip", () => {
     Object.entries(NATIVE_SESSION_CLIENT_LABELS),
   )("marks %s as supporting guardrails even before enforcement is enabled", async (clientId, label) => {
     setup(clientId, { active: false, unsupportedClientAction: "block" });
-    const badge = within(
-      screen.getByRole("button", { name: new RegExp(`${label}$`) }),
-    ).getByRole("img", { name: "Supports LLM proxy guardrails" });
+    const tile = screen.getByRole("button", { name: new RegExp(`${label}$`) });
+    const badge = within(tile).getByRole("img", {
+      name: "Supports LLM proxy guardrails",
+    });
     expect(badge).toBeVisible();
+    // Separate from the label text so the shield does not shift the agent name.
+    expect(within(tile).getByText(label)).not.toContainElement(badge);
     await userEvent.hover(badge);
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       "Enforcement depends on your organization's settings.",
     );
+  });
+
+  it("stacks the last connected mark below the guardrails mark in the same corner", async () => {
+    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+    const now = new Date().toISOString();
+    api.use(
+      http.get("http://localhost:9000/api/connected-clients", () =>
+        HttpResponse.json([
+          {
+            clientId: "codex",
+            name: "Codex",
+            lastConnectedAt: now,
+            deviceNames: [],
+            lastSeenAt: now,
+          },
+        ]),
+      ),
+    );
+    setup("codex", { active: true, unsupportedClientAction: "block" });
+    const tile = screen.getByRole("button", { name: "Codex" });
+    const lastConnected = await within(tile).findByRole("img", {
+      name: "Last connected",
+    });
+    const guardrails = within(tile).getByRole("img", {
+      name: "Supports LLM proxy guardrails",
+    });
+    const corner = guardrails.parentElement;
+    expect(lastConnected.parentElement).toBe(corner);
+    expect(within(tile).getByText("Codex")).not.toContainElement(guardrails);
+    expect(
+      within(corner as HTMLElement)
+        .getAllByRole("img")
+        .map((mark) => mark.getAttribute("aria-label")),
+    ).toEqual(["Supports LLM proxy guardrails", "Last connected"]);
   });
 
   it("does not mark an unsupported client as supporting guardrails", () => {

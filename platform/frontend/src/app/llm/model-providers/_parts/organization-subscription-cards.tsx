@@ -36,8 +36,8 @@ export function OrganizationSubscriptionCards({
   return (
     <SubscriptionCardsSection
       id="organization-subscriptions-heading"
-      heading="Organization subscriptions"
-      description="Connect a subscription your organization pays for. Members use it without their own seat."
+      heading="Enterprise plans"
+      description="Connect your business account. Can be shared."
     >
       {credentials.length === 0 ? (
         <SubscriptionCard

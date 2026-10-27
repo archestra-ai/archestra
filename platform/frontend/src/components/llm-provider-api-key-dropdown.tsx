@@ -359,7 +359,7 @@ export function LlmProviderApiKeyDropdown({
                       key.provider,
                       key.name,
                       key.githubOrganization ?? "",
-                      "organization subscription",
+                      "enterprise plan",
                     ]}
                     disabled={providerFilter?.(key.provider) === false}
                     onSelect={() => onSelectKey(key.id)}

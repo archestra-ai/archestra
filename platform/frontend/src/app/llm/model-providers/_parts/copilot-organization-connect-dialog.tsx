@@ -136,16 +136,14 @@ export function CopilotOrganizationConnectDialog({
     );
   }
 
-  const title = replace
-    ? "Reconnect GitHub Copilot"
-    : "Connect GitHub Copilot for your organization";
+  const title = replace ? "Reconnect GitHub Copilot" : "Connect GitHub Copilot";
 
   return (
     <ConnectionSignInDialog
       open={open}
       onOpenChange={onOpenChange}
       title={title}
-      description="Connect your enterprise GitHub Copilot plan. Members use it without their own seat."
+      description="Connect your enterprise GitHub Copilot plan. Can be shared."
       action={
         step === "start" ? (
           <StartStep

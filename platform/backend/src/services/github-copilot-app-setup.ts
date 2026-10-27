@@ -356,7 +356,7 @@ class CopilotGithubAppSetup {
         existing.organizationId !== organizationId ||
         !(await LlmProviderApiKeyModel.isGithubAppKey(existing.id))
       )
-        throw new ApiError(404, "Organization subscription not found");
+        throw new ApiError(404, "Enterprise plan not found");
       await ResourcePermissions.require({
         organizationId,
         userId,
@@ -467,7 +467,7 @@ class CopilotGithubAppSetup {
       key.organizationId !== params.organizationId ||
       !(await LlmProviderApiKeyModel.isGithubAppKey(key.id))
     )
-      throw new ApiError(404, "Organization subscription not found");
+      throw new ApiError(404, "Enterprise plan not found");
     await ResourcePermissions.require({
       organizationId: params.organizationId,
       userId: params.userId,

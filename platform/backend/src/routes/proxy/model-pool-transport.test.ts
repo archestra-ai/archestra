@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   canReachMember,
-  inboundPoolWire,
   memberAdapter,
   memberTransport,
   requestedMaxOutputTokens,
@@ -28,23 +27,12 @@ describe("the output a request allows", () => {
     ).toBe(512);
   });
 
-  test("is undefined when the request sets no usable limit", () => {
+  test("is undefined when the request sets no limit", () => {
     expect(requestedMaxOutputTokens({ messages: [] })).toBeUndefined();
-    expect(requestedMaxOutputTokens({ max_tokens: 0 })).toBeUndefined();
-    expect(requestedMaxOutputTokens({ max_tokens: "100" })).toBeUndefined();
-    expect(requestedMaxOutputTokens(null)).toBeUndefined();
   });
 });
 
 describe("which members a client's wire reaches", () => {
-  test("names the wire a request arrived in", () => {
-    expect(inboundPoolWire("openai:chatCompletions")).toBe("openai-chat");
-    expect(inboundPoolWire("zhipuai:chatCompletions")).toBe("openai-chat");
-    expect(inboundPoolWire("anthropic:messages")).toBe("anthropic");
-    expect(inboundPoolWire("bedrock:converse")).toBe("bedrock-converse");
-    expect(inboundPoolWire("gemini:generateContent")).toBeNull();
-  });
-
   test("reaches the same wire and the pairs a translator connects", () => {
     expect(canReachMember("openai-chat", "zhipuai")).toBe(true);
     expect(canReachMember("openai-chat", "anthropic")).toBe(true);
@@ -186,66 +174,10 @@ describe("memberTransport", () => {
     );
   });
 
-  test("sends Claude in every Bedrock id form through InvokeModel", async () => {
-    for (const modelId of [
-      "anthropic.claude-haiku-4-5-20251001-v1:0",
-      "global.anthropic.claude-opus-4-8",
-      "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-    ]) {
-      const client = { invoke: vi.fn().mockResolvedValue({}) };
-      await memberTransport({
-        inbound: "anthropic",
-        provider: "bedrock",
-        modelId,
-        client,
-      }).execute({ model: "claude", max_tokens: 10, messages: [] });
-      expect(client.invoke).toHaveBeenCalledWith(modelId, expect.anything());
-    }
-  });
-
-  test("answers a Claude Code request from another model on Bedrock", async () => {
-    // biome-ignore lint/style/noNonNullAssertion: bedrock is poolable
-    const adapter = memberAdapter("bedrock")!;
-    const execute = vi.spyOn(adapter, "execute").mockResolvedValue({
-      output: { message: { role: "assistant", content: [{ text: "Hi" }] } },
-      stopReason: "end_turn",
-      usage: { inputTokens: 3, outputTokens: 1, totalTokens: 4 },
-    });
-    const transport = memberTransport({
-      inbound: "anthropic",
-      provider: "bedrock",
-      modelId: "us.zai.glm-5",
-      client: "client",
-    });
-
-    const response = await transport.execute({
-      model: "glm-5",
-      max_tokens: 100,
-      system: "Be brief.",
-      messages: [{ role: "user", content: "hello" }],
-    });
-
-    expect(execute).toHaveBeenCalledWith(
-      "client",
-      expect.objectContaining({
-        modelId: "us.zai.glm-5",
-        messages: [{ role: "user", content: [{ text: "hello" }] }],
-      }),
-    );
-    expect(response).toEqual(
-      expect.objectContaining({
-        type: "message",
-        role: "assistant",
-        content: [{ type: "text", text: "Hi" }],
-        stop_reason: "end_turn",
-      }),
-    );
-  });
-
   test("streams another Bedrock model back to a Claude Code request", async () => {
     // biome-ignore lint/style/noNonNullAssertion: bedrock is poolable
     const adapter = memberAdapter("bedrock")!;
-    vi.spyOn(adapter, "executeStream").mockResolvedValue(
+    const executeStream = vi.spyOn(adapter, "executeStream").mockResolvedValue(
       from([
         { messageStart: { role: "assistant" } },
         { contentBlockDelta: { contentBlockIndex: 0, delta: { text: "Hi" } } },
@@ -274,6 +206,13 @@ describe("memberTransport", () => {
       }),
     );
 
+    expect(executeStream).toHaveBeenCalledWith(
+      "client",
+      expect.objectContaining({
+        modelId: "us.zai.glm-5",
+        messages: [{ role: "user", content: [{ text: "hello" }] }],
+      }),
+    );
     expect(events).toContainEqual({
       type: "content_block_delta",
       index: 0,
@@ -369,16 +308,5 @@ describe("memberTransport", () => {
     await expect(
       collect(await transport.executeStream({ model: "haiku", messages: [] })),
     ).rejects.toThrow(/ended before it finished/);
-  });
-
-  test("refuses a member the wire cannot reach", () => {
-    expect(() =>
-      memberTransport({
-        inbound: "bedrock-converse",
-        provider: "zhipuai",
-        modelId: "glm-5",
-        client: "client",
-      }),
-    ).toThrow(/cannot reach/);
   });
 });

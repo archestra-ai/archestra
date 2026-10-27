@@ -115,8 +115,12 @@ describe("Model pools - LLM Proxy", () => {
               enabled: true,
             },
           ],
-          virtualApiKeyIds: [virtualKeyRow.id],
         },
+      });
+      await ModelPoolModel.setPoolsForVirtualApiKey({
+        organizationId: proxy.organizationId,
+        virtualApiKeyId: virtualKeyRow.id,
+        poolIds: [pool.id],
       });
 
       const response = await app.inject({
@@ -194,7 +198,7 @@ describe("Model pools - LLM Proxy", () => {
         name: "all-limited",
         providerApiKeys: [{ provider: "openai", providerApiKeyId: first.id }],
       });
-    await ModelPoolModel.create({
+    const pool = await ModelPoolModel.create({
       organizationId: proxy.organizationId,
       input: {
         name: "gpt-4o-mini",
@@ -205,8 +209,12 @@ describe("Model pools - LLM Proxy", () => {
           weight: 1,
           enabled: true,
         })),
-        virtualApiKeyIds: [virtualKeyRow.id],
       },
+    });
+    await ModelPoolModel.setPoolsForVirtualApiKey({
+      organizationId: proxy.organizationId,
+      virtualApiKeyId: virtualKeyRow.id,
+      poolIds: [pool.id],
     });
 
     const response = await app.inject({

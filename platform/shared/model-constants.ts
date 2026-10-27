@@ -143,7 +143,7 @@ export function isModelPoolProvider(
  * ARN does not say which model it wraps.
  */
 export function isClaudeOnBedrock(modelId: string): boolean {
-  return /(^|[./])anthropic\.claude/.test(modelId.trim());
+  return /(?:^|[./])anthropic\.claude-/.test(modelId.trim());
 }
 
 /**
@@ -696,7 +696,7 @@ export function getAgentRuntimeModelCompatibility(params: {
     params.runtimeCommand?.[0] === "archestra-claude-code" &&
     params.provider === "bedrock" &&
     params.modelId &&
-    !/(?:^|[./])anthropic\.claude-/.test(params.modelId)
+    !isClaudeOnBedrock(params.modelId)
   ) {
     return {
       compatible: false,

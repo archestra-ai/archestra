@@ -42,6 +42,7 @@ import {
   LlmOauthClientGrantTypeSchema,
   ManagedOauthClientSchema,
   ManagedOauthClientWithSecretSchema,
+  ModelPoolIdsInputSchema,
 } from "@/types";
 import { assertValidProviderKeyMappings } from "@/utils/provider-key-mappings";
 import {
@@ -85,14 +86,10 @@ const OauthClientFields = z
     allowedGatewayIds: z.array(z.string().uuid()).optional(),
     grantType: LlmOauthClientGrantTypeSchema.default("client_credentials"),
     providerApiKeys: z.array(LlmOauthClientProviderKeyBodySchema).optional(),
-    modelPoolIds: z
-      .array(z.string().uuid())
-      .max(500)
-      .optional()
-      .describe(
-        "Model pools the client may call by name without mapping one of their members. " +
-          "Omit on update to keep them. Only applies to client_credentials clients.",
-      ),
+    modelPoolIds: ModelPoolIdsInputSchema.describe(
+      "Model pools the client may call by name without mapping one of their members. " +
+        "Omit on update to keep them. Only applies to client_credentials clients.",
+    ),
     includeFutureProviders: z
       .boolean()
       .optional()

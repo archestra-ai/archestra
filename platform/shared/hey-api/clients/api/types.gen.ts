@@ -96905,7 +96905,6 @@ export type CreateModelPoolData = {
             weight?: number;
             enabled?: boolean;
         }>;
-        virtualApiKeyIds?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -97106,7 +97105,6 @@ export type UpdateModelPoolData = {
             weight?: number;
             enabled?: boolean;
         }>;
-        virtualApiKeyIds?: Array<string>;
     };
     path: {
         id: string;

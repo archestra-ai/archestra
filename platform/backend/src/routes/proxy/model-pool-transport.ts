@@ -101,22 +101,17 @@ export function memberTransport(params: {
   client: unknown;
 }): MemberTransport {
   const { inbound, provider, modelId, client } = params;
-  if (claudeOnBedrock(inbound, params)) {
-    // Bedrock serves Claude in Anthropic's own format (InvokeModel), as it
-    // does for Claude Code with CLAUDE_CODE_USE_BEDROCK: no translation.
-    const withModel = (request: unknown) => ({
-      ...(request as Anthropic.Types.MessagesRequest),
-      model: modelId,
-    });
-    return {
-      execute: (request) =>
-        bedrockInvokeAdapterFactory.execute(client, withModel(request)),
-      executeStream: (request) =>
-        bedrockInvokeAdapterFactory.executeStream(client, withModel(request)),
-    };
-  }
-  const adapter = memberAdapter(provider);
-  const target = wireOf(provider);
+  // Bedrock also serves Claude in Anthropic's own format (InvokeModel), as it
+  // does for Claude Code with CLAUDE_CODE_USE_BEDROCK, so an Anthropic client
+  // reaches it untranslated.
+  const claudeOnBedrock =
+    inbound === "anthropic" &&
+    provider === "bedrock" &&
+    isClaudeOnBedrock(modelId);
+  const adapter = claudeOnBedrock
+    ? bedrockInvokeAdapterFactory
+    : memberAdapter(provider);
+  const target = claudeOnBedrock ? "anthropic" : wireOf(provider);
   if (!adapter || !target) {
     throw new Error(`Provider ${provider} cannot serve a model pool`);
   }
@@ -198,46 +193,10 @@ export function memberTransport(params: {
     };
   }
 
-  if (inbound === "anthropic" && target === "openai-chat") {
-    return {
-      async execute(request) {
-        const { openaiBody, anthropicContext } = anthropicToOpenai(
-          request as Anthropic.Types.MessagesRequest,
-        );
-        const response = await adapter.execute(client, {
-          ...openaiBody,
-          model: modelId,
-        });
-        return openaiResponseToAnthropic(
-          response as OpenAi.Types.ChatCompletionsResponse,
-          anthropicContext,
-        );
-      },
-      async executeStream(request) {
-        const { openaiBody, anthropicContext } = anthropicToOpenai(
-          request as Anthropic.Types.MessagesRequest,
-        );
-        const chunks = await adapter.executeStream(client, {
-          ...openaiBody,
-          model: modelId,
-          stream: true,
-        });
-        const translator =
-          createOpenaiToAnthropicStreamTranslator(anthropicContext);
-        return mapStream(
-          chunks,
-          (chunk) =>
-            translator.translate(chunk as OpenAi.Types.ChatCompletionChunk),
-          translator.finish,
-        );
-      },
-    };
-  }
-
-  if (inbound === "anthropic" && target === "bedrock-converse") {
-    // No direct translator: go through the OpenAI chat shape, which both the
-    // Anthropic and the Converse translators speak. Anthropic-only fields
-    // (cache_control, thinking blocks) don't survive the middle step.
+  if (inbound === "anthropic") {
+    // Through the OpenAI chat shape, which an OpenAI-style member speaks and
+    // the Converse translator takes. Anthropic-only fields (cache_control,
+    // thinking blocks) don't survive it.
     const viaOpenai = memberTransport({
       inbound: "openai-chat",
       provider,
@@ -339,18 +298,6 @@ const TRANSLATED = new Set([
   "anthropic>openai-chat",
   "anthropic>bedrock-converse",
 ]);
-
-/** A Claude member on Bedrock, which an Anthropic client reaches as is. */
-function claudeOnBedrock(
-  inbound: PoolWire,
-  member: { provider: SupportedProvider; modelId: string },
-): boolean {
-  return (
-    inbound === "anthropic" &&
-    member.provider === "bedrock" &&
-    isClaudeOnBedrock(member.modelId)
-  );
-}
 
 function wireOf(provider: SupportedProvider): PoolWire | null {
   if (!isModelPoolProvider(provider)) return null;

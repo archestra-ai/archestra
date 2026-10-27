@@ -38,6 +38,7 @@ import {
   constructResponseSchema,
   type LabelWithDetails,
   LabelWithDetailsSchema,
+  ModelPoolIdsInputSchema,
   ResourceVisibilityScopeSchema,
   type User,
   VirtualApiKeyTypeSchema,
@@ -84,7 +85,7 @@ const VirtualApiKeyBodyObjectSchema = z.object({
    * Model pools the key may call by name even when it maps none of their
    * members. Omit to keep the key's current pools. Needs model pools on.
    */
-  modelPoolIds: z.array(z.string().uuid()).max(500).optional(),
+  modelPoolIds: ModelPoolIdsInputSchema,
 });
 
 /**
@@ -784,10 +785,7 @@ async function updateVirtualApiKey(params: {
   };
 }
 
-/**
- * Choosing a key's model pools edits who may call those pools, which is pool
- * administration, so it takes the pools' permission and model pools on.
- */
+/** Saves the pools a create/update body names; undefined keeps the current ones. */
 async function setModelPools(params: {
   modelPoolIds: string[] | undefined;
   organizationId: string;
@@ -795,12 +793,11 @@ async function setModelPools(params: {
 }): Promise<void> {
   if (params.modelPoolIds === undefined || !config.llmProxy.modelPoolsEnabled)
     return;
-  const saved = await ModelPoolModel.setPoolsForVirtualApiKey({
+  await ModelPoolModel.setPoolsForVirtualApiKey({
     organizationId: params.organizationId,
     virtualApiKeyId: params.virtualApiKeyId,
     poolIds: params.modelPoolIds,
   });
-  if (!saved) throw new ApiError(400, "Model pool not found");
 }
 
 async function readBilling(virtualKey: {

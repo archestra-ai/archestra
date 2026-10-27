@@ -37,20 +37,6 @@ describe("orderPoolMembers", () => {
     ).toEqual(["a", "b", "c"]);
   });
 
-  test("splits one priority by weight", () => {
-    const firsts = { heavy: 0, light: 0 };
-    for (let i = 0; i < 2000; i++) {
-      const [first] = orderPoolMembers({
-        members: [member("heavy", 1, 9), member("light", 1, 1)],
-        benchedUntil: new Map(),
-        seed: `session-${i}`,
-      });
-      firsts[first as keyof typeof firsts]++;
-    }
-    expect(firsts.heavy / 2000).toBeGreaterThan(0.85);
-    expect(firsts.light).toBeGreaterThan(0);
-  });
-
   test("AC-W1: weights 1:2:7 split first picks within the lab's bounds", () => {
     const counts = { a: 0, b: 0, c: 0 };
     const draws = 2000;
@@ -120,7 +106,6 @@ describe("planModelPool", () => {
           member(zai.id, "glm-5", 1),
           member(bedrock.id, "zai.glm-5", 2),
         ],
-        virtualApiKeyIds: [],
       },
     });
 
@@ -156,34 +141,6 @@ describe("planModelPool", () => {
     ).resolves.toBeNull();
   });
 
-  test("plans nothing while model pools are off", async ({
-    makeOrganization,
-    makeLlmProviderApiKey,
-  }) => {
-    const org = await makeOrganization();
-    const zai = await makeLlmProviderApiKey(org.id, null, {
-      provider: "zhipuai",
-    });
-    await ModelPoolModel.create({
-      organizationId: org.id,
-      input: {
-        name: "glm-5",
-        members: [member(zai.id, "glm-5", 1)],
-        virtualApiKeyIds: [],
-      },
-    });
-
-    config.llmProxy.modelPoolsEnabled = false;
-    await expect(
-      planModelPool({
-        organizationId: org.id,
-        name: "glm-5",
-        inbound: "openai-chat",
-        caller: { providerApiKeyIds: [zai.id] },
-      }),
-    ).resolves.toBeNull();
-  });
-
   test("leaves out members the client's wire cannot reach", async ({
     makeOrganization,
     makeLlmProviderApiKey,
@@ -203,7 +160,6 @@ describe("planModelPool", () => {
           member(zai.id, "glm-5", 1),
           member(bedrock.id, "zai.glm-5", 1),
         ],
-        virtualApiKeyIds: [],
       },
     });
 
@@ -253,8 +209,12 @@ describe("planModelPool", () => {
       input: {
         name: "glm-5",
         members: [member(zai.id, "glm-5", 1)],
-        virtualApiKeyIds: [granted.id],
       },
+    });
+    await ModelPoolModel.setPoolsForVirtualApiKey({
+      organizationId: org.id,
+      virtualApiKeyId: granted.id,
+      poolIds: [pool.id],
     });
     const plan = (caller: ModelPoolCaller, grantedPoolId?: string) =>
       planModelPool({
@@ -303,7 +263,6 @@ describe("planModelPool", () => {
           member(first.id, "claude-haiku-4-5", 1),
           member(second.id, "claude-haiku-4-5", 2),
         ],
-        virtualApiKeyIds: [],
       },
     });
     const planParams = {

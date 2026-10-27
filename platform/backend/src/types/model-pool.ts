@@ -40,12 +40,13 @@ export const ModelPoolMemberInputSchema = z.object({
 export const ModelPoolInputSchema = z.object({
   name: z.string().trim().min(1).max(512),
   members: z.array(ModelPoolMemberInputSchema).min(1).max(50),
-  /**
-   * Virtual keys that may call the pool by its name. Omit to keep the pool's
-   * current keys; they are usually set from the virtual key instead.
-   */
-  virtualApiKeyIds: z.array(z.string().uuid()).max(500).optional(),
 });
+
+/** The pools a virtual key or OAuth client form grants; omit to keep them. */
+export const ModelPoolIdsInputSchema = z
+  .array(z.string().uuid())
+  .max(500)
+  .optional();
 
 export type ModelPoolMember = z.infer<typeof SelectModelPoolMemberSchema>;
 export type ModelPool = z.infer<typeof SelectModelPoolSchema>;

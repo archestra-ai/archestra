@@ -152,35 +152,6 @@ describe("POST /api/model-pools", () => {
     });
     expect(renamed.statusCode, renamed.body).toBe(200);
   });
-  test("grants virtual keys of the organization only", async ({
-    makeOrganization,
-    makeLlmProviderApiKey,
-    makeVirtualApiKey,
-  }) => {
-    const zai = await makeLlmProviderApiKey(organizationId, null, {
-      provider: "zhipuai",
-    });
-    const own = await makeVirtualApiKey(organizationId);
-    const foreign = await makeVirtualApiKey((await makeOrganization()).id);
-    const create = (virtualApiKeyIds: string[]) =>
-      app.inject({
-        method: "POST",
-        url: "/api/model-pools",
-        payload: {
-          name: "glm-5",
-          members: [{ providerApiKeyId: zai.id, modelId: "glm-5" }],
-          virtualApiKeyIds,
-        },
-      });
-
-    const rejected = await create([foreign.id]);
-    expect(rejected.statusCode).toBe(400);
-
-    const created = await create([own.id]);
-    expect(created.statusCode, created.body).toBe(200);
-    expect(created.json().virtualApiKeyIds).toEqual([own.id]);
-  });
-
   test("is not there while model pools are off", async () => {
     config.llmProxy.modelPoolsEnabled = false;
     const listed = await app.inject({

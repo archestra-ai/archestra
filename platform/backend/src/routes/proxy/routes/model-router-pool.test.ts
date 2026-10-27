@@ -94,8 +94,12 @@ const poolTest = test.extend<{
             enabled: true,
           },
         ],
-        virtualApiKeyIds: [virtual.virtualKey.id],
       },
+    });
+    await ModelPoolModel.setPoolsForVirtualApiKey({
+      organizationId: org.id,
+      virtualApiKeyId: virtual.virtualKey.id,
+      poolIds: [pool.id],
     });
     const ungranted = await VirtualApiKeyModel.create({
       organizationId: org.id,

@@ -784,10 +784,8 @@ export async function handleLLMProxy<
   let perKeyChatApiKeyIdFromInternalHeader = false;
   let wasJwksAuthenticated = false;
   let wasVirtualKeyResolved = false;
-  /** The pool a virtual key with no key of this provider was let in for. */
-  let virtualKeyOnlyPoolId: string | undefined;
-  // A pool an OAuth client may use for the requested model.
-  let oauthPoolId: string | undefined;
+  /** A pool the virtual key or OAuth client was granted for the requested model. */
+  let grantedPoolId: string | undefined;
   let wasOAuthAuthenticated = false;
   let authMethod = authOverride?.authMethod;
   let authenticatedApp = authOverride?.authenticatedApp;
@@ -873,7 +871,7 @@ export async function handleLLMProxy<
       authenticatedApp = oauthResult.authenticatedApp;
       billingTeamId ??= oauthResult.billingTeamId;
       serviceAccountId = oauthResult.serviceAccountId;
-      oauthPoolId = oauthResult.modelPoolId;
+      grantedPoolId = oauthResult.modelPoolId;
       if (oauthResult.userId) {
         oauthUserId = oauthResult.userId;
         userId = oauthResult.userId;
@@ -967,7 +965,7 @@ export async function handleLLMProxy<
       virtualKeyId = virtualResult.virtualKeyId;
       serviceAccountId = virtualResult.serviceAccountId;
       billingTeamId ??= virtualResult.billingTeamId;
-      virtualKeyOnlyPoolId = virtualResult.modelPoolId;
+      grantedPoolId = virtualResult.modelPoolId;
       // A personal standard virtual key identifies its owner; include it in the
       // cross-credential consistency check.
       if (virtualResult.virtualKeyIsPersonal) {
@@ -1374,23 +1372,16 @@ export async function handleLLMProxy<
             virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
             providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
           },
-          grantedPoolId:
-            authOverride?.modelPoolId ?? virtualKeyOnlyPoolId ?? oauthPoolId,
+          grantedPoolId: authOverride?.modelPoolId ?? grantedPoolId,
           sessionId,
         })
       : null;
-    // A virtual key let in only for its pool has no key for this provider, so
+    // A credential let in only for a pool has no key for this provider, so
     // the request can't go anywhere but the pool.
-    if (virtualKeyOnlyPoolId && !modelPoolPlan) {
+    if (grantedPoolId && !perKeyChatApiKeyId && !modelPoolPlan) {
       throw new ApiError(
         400,
-        `Virtual API key is not mapped to provider "${providerName}".`,
-      );
-    }
-    if (oauthPoolId && !perKeyChatApiKeyId && !modelPoolPlan) {
-      throw new ApiError(
-        400,
-        `LLM OAuth client is not mapped to provider "${providerName}".`,
+        `${wasOAuthAuthenticated ? "LLM OAuth client" : "Virtual API key"} is not mapped to provider "${providerName}".`,
       );
     }
 

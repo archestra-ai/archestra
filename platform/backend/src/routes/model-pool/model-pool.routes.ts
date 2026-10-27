@@ -55,7 +55,6 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ organizationId, body }, reply) => {
       assertModelPoolsEnabled();
       await assertValidMembers({ organizationId, input: body });
-      await assertValidVirtualApiKeys({ organizationId, input: body });
       await assertNameHasNoOtherPool({ organizationId, input: body });
       return reply.send(
         await ModelPoolModel.create({ organizationId, input: body }),
@@ -78,7 +77,6 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ organizationId, params, body }, reply) => {
       assertModelPoolsEnabled();
       await assertValidMembers({ organizationId, input: body });
-      await assertValidVirtualApiKeys({ organizationId, input: body });
       await assertNameHasNoOtherPool({
         organizationId,
         input: body,
@@ -180,28 +178,6 @@ async function assertValidMembers(params: {
       throw new ApiError(
         400,
         `Provider key "${key.name}" is on ${key.provider}, which a pool can't send requests to yet.`,
-      );
-    }
-  }
-}
-
-/** Every virtual key is a standard key of the organization. */
-async function assertValidVirtualApiKeys(params: {
-  organizationId: string;
-  input: ModelPoolInput;
-}): Promise<void> {
-  const ids = params.input.virtualApiKeyIds ?? [];
-  const keys = await VirtualApiKeyModel.findSummariesByIds({
-    ids,
-    organizationId: params.organizationId,
-  });
-  for (const id of ids) {
-    const key = keys.get(id);
-    if (!key) throw new ApiError(400, `Virtual key ${id} not found.`);
-    if (key.keyType !== "standard") {
-      throw new ApiError(
-        400,
-        `Virtual key "${key.name}" passes the caller's own provider key through, so it can't use a pool.`,
       );
     }
   }

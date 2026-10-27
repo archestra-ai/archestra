@@ -187,23 +187,33 @@ export function SizeScatter({ sessions }: { sessions: Session[] }) {
       : [],
   );
   if (points.length === 0) return null;
-  const lo = Math.floor(Math.min(...points.flat()));
-  const hi = Math.ceil(Math.max(...points.flat()));
-  const decades = Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
+  const domain = (values: number[]) => {
+    const lo = Math.floor(Math.min(...values));
+    return { lo, hi: Math.max(lo + 1, Math.ceil(Math.max(...values))) };
+  };
+  const dx = domain(points.map(([px]) => px));
+  const dy = domain(points.map(([, py]) => py));
+  const decades = ({ lo, hi }: { lo: number; hi: number }) =>
+    Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
   const { w, h, left, right, top, bottom } = SCATTER;
-  const x = (v: number) => left + ((v - lo) / (hi - lo)) * (w - left - right);
+  const x = (v: number) =>
+    left + ((v - dx.lo) / (dx.hi - dx.lo)) * (w - left - right);
   const y = (v: number) =>
-    h - bottom - ((v - lo) / (hi - lo)) * (h - top - bottom);
+    h - bottom - ((v - dy.lo) / (dy.hi - dy.lo)) * (h - top - bottom);
+  const diagonal = {
+    lo: Math.max(dx.lo, dy.lo),
+    hi: Math.min(dx.hi, dy.hi),
+  };
 
   return (
     <svg
       viewBox={`0 0 ${w} ${h}`}
-      className="w-full"
+      className="mx-auto block w-full max-w-[760px]"
       role="img"
       aria-label="Predicted vs realized tokens"
     >
-      {decades.map((d) => (
-        <g key={d}>
+      {decades(dy).map((d) => (
+        <g key={`y${d}`}>
           <line
             x1={left}
             x2={w - right}
@@ -212,6 +222,13 @@ export function SizeScatter({ sessions }: { sessions: Session[] }) {
             className={GRID}
             strokeWidth={0.5}
           />
+          <text x={left - 6} y={y(d) + 3} textAnchor="end" className={TICK}>
+            {formatCompactNumber(10 ** d)}
+          </text>
+        </g>
+      ))}
+      {decades(dx).map((d) => (
+        <g key={`x${d}`}>
           <line
             x1={x(d)}
             x2={x(d)}
@@ -220,9 +237,6 @@ export function SizeScatter({ sessions }: { sessions: Session[] }) {
             className={GRID}
             strokeWidth={0.5}
           />
-          <text x={left - 6} y={y(d) + 3} textAnchor="end" className={TICK}>
-            {formatCompactNumber(10 ** d)}
-          </text>
           <text
             x={x(d)}
             y={h - bottom + 14}
@@ -233,17 +247,26 @@ export function SizeScatter({ sessions }: { sessions: Session[] }) {
           </text>
         </g>
       ))}
-      <line
-        x1={x(lo)}
-        y1={y(lo)}
-        x2={x(hi)}
-        y2={y(hi)}
-        className="stroke-muted-foreground"
-        strokeWidth={1}
-      />
-      <text x={x(hi) - 4} y={y(hi) + 12} textAnchor="end" className={TICK}>
-        y = x
-      </text>
+      {diagonal.hi > diagonal.lo && (
+        <>
+          <line
+            x1={x(diagonal.lo)}
+            y1={y(diagonal.lo)}
+            x2={x(diagonal.hi)}
+            y2={y(diagonal.hi)}
+            className="stroke-muted-foreground"
+            strokeWidth={1}
+          />
+          <text
+            x={x(diagonal.hi) - 4}
+            y={y(diagonal.hi) + 12}
+            textAnchor="end"
+            className={TICK}
+          >
+            y = x
+          </text>
+        </>
+      )}
       {points.map(([px, py], i) => (
         <circle
           // biome-ignore lint/suspicious/noArrayIndexKey: points are positional

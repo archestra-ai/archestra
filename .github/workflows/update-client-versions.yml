@@ -1,11 +1,12 @@
 name: Update Client Versions
 
-# Two kinds of client version live here:
+# Client and browser version updates:
 # - identity: the client and editor versions the backend sends upstream when it
 #   emulates a first-party client. Hourly, auto-merged.
 # - agent-runtime: the agent CLIs installed in the agent catalog images. Daily,
 #   held back by a cooldown, and left for review because the image validation
 #   builds are not required checks.
+# - playwright-mcp: upstream browser MCP image. Daily, review required.
 on:
   schedule:
     - cron: "23 * * * *"
@@ -440,14 +441,142 @@ jobs:
           echo "::error::Could not update every agent runtime CLI; see the update step log"
           exit 1
 
+  playwright-mcp:
+    name: Propose upstream Playwright MCP updates
+    if: github.repository == 'archestra-ai/archestra' && github.event.schedule != '23 * * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      pushed: ${{ steps.push.outputs.pushed }}
+      summary: ${{ steps.update.outputs.summary }}
+      pull_request_url: ${{ steps.pr.outputs.url }}
+    defaults:
+      run:
+        working-directory: ./platform
+    env:
+      BRANCH: automation/playwright-mcp
+      IMAGE_FILE: platform/backend/src/playwright-mcp-image.json
+    steps:
+      - name: Checkout trusted main branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js and pnpm
+        uses: $/.github/actions/setup-env
+
+      - name: Generate releaser token
+        id: token
+        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Prepare automation branch
+        id: branch
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git --hostname github.com --force
+          git config user.name "Archestra releaser automation"
+          git config user.email "releaser-bot@users.noreply.github.com"
+          git fetch origin main
+
+          target="$RUNNER_TEMP/playwright-mcp-branch"
+          existing="$(git ls-remote --heads origin "refs/heads/$BRANCH")"
+          if [[ -n "$existing" ]]; then
+            git fetch origin "refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+            git worktree add -b "$BRANCH" "$target" "origin/$BRANCH"
+            git -C "$target" -c core.hooksPath=/dev/null merge --no-edit origin/main
+          else
+            git worktree add -b "$BRANCH" "$target" origin/main
+          fi
+          echo "path=$target" >> "$GITHUB_OUTPUT"
+
+      # Execute only the updater from trusted main, writing immutable image inputs
+      # into the automation worktree after validating both architectures.
+      - name: Update upstream Playwright MCP
+        id: update
+        env:
+          TARGET: ${{ steps.branch.outputs.path }}
+        run: |
+          set -euo pipefail
+          pnpm --silent --dir backend update:playwright-mcp \
+            --file "$TARGET/$IMAGE_FILE" | tee "$RUNNER_TEMP/playwright-mcp.log"
+          if git -C "$TARGET" diff --quiet -- "$IMAGE_FILE"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            summary="$(sed -n 's/^Updated //p' "$RUNNER_TEMP/playwright-mcp.log")"
+            echo "summary=$summary" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push update
+        id: push
+        if: steps.update.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          TARGET: ${{ steps.branch.outputs.path }}
+          SUMMARY: ${{ steps.update.outputs.summary }}
+        run: |
+          set -euo pipefail
+          git -C "$TARGET" add -- "$IMAGE_FILE"
+          git -C "$TARGET" -c core.hooksPath=/dev/null commit -m "chore: update upstream Playwright MCP ($SUMMARY)"
+          git -C "$TARGET" push origin "HEAD:refs/heads/$BRANCH"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      # Also recovers a branch pushed by an earlier run whose PR creation failed.
+      # No auto-merge: upstream image changes require compatibility/security review.
+      - name: Open or update pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TARGET: ${{ steps.branch.outputs.path }}
+        run: |
+          set -euo pipefail
+          if git -C "$TARGET" diff --quiet origin/main HEAD -- "$IMAGE_FILE"; then
+            echo "Upstream Playwright MCP already matches main."
+            exit 0
+          else
+            status=$?
+            if [[ "$status" -ne 1 ]]; then
+              exit "$status"
+            fi
+          fi
+
+          pr_title="chore: update upstream Playwright MCP"
+          pr_body="Update the built-in browser to the newest stable upstream Playwright MCP release that has been public for at least seven days. Pin its immutable multi-architecture image digest and record the actual upstream Node/Playwright versions for review.
+
+          This uses Microsoft’s published image unchanged. Review upstream release notes, runtime vulnerabilities and browser compatibility before merging; a version update does not guarantee that upstream has patched every known CVE."
+          owner="${GH_REPO%%/*}"
+          existing_pr="$(gh api "repos/$GH_REPO/pulls?state=open&head=$owner:$BRANCH&base=main&per_page=1" --jq '.[0].number // empty')"
+          if [[ -z "$existing_pr" ]]; then
+            pr="$(gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "$pr_title" \
+              --body "$pr_body")"
+          else
+            pr="$existing_pr"
+            gh pr edit "$pr" --title "$pr_title" --body "$pr_body"
+          fi
+          gh pr view "$pr" --repo "$GH_REPO" --json url --jq '"url=" + .url' >> "$GITHUB_OUTPUT"
+
   # Runs stay quiet unless a job fails or pushes a new version.
   notify:
     name: Report update results
-    needs: [identity, agent-runtime]
+    needs: [identity, agent-runtime, playwright-mcp]
     if: >-
       always() && github.repository == 'archestra-ai/archestra' && (
         needs.identity.result == 'failure' || needs.identity.outputs.pushed == 'true' ||
-        needs.agent-runtime.result == 'failure' || needs.agent-runtime.outputs.pushed == 'true')
+        needs.agent-runtime.result == 'failure' || needs.agent-runtime.outputs.pushed == 'true' ||
+        needs.playwright-mcp.result == 'failure' || needs.playwright-mcp.outputs.pushed == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}
@@ -463,6 +592,10 @@ jobs:
           RUNTIME_PUSHED: ${{ needs.agent-runtime.outputs.pushed }}
           RUNTIME_SUMMARY: ${{ needs.agent-runtime.outputs.summary }}
           RUNTIME_PULL_REQUEST_URL: ${{ needs.agent-runtime.outputs.pull_request_url }}
+          PLAYWRIGHT_RESULT: ${{ needs.playwright-mcp.result }}
+          PLAYWRIGHT_PUSHED: ${{ needs.playwright-mcp.outputs.pushed }}
+          PLAYWRIGHT_SUMMARY: ${{ needs.playwright-mcp.outputs.summary }}
+          PLAYWRIGHT_PULL_REQUEST_URL: ${{ needs.playwright-mcp.outputs.pull_request_url }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -495,6 +628,8 @@ jobs:
               "$IDENTITY_SUMMARY" "$IDENTITY_PULL_REQUEST_URL" ""
             report "Agent runtime CLI" "$RUNTIME_RESULT" "$RUNTIME_PUSHED" \
               "$RUNTIME_SUMMARY" "$RUNTIME_PULL_REQUEST_URL" " — merge once the Validate agent-* checks pass."
+            report "Playwright MCP image" "$PLAYWRIGHT_RESULT" "$PLAYWRIGHT_PUSHED" \
+              "$PLAYWRIGHT_SUMMARY" "$PLAYWRIGHT_PULL_REQUEST_URL" " — review upstream runtime vulnerabilities and browser compatibility before merging."
           )"
           if [[ -z "$message" ]]; then
             exit 0

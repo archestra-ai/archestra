@@ -378,8 +378,12 @@ const PROVIDER_CONFIG: Record<
     icon: "/icons/kimi.png",
     placeholder: "sk-...",
     enabled: true,
-    consoleUrl: "https://platform.moonshot.ai/console/api-keys",
-    consoleName: "Moonshot AI Platform",
+    consoleUrl: "https://platform.kimi.ai/console/api-keys",
+    consoleName: "Kimi API Platform",
+    // A Kimi for Coding membership key is not a platform key: it only answers
+    // on the Kimi Code endpoint, which the key's Base URL selects.
+    description:
+      "A Kimi API Platform key works as is. A Kimi for Coding membership key from the Kimi Code console only works on the Kimi Code endpoint: set the Base URL under advanced settings to https://api.kimi.ai/coding/v1 (or https://api.kimi.com/coding/v1 for kimi.com accounts).",
   },
   bedrock: {
     name: "AWS Bedrock",

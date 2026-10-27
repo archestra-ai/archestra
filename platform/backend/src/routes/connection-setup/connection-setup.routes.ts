@@ -37,6 +37,7 @@ import {
   OrganizationModel,
   PluginModel,
   SkillMarketplaceCredentialModel,
+  SkillMarketplaceRepoModel,
   SkillModel,
   SkillShareLinkModel,
   TeamModel,
@@ -1120,29 +1121,40 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Desktop configuration requires a Claude Desktop setup.",
           );
         const { context, marketplaceRender } = await buildScriptContext(setup);
+        // Skills-only setups register the deployment's shared marketplace
+        // URL, authenticated with a credential minted for this user. That is
+        // what lets a member install with the same one command an admin
+        // gets, and it stays current instead of freezing a snapshot.
+        //
+        // A setup that also delivers plugins still mints a share link: the
+        // shared URL serves skills only, and splitting the two would make the
+        // script register two marketplaces.
+        // Desktop rejects URL userinfo and requires a pinned revision for
+        // automatic installation, so it uses the snapshot branch below.
+        // Pi uses the scoped link too: the static credential exposes every
+        // readable skill and would ignore its approved skill selection.
+        //
+        // Clients register the shared marketplace under the name the user's
+        // repo row serves, frozen when the row is created. Create it now, so
+        // the name the script removes and guards is the one the clone serves,
+        // even after an app or org rename.
+        const sharedMarketplaceRepo =
+          marketplaceRender &&
+          marketplaceRender.pluginIds.length === 0 &&
+          setup.clientId !== "claude-desktop" &&
+          setup.clientId !== "pi"
+            ? await SkillMarketplaceRepoModel.ensureForViewer({
+                organizationId: setup.organizationId,
+                userId: setup.userId,
+                marketplaceName: marketplaceRender.marketplaceName,
+              })
+            : null;
 
         // Skill-link creation + attach + render commit together: a rendered
         // clone URL exists iff its link row committed.
         script = await withDbTransaction(async (tx) => {
           let skills: SetupScriptContext["skills"] = null;
-          // Skills-only setups register the deployment's shared marketplace
-          // URL, authenticated with a credential minted for this user. That is
-          // what lets a member install with the same one command an admin
-          // gets, and it stays current instead of freezing a snapshot.
-          //
-          // A setup that also delivers plugins still mints a share link: the
-          // shared URL serves skills only, and splitting the two would make the
-          // script register two marketplaces.
-          // Desktop rejects URL userinfo and requires a pinned revision for
-          // automatic installation, so it uses the snapshot branch below.
-          // Pi uses the scoped link too: the static credential exposes every
-          // readable skill and would ignore its approved skill selection.
-          if (
-            marketplaceRender &&
-            marketplaceRender.pluginIds.length === 0 &&
-            setup.clientId !== "claude-desktop" &&
-            setup.clientId !== "pi"
-          ) {
+          if (sharedMarketplaceRepo) {
             const { rawToken: marketplaceToken } =
               await SkillMarketplaceCredentialModel.create({
                 organizationId: setup.organizationId,
@@ -1164,7 +1176,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             staticUrl.password = encodeURIComponent(marketplaceToken);
             skills = {
               cloneUrl: staticUrl.toString(),
-              marketplaceName: marketplaceRender.marketplaceName,
+              marketplaceName: sharedMarketplaceRepo.marketplaceName,
               hasSkills: true,
               pluginNames: [],
             };

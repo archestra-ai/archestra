@@ -136,6 +136,9 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   // LLM model
   "llmModel.updated": "LLM model updated",
   "llmModel.synced": "LLM model catalog synced",
+  "modelPool.created": "Model pool created",
+  "modelPool.updated": "Model pool updated",
+  "modelPool.deleted": "Model pool deleted",
   "oauthClient.created": "OAuth client created",
   "oauthClient.updated": "OAuth client updated",
   "oauthClient.deleted": "OAuth client deleted",
@@ -237,6 +240,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "user.password_reset": "Password reset",
   // User token
   "userToken.rotated": "Personal token rotated",
+  "userLimitUsage.reset": "User limit usage reset",
   // Virtual API key
   "virtualApiKey.created": "Virtual API key created",
   "virtualApiKey.deleted": "Virtual API key deleted",
@@ -262,6 +266,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "knowledgeFile.bulk_updated": "Knowledge documents bulk updated",
   "knowledgeFile.bulk_deleted": "Knowledge documents bulk deleted",
   "llmModel.bulk_updated": "LLM models bulk updated",
+  "llmModel.cost_backfill_started": "LLM model past costs recompute started",
   "mcpServer.bulk_deleted": "MCP servers bulk deleted",
   "role.bulk_deleted": "Roles bulk deleted",
   "serviceAccount.bulk_deleted": "Service accounts bulk deleted",
@@ -369,6 +374,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "plugin",
   "connector",
   "defaultUserLimit",
+  "userLimitUsage",
   "environment",
   "credential",
   "githubPat",
@@ -380,6 +386,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "knowledgeFile",
   "limit",
   "llmModel",
+  "modelPool",
   "oauthClient",
   "llmOauthClient",
   "llmProviderApiKey",

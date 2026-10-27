@@ -212,6 +212,10 @@ describe("getAgentRuntimeModelCompatibility", () => {
         runtimeCommand: ["archestra-grok"],
         inferenceProtocol: "openai_chat",
       },
+      {
+        runtimeCommand: ["archestra-kimi"],
+        inferenceProtocol: "openai_chat",
+      },
     ] as const) {
       expect(
         getAgentRuntimeModelCompatibility({
@@ -219,6 +223,39 @@ describe("getAgentRuntimeModelCompatibility", () => {
           runtimeCommand,
           provider: "gemini",
           modelId: "gemini-2.5-pro",
+        }),
+      ).toEqual({ compatible: true });
+    }
+  });
+
+  test("serves Chat Completions-only router providers on Chat Completions images only", () => {
+    // The router refuses Kimi on /responses because its translation drops
+    // the reasoning Kimi thinking models replay on tool-call turns, so the
+    // picker and the launch preflight must refuse the same pairing.
+    for (const runtimeCommand of [null, ["archestra-opencode"]] as const) {
+      expect(
+        getAgentRuntimeModelCompatibility({
+          inferenceProtocol: "openai_responses",
+          runtimeCommand,
+          provider: "kimi",
+          modelId: "k3.1-pro",
+        }),
+      ).toMatchObject({
+        compatible: false,
+        message: expect.stringContaining("Chat Completions endpoint only"),
+      });
+    }
+    for (const runtimeCommand of [
+      null,
+      ["archestra-hermes"],
+      ["archestra-grok"],
+    ] as const) {
+      expect(
+        getAgentRuntimeModelCompatibility({
+          inferenceProtocol: "openai_chat",
+          runtimeCommand,
+          provider: "kimi",
+          modelId: "k3.1-pro",
         }),
       ).toEqual({ compatible: true });
     }
@@ -492,6 +529,9 @@ describe("getAgentRuntimeAllowedProtocols", () => {
       "openai_chat",
     ]);
     expect(getAgentRuntimeAllowedProtocols(["archestra-grok"])).toEqual([
+      "openai_chat",
+    ]);
+    expect(getAgentRuntimeAllowedProtocols(["archestra-kimi"])).toEqual([
       "openai_chat",
     ]);
     for (const command of [

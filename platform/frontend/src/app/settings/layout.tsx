@@ -69,7 +69,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   },
   "/settings/llm": {
     title: "LLM",
-    description: "Configure model providers and default cost limits.",
+    description: "Configure model providers and LLM proxy access.",
   },
   "/settings/mcp": {
     title: "MCP",

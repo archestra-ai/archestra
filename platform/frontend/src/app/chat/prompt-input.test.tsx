@@ -1892,6 +1892,60 @@ describe("ArchestraPromptInput", () => {
     });
   });
 
+  describe("interrupt queued messages", () => {
+    it("interrupts without removing or reordering queued messages", () => {
+      const conversationId = "interrupt-queue";
+      chatMessageQueue.clear(conversationId);
+      chatMessageQueue.enqueue(conversationId, { text: "first correction" });
+      chatMessageQueue.enqueue(conversationId, { text: "second correction" });
+      const onInterruptQueue = vi.fn();
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId={conversationId}
+          status="streaming"
+          onInterruptQueue={onInterruptQueue}
+        />,
+      );
+      const button = screen.getByRole("button", { name: "Interrupt & send" });
+      button.focus();
+      expect(button).toHaveFocus();
+      fireEvent.click(button);
+      expect(onInterruptQueue).toHaveBeenCalledTimes(1);
+      expect(
+        chatMessageQueue.get(conversationId).map(({ text }) => text),
+      ).toEqual(["first correction", "second correction"]);
+    });
+    it("disables interruption while stopping or waiting on a tool", () => {
+      const conversationId = "interrupt-blocked";
+      chatMessageQueue.enqueue(conversationId, { text: "wait safely" });
+      const onInterruptQueue = vi.fn();
+      const { rerender } = render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId={conversationId}
+          status="streaming"
+          onInterruptQueue={onInterruptQueue}
+          interruptQueueDisabledReason="Resolve the pending tool approval first."
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Interrupt & send" }));
+      expect(onInterruptQueue).not.toHaveBeenCalled();
+      rerender(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId={conversationId}
+          status="streaming"
+          onInterruptQueue={onInterruptQueue}
+          isInterruptingQueue
+        />,
+      );
+      expect(
+        screen.getByRole("button", { name: "Interrupting…" }),
+      ).toBeDisabled();
+    });
+  });
+
   describe("queue keyboard shortcuts", () => {
     it("pops the most recently queued message into the composer on ArrowUp when empty", () => {
       const conversationId = "conv-arrowup-pop";

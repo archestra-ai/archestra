@@ -22,7 +22,7 @@ import { z } from "zod";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasPermission } from "@/auth";
-import { getPermissionsForUserContext } from "@/auth/utils";
+import { getPermissionsForUserContext, isGlobalAdmin } from "@/auth/utils";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { syncBuiltInSkillsForOrganization } from "@/database/seed";
@@ -59,6 +59,7 @@ import { openappaBatteriesService } from "@/openappa/batteries";
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
 import { knowledgeSettingsService } from "@/services/knowledge-settings";
 import { removeMemberTarget } from "@/services/member-removal";
+import { reconcileManagedPlaywrightSetting } from "@/services/playwright-runtime";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
@@ -213,8 +214,25 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
-    async ({ organizationId, body }, reply) => {
-      const organization = await OrganizationModel.patch(organizationId, body);
+    async ({ organizationId, body, user }, reply) => {
+      // Keep the existing permission gate for security settings; the browser
+      // lifecycle control additionally requires a built-in administrator role.
+      if (
+        body.playwrightMcpEnabled !== undefined &&
+        !(await isGlobalAdmin(user.id, organizationId))
+      ) {
+        throw new ApiError(
+          403,
+          "Only administrators can change the built-in browser setting",
+        );
+      }
+      const organization =
+        body.playwrightMcpEnabled !== undefined
+          ? await reconcileManagedPlaywrightSetting({
+              organizationId,
+              settings: body,
+            })
+          : await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");

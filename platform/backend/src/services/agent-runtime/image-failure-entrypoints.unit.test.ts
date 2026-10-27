@@ -24,6 +24,7 @@ test.each([
   "opencode",
   "openclaw",
   "grok",
+  "kimi",
 ])("%s reports incompatible protocols before starting the client", async (image) => {
   const root = await mkdtemp(path.join(tmpdir(), "image-protocol-"));
   try {

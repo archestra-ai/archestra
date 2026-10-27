@@ -3966,3 +3966,45 @@ db.commit()`,
   ]);
   return stdout;
 }
+
+test.each([
+  "opencode",
+  "kilo",
+] as const)("%s Windows MCP helper accepts UTF-8 BOM and preserves the original backup", async (clientId) => {
+  const script = renderSetupScript({
+    ...fullContext(clientId, "windows"),
+    proxy: null,
+    skills: null,
+  });
+  const helper = script.match(/\$archMcpScript = @'\n([\s\S]*?)\n'@/)?.[1];
+  expect(helper).toBeDefined();
+  const home = await mkdtemp(path.join(tmpdir(), "opencode-bom-"));
+  const configPath = path.join(home, `${clientId}.json`);
+  const original =
+    "\uFEFF" +
+    JSON.stringify({ model: "local/model", instructions: ["custom.md"] });
+  try {
+    await writeFile(configPath, original);
+    await execFileAsync(process.execPath, ["-e", helper as string], {
+      env: {
+        ...process.env,
+        HOME: home,
+        ARCHESTRA_OC_CONFIG_PATH: configPath,
+        ARCHESTRA_OC_MCP_NAME: MCP.serverName,
+        ARCHESTRA_OC_MCP_URL: MCP.url,
+      },
+    });
+    const result = await readFile(configPath, "utf8");
+    expect(result.startsWith("\uFEFF")).toBe(false);
+    expect(JSON.parse(result)).toMatchObject({
+      model: "local/model",
+      instructions: ["custom.md"],
+      mcp: { [MCP.serverName]: { url: MCP.url } },
+    });
+    expect(await readFile(`${configPath}.archestra-backup`, "utf8")).toBe(
+      original,
+    );
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});

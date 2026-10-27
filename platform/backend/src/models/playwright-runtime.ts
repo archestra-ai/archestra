@@ -15,6 +15,48 @@ import McpServerModel from "./mcp-server";
 // === Public API ===
 
 class PlaywrightRuntimeModel {
+  /** Read the policy from Postgres on every boundary, including other replicas. */
+  static async isEnabled(): Promise<boolean> {
+    const [organization] = await db
+      .select({ enabled: schema.organizationsTable.playwrightMcpEnabled })
+      .from(schema.organizationsTable)
+      .limit(1);
+    return organization?.enabled ?? true;
+  }
+
+  /** Includes legacy and removed-environment installs so cleanup cannot strand pods. */
+  static async findAllInstallations(): Promise<McpServer[]> {
+    const rows = await db
+      .select({ server: schema.mcpServersTable })
+      .from(schema.mcpServersTable)
+      .innerJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .where(
+        and(
+          or(
+            eq(schema.internalMcpCatalogTable.id, PLAYWRIGHT_MCP_CATALOG_ID),
+            eq(
+              schema.internalMcpCatalogTable.parentCatalogItemId,
+              PLAYWRIGHT_MCP_CATALOG_ID,
+            ),
+          ),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
+    return rows.map(({ server }) => server);
+  }
+
+  /** Loaded model rows retain internal parent metadata that the public API omits. */
+  static isManagedCatalogConfig(catalog: { id: string }): boolean {
+    return (
+      catalog.id === PLAYWRIGHT_MCP_CATALOG_ID ||
+      ("parentCatalogItemId" in catalog &&
+        catalog.parentCatalogItemId === PLAYWRIGHT_MCP_CATALOG_ID)
+    );
+  }
+
   static async isManagedCatalog(catalogId: string): Promise<boolean> {
     if (catalogId === PLAYWRIGHT_MCP_CATALOG_ID) return true;
     const [catalog] = await db
@@ -46,6 +88,7 @@ class PlaywrightRuntimeModel {
     const environments = await db.select().from(schema.environmentsTable);
 
     await withDbTransaction(async (tx) => {
+      if (!(await PlaywrightRuntimeModel.lockEnabledPolicy(tx))) return;
       await PlaywrightRuntimeModel.ensureServer({
         catalogId: rootCatalog.id,
         environmentId: null,
@@ -69,7 +112,9 @@ class PlaywrightRuntimeModel {
       }
     });
 
-    return PlaywrightRuntimeModel.findAllActive();
+    return (await PlaywrightRuntimeModel.isEnabled())
+      ? PlaywrightRuntimeModel.findAllActive()
+      : [];
   }
 
   /**
@@ -156,6 +201,7 @@ class PlaywrightRuntimeModel {
     if (!rootCatalog) return null;
 
     return withDbTransaction(async (tx) => {
+      if (!(await PlaywrightRuntimeModel.lockEnabledPolicy(tx))) return null;
       const catalogId = await PlaywrightRuntimeModel.ensureEnvironmentCatalog({
         ...params,
         rootCatalog,
@@ -185,6 +231,7 @@ class PlaywrightRuntimeModel {
   static async findForEnvironment(
     environmentId: string | null,
   ): Promise<McpServer | null> {
+    if (!(await PlaywrightRuntimeModel.isEnabled())) return null;
     const id = managedServerId(environmentId);
     const [server] = await db
       .select()
@@ -223,6 +270,17 @@ class PlaywrightRuntimeModel {
   }
 
   // === Internal helpers ===
+
+  private static async lockEnabledPolicy(tx: Transaction): Promise<boolean> {
+    // The row lock serializes provisioning with the setting UPDATE. A stale
+    // startup pass cannot revive rows after a disable has committed.
+    const [organization] = await tx
+      .select({ enabled: schema.organizationsTable.playwrightMcpEnabled })
+      .from(schema.organizationsTable)
+      .limit(1)
+      .for("update");
+    return organization?.enabled ?? true;
+  }
 
   private static async findRootCatalog() {
     const [catalog] = await db

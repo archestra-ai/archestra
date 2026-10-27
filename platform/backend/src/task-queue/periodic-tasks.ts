@@ -126,6 +126,14 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     intervalSeconds: 60,
     payload: {},
   },
+  // Resumes model cost backfills (recomputing recorded costs after a price
+  // change) whose run ran out of time or whose worker died. One read of a
+  // tiny table when none are active.
+  {
+    taskType: "check_due_model_cost_backfills",
+    intervalSeconds: 30,
+    payload: {},
+  },
   // Records each MCP installation's own tool descriptions for installations
   // that predate them (or never synced since), so callers stop being served
   // another installation's text. A tick rather than a boot-only run, so an

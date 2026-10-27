@@ -75,6 +75,8 @@ export const CacheKey = {
   OpenAppaRemedyToolsMissing: "openappa-remedy-tools-missing",
   /** Ruling on a call to a tool the client had not loaded, answered on that call's result */
   OpenAppaNotLoadedRuling: "openappa-not-loaded-ruling",
+  /** Ruling an undeclared notice call carried, as the client can act on it, answered on that call's result */
+  OpenAppaCarriedRuling: "openappa-carried-ruling",
   /** Notice for a call whose annotator gave no answer, answered on that call's result */
   OpenAppaUnansweredAnnotationNotice: "openappa-unanswered-annotation-notice",
   /** Host clarification appended to a runtime-confirmed denied call's result. */
@@ -173,6 +175,8 @@ export const CacheKey = {
    * next call reads them.
    */
   AgentRuntimePendingExports: "agent-runtime-pending-exports-v1",
+  /** Model pool members sitting out after a failure, shared by every replica. */
+  ModelPoolBench: "model-pool-bench",
   /**
    * Workspace transfer tickets: minted by whichever replica serves the tool
    * or API call, redeemed by whichever one the public content URL reaches.

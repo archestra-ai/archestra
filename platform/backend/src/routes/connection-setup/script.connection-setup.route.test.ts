@@ -17,6 +17,7 @@ import {
   MemberModel,
   OrganizationModel,
   PluginModel,
+  SkillMarketplaceRepoModel,
   SkillModel,
   SkillShareLinkModel,
   VirtualApiKeyModel,
@@ -24,6 +25,7 @@ import {
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import { readVirtualKeyValue } from "@/services/connection-setup";
+import { deriveMarketplaceName } from "@/skills/marketplace/marketplace-name";
 import { resolveMarketplaceViewer } from "@/skills/marketplace/static-marketplace";
 import {
   accessGrants,
@@ -677,6 +679,14 @@ describe("GET /api/connection-setups/script/:token", () => {
     } else {
       expect(response.body).not.toContain("archestra_skl_");
     }
+    // Pi uses a share link, so it must not create a shared-marketplace repo
+    // row with a name the client never registers.
+    expect(
+      await SkillMarketplaceRepoModel.findForViewer({
+        organizationId,
+        userId: user.id,
+      }),
+    ).toBeNull();
     expect((await fetchScript(rawToken)).statusCode).toBe(410);
   });
 
@@ -792,6 +802,72 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(
       await SkillShareLinkModel.listByOrganization({ organizationId }),
     ).toHaveLength(0);
+  });
+
+  test("a skills-only setup names the marketplace after the repo the user already cloned", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    // Codex registers the marketplace under the served manifest's name, which
+    // the user's repo row freezes. After an app rename the setup must still
+    // remove and guard that name, or the add collides with it.
+    const skill = await seedSkill({ organizationId, name: "alpha" });
+    await OrganizationModel.patch(organizationId, { appName: "Acme Staging" });
+    const derived = await deriveMarketplaceName(organizationId, "skills");
+    expect(derived).toMatch(/^acme-staging-/);
+
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId);
+    await SkillMarketplaceRepoModel.ensureForViewer({
+      organizationId,
+      userId: user.id,
+      marketplaceName: "archestra-old-skills",
+    });
+
+    const renderCodex = async (platform: "linux" | "windows" = "linux") => {
+      const { rawToken } = await createSetup({
+        clientId: "codex",
+        platform,
+        baseUrl: "http://localhost:9000/v1",
+        skills: { skillIds: [skill.id], ttlDays: null },
+      });
+      const response = await fetchScript(rawToken);
+      expect(response.statusCode).toBe(200);
+      return response.body;
+    };
+
+    const script = await renderCodex();
+    expect(script).toContain(
+      "cli codex plugin marketplace remove 'archestra-old-skills'",
+    );
+    expect(script).toContain("SKILLS_MARKETPLACE_NAME='archestra-old-skills'");
+    expect(script).not.toContain(derived);
+
+    const windowsScript = await renderCodex("windows");
+    expect(windowsScript).toContain(
+      "codex plugin marketplace remove 'archestra-old-skills'",
+    );
+    expect(windowsScript).toContain(
+      "$SkillsMarketplaceName = 'archestra-old-skills'",
+    );
+    expect(windowsScript).not.toContain(derived);
+
+    // Someone who never cloned gets the derived name, frozen when the script
+    // renders, so a rename before their first clone cannot split the names.
+    // The request hook reads `user`, so the setups below belong to otherUser.
+    user = otherUser;
+    const fresh = await renderCodex();
+    expect(fresh).toContain(`cli codex plugin marketplace remove '${derived}'`);
+    expect(fresh).toContain(`SKILLS_MARKETPLACE_NAME='${derived}'`);
+
+    await OrganizationModel.patch(organizationId, {
+      appName: "Acme Production",
+    });
+    const afterRename = await renderCodex();
+    expect(afterRename).toContain(
+      `cli codex plugin marketplace remove '${derived}'`,
+    );
+    expect(afterRename).toContain(`SKILLS_MARKETPLACE_NAME='${derived}'`);
   });
 
   test("the shared marketplace URL carries the token as its password", async ({

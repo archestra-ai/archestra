@@ -512,6 +512,10 @@ export const RouteId = {
   GetChatAttachmentContent: "getChatAttachmentContent",
   DeleteChatAttachment: "deleteChatAttachment",
   GetLlmModels: "getLlmModels",
+  GetModelPools: "getModelPools",
+  CreateModelPool: "createModelPool",
+  UpdateModelPool: "updateModelPool",
+  DeleteModelPool: "deleteModelPool",
   GetLlmProviderModelLabelValues: "llmProviderModelLabelValues",
   GetLlmProviderModelLabelKeys: "llmProviderModelLabelKeys",
   SyncLlmModels: "syncLlmModels",
@@ -637,6 +641,9 @@ export const RouteId = {
   GetLlmModelIdsByKey: "getLlmModelIdsByKey",
   GetLlmModelOptions: "getLlmModelOptions",
   UpdateModel: "updateModel",
+  PreviewModelCostBackfill: "previewModelCostBackfill",
+  StartModelCostBackfill: "startModelCostBackfill",
+  GetModelCostBackfill: "getModelCostBackfill",
   BulkUpdateModels: "bulkUpdateModels",
 
   // Limits Routes
@@ -654,6 +661,8 @@ export const RouteId = {
   CreateDefaultUserLimit: "createDefaultUserLimit",
   UpdateDefaultUserLimit: "updateDefaultUserLimit",
   DeleteDefaultUserLimit: "deleteDefaultUserLimit",
+  ListUserLimitUsage: "listUserLimitUsage",
+  ResetUserLimitUsage: "resetUserLimitUsage",
 
   // Onboarding Routes
   GetOnboardingSeenNavItems: "getOnboardingSeenNavItems",

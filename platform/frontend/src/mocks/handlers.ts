@@ -400,6 +400,32 @@ export const handlers: HttpHandler[] = [
     sandbox: "disabled",
   }),
   ...getJson("/api/organization", organizationSeed),
+  ...getJson("/api/default-user-limits", []),
+  // Per-user limit usage on the Limits page: no members, nothing spent.
+  ...getJson("/api/default-user-limits/users", {
+    data: [],
+    pagination: {
+      currentPage: 1,
+      limit: 20,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+    summary: {
+      total: 0,
+      at: 0,
+      near: 0,
+      custom: 0,
+      none: 0,
+      organizationDefault: 0,
+      environmentDefault: 0,
+      flaggedCustom: 0,
+      spent: 0,
+      resetsAt: null,
+      environments: [],
+    },
+  }),
   ...getJson("/api/organization/appearance-settings", appearanceSettingsSeed),
   // Onboarding nudges: everything already seen / nothing eligible, so neither
   // the red dots nor the survey/feedback dialogs interfere with other tests.

@@ -124,6 +124,7 @@ export const PopularAgentOverridesSchema = z.strictObject({
   hermes: PopularAgentOverrideSchema.optional(),
   openclaw: PopularAgentOverrideSchema.optional(),
   grok: PopularAgentOverrideSchema.optional(),
+  kimi: PopularAgentOverrideSchema.optional(),
 } satisfies Record<
   AgentCatalogId,
   z.ZodOptional<typeof PopularAgentOverrideSchema>

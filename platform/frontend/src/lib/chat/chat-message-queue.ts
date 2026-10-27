@@ -54,6 +54,7 @@ class ChatMessageQueueStore {
   private queues = new Map<string, readonly QueuedChatMessage[]>();
   private loadedConversationIds = new Set<string>();
   private listeners = new Set<() => void>();
+  private batchRequested = new Set<string>();
 
   /** Snapshot of a conversation's queue (stable reference until it changes). */
   get(conversationId: string): readonly QueuedChatMessage[] {
@@ -92,6 +93,37 @@ class ChatMessageQueueStore {
     return next;
   }
 
+  /** The next settled turn consumes all pending messages, including after reload. */
+  requestBatch(conversationId: string): void {
+    this.batchRequested.add(conversationId);
+    try {
+      localStorage.setItem(`${storageKey(conversationId)}:batch`, "true");
+    } catch {
+      /* Memory still retains the intent when storage is unavailable. */
+    }
+  }
+
+  takeForTurn(conversationId: string): readonly QueuedChatMessage[] {
+    let together = this.batchRequested.has(conversationId);
+    try {
+      together ||=
+        localStorage.getItem(`${storageKey(conversationId)}:batch`) === "true";
+    } catch {
+      /* Fall back to in-memory intent. */
+    }
+    // Explicit shell commands must remain distinct executions, even if one
+    // was added while an interrupt was settling.
+    if (this.get(conversationId).some((message) => message.sandboxCommand))
+      together = false;
+    if (!together) {
+      const next = this.takeNext(conversationId);
+      return next ? [next] : [];
+    }
+    const batch = this.get(conversationId);
+    this.setQueue(conversationId, EMPTY_QUEUE);
+    return batch;
+  }
+
   /** Drop a conversation's queue entirely (conversation deleted). */
   clear(conversationId: string): void {
     this.setQueue(conversationId, EMPTY_QUEUE);
@@ -126,6 +158,12 @@ class ChatMessageQueueStore {
   ): void {
     this.ensureLoaded(conversationId);
     if (queue.length === 0) {
+      this.batchRequested.delete(conversationId);
+      try {
+        localStorage.removeItem(`${storageKey(conversationId)}:batch`);
+      } catch {
+        /* Best-effort persistence, like the queue itself. */
+      }
       this.queues.delete(conversationId);
     } else {
       this.queues.set(conversationId, queue);

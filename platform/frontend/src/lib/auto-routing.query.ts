@@ -16,6 +16,10 @@ const {
   replanAutoRouting,
   previewAutoRouting,
   simulateAutoRouting,
+  getAutoRoutingBackfill,
+  scanAutoRoutingBackfill,
+  scoreAutoRoutingBackfill,
+  cancelAutoRoutingBackfill,
 } = archestraApiSdk;
 
 export type AutoRoutingSettings =
@@ -36,6 +40,10 @@ type AutoRoutingSimulateBody =
   archestraApiTypes.SimulateAutoRoutingData["body"];
 export type AutoRoutingSimulation =
   archestraApiTypes.SimulateAutoRoutingResponses["200"];
+export type AutoRoutingBackfillState =
+  archestraApiTypes.GetAutoRoutingBackfillResponses["200"];
+type AutoRoutingScoreBackfillBody =
+  archestraApiTypes.ScoreAutoRoutingBackfillData["body"];
 export type SimulatedTraffic = Extract<
   AutoRoutingSimulation,
   { status: "feasible" }
@@ -50,6 +58,7 @@ const autoRoutingKeys = {
   simulations: () => [...autoRoutingKeys.all, "simulate"] as const,
   simulation: (body: AutoRoutingSimulateBody | null) =>
     [...autoRoutingKeys.simulations(), body] as const,
+  backfill: () => [...autoRoutingKeys.all, "backfill"] as const,
 };
 
 export function useAutoRoutingSettings() {
@@ -178,3 +187,78 @@ export function useSimulateAutoRouting(body: AutoRoutingSimulateBody | null) {
 
 const SIMULATION_RETRIES = 10;
 const SIMULATION_RETRY_DELAY_MS = 1000;
+
+const BACKFILL_POLL_MS = 5000;
+
+/** The organization's latest historical backfill, polled while it runs. */
+export function useAutoRoutingBackfill() {
+  const queryClient = useQueryClient();
+  return useQuery({
+    queryKey: autoRoutingKeys.backfill(),
+    queryFn: async () => {
+      const { data, error } = await getAutoRoutingBackfill();
+      throwOnApiError(error, { toastOnError: false });
+      const previous = queryClient.getQueryData<AutoRoutingBackfillState>(
+        autoRoutingKeys.backfill(),
+      );
+      // A finished backfill bumps the generation and re-fits.
+      if (
+        previous?.backfill?.status === "running" &&
+        data?.backfill?.status !== "running"
+      ) {
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: autoRoutingKeys.settings(),
+          }),
+          queryClient.invalidateQueries({ queryKey: autoRoutingKeys.plans() }),
+        ]);
+      }
+      return data ?? null;
+    },
+    refetchInterval: (query) =>
+      query.state.data?.backfill?.status === "running"
+        ? BACKFILL_POLL_MS
+        : false,
+  });
+}
+
+export function useScanAutoRoutingBackfill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await scanAutoRoutingBackfill();
+      throwOnApiError(error);
+      return data;
+    },
+    onSuccess: (data) =>
+      queryClient.setQueryData(autoRoutingKeys.backfill(), data),
+  });
+}
+
+export function useScoreAutoRoutingBackfill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: AutoRoutingScoreBackfillBody) => {
+      const { data, error } = await scoreAutoRoutingBackfill({ body });
+      throwOnApiError(error);
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(autoRoutingKeys.backfill(), data);
+      toast.success("Scoring past sessions");
+    },
+  });
+}
+
+export function useCancelAutoRoutingBackfill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await cancelAutoRoutingBackfill();
+      throwOnApiError(error);
+      return data;
+    },
+    onSuccess: (data) =>
+      queryClient.setQueryData(autoRoutingKeys.backfill(), data),
+  });
+}

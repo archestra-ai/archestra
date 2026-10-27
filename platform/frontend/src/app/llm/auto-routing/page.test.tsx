@@ -17,6 +17,7 @@ import {
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import type {
+  AutoRoutingBackfillState,
   AutoRoutingPlanDetail,
   AutoRoutingPreview,
   AutoRoutingSettings,
@@ -150,6 +151,12 @@ const server = setupServer(
   ),
   http.get(`${API_ORIGIN}/api/llm-models/available`, () =>
     HttpResponse.json([]),
+  ),
+  http.get(`${API_ORIGIN}/api/auto-routing/backfill`, () =>
+    HttpResponse.json({
+      backfill: null,
+      scoreOffer: null,
+    } satisfies AutoRoutingBackfillState),
   ),
 );
 
@@ -761,6 +768,143 @@ function withActivePlan(base: AutoRoutingSettings): AutoRoutingSettings {
     },
   };
 }
+
+describe("past sessions", () => {
+  const scanned = (
+    overrides: Partial<NonNullable<AutoRoutingBackfillState["backfill"]>> = {},
+  ): NonNullable<AutoRoutingBackfillState["backfill"]> => ({
+    id: "00000000-0000-4000-8000-000000000301",
+    status: "scanned",
+    phase: "scan",
+    windowStart: "2026-09-27T00:00:00.000Z",
+    cutoff: "2026-10-26T00:00:00.000Z",
+    eligibleSessions: 240,
+    eligibleTokens: 9_000_000,
+    breakdown: [
+      { apiShape: "messages", client: "claude-code", sessions: 200 },
+      { apiShape: "chat_completions", client: "opencode", sessions: 40 },
+    ],
+    scorerCurrent: null,
+    maxSessions: null,
+    maxCostUsd: null,
+    spentCostUsd: 0,
+    progress: null,
+    error: null,
+    completedAt: null,
+    ...overrides,
+  });
+  const offer = {
+    sessions: 240,
+    remaining: 240,
+    estimatedCostUsd: 0.24,
+    suggestedMaxCostUsd: 1,
+    rescore: false,
+  };
+
+  function serveBackfill(state: AutoRoutingBackfillState) {
+    const scores: unknown[] = [];
+    server.use(
+      http.get(`${API_ORIGIN}/api/auto-routing/backfill`, () =>
+        HttpResponse.json(state),
+      ),
+      http.post(
+        `${API_ORIGIN}/api/auto-routing/backfill/score`,
+        async ({ request }) => {
+          scores.push(await request.json());
+          return HttpResponse.json({
+            backfill: scanned({ status: "running", phase: "score" }),
+            scoreOffer: null,
+          } satisfies AutoRoutingBackfillState);
+        },
+      ),
+    );
+    return scores;
+  }
+
+  it("shows what a scan found against what the plan needs", async () => {
+    settings = makeSettings({
+      status: {
+        ...makeSettings().status,
+        coldStart: { ...makeSettings().status.coldStart, required: 1000 },
+      },
+    });
+    serveBackfill({ backfill: scanned(), scoreOffer: offer });
+    renderPage();
+
+    const section = await screen.findByTestId("auto-routing-past-sessions");
+    expect(
+      within(section).getByTestId("auto-routing-past-sessions-eligible"),
+    ).toHaveTextContent(/^240 eligible .* needs 1,000;/);
+    expect(within(section).getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("scores only after the confirmation, with the ceiling the admin set", async () => {
+    const scores = serveBackfill({ backfill: scanned(), scoreOffer: offer });
+    const user = userEvent.setup();
+    renderPage();
+    const ceiling = await screen.findByLabelText("Cost ceiling (USD)");
+    await user.clear(ceiling);
+    await user.type(ceiling, "2.5");
+    await user.click(
+      screen.getByRole("button", { name: /^Score 240 sessions/ }),
+    );
+    expect(scores).toEqual([]);
+
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: /sessions$/ }));
+
+    await waitFor(() =>
+      expect(scores).toEqual([{ maxSessions: 240, maxCostUsd: 2.5 }]),
+    );
+  });
+
+  it("offers a re-score beside an active plan once the scorer changed", async () => {
+    settings = makeSettings({
+      status: {
+        ...makeSettings().status,
+        activePlan: { id: PLAN_ID, createdAt: activePlan.createdAt },
+      },
+    });
+    const scores = serveBackfill({
+      backfill: scanned({
+        status: "superseded",
+        phase: "score",
+        scorerCurrent: false,
+      }),
+      scoreOffer: { ...offer, rescore: true },
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: /^Re-score 240 sessions/ }),
+    );
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: /sessions$/,
+      }),
+    );
+
+    await waitFor(() =>
+      expect(scores).toEqual([{ maxSessions: 240, maxCostUsd: 1 }]),
+    );
+  });
+
+  it("stays out of the way of an active plan with nothing to re-score", async () => {
+    settings = makeSettings({
+      status: {
+        ...makeSettings().status,
+        activePlan: { id: PLAN_ID, createdAt: activePlan.createdAt },
+      },
+    });
+    serveBackfill({ backfill: scanned({ status: "done" }), scoreOffer: null });
+    renderPage();
+
+    await screen.findByText(/Active plan from/);
+    expect(
+      screen.queryByTestId("auto-routing-past-sessions"),
+    ).not.toBeInTheDocument();
+  });
+});
 
 function setCanUpdate(canUpdate: boolean) {
   vi.mocked(useHasPermissions).mockReturnValue({

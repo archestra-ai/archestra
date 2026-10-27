@@ -11,6 +11,7 @@ import {
 } from "@/lib/auto-routing.query";
 import { formatDate } from "@/lib/utils/date-time";
 import { useFittedTierModels } from "./_parts/fitted-tier-models";
+import { PastSessions } from "./_parts/past-sessions";
 import {
   describeFitError,
   type FittedHistory,
@@ -43,6 +44,13 @@ export default function AutoRoutingOverviewPage() {
     <div className="space-y-6">
       <AutoRoutingSettingsForm settings={settings} canUpdate={canUpdate} />
       <PlanStatus settings={settings} />
+      {settings.enabled && (
+        <PastSessions
+          required={settings.status.coldStart.required}
+          hasActivePlan={settings.status.activePlan !== null}
+          canUpdate={canUpdate}
+        />
+      )}
       <ActivePlanSummary settings={settings} />
       <TryPrompt canUpdate={canUpdate} />
     </div>
@@ -81,7 +89,11 @@ function PlanStatus({ settings }: { settings: AutoRoutingSettings }) {
 }
 
 function learnedFrom(history: FittedHistory): string {
-  const sessions = `Learned from ${history.sessions.toLocaleString("en-US")} sessions`;
+  const past =
+    history.past_sessions > 0
+      ? ` (${history.past_sessions.toLocaleString("en-US")} from past traffic)`
+      : "";
+  const sessions = `Learned from ${history.sessions.toLocaleString("en-US")} sessions${past}`;
   return history.last_created_at
     ? `${sessions}, data up to ${formatDate({ date: history.last_created_at })}`
     : sessions;

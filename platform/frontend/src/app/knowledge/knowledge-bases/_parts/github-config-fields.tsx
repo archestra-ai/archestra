@@ -19,8 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
+import { GithubRepositorySettings } from "./github-repository-settings";
 
 interface GithubConfigFieldsProps {
   // biome-ignore lint/suspicious/noExplicitAny: form type is generic across different form schemas
@@ -51,9 +51,6 @@ export function GithubConfigFields({
   const githubAppConfigId = form.watch(`${prefix}.githubAppConfigId`) as
     | string
     | undefined;
-  const includeRepositoryFiles = form.watch(
-    `${prefix}.includeRepositoryFiles`,
-  ) as boolean | undefined;
   const { data: credentials = [] } = useRuntimeCredentials();
   const credentialId = form.watch(`${prefix}.credentialId`) as
     | string
@@ -181,147 +178,7 @@ export function GithubConfigFields({
       )}
 
       {!hideRepositoryOptions && (
-        <>
-          <FormField
-            control={form.control}
-            name={`${prefix}.repos`}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Repositories (optional)</FormLabel>
-                <FormDescription>
-                  Comma-separated list of repository names. Leave blank to sync
-                  all repositories.
-                </FormDescription>
-                <FormControl>
-                  <Input placeholder="repo-a, repo-b" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name={`${prefix}.includeIssues`}
-            render={({ field }) => (
-              <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                <div className="space-y-0.5">
-                  <FormLabel>Include Issues</FormLabel>
-                  <FormDescription>
-                    Sync issues and their comments.
-                  </FormDescription>
-                </div>
-                <FormControl>
-                  <Switch
-                    checked={field.value ?? true}
-                    onCheckedChange={field.onChange}
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name={`${prefix}.includePullRequests`}
-            render={({ field }) => (
-              <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                <div className="space-y-0.5">
-                  <FormLabel>Include Pull Requests</FormLabel>
-                  <FormDescription>
-                    Sync pull requests and their comments.
-                  </FormDescription>
-                </div>
-                <FormControl>
-                  <Switch
-                    checked={field.value ?? true}
-                    onCheckedChange={field.onChange}
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name={`${prefix}.includeRepositoryFiles`}
-            render={({ field }) => (
-              <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                <div className="space-y-0.5">
-                  <FormLabel>Include Repository Files</FormLabel>
-                  <FormDescription>
-                    Sync selected text files from repositories.
-                  </FormDescription>
-                </div>
-                <FormControl>
-                  <Switch
-                    checked={field.value ?? false}
-                    onCheckedChange={field.onChange}
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name={`${prefix}.labelsToSkip`}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Labels to Skip (optional)</FormLabel>
-                <FormDescription>
-                  Comma-separated list of labels to exclude.
-                </FormDescription>
-                <FormControl>
-                  <Input placeholder="wontfix, duplicate" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </>
-      )}
-
-      {!hideRepositoryOptions && includeRepositoryFiles === true && (
-        <>
-          <FormField
-            control={form.control}
-            name={`${prefix}.fileTypes`}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>File Types (optional)</FormLabel>
-                <FormDescription>
-                  Comma-separated extensions or file names to index when
-                  repository files are enabled, such as .md or Dockerfile. Use *
-                  for every text file. Defaults to Markdown and YAML.
-                </FormDescription>
-                <FormControl>
-                  <Input placeholder=".md, .yaml, Dockerfile" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name={`${prefix}.includePaths`}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Folders (optional)</FormLabel>
-                <FormDescription>
-                  Comma-separated folders to index, relative to the repository
-                  root. Applies to every selected repository. Leave blank to
-                  index the whole repository.
-                </FormDescription>
-                <FormControl>
-                  <Input placeholder="docs, packages/api/src" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </>
+        <GithubRepositorySettings form={form} prefix={prefix} />
       )}
     </div>
   );

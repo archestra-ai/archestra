@@ -286,6 +286,7 @@ describe("ModelSyncService", () => {
             "gpt-4o-mini-tts",
             "whisper-1",
             "gpt-4o-transcribe",
+            "gpt-transcribe",
             "davinci-002",
           ].map((id) => ({
             id,
@@ -313,6 +314,7 @@ describe("ModelSyncService", () => {
       "gpt-4o-mini-tts",
       "gpt-4o-transcribe",
       "gpt-image-1",
+      "gpt-transcribe",
       "tts-1",
       "whisper-1",
     ]);
@@ -320,6 +322,7 @@ describe("ModelSyncService", () => {
     expect(byId.get("gpt-4o-mini-tts")?.outputModalities).toEqual(["audio"]);
     // Transcription ids pass the chat-name filter, so they used to sync as chat.
     expect(byId.get("gpt-4o-transcribe")?.inputModalities).toEqual(["audio"]);
+    expect(byId.get("gpt-transcribe")?.inputModalities).toEqual(["audio"]);
     const chatModels = rows
       .filter(({ model }) => ModelModel.supportsTextChat(model))
       .map(({ model }) => model.modelId);

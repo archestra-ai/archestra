@@ -163,10 +163,11 @@ function openAiMediaCapabilities(id: string): FetchedModelCapabilities | null {
   if (/^(gpt-image-|chatgpt-image-|dall-e-)/.test(lower)) {
     return mediaCapabilities(["text"], ["image"]);
   }
-  if (/^(tts-|gpt-[\w.-]+-tts(?:-|$))/.test(lower)) {
+  // The generation segment is optional: OpenAI also ships bare `gpt-transcribe`.
+  if (/^(tts-|gpt-(?:[\w.-]+-)?tts(?:-|$))/.test(lower)) {
     return mediaCapabilities(["text"], ["audio"]);
   }
-  if (/^(whisper-|gpt-[\w.-]+-transcribe(?:-|$))/.test(lower)) {
+  if (/^(whisper-|gpt-(?:[\w.-]+-)?transcribe(?:-|$))/.test(lower)) {
     return mediaCapabilities(["audio"], ["text"]);
   }
   return null;

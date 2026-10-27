@@ -119,13 +119,16 @@ A refusal names its reason in `error`:
 
 | `error` | Cause | Fix |
 | --- | --- | --- |
-| `not_author` | Someone other than the author started the run | The author pushes to the pull request or re-runs the job |
+| `not_author` | Someone other than the author started the run | The author starts a new run, for example by pushing a commit. A re-run keeps who started it |
 | `not_linked` | The author has not connected GitHub through the App, or that connection expired or was revoked | The author connects it under **Credentials**, then re-runs the job |
 | `ambiguous_link` | Several accounts connected the same GitHub user | Disconnect it from all but one account |
 | `forbidden` | The author's account cannot use the gateway | Share the gateway with the author |
 | `not_trusted` | The repository, workflow, or event is not allowed, the pull request is from a fork, or the App cannot read it | Check the gateway's **GitHub Actions** settings and the App's installation |
+| `invalid_request` | The body lacks `token` or `resource`, or `resource` is not a gateway URL of this Archestra | Send both, with `resource` built from your Archestra URL |
 | `invalid_token` | Wrong audience, expired, or already exchanged | Request a new token with the right audience |
+| `rate_limited` | Too many requests from one address | Wait for the time in the `Retry-After` header, then try again |
 | `github_error` | GitHub refused a request, for example because the App lacks one of the permissions above, or the App's private key cannot be used | Check the App's permissions, installation, and private key |
+| `server_error` | The exchange failed unexpectedly | Request a fresh OIDC token and try again |
 
 <span id="identity-assertion-jwt-authorization-grant-id-jag"></span>
 

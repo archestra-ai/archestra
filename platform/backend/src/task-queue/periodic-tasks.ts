@@ -8,6 +8,7 @@ type PeriodicTaskDefinition = {
 };
 
 const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
+  { taskType: "jira_chatops_poll", intervalSeconds: 60, payload: {} },
   {
     taskType: "interaction_user_activity_rebuild",
     intervalSeconds: 30,

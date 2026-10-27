@@ -1,6 +1,7 @@
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { threadStates } from "@/openappa/thread-state";
 import { deleteExpiredUnenforcedRecords } from "@/openappa/unenforced";
+import { pollJiraChatOps } from "@/services/jira-chatops-poll";
 import {
   checkDueAppaGithubSyncs,
   syncAppaGithubPolicy,
@@ -22,6 +23,7 @@ import { handleContentEncryptionBackfill } from "./content-encryption-backfill-h
 import { handleContentRetentionCleanup } from "./content-retention-cleanup-handler.ee";
 import { handleInteractionSessionPreviewBackfill } from "./interaction-session-preview-backfill-handler";
 import { handleInteractionUserActivityRebuild } from "./interaction-user-activity-rebuild-handler";
+import { handleJiraChatOpsEvent } from "./jira-chatops-event-handler";
 import { handleKbBm25StatsRefresh } from "./kb-bm25-stats-refresh-handler";
 import { handleLlmModelSync } from "./llm-model-sync-handler";
 import { handleMcpToolDescriptionBackfill } from "./mcp-tool-description-backfill-handler";
@@ -34,6 +36,11 @@ import { handleSkillGithubSync } from "./skill-github-sync-handler";
 import { handleSkillPublicationBackfill } from "./skill-publication-backfill-handler";
 
 export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
+  taskQueueService.registerHandler("jira_chatops_poll", pollJiraChatOps);
+  taskQueueService.registerHandler(
+    "jira_chatops_event",
+    handleJiraChatOpsEvent,
+  );
   taskQueueService.registerHandler(
     "agent_run_attention_notice",
     handleAgentRunAttentionNotice,

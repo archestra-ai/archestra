@@ -88,6 +88,10 @@ export const THREAD_MUTE_HINT =
 /** Slack's native Stop control cancels a turn without muting the thread. */
 export const SLACK_THREAD_MUTE_HINT = `Press Stop to cancel only the current answer. ${THREAD_MUTE_HINT}`;
 
+/** Jira has no mute-reaction ingress; its project label is a persistent stop. */
+export const JIRA_THREAD_MUTE_HINT =
+  'Reply "mute" to stop auto-replies; @mention me to resume. The archestra-mute label blocks replies until removed.';
+
 /**
  * In group conversations the agent hears every message but should not answer
  * every one. When it decides no reply is needed it answers with exactly this

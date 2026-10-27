@@ -52,6 +52,16 @@ interface EffectivePricing {
   cacheSource: PriceSource | null;
 }
 
+/** Whether a prompt of `promptTokens` is priced at a long-context tier starting above `threshold`. */
+export function isLongContextPrompt(
+  threshold: number | null,
+  promptTokens: number | undefined,
+): boolean {
+  return (
+    threshold !== null && promptTokens !== undefined && promptTokens > threshold
+  );
+}
+
 /**
  * Returns default token prices for a model.
  * Cheaper models (-haiku, -nano, -mini) get $30/million tokens.
@@ -962,9 +972,8 @@ class ModelModel {
         ? "provider"
         : cache.cacheSource;
     if (
-      model?.longContextThreshold != null &&
-      promptTokens !== undefined &&
-      promptTokens > model.longContextThreshold
+      model &&
+      isLongContextPrompt(model.longContextThreshold, promptTokens)
     ) {
       // The CHECK constraint makes the threshold and all four prices all-or-none.
       // They are configured on the model, so they are no estimate even when

@@ -18,8 +18,10 @@ import type {
   CostHistoryDay,
   CostWindowTotals,
   RecomputedCost,
+  TieredTokenSums,
   TokenSums,
 } from "@/models/interaction-cost-backfill";
+import { isLongContextPrompt } from "@/models/model";
 import {
   priceCacheUsage,
   priceTokenUsage,
@@ -33,6 +35,7 @@ import type {
   ModelCostBackfill,
   ModelCostBackfillPricing,
 } from "@/types/model-cost-backfill";
+import { promptTokens } from "@/utils/billable-usage";
 
 // Above the class: the exported singleton reads it while initializing.
 /** Long enough to absorb a burst of preview calls while prices are typed. */
@@ -71,16 +74,17 @@ class ModelCostBackfillService {
     }
 
     const scope = toScope(model);
+    const threshold = pricing.longContext?.threshold ?? null;
     const [history, window] = await Promise.all([
-      this.getCachedHistory(scope, model.id, params.timeZone),
+      this.getCachedHistory(scope, model.id, params.timeZone, threshold),
       params.since
-        ? this.getCachedWindow(scope, model.id, params.since)
+        ? this.getCachedWindow(scope, model.id, params.since, threshold)
         : Promise.resolve(null),
     ]);
     // Gate on what the selected range would recompute, as start() does.
     const tokens = window
       ? window.tokens
-      : sumTokens(history.map((day) => day.tokens));
+      : sumTieredTokens(history.map((day) => day.tokens));
     if (missesCachePrice({ pricing, instancePriced, tokens })) {
       return {
         availability: "needs_custom_price",
@@ -159,6 +163,7 @@ class ModelCostBackfillService {
       scope: toScope(model),
       since,
       until: cutoff,
+      longContextThreshold: pricing.longContext?.threshold ?? null,
     });
     if (missesCachePrice({ pricing, instancePriced, tokens: totals.tokens })) {
       throw new ApiError(400, UNAVAILABLE_MESSAGES.needs_custom_price);
@@ -167,7 +172,8 @@ class ModelCostBackfillService {
     // and leave the history half rewritten.
     if (
       mayOverflow({
-        pricing: { provider: model.provider, ...pricing },
+        pricing,
+        provider: model.provider,
         bound: totals.largestRequestBound,
       })
     ) {
@@ -346,7 +352,7 @@ class ModelCostBackfillService {
   private async resolvePricing(
     model: Model,
     prices?: CostBackfillPrices,
-  ): Promise<{ pricing: ResolvedPricing; instancePriced: boolean }> {
+  ): Promise<{ pricing: BackfillPricing; instancePriced: boolean }> {
     const instancePriced =
       model.provider !== "openrouter" &&
       (await LlmProviderApiKeyModelLinkModel.hasProviderPricing(model.id));
@@ -359,7 +365,7 @@ class ModelCostBackfillService {
   /** Why the model's past costs can't be recomputed, before reading any rows. */
   private async getBlocker(
     model: Model,
-    pricing: ResolvedPricing,
+    pricing: BackfillPricing,
     instancePriced: boolean,
   ): Promise<Exclude<CostBackfillAvailability, "available"> | null> {
     if (model.provider === "openrouter") return "provider_reported_cost";
@@ -374,13 +380,15 @@ class ModelCostBackfillService {
     scope: BackfillScope,
     modelId: string,
     timeZone: string,
+    longContextThreshold: number | null,
   ): Promise<CostHistoryDay[]> {
-    const key = `${modelId}:${timeZone}`;
+    const key = `${modelId}:${timeZone}:${longContextThreshold}`;
     const cached = this.historyCache.get(key);
     if (cached) return cached;
     const history = await InteractionCostBackfillModel.getDailyHistory({
       scope,
       timeZone,
+      longContextThreshold,
     });
     this.historyCache.set(key, history);
     return history;
@@ -390,14 +398,16 @@ class ModelCostBackfillService {
     scope: BackfillScope,
     modelId: string,
     since: Date,
+    longContextThreshold: number | null,
   ): Promise<CostWindowTotals> {
-    const key = `${modelId}:${since.toISOString()}`;
+    const key = `${modelId}:${since.toISOString()}:${longContextThreshold}`;
     const cached = this.windowCache.get(key);
     if (cached) return cached;
     const totals = await InteractionCostBackfillModel.getWindowTotals({
       scope,
       since,
       until: new Date(),
+      longContextThreshold,
     });
     this.windowCache.set(key, totals);
     return totals;
@@ -409,6 +419,8 @@ export const modelCostBackfillService = new ModelCostBackfillService();
 // ===
 
 type ResolvedPricing = ReturnType<typeof ModelModel.getEffectivePricing>;
+/** The base prices plus the model's long-context tier, as a backfill freezes them. */
+type BackfillPricing = Omit<ModelCostBackfillPricing, "provider">;
 
 const WORKER_ID = `${hostname()}#${process.pid}`;
 /** Rows per transaction: short enough to keep row locks brief. */
@@ -455,7 +467,7 @@ function pricingFor(params: {
   model: Model;
   prices?: CostBackfillPrices;
   instancePriced: boolean;
-}): ResolvedPricing {
+}): BackfillPricing {
   const { model, prices } = params;
   const priced: Model = prices
     ? {
@@ -471,7 +483,22 @@ function pricingFor(params: {
     model.modelId,
     model.provider,
   );
-  if (!params.instancePriced) return pricing;
+  // Long-context prices are the model's own, the same for every key, so they
+  // apply as the proxy applies them; resolved just past the threshold.
+  const threshold = model.longContextThreshold;
+  const longContext =
+    threshold === null
+      ? null
+      : {
+          threshold,
+          prices: ModelModel.getEffectivePricing(
+            priced,
+            model.modelId,
+            model.provider,
+            threshold + 1,
+          ),
+        };
+  if (!params.instancePriced) return { ...pricing, longContext };
 
   const cacheRead =
     priced.customPricePerMillionCacheRead != null
@@ -487,6 +514,7 @@ function pricingFor(params: {
     pricePerMillionCacheWrite: cacheWrite,
     cacheSource:
       cacheRead === null && cacheWrite === null ? null : pricing.cacheSource,
+    longContext,
   };
 }
 
@@ -537,18 +565,25 @@ function toStoredPrice(price: string | null): string | null {
  * the recompute can't invent one.
  */
 function missesCachePrice(params: {
-  pricing: ResolvedPricing;
+  pricing: BackfillPricing;
   instancePriced: boolean;
-  tokens: TokenSums;
+  tokens: TieredTokenSums;
 }): boolean {
   const { pricing, instancePriced, tokens } = params;
+  const misses = (prices: ResolvedPricing, sums: TokenSums) =>
+    (sums.cacheReadTokens > 0 && prices.pricePerMillionCacheRead === null) ||
+    (sums.cacheWriteTokens > 0 && prices.pricePerMillionCacheWrite === null);
   return (
     instancePriced &&
-    ((tokens.cacheReadTokens > 0 &&
-      pricing.pricePerMillionCacheRead === null) ||
-      (tokens.cacheWriteTokens > 0 &&
-        pricing.pricePerMillionCacheWrite === null))
+    tierPrices(pricing).some(([tier, prices]) => misses(prices, tokens[tier]))
   );
+}
+
+function sumTieredTokens(all: TieredTokenSums[]): TieredTokenSums {
+  return {
+    base: sumTokens(all.map((tokens) => tokens.base)),
+    long: sumTokens(all.map((tokens) => tokens.long)),
+  };
 }
 
 function sumTokens(all: TokenSums[]): TokenSums {
@@ -575,14 +610,58 @@ function sweepStart(backfill: ModelCostBackfill): Date {
   return new Date(Math.max(backfill.since.getTime(), start));
 }
 
+/** Each tier's prices; a model without a long-context tier has only base. */
+function tierPrices(
+  pricing: BackfillPricing,
+): Array<[keyof TieredTokenSums, ResolvedPricing]> {
+  return pricing.longContext
+    ? [
+        ["base", pricing],
+        ["long", pricing.longContext.prices],
+      ]
+    : [["base", pricing]];
+}
+
 /**
- * Whether a request within `bound` could store an amount (cost, cache cost or
- * cache savings, which can be negative) past {@link MAX_STORED_COST}. Each
- * amount is linear in each token kind, so pricing every kind's largest count
- * on its own and adding the magnitudes bounds what any one request reaches.
+ * The prices the proxy applies to a request of this prompt size: the
+ * long-context tier above its threshold, the base prices otherwise.
+ */
+function pricesFor(pricing: BackfillPricing, row: CostBackfillRow) {
+  const prompt = promptTokens({
+    inputTokens: row.inputTokens ?? 0,
+    cacheReadTokens: row.cacheReadTokens ?? 0,
+    cacheWriteTokens: row.cacheWriteTokens ?? 0,
+  });
+  const { longContext } = pricing;
+  return longContext && isLongContextPrompt(longContext.threshold, prompt)
+    ? longContext.prices
+    : pricing;
+}
+
+/**
+ * Whether a request within its tier's `bound` could store an amount (cost,
+ * cache cost or cache savings, which can be negative) past
+ * {@link MAX_STORED_COST}. Each amount is linear in each token kind within a
+ * tier, so pricing every kind's largest count on its own at that tier's prices
+ * and adding the magnitudes bounds what any one request reaches.
  */
 function mayOverflow(params: {
-  pricing: ModelCostBackfillPricing;
+  pricing: BackfillPricing;
+  provider: SupportedProvider;
+  bound: TieredTokenSums;
+}): boolean {
+  return tierPrices(params.pricing).some(([tier, prices]) =>
+    tierMayOverflow({
+      prices,
+      provider: params.provider,
+      bound: params.bound[tier],
+    }),
+  );
+}
+
+function tierMayOverflow(params: {
+  prices: ResolvedPricing;
+  provider: SupportedProvider;
   bound: TokenSums;
 }): boolean {
   const { bound } = params;
@@ -610,7 +689,7 @@ function mayOverflow(params: {
     ],
   ];
   const magnitudes = (row: CostBackfillRow) => {
-    const amounts = recompute(row, params.pricing);
+    const amounts = recomputeAt(row, params.prices, params.provider);
     return [amounts.cost, amounts.cacheCost, amounts.cacheSavings].map(
       (amount) => Math.abs(Number(amount ?? 0)),
     );
@@ -630,6 +709,14 @@ function recompute(
   row: CostBackfillRow,
   pricing: ModelCostBackfillPricing,
 ): RecomputedCost {
+  return recomputeAt(row, pricesFor(pricing, row), pricing.provider);
+}
+
+function recomputeAt(
+  row: CostBackfillRow,
+  pricing: ResolvedPricing,
+  provider: SupportedProvider,
+): RecomputedCost {
   const usage = {
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,
@@ -637,9 +724,8 @@ function recompute(
     writeTokens: row.cacheWriteTokens,
     write1hTokens: row.cacheWrite1hTokens,
   };
-  const cost =
-    priceTokenUsage({ pricing, provider: pricing.provider, usage }) ?? 0;
-  const cache = priceCacheUsage({ pricing, provider: pricing.provider, usage });
+  const cost = priceTokenUsage({ pricing, provider, usage }) ?? 0;
+  const cache = priceCacheUsage({ pricing, provider, usage });
   return {
     id: row.id,
     cost: cost.toFixed(10),
@@ -648,24 +734,27 @@ function recompute(
   };
 }
 
-/** Pricing is linear in each token count, so summed tokens price exactly. */
+/** Pricing is linear in each token count within a tier, so tier sums price exactly. */
 function priceSums(params: {
-  pricing: ResolvedPricing;
+  pricing: BackfillPricing;
   provider: SupportedProvider;
-  tokens: TokenSums;
+  tokens: TieredTokenSums;
 }): number {
-  const { pricing, provider, tokens } = params;
-  return (
-    priceTokenUsage({
-      pricing,
-      provider,
-      usage: {
-        inputTokens: tokens.inputTokens,
-        outputTokens: tokens.outputTokens,
-        readTokens: tokens.cacheReadTokens,
-        writeTokens: tokens.cacheWriteTokens,
-        write1hTokens: tokens.cacheWrite1hTokens,
-      },
-    }) ?? 0
+  const { provider, tokens } = params;
+  return tierPrices(params.pricing).reduce(
+    (total, [tier, pricing]) =>
+      total +
+      (priceTokenUsage({
+        pricing,
+        provider,
+        usage: {
+          inputTokens: tokens[tier].inputTokens,
+          outputTokens: tokens[tier].outputTokens,
+          readTokens: tokens[tier].cacheReadTokens,
+          writeTokens: tokens[tier].cacheWriteTokens,
+          write1hTokens: tokens[tier].cacheWrite1hTokens,
+        },
+      }) ?? 0),
+    0,
   );
 }

@@ -72,7 +72,7 @@ describe("PUT /api/connectors/:id GitHub settings compatibility", () => {
     const config = {
       ...defaults,
       repositoryOverrides: [
-        { repository: "repo-a", includePullRequests: false },
+        { repository: "example-org/repo-a", includePullRequests: false },
       ],
     };
     const connector = await savedConnector(config);
@@ -88,22 +88,22 @@ describe("PUT /api/connectors/:id GitHub settings compatibility", () => {
     expect(saved?.secretId).toBe(connector.secretId);
   });
 
-  test("format-only conversion of path rules preserves the sync checkpoint", async () => {
-    const pathRules = [
-      { repository: "repo-a", excludePaths: ["docs/private"] },
-    ];
-    const connector = await savedConnector({
-      ...defaults,
-      repositoryPathFilters: pathRules,
-    });
+  test("explicit empty defaults preserve the legacy sync checkpoint", async () => {
+    const connector = await savedConnector(defaults);
     const response = await ctx.app.inject({
       method: "PUT",
       url: `/api/connectors/${connector.id}`,
-      payload: { config: { ...defaults, repositoryOverrides: pathRules } },
+      payload: {
+        config: {
+          ...defaults,
+          fileTypes: [],
+          excludePaths: [],
+          repositoryOverrides: [],
+        },
+      },
     });
     expect(response.statusCode, response.body).toBe(200);
     const saved = await KnowledgeBaseConnectorModel.findById(connector.id);
-    expect(saved?.config).toMatchObject({ repositoryOverrides: pathRules });
     expect(saved?.checkpoint).toEqual(checkpoint);
     expect(saved?.secretId).toBe(connector.secretId);
   });
@@ -139,26 +139,6 @@ describe("PUT /api/connectors/:id GitHub settings compatibility", () => {
     expect(saved?.checkpoint).toEqual(checkpoint);
   });
 
-  test("an old writer cannot revive legacy rules hidden by a canonical reset", async () => {
-    const legacy = {
-      ...defaults,
-      repositoryPathFilters: [
-        { repository: "repo-a", includePaths: ["private"] },
-      ],
-    };
-    const config = { ...legacy, repositoryOverrides: [] };
-    const connector = await savedConnector(config);
-    const response = await ctx.app.inject({
-      method: "PUT",
-      url: `/api/connectors/${connector.id}`,
-      payload: { config: legacy },
-    });
-    expect(response.statusCode, response.body).toBe(409);
-    const saved = await KnowledgeBaseConnectorModel.findById(connector.id);
-    expect(saved?.config).toEqual(config);
-    expect(saved?.checkpoint).toEqual(checkpoint);
-  });
-
   test("explicitly empty global exclusions are an intentional supported reset", async () => {
     const connector = await savedConnector({
       ...defaults,
@@ -186,7 +166,7 @@ describe("PUT /api/connectors/:id GitHub settings compatibility", () => {
           ...defaults,
           repositoryOverrides: [
             {
-              repository: "repo-a",
+              repository: "example-org/repo-a",
               includePullRequests: false,
               labelsToSkip: [],
               includePaths: [],
@@ -215,7 +195,7 @@ describe("PUT /api/connectors/:id GitHub settings compatibility", () => {
       },
       repositories: [
         {
-          repository: "repo-a",
+          repository: "example-org/repo-a",
           includeIssues: null,
           includePullRequests: false,
           labelsToSkip: [],

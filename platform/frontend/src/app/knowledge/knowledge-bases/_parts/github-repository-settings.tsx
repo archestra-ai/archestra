@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, Info, Plus } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import {
   type FieldValues,
   type UseFormReturn,
@@ -27,7 +27,10 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
-  githubRepositoryOverrideDraft,
+  type GithubRepositoryEntryDraft,
+  githubRepositoryDraftFingerprint,
+  githubRepositoryEntriesDraft,
+  githubRepositorySettingsDraft,
   githubRepositoryStandardSettingsDraft,
   joinIfArray,
 } from "./transform-config-array-fields";
@@ -82,55 +85,7 @@ const LIST_SETTINGS = [
   },
 ] as const;
 
-type BooleanSetting = (typeof BOOLEAN_SETTINGS)[number];
-type ListSetting = (typeof LIST_SETTINGS)[number];
-type RepositoryOverrideDraft = { repository: string } & Partial<
-  Record<BooleanSetting["name"], boolean | null> &
-    Record<ListSetting["name"], string | string[] | null>
->;
-
 type Props = { form: UseFormReturn<FieldValues>; prefix: string };
-
-function repositories(value: unknown): string[] {
-  const entries = Array.isArray(value)
-    ? value
-    : typeof value === "string"
-      ? value.split(",")
-      : [];
-  return entries.map((entry: string) => entry.trim()).filter(Boolean);
-}
-
-function findOverride(
-  overrides: RepositoryOverrideDraft[],
-  repository: string,
-  owner: string,
-) {
-  const fullName = repository.includes("/")
-    ? repository
-    : `${owner}/${repository}`;
-  const exact = overrides.findIndex(
-    (entry) => entry.repository.trim().toLowerCase() === fullName.toLowerCase(),
-  );
-  if (exact >= 0) return exact;
-  const [repoOwner, name] = fullName.split("/");
-  return repoOwner.toLowerCase() === owner.toLowerCase()
-    ? overrides.findIndex(
-        (entry) => entry.repository.trim().toLowerCase() === name.toLowerCase(),
-      )
-    : -1;
-}
-
-function defaultValue(values: FieldValues | undefined, path: string): unknown {
-  return path
-    .split(".")
-    .reduce<unknown>(
-      (value, key) =>
-        value && typeof value === "object"
-          ? (value as Record<string, unknown>)[key]
-          : undefined,
-      values,
-    );
-}
 
 function Disclosure({
   title,
@@ -182,393 +137,60 @@ function Disclosure({
   );
 }
 
-type RepositoryEntryDraft = {
-  repository: string;
-  overrideIndex: number;
-  ownsOverride: boolean;
-  sourceRepository: string;
-  originalRepository?: string;
-  originalDisplayRepository?: string;
-  originalOwner?: string;
-  isNew?: boolean;
-  settings?: Record<string, unknown>;
-};
-
 export function GithubRepositorySettings({ form, prefix }: Props) {
-  const canonical = form.watch(`${prefix}.repositoryOverrides`) as
-    | RepositoryOverrideDraft[]
-    | undefined;
-  const legacy = form.watch(`${prefix}.repositoryPathFilters`) as
-    | RepositoryOverrideDraft[]
-    | undefined;
-  const { append, remove } = useFieldArray({
-    control: form.control,
-    name: `${prefix}.repositoryOverrides`,
-  });
+  const config = form.watch(prefix) as Record<string, unknown>;
   const entryPath = `${prefix}.repositoryEntries`;
-  const entries = form.watch(entryPath) as RepositoryEntryDraft[] | undefined;
-  const {
-    fields: entryFields,
-    append: appendEntry,
-    remove: removeEntry,
-  } = useFieldArray({ control: form.control, name: entryPath });
-  const overrides = canonical ?? legacy ?? [];
-  const owner = (form.watch(`${prefix}.owner`) as string | undefined) ?? "";
-  const initialRepos = defaultValue(
-    form.formState.defaultValues,
-    `${prefix}.repos`,
-  );
-  const [mode, setMode] = useState<"selected" | "all">(() =>
-    repositories(form.getValues(`${prefix}.repos`)).length ? "selected" : "all",
-  );
-  const [openKey, setOpenKey] = useState<string | null>(null);
-
-  useEffect(() => {
-    setMode(repositories(initialRepos).length ? "selected" : "all");
-  }, [initialRepos]);
-  useEffect(() => {
-    if (canonical === undefined)
-      form.setValue(`${prefix}.repositoryOverrides`, legacy ?? [], {
-        shouldDirty: false,
-      });
-  }, [canonical, form, legacy, prefix]);
-  useEffect(() => {
-    if (entries === undefined)
-      form.setValue(
-        entryPath,
-        repositories(form.getValues(`${prefix}.repos`)).map((repository) => ({
-          repository: repository.includes("/")
-            ? repository
-            : `${owner}/${repository}`,
-          originalRepository: repository,
-          originalDisplayRepository: repository.includes("/")
-            ? repository
-            : `${owner}/${repository}`,
-          originalOwner: owner,
-          overrideIndex: findOverride(overrides, repository, owner),
-          ownsOverride: findOverride(overrides, repository, owner) >= 0,
-          sourceRepository: repository.includes("/")
-            ? repository
-            : `${owner}/${repository}`,
-        })),
-        { shouldDirty: false },
-      );
-  }, [entries, entryPath, form, overrides, owner, prefix]);
-  const previousOwner = useRef(owner);
-  useEffect(() => {
-    if (previousOwner.current === owner) return;
-    previousOwner.current = owner;
-    // Owner scopes bare names; changing it must not rename a qualified rule.
-    for (const [index, entry] of (entries ?? []).entries()) {
-      if (
-        entry.isNew ||
-        (entry.ownsOverride &&
-          !/^[^/\\\s,]+\/[^/\\\s,]+$/.test(entry.repository.trim()))
-      )
-        continue;
-      const overrideIndex = findOverride(overrides, entry.repository, owner);
-      form.setValue(`${entryPath}.${index}.overrideIndex`, overrideIndex);
-      form.setValue(`${entryPath}.${index}.ownsOverride`, overrideIndex >= 0);
-      form.setValue(`${entryPath}.${index}.sourceRepository`, entry.repository);
-    }
-  }, [entries, entryPath, form, overrides, owner]);
-  const defaults = form.watch(prefix) as Record<string, unknown>;
-  const applyShared = form.watch(`${prefix}.repositoryApplyShared`) === true;
+  const entries = form.watch(entryPath) as
+    | GithubRepositoryEntryDraft[]
+    | undefined;
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: entryPath,
+  });
+  const mode =
+    form.watch(`${prefix}.repositorySelectionMode`) ??
+    ((Array.isArray(config.repos) && config.repos.length > 0) ||
+    (typeof config.repos === "string" && config.repos.trim())
+      ? "selected"
+      : "all");
   const sharedPath = `${prefix}.repositorySharedSettings`;
   const sharedSettings = form.watch(sharedPath) as
     | Record<string, unknown>
     | undefined;
+  const applyShared = form.watch(`${prefix}.repositoryApplyShared`) === true;
+  const [openKey, setOpenKey] = useState<string | null>(null);
+
   useEffect(() => {
-    if (sharedSettings === undefined)
+    if (entries !== undefined) return;
+    const rows = githubRepositoryEntriesDraft(config);
+    if (config.repositoryOverrides === undefined)
       form.setValue(
-        sharedPath,
-        Object.fromEntries(
-          [...BOOLEAN_SETTINGS, ...LIST_SETTINGS].map(({ name }) => [
-            name,
-            form.getValues(`${prefix}.${name}`),
-          ]),
-        ),
+        `${prefix}.repositoryLegacyBaseline`,
+        {
+          owner: config.owner,
+          fingerprint: githubRepositoryDraftFingerprint(rows),
+        },
         { shouldDirty: false },
       );
-  }, [form, prefix, sharedPath, sharedSettings]);
-  const activeIndices = new Set(
-    (entries ?? []).map((entry) => entry.overrideIndex),
-  );
-  const inactiveCount = overrides.filter(
-    (_, index) => !activeIndices.has(index),
-  ).length;
-  const identity = (repository: string) => {
-    const name = repository.trim().toLowerCase();
-    return name.includes("/") ? name : `${owner.toLowerCase()}/${name}`;
-  };
-  const removeSavedSettings = (index: number, includeAliases = false) => {
-    const repository = overrides[index].repository;
-    const indices =
-      includeAliases && repository.trim()
-        ? overrides.flatMap((entry, entryIndex) =>
-            identity(entry.repository) === identity(repository)
-              ? [entryIndex]
-              : [],
-          )
-        : [index];
-    remove(indices);
-    for (const [entryIndex, entry] of (entries ?? []).entries()) {
-      const nextIndex = indices.includes(entry.overrideIndex)
-        ? -1
-        : entry.overrideIndex -
-          indices.filter((removed) => removed < entry.overrideIndex).length;
-      form.setValue(`${entryPath}.${entryIndex}.overrideIndex`, nextIndex, {
-        shouldDirty: true,
+    form.setValue(entryPath, rows, { shouldDirty: false });
+  }, [config, entries, entryPath, form, prefix]);
+  useEffect(() => {
+    if (sharedSettings === undefined)
+      form.setValue(sharedPath, githubRepositorySettingsDraft(config), {
+        shouldDirty: false,
       });
-      if (nextIndex < 0) {
-        form.setValue(`${entryPath}.${entryIndex}.ownsOverride`, false);
-        form.setValue(
-          `${entryPath}.${entryIndex}.sourceRepository`,
-          entry.repository,
-        );
-      }
-    }
-  };
-  const validateName = (value: string, entryIndex: number) => {
+  }, [config, form, sharedPath, sharedSettings]);
+
+  const validateName = (value: string, index: number) => {
     if (mode === "all") return true;
     if (!value.trim()) return "Repository is required";
     if (!/^[^/\\\s,]+\/[^/\\\s,]+$/.test(value.trim())) return "Use owner/repo";
-    const current = form.getValues(entryPath) as RepositoryEntryDraft[];
-    if (
-      !current.every(
-        (entry, index) =>
-          index === entryIndex ||
-          identity(entry.repository) !== identity(value),
-      )
-    )
-      return "Each repository can be selected only once";
-    const entry = current[entryIndex];
-    if (
-      entry.ownsOverride &&
-      identity(value) !== identity(entry.sourceRepository) &&
-      overrides.some(
-        (override, index) =>
-          index !== entry.overrideIndex &&
-          identity(override.repository) === identity(value),
-      )
-    )
-      return "This repository already has saved settings. Remove them before renaming this entry.";
-    return true;
-  };
-  const applyName = (value: string, entryIndex: number) => {
-    const entry = form.getValues(
-      `${entryPath}.${entryIndex}`,
-    ) as RepositoryEntryDraft;
-    if (entry.isNew) return;
-    if (validateName(value, entryIndex) !== true) {
-      if (!entry.ownsOverride)
-        form.setValue(`${entryPath}.${entryIndex}.overrideIndex`, -1);
-      return;
-    }
-    // A bare rule is owner-scoped. Restoring an interrupted name after an Owner
-    // change must qualify the rule, even when the visible identity is unchanged.
-    const boundRule = overrides[entry.overrideIndex];
-    const ownerScopedRuleMoved =
-      entry.ownsOverride &&
-      boundRule &&
-      !boundRule.repository.includes("/") &&
-      entry.originalOwner !== undefined &&
-      entry.originalOwner.trim().toLowerCase() !== owner.trim().toLowerCase();
-    if (
-      identity(value) === identity(entry.sourceRepository) &&
-      !ownerScopedRuleMoved
-    )
-      return;
-    if (
-      entry.ownsOverride &&
-      entry.overrideIndex >= 0 &&
-      overrides[entry.overrideIndex]
-    ) {
-      const shared = (form.getValues(entryPath) as RepositoryEntryDraft[]).some(
-        (other, index) =>
-          index !== entryIndex && other.overrideIndex === entry.overrideIndex,
-      );
-      if (shared && identity(value) !== identity(entry.sourceRepository)) {
-        const nextIndex = overrides.length;
-        append(
-          githubRepositoryOverrideDraft({
-            ...overrides[entry.overrideIndex],
-            repository: value,
-          }),
-        );
-        form.setValue(`${entryPath}.${entryIndex}.overrideIndex`, nextIndex, {
-          shouldDirty: true,
-        });
-      } else
-        form.setValue(
-          `${prefix}.repositoryOverrides.${entry.overrideIndex}.repository`,
-          value,
-          { shouldDirty: true },
-        );
-    } else
-      form.setValue(
-        `${entryPath}.${entryIndex}.overrideIndex`,
-        findOverride(overrides, value, owner),
-        { shouldDirty: true },
-      );
-  };
-  const claimEntry = (entryIndex: number) => {
-    const entry = form.getValues(
-      `${entryPath}.${entryIndex}`,
-    ) as RepositoryEntryDraft;
-    if (entry.isNew || validateName(entry.repository, entryIndex) !== true)
-      return;
-    applyName(entry.repository, entryIndex);
-    const linked = form.getValues(
-      `${entryPath}.${entryIndex}.overrideIndex`,
-    ) as number;
-    form.setValue(`${entryPath}.${entryIndex}.ownsOverride`, linked >= 0, {
-      shouldDirty: true,
-    });
-    form.setValue(
-      `${entryPath}.${entryIndex}.sourceRepository`,
-      entry.repository,
-      { shouldDirty: true },
-    );
-  };
-
-  const effective = (override?: RepositoryOverrideDraft, base = defaults) => ({
-    ...Object.fromEntries(
-      BOOLEAN_SETTINGS.map(({ name, fallback }) => [
-        name,
-        override?.[name] ?? base[name] ?? fallback,
-      ]),
-    ),
-    ...Object.fromEntries(
-      LIST_SETTINGS.map(({ name }) => [
-        name,
-        override?.[name] ?? base[name] ?? [],
-      ]),
-    ),
-  });
-  const writeEntrySetting = (
-    entryIndex: number,
-    name: string,
-    value: unknown,
-  ) => {
-    const entry = form.getValues(
-      `${entryPath}.${entryIndex}`,
-    ) as RepositoryEntryDraft;
-    if (entry.isNew) return;
-    if (entry.overrideIndex >= 0 && overrides[entry.overrideIndex]) {
-      form.setValue(
-        `${prefix}.repositoryOverrides.${entry.overrideIndex}.${name}`,
-        value,
-        { shouldDirty: true },
-      );
-    } else {
-      const index = overrides.length;
-      append(
-        githubRepositoryOverrideDraft({
-          repository: entry.repository.trim(),
-          [name]: value,
-        }),
-      );
-      form.setValue(`${entryPath}.${entryIndex}.overrideIndex`, index, {
-        shouldDirty: true,
-      });
-      form.setValue(`${entryPath}.${entryIndex}.ownsOverride`, true);
-      form.setValue(
-        `${entryPath}.${entryIndex}.sourceRepository`,
-        entry.repository,
-      );
-    }
-  };
-  const entryRow = (
-    entry: RepositoryEntryDraft,
-    entryIndex: number,
-    key: string,
-  ) => {
-    const matched =
-      entry.overrideIndex >= 0 ? overrides[entry.overrideIndex] : undefined;
-    const name = entry.repository.trim() || "New repository";
-    const path = `${entryPath}.${entryIndex}.repository`;
-    const error = Boolean(defaultValue(form.formState.errors, path));
     return (
-      <fieldset key={key} aria-label={`Repository ${name}`}>
-        <Disclosure
-          title={name}
-          open={
-            openKey === key ||
-            error ||
-            (openKey === "new-entry" &&
-              entryIndex === (entries?.length ?? 0) - 1)
-          }
-          onOpenChange={(next) => setOpenKey(next ? key : null)}
-          actions={
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              aria-label={`Remove repository ${name}`}
-              onClick={() => {
-                const shared = (
-                  form.getValues(entryPath) as RepositoryEntryDraft[]
-                ).some(
-                  (other, index) =>
-                    index !== entryIndex &&
-                    other.overrideIndex === entry.overrideIndex,
-                );
-                if (matched && entry.ownsOverride && !shared)
-                  removeSavedSettings(entry.overrideIndex, true);
-                removeEntry(entryIndex);
-                setOpenKey(null);
-              }}
-            >
-              Remove
-            </Button>
-          }
-        >
-          <FormField
-            control={form.control}
-            name={path}
-            rules={{
-              validate: (value: string) => validateName(value, entryIndex),
-            }}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Repository</FormLabel>
-                <FormDescription>
-                  Enter owner/repo. Renaming keeps this entry's settings.
-                </FormDescription>
-                <FormControl>
-                  <Input
-                    placeholder="owner/repo"
-                    {...field}
-                    onChange={(event) => {
-                      field.onChange(event.target.value);
-                      applyName(event.target.value, entryIndex);
-                    }}
-                    onBlur={() => {
-                      field.onBlur();
-                      claimEntry(entryIndex);
-                    }}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <RepositoryControls
-            form={form}
-            prefix={`${entryPath}.${entryIndex}.settings`}
-            values={
-              entry.isNew
-                ? (entry.settings ?? githubRepositoryStandardSettingsDraft())
-                : effective(matched)
-            }
-            disabled={validateName(entry.repository, entryIndex) !== true}
-            onChange={(setting, value) =>
-              writeEntrySetting(entryIndex, setting, value)
-            }
-          />
-        </Disclosure>
-      </fieldset>
+      (entries ?? []).every(
+        (entry, other) =>
+          other === index ||
+          entry.repository.trim().toLowerCase() !== value.trim().toLowerCase(),
+      ) || "Each repository can be selected only once"
     );
   };
   return (
@@ -585,13 +207,11 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
           rule: "Only sync the repositories you add, each with its own settings.",
         }}
         onModeChange={(next) => {
-          const value = next === "all" ? "all" : "selected";
-          setMode(value);
-          form.setValue(`${prefix}.repositorySelectionMode`, value, {
+          const mode = next === "all" ? "all" : "selected";
+          form.setValue(`${prefix}.repositorySelectionMode`, mode, {
             shouldDirty: true,
           });
-          if (value === "all") {
-            form.setValue(`${prefix}.repos`, [], { shouldDirty: true });
+          if (mode === "all") {
             form.setValue(`${prefix}.repositoryApplyShared`, true, {
               shouldDirty: true,
             });
@@ -605,8 +225,7 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
         rules={{
           validate: () =>
             mode === "all" ||
-            ((form.getValues(entryPath) as RepositoryEntryDraft[] | undefined)
-              ?.length ?? 0) > 0 ||
+            (entries?.length ?? 0) > 0 ||
             "Add at least one repository or choose All accessible repositories.",
         }}
         render={() => (
@@ -615,21 +234,23 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
           </FormItem>
         )}
       />
-      {mode === "all" && (
+      {mode === "all" ? (
         <>
-          {overrides.length > 0 && !applyShared && (
-            <InlineNotice variant="neutral">
-              <Info />
-              <InlineNoticeText>
-                Existing repository-specific settings are preserved. Changing
-                these shared settings applies them to every repository.
-              </InlineNoticeText>
-            </InlineNotice>
-          )}
+          {Array.isArray(config.repositoryOverrides) &&
+            config.repositoryOverrides.length > 0 &&
+            !applyShared && (
+              <InlineNotice variant="neutral">
+                <Info />
+                <InlineNoticeText>
+                  Existing repository-specific settings are preserved. Changing
+                  these shared settings applies them to every repository.
+                </InlineNoticeText>
+              </InlineNotice>
+            )}
           <RepositoryControls
             form={form}
             prefix={sharedPath}
-            values={effective(undefined, sharedSettings ?? defaults)}
+            values={sharedSettings ?? githubRepositorySettingsDraft(config)}
             onChange={() =>
               form.setValue(`${prefix}.repositoryApplyShared`, true, {
                 shouldDirty: true,
@@ -637,23 +258,79 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
             }
           />
         </>
-      )}
-      {mode === "selected" && (
+      ) : (
         <div className="space-y-2">
-          {entryFields.map((field, index) =>
-            entries?.[index] ? entryRow(entries[index], index, field.id) : null,
-          )}
+          {fields.map((field, index) => {
+            const entry = entries?.[index];
+            if (!entry) return null;
+            const name = entry.repository.trim() || "New repository";
+            const path = `${entryPath}.${index}.repository`;
+            const invalid = Boolean(
+              form.getFieldState(path, form.formState).error,
+            );
+            return (
+              <fieldset key={field.id} aria-label={`Repository ${name}`}>
+                <Disclosure
+                  title={name}
+                  open={
+                    openKey === field.id ||
+                    invalid ||
+                    (openKey === "new-entry" &&
+                      index === (entries?.length ?? 0) - 1)
+                  }
+                  onOpenChange={(open) => setOpenKey(open ? field.id : null)}
+                  actions={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`Remove repository ${name}`}
+                      onClick={() => {
+                        remove(index);
+                        setOpenKey(null);
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  }
+                >
+                  <FormField
+                    control={form.control}
+                    name={path}
+                    rules={{
+                      validate: (value: string) => validateName(value, index),
+                    }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Repository</FormLabel>
+                        <FormDescription>
+                          Enter owner/repo. Renaming keeps this entry's
+                          settings.
+                        </FormDescription>
+                        <FormControl>
+                          <Input placeholder="owner/repo" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <RepositoryControls
+                    form={form}
+                    prefix={`${entryPath}.${index}.settings`}
+                    values={entry.settings}
+                    disabled={validateName(entry.repository, index) !== true}
+                  />
+                </Disclosure>
+              </fieldset>
+            );
+          })}
           <Button
             type="button"
             size="sm"
             variant="outline"
             onClick={() => {
-              appendEntry({
+              append({
                 repository: "",
-                overrideIndex: -1,
-                ownsOverride: false,
-                sourceRepository: "",
-                isNew: true,
                 settings: githubRepositoryStandardSettingsDraft(),
               });
               setOpenKey("new-entry");
@@ -663,15 +340,6 @@ export function GithubRepositorySettings({ form, prefix }: Props) {
             <span>Add repository</span>
           </Button>
         </div>
-      )}
-      {mode === "selected" && inactiveCount > 0 && (
-        <InlineNotice variant="neutral">
-          <Info />
-          <InlineNoticeText>
-            Other saved repository settings are kept when they do not match the
-            repositories above.
-          </InlineNoticeText>
-        </InlineNotice>
       )}
     </div>
   );

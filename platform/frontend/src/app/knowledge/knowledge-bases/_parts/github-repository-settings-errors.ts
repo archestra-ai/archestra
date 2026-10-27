@@ -2,7 +2,6 @@ const REPOSITORY_SETTINGS_FIELDS = new Set([
   "repos",
   "repositoryEntries",
   "repositoryOverrides",
-  "repositoryPathFilters",
   "includeIssues",
   "includePullRequests",
   "includeRepositoryFiles",

@@ -98,11 +98,12 @@ describe("GithubConnector", () => {
     test.each([
       [{ repository: "" }],
       [{ repository: "owner/repo/extra" }],
-      [{ repository: "repo" }, { repository: "REPO" }],
-    ])("rejects invalid repository path filters %j", async (...filters) => {
+      [{ repository: "owner/repo" }, { repository: "OWNER/REPO" }],
+      [{ repository: "bare-repo" }],
+    ])("rejects invalid repository overrides %j", async (...filters) => {
       const result = await connector.validateConfig({
         ...validConfig,
-        repositoryPathFilters: filters,
+        repositoryOverrides: filters,
       });
       expect(result.valid).toBe(false);
     });
@@ -116,8 +117,8 @@ describe("GithubConnector", () => {
       const result = await connector.validateConfig({
         ...validConfig,
         repositoryOverrides: [
-          { repository: "my-repo", includeIssues: false },
-          { repository: "MY-REPO", includePullRequests: false },
+          { repository: "test-org/my-repo", includeIssues: false },
+          { repository: "TEST-ORG/MY-REPO", includePullRequests: false },
         ],
       });
       expect(result.valid).toBe(false);
@@ -765,20 +766,20 @@ describe("GithubConnector", () => {
           excludePaths: ["docs/private"],
           repositoryOverrides: [
             {
-              repository: "repo-a",
+              repository: "test-org/repo-a",
               includeIssues: true,
               includeRepositoryFiles: true,
               labelsToSkip: [],
             },
             {
-              repository: "repo-b",
+              repository: "test-org/repo-b",
               includePullRequests: true,
               includeRepositoryFiles: true,
               fileTypes: [".txt"],
               includePaths: [],
               excludePaths: [],
             },
-            { repository: "repo-c", includeRepositoryFiles: true },
+            { repository: "test-org/repo-c", includeRepositoryFiles: true },
           ],
         },
         credentials,
@@ -830,7 +831,7 @@ describe("GithubConnector", () => {
           includePullRequests: false,
           includeRepositoryFiles: true,
           includePaths: ["docs"],
-          repositoryOverrides: [{ repository: "my-repo" }],
+          repositoryOverrides: [{ repository: "test-org/my-repo" }],
         },
         credentials,
         checkpoint: null,
@@ -880,7 +881,7 @@ describe("GithubConnector", () => {
           ...validConfig,
           repos: [],
           repositoryOverrides: [
-            { repository: "repo-a", includeIssues: false },
+            { repository: "test-org/repo-a", includeIssues: false },
             { repository: "test-org/repo-b", includePullRequests: false },
           ],
         },
@@ -897,28 +898,7 @@ describe("GithubConnector", () => {
       expect(mockListForOrg).toHaveBeenCalledTimes(1);
     });
 
-    test("a qualified override wins as one rule rather than cascading through a bare rule", async () => {
-      mockListForRepo.mockResolvedValue({
-        data: [makeIssue(1, "Issue"), makeIssue(2, "PR", { isPr: true })],
-      });
-      mockListComments.mockResolvedValue({ data: [] });
-      const documents = [];
-      for await (const batch of connector.sync({
-        config: {
-          ...validConfig,
-          repositoryOverrides: [
-            { repository: "my-repo", includeIssues: false },
-            { repository: "TEST-ORG/MY-REPO", includePullRequests: false },
-          ],
-        },
-        credentials,
-        checkpoint: null,
-      }))
-        documents.push(...batch.documents);
-      expect(documents.map((doc) => doc.metadata.kind)).toEqual(["issue"]);
-    });
-
-    test("canonical empty overrides clear the legacy alias without changing legacy defaults", async () => {
+    test("empty canonical overrides preserve flat legacy folder and built-in file type defaults", async () => {
       mockListForRepo.mockResolvedValue({ data: [] });
       mockGetRef.mockResolvedValue({ data: { object: { sha: "tree" } } });
       mockGetTree.mockResolvedValue({
@@ -940,7 +920,6 @@ describe("GithubConnector", () => {
           includeRepositoryFiles: true,
           fileTypes: [],
           includePaths: ["docs"],
-          repositoryPathFilters: [{ repository: "my-repo", includePaths: [] }],
           repositoryOverrides: [],
         },
         credentials,
@@ -1211,12 +1190,12 @@ describe("GithubConnector", () => {
           includeRepositoryFiles: true,
           repositoryOverrides: [
             {
-              repository: "repo-a",
+              repository: "test-org/repo-a",
               includeRepositoryFiles: false,
               includePullRequests: false,
             },
             {
-              repository: "repo-b",
+              repository: "test-org/repo-b",
               includeRepositoryFiles: false,
               includeIssues: false,
             },
@@ -1240,7 +1219,7 @@ describe("GithubConnector", () => {
           ...validConfig,
           repos: ["repo-a", "repo-b"],
           repositoryOverrides: [
-            { repository: "repo-b", includeRepositoryFiles: true },
+            { repository: "test-org/repo-b", includeRepositoryFiles: true },
           ],
         },
         credentials,
@@ -1389,7 +1368,7 @@ describe("GithubConnector", () => {
         name: "independent includes and exclusions with directory boundaries",
         filters: [
           {
-            repository: "MY-REPO",
+            repository: "TEST-ORG/MY-REPO",
             includePaths: ["./docs\\"],
             excludePaths: ["/docs/internal/"],
           },
@@ -1408,7 +1387,11 @@ describe("GithubConnector", () => {
       {
         name: "empty per-repository includes override legacy defaults with the root",
         filters: [
-          { repository: "my-repo", includePaths: [], excludePaths: [] },
+          {
+            repository: "test-org/my-repo",
+            includePaths: [],
+            excludePaths: [],
+          },
         ],
         expected: [
           "my-repo:README.md",
@@ -1424,16 +1407,17 @@ describe("GithubConnector", () => {
       },
       {
         name: "omitted includes inherit legacy folders and exclusions win",
-        filters: [{ repository: "my-repo", excludePaths: ["handbook"] }],
+        filters: [
+          { repository: "test-org/my-repo", excludePaths: ["handbook"] },
+        ],
         expected: [
           "other-repo:handbook/guide.md",
           "other-repo:handbook/private.md",
         ],
       },
       {
-        name: "qualified case-insensitive names take precedence over bare names",
+        name: "qualified names match case-insensitively",
         filters: [
-          { repository: "my-repo", includePaths: ["docs"] },
           { repository: "TEST-ORG/MY-REPO", includePaths: ["README.md"] },
         ],
         expected: [
@@ -1446,7 +1430,7 @@ describe("GithubConnector", () => {
         name: "root exclusion excludes every file even with an overlapping include",
         filters: [
           {
-            repository: "my-repo",
+            repository: "test-org/my-repo",
             includePaths: ["docs"],
             excludePaths: ["./"],
           },
@@ -1487,7 +1471,7 @@ describe("GithubConnector", () => {
           includePullRequests: false,
           includeRepositoryFiles: true,
           includePaths: ["handbook"],
-          repositoryPathFilters: filters,
+          repositoryOverrides: filters,
         },
         credentials,
         checkpoint: null,
@@ -1568,8 +1552,8 @@ describe("GithubConnector", () => {
           includePullRequests: false,
           includeRepositoryFiles: true,
           includePaths: ["handbook"],
-          repositoryPathFilters: [
-            { repository: "my-repo", includePaths: ["docs"] },
+          repositoryOverrides: [
+            { repository: "test-org/my-repo", includePaths: ["docs"] },
           ],
         },
         credentials:

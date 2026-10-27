@@ -300571,7 +300571,7 @@
                                           "properties": {
                                             "repository": {
                                               "type": "string",
-                                              "pattern": "^[^/\\\\\\s]+(?:\\/[^/\\\\\\s]+)?$"
+                                              "pattern": "^[^/\\\\\\s]+\\/[^/\\\\\\s]+$"
                                             },
                                             "includeIssues": {
                                               "type": "boolean"
@@ -300601,36 +300601,6 @@
                                               }
                                             },
                                             "excludePaths": {
-                                              "type": "array",
-                                              "items": {
-                                                "type": "string"
-                                              }
-                                            }
-                                          },
-                                          "required": [
-                                            "repository"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "repositoryPathFilters": {
-                                        "type": "array",
-                                        "items": {
-                                          "type": "object",
-                                          "properties": {
-                                            "repository": {
-                                              "type": "string",
-                                              "pattern": "^[^/\\\\\\s]+(?:\\/[^/\\\\\\s]+)?$"
-                                            },
-                                            "includePaths": {
-                                              "description": "Omitted inherits global includePaths; an empty list includes the whole repository.",
-                                              "type": "array",
-                                              "items": {
-                                                "type": "string"
-                                              }
-                                            },
-                                            "excludePaths": {
-                                              "description": "Files or folders to skip. Exclusions take precedence over includes; / excludes every file.",
                                               "type": "array",
                                               "items": {
                                                 "type": "string"
@@ -302214,7 +302184,7 @@
                               "properties": {
                                 "repository": {
                                   "type": "string",
-                                  "pattern": "^[^/\\\\\\s]+(?:\\/[^/\\\\\\s]+)?$"
+                                  "pattern": "^[^/\\\\\\s]+\\/[^/\\\\\\s]+$"
                                 },
                                 "includeIssues": {
                                   "type": "boolean"
@@ -302244,35 +302214,6 @@
                                   }
                                 },
                                 "excludePaths": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string"
-                                  }
-                                }
-                              },
-                              "required": [
-                                "repository"
-                              ]
-                            }
-                          },
-                          "repositoryPathFilters": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "repository": {
-                                  "type": "string",
-                                  "pattern": "^[^/\\\\\\s]+(?:\\/[^/\\\\\\s]+)?$"
-                                },
-                                "includePaths": {
-                                  "description": "Omitted inherits global includePaths; an empty list includes the whole repository.",
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string"
-                                  }
-                                },
-                                "excludePaths": {
-                                  "description": "Files or folders to skip. Exclusions take precedence over includes; / excludes every file.",
                                   "type": "array",
                                   "items": {
                                     "type": "string"
@@ -303578,7 +303519,7 @@
                                 "properties": {
                                   "repository": {
                                     "type": "string",
-                                    "pattern": "^[^/\\\\\\s]+(?:\\/[^/\\\\\\s]+)?$"
+                                    "pattern": "^[^/\\\\\\s]+\\/[^/\\\\\\s]+$"
                                   },
                                   "includeIssues": {
                                     "type": "boolean"
@@ -303608,36 +303549,6 @@
                                     }
                                   },
                                   "excludePaths": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  }
-                                },
-                                "required": [
-                                  "repository"
-                                ],
-                                "additionalProperties": false
-                              }
-                            },
-                            "repositoryPathFilters": {
-                              "type": "array",
-                              "items": {
-                                "type": "object",
-                                "properties": {
-                                  "repository": {
-                                    "type": "string",
-                                    "pattern": "^[^/\\\\\\s]+(?:\\/[^/\\\\\\s]+)?$"
-                                  },
-                                  "includePaths": {
-                                    "description": "Omitted inherits global includePaths; an empty list includes the whole repository.",
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "excludePaths": {
-                                    "description": "Files or folders to skip. Exclusions take precedence over includes; / excludes every file.",
                                     "type": "array",
                                     "items": {
                                       "type": "string"
@@ -305172,7 +305083,7 @@
                                     "properties": {
                                       "repository": {
                                         "type": "string",
-                                        "pattern": "^[^/\\\\\\s]+(?:\\/[^/\\\\\\s]+)?$"
+                                        "pattern": "^[^/\\\\\\s]+\\/[^/\\\\\\s]+$"
                                       },
                                       "includeIssues": {
                                         "type": "boolean"
@@ -305202,36 +305113,6 @@
                                         }
                                       },
                                       "excludePaths": {
-                                        "type": "array",
-                                        "items": {
-                                          "type": "string"
-                                        }
-                                      }
-                                    },
-                                    "required": [
-                                      "repository"
-                                    ],
-                                    "additionalProperties": false
-                                  }
-                                },
-                                "repositoryPathFilters": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "repository": {
-                                        "type": "string",
-                                        "pattern": "^[^/\\\\\\s]+(?:\\/[^/\\\\\\s]+)?$"
-                                      },
-                                      "includePaths": {
-                                        "description": "Omitted inherits global includePaths; an empty list includes the whole repository.",
-                                        "type": "array",
-                                        "items": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "excludePaths": {
-                                        "description": "Files or folders to skip. Exclusions take precedence over includes; / excludes every file.",
                                         "type": "array",
                                         "items": {
                                           "type": "string"
@@ -306641,7 +306522,7 @@
                               "properties": {
                                 "repository": {
                                   "type": "string",
-                                  "pattern": "^[^/\\\\\\s]+(?:\\/[^/\\\\\\s]+)?$"
+                                  "pattern": "^[^/\\\\\\s]+\\/[^/\\\\\\s]+$"
                                 },
                                 "includeIssues": {
                                   "type": "boolean"
@@ -306671,35 +306552,6 @@
                                   }
                                 },
                                 "excludePaths": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string"
-                                  }
-                                }
-                              },
-                              "required": [
-                                "repository"
-                              ]
-                            }
-                          },
-                          "repositoryPathFilters": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "repository": {
-                                  "type": "string",
-                                  "pattern": "^[^/\\\\\\s]+(?:\\/[^/\\\\\\s]+)?$"
-                                },
-                                "includePaths": {
-                                  "description": "Omitted inherits global includePaths; an empty list includes the whole repository.",
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string"
-                                  }
-                                },
-                                "excludePaths": {
-                                  "description": "Files or folders to skip. Exclusions take precedence over includes; / excludes every file.",
                                   "type": "array",
                                   "items": {
                                     "type": "string"
@@ -307871,7 +307723,7 @@
                                 "properties": {
                                   "repository": {
                                     "type": "string",
-                                    "pattern": "^[^/\\\\\\s]+(?:\\/[^/\\\\\\s]+)?$"
+                                    "pattern": "^[^/\\\\\\s]+\\/[^/\\\\\\s]+$"
                                   },
                                   "includeIssues": {
                                     "type": "boolean"
@@ -307901,36 +307753,6 @@
                                     }
                                   },
                                   "excludePaths": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  }
-                                },
-                                "required": [
-                                  "repository"
-                                ],
-                                "additionalProperties": false
-                              }
-                            },
-                            "repositoryPathFilters": {
-                              "type": "array",
-                              "items": {
-                                "type": "object",
-                                "properties": {
-                                  "repository": {
-                                    "type": "string",
-                                    "pattern": "^[^/\\\\\\s]+(?:\\/[^/\\\\\\s]+)?$"
-                                  },
-                                  "includePaths": {
-                                    "description": "Omitted inherits global includePaths; an empty list includes the whole repository.",
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "excludePaths": {
-                                    "description": "Files or folders to skip. Exclusions take precedence over includes; / excludes every file.",
                                     "type": "array",
                                     "items": {
                                       "type": "string"

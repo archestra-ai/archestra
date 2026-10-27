@@ -86,9 +86,9 @@ describe("knowledge base routes", () => {
       repos: ["repo-a", "example-org/repo-b"],
       includeRepositoryFiles: true,
       includePaths: ["legacy"],
-      repositoryPathFilters: [
+      repositoryOverrides: [
         {
-          repository: "repo-a",
+          repository: "example-org/repo-a",
           includePaths: ["docs"],
           excludePaths: ["docs/internal"],
         },
@@ -120,9 +120,13 @@ describe("knowledge base routes", () => {
     expect(read.json().config).toMatchObject(githubConfig);
     const edited = {
       ...githubConfig,
-      repositoryPathFilters: [
-        { repository: "repo-a", includePaths: ["handbook"], excludePaths: [] },
-        githubConfig.repositoryPathFilters[1],
+      repositoryOverrides: [
+        {
+          repository: "example-org/repo-a",
+          includePaths: ["handbook"],
+          excludePaths: [],
+        },
+        githubConfig.repositoryOverrides[1],
       ],
     };
     const updated = await app.inject({
@@ -152,13 +156,13 @@ describe("knowledge base routes", () => {
     );
     expect(audit?.action).toBe("connector.updated");
     expect(audit?.outcome).toBe("success");
-    expect(audit?.before?.githubPathFilters).toMatchObject({
-      defaultIncludePaths: ["legacy"],
-      repositories: githubConfig.repositoryPathFilters,
+    expect(audit?.before?.githubRepositorySettings).toMatchObject({
+      defaults: { includePaths: ["legacy"] },
+      repositories: githubConfig.repositoryOverrides,
     });
-    expect(audit?.after?.githubPathFilters).toMatchObject({
-      defaultIncludePaths: ["legacy"],
-      repositories: edited.repositoryPathFilters,
+    expect(audit?.after?.githubRepositorySettings).toMatchObject({
+      defaults: { includePaths: ["legacy"] },
+      repositories: edited.repositoryOverrides,
     });
     expect(JSON.stringify(audit)).not.toContain("local-fixture-token");
   });

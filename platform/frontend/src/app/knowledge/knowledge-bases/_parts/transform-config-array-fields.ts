@@ -32,29 +32,89 @@ export function githubRepositoryStandardSettingsDraft() {
   };
 }
 
-const GITHUB_INHERITABLE_OVERRIDE_FIELDS = new Set([
-  "includeIssues",
-  "includePullRequests",
-  "includeRepositoryFiles",
-  "labelsToSkip",
-  "fileTypes",
-  "includePaths",
-  "excludePaths",
-]);
+export type GithubRepositoryEntryDraft = {
+  repository: string;
+  settings: Record<string, unknown>;
+};
+const GITHUB_SETTING_FIELDS = Object.keys(
+  githubRepositoryStandardSettingsDraft(),
+);
 
-/** Null is a form-only inheritance value; undefined can restore a loaded Controller default. */
-export function githubRepositoryOverrideDraft(
-  override: Record<string, unknown>,
+/** Concrete card values from production flat settings or a qualified repository policy. */
+export function githubRepositorySettingsDraft(
+  config: Record<string, unknown>,
+  override?: Record<string, unknown>,
 ): Record<string, unknown> {
-  return {
-    ...override,
-    ...Object.fromEntries(
-      [...GITHUB_INHERITABLE_OVERRIDE_FIELDS].map((field) => [
-        field,
-        override[field] ?? null,
-      ]),
+  return Object.fromEntries(
+    Object.entries(githubRepositoryStandardSettingsDraft()).map(
+      ([field, fallback]) => {
+        const value = override?.[field] ?? config[field] ?? fallback;
+        return [field, Array.isArray(fallback) ? joinIfArray(value) : value];
+      },
     ),
-  };
+  );
+}
+export function githubRepositoryEntriesDraft(
+  config: Record<string, unknown>,
+): GithubRepositoryEntryDraft[] {
+  const repos = Array.isArray(config.repos)
+    ? config.repos
+    : typeof config.repos === "string"
+      ? config.repos.split(",")
+      : [];
+  const policies = Array.isArray(config.repositoryOverrides)
+    ? (config.repositoryOverrides as Record<string, unknown>[])
+    : [];
+  return repos
+    .map((raw: string) => raw.trim())
+    .filter(Boolean)
+    .map((repository) => {
+      const qualified = repository.includes("/")
+        ? repository
+        : `${config.owner}/${repository}`;
+      const policy = policies.find(
+        (entry) =>
+          typeof entry.repository === "string" &&
+          entry.repository.toLowerCase() === qualified.toLowerCase(),
+      );
+      return {
+        repository: qualified,
+        settings: githubRepositorySettingsDraft(config, policy),
+      };
+    });
+}
+function serializedGithubEntry(
+  entry: GithubRepositoryEntryDraft,
+): Record<string, unknown> {
+  return transformConfigArrayFields({
+    repository: entry.repository.trim(),
+    ...Object.fromEntries(
+      GITHUB_SETTING_FIELDS.map((field) => [field, entry.settings[field]]),
+    ),
+  });
+}
+/** Compare effective settings, ignoring CSV formatting and order within lists. */
+export function githubRepositoryDraftFingerprint(
+  entries: GithubRepositoryEntryDraft[],
+): string {
+  return JSON.stringify(
+    entries
+      .map((entry) => {
+        const policy = serializedGithubEntry(entry);
+        return {
+          repository: entry.repository.trim().toLowerCase(),
+          ...Object.fromEntries(
+            GITHUB_SETTING_FIELDS.map((field) => [
+              field,
+              Array.isArray(policy[field])
+                ? [...new Set(policy[field] as string[])].sort()
+                : policy[field],
+            ]),
+          ),
+        };
+      })
+      .sort((left, right) => left.repository.localeCompare(right.repository)),
+  );
 }
 
 /** Convert comma-separated string fields to arrays before sending to the API. */
@@ -63,134 +123,53 @@ export function transformConfigArrayFields(
 ): Record<string, unknown> {
   const result = { ...config };
 
-  const repositoryOverrides =
-    config.repositoryOverrides ?? config.repositoryPathFilters;
-  if (Array.isArray(repositoryOverrides)) {
-    result.repositoryOverrides = repositoryOverrides.map(
-      (override: Record<string, unknown>) => ({
-        ...Object.fromEntries(
-          Object.entries(transformConfigArrayFields(override)).filter(
-            ([field, value]) =>
-              value !== undefined &&
-              (value !== null ||
-                !GITHUB_INHERITABLE_OVERRIDE_FIELDS.has(field)),
-          ),
-        ),
-        repository:
-          typeof override.repository === "string"
-            ? override.repository.trim()
-            : override.repository,
-      }),
+  if (Array.isArray(config.repositoryOverrides))
+    result.repositoryOverrides = config.repositoryOverrides.map(
+      (entry: Record<string, unknown>) =>
+        transformConfigArrayFields({
+          ...entry,
+          repository:
+            typeof entry.repository === "string"
+              ? entry.repository.trim()
+              : entry.repository,
+        }),
     );
-    delete result.repositoryPathFilters;
-  }
-
-  if (Array.isArray(config.repositoryEntries)) {
-    const mode =
-      config.repositorySelectionMode ??
-      ((
-        Array.isArray(config.repos)
-          ? config.repos.length
-          : typeof config.repos === "string"
-            ? config.repos.trim().length
-            : 0
-      )
-        ? "selected"
-        : "all");
-    if (mode === "selected") {
-      result.repos = config.repositoryEntries.map(
-        (entry: {
-          repository: string;
-          originalRepository?: string;
-          originalDisplayRepository?: string;
-          originalOwner?: string;
-        }) => {
-          const name = entry.repository.trim();
-          const owner =
-            typeof config.owner === "string" ? config.owner.trim() : "";
-          if (
-            entry.originalRepository !== undefined &&
-            name === entry.originalDisplayRepository &&
-            owner.toLowerCase() === entry.originalOwner?.trim().toLowerCase()
-          )
-            return entry.originalRepository;
-          return name.includes("/") || !owner ? name : `${owner}/${name}`;
-        },
-      );
-      const freshEntries = config.repositoryEntries.filter(
-        (entry: { isNew?: boolean }) => entry.isNew,
-      );
-      if (freshEntries.length > 0) {
-        const owner =
-          typeof config.owner === "string"
-            ? config.owner.trim().toLowerCase()
-            : "";
-        const identity = (repository: string) =>
-          repository.trim().toLowerCase().includes("/")
-            ? repository.trim().toLowerCase()
-            : `${owner}/${repository.trim().toLowerCase()}`;
-        const freshNames = new Set(
-          freshEntries.map((entry: { repository: string }) =>
-            identity(entry.repository),
-          ),
-        );
-        const existing = Array.isArray(result.repositoryOverrides)
-          ? (result.repositoryOverrides as Record<string, unknown>[])
-          : [];
-        result.repositoryOverrides = [
-          ...existing.filter(
-            (override) =>
-              typeof override.repository !== "string" ||
-              !freshNames.has(identity(override.repository)),
-          ),
-          ...freshEntries.map(
-            (entry: {
-              repository: string;
-              settings?: Record<string, unknown>;
-            }) => {
-              const standard =
-                githubRepositoryStandardSettingsDraft() as Record<
-                  string,
-                  unknown
-                >;
-              return transformConfigArrayFields({
-                repository: entry.repository.trim(),
-                ...Object.fromEntries(
-                  [...GITHUB_INHERITABLE_OVERRIDE_FIELDS].map((field) => [
-                    field,
-                    entry.settings?.[field] ?? standard[field],
-                  ]),
-                ),
-              });
-            },
-          ),
-        ];
-      }
-    }
-  }
   const selectedMode =
     config.repositorySelectionMode === "selected" ||
     (config.repositorySelectionMode === undefined &&
       (Array.isArray(config.repos)
         ? config.repos.length > 0
         : typeof config.repos === "string" && config.repos.trim() !== ""));
-  if (!selectedMode && config.repositoryApplyShared === true) {
+  if (selectedMode && Array.isArray(config.repositoryEntries)) {
+    const entries = config.repositoryEntries as GithubRepositoryEntryDraft[];
+    const baseline = config.repositoryLegacyBaseline as
+      | { owner?: string; fingerprint?: string }
+      | undefined;
+    const unchangedLegacy =
+      baseline &&
+      (baseline.owner ?? "").trim().toLowerCase() ===
+        String(config.owner ?? "")
+          .trim()
+          .toLowerCase() &&
+      baseline.fingerprint === githubRepositoryDraftFingerprint(entries);
+    if (!unchangedLegacy) {
+      result.repos = entries.map((entry) => entry.repository.trim());
+      result.repositoryOverrides = entries.map(serializedGithubEntry);
+    }
+  } else if (!selectedMode && config.repositoryApplyShared === true) {
     result.repos = [];
     result.repositoryOverrides = [];
-    delete result.repositoryPathFilters;
-    if (
-      config.repositorySharedSettings &&
-      typeof config.repositorySharedSettings === "object"
-    ) {
-      const shared = config.repositorySharedSettings as Record<string, unknown>;
-      for (const field of GITHUB_INHERITABLE_OVERRIDE_FIELDS)
-        if (shared[field] !== undefined) result[field] = shared[field];
-    }
+    const shared = config.repositorySharedSettings as
+      | Record<string, unknown>
+      | undefined;
+    if (shared)
+      for (const field of GITHUB_SETTING_FIELDS) result[field] = shared[field];
   }
   delete result.repositorySharedSettings;
   delete result.repositoryEntries;
   delete result.repositorySelectionMode;
   delete result.repositoryApplyShared;
+  delete result.repositoryLegacyBaseline;
 
   // String array fields: split by comma, trim, filter empty
   const stringArrayFields = [

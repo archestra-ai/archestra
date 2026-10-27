@@ -1,9 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import type { GithubConfig } from "@/types/knowledge-connector";
-import {
-  getGithubRepositoryOverrides,
-  resolveGithubRepositorySettings,
-} from "./connectors/github/github-repository-settings";
+import { resolveGithubRepositorySettings } from "./connectors/github/github-repository-settings";
 
 export function githubRepositorySettingsWriteError(
   current: GithubConfig,
@@ -11,31 +8,17 @@ export function githubRepositorySettingsWriteError(
 ): string | null {
   const omittedGlobalExclusions =
     (current.excludePaths?.length ?? 0) > 0 && next.excludePaths === undefined;
-  const revivesLegacyPaths =
-    current.repositoryOverrides !== undefined &&
-    current.repositoryOverrides.length === 0 &&
-    (current.repositoryPathFilters?.length ?? 0) > 0 &&
-    next.repositoryOverrides === undefined &&
-    (next.repositoryPathFilters?.length ?? 0) > 0;
-  if (omittedGlobalExclusions || revivesLegacyPaths) {
+  if (omittedGlobalExclusions) {
     return "This configuration would discard existing repository settings. Reload the connector settings before saving, or reset the setting explicitly.";
   }
-  if (getGithubRepositoryOverrides(current).length === 0) return null;
-  const understandsCanonical = next.repositoryOverrides !== undefined;
-  const understandsLegacyPaths =
-    current.repositoryOverrides === undefined &&
-    next.repositoryPathFilters !== undefined;
-  return understandsCanonical || understandsLegacyPaths
+  if ((current.repositoryOverrides?.length ?? 0) === 0) return null;
+  return next.repositoryOverrides !== undefined
     ? null
     : "This connector has repository overrides. Reload its settings in a client that supports repository overrides before changing its configuration.";
 }
 
 function syncConfiguration(config: GithubConfig) {
-  const {
-    repositoryPathFilters: _legacy,
-    repositoryOverrides: _overrides,
-    ...base
-  } = config;
+  const { repositoryOverrides: _overrides, ...base } = config;
   const defaults = resolveGithubRepositorySettings(
     { ...config, repositoryOverrides: [] },
     { owner: config.owner, name: "" },
@@ -46,11 +29,8 @@ function syncConfiguration(config: GithubConfig) {
   });
   const defaultSettings = normalizeSettings(defaults);
   const repositories = new Set(
-    getGithubRepositoryOverrides(config).map(({ repository }) =>
-      (repository.includes("/")
-        ? repository
-        : `${config.owner}/${repository}`
-      ).toLowerCase(),
+    (config.repositoryOverrides ?? []).map(({ repository }) =>
+      repository.toLowerCase(),
     ),
   );
   const overrides = [...repositories].sort().flatMap((repository) => {

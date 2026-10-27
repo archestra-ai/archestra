@@ -1,39 +1,164 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { transformConfigArrayFields } from "./transform-config-array-fields";
+import {
+  githubRepositoryDraftFingerprint,
+  githubRepositoryEntriesDraft,
+  githubRepositorySettingsDraft,
+  githubRepositoryStandardSettingsDraft,
+  transformConfigArrayFields,
+} from "./transform-config-array-fields";
 
 describe("transformConfigArrayFields", () => {
-  it("materializes fresh repository defaults independently and replaces only matching retained policies", () => {
+  it("preserves unchanged actual flat legacy settings and raw identities", () => {
+    const config = {
+      type: "github",
+      owner: "org",
+      repos: ["repo-a"],
+      includeIssues: false,
+      includeRepositoryFiles: true,
+      labelsToSkip: ["skip"],
+      includePaths: ["docs", "guides"],
+    };
+    const entries = githubRepositoryEntriesDraft(config);
+    expect(entries[0]).toEqual({
+      repository: "org/repo-a",
+      settings: {
+        includeIssues: false,
+        includePullRequests: true,
+        includeRepositoryFiles: true,
+        labelsToSkip: "skip",
+        fileTypes: "",
+        includePaths: "docs, guides",
+        excludePaths: "",
+      },
+    });
+    const draft = {
+      ...config,
+      repositoryEntries: entries,
+      repositoryLegacyBaseline: {
+        owner: "org",
+        fingerprint: githubRepositoryDraftFingerprint(entries),
+      },
+    };
+    expect(transformConfigArrayFields(draft)).toEqual(config);
+    entries[0].settings.includePaths = " guides, docs, ";
+    expect(transformConfigArrayFields(draft)).toEqual(config);
+  });
+  it("materializes modified complete rows without broadening legacy settings", () => {
+    const config = {
+      type: "github",
+      owner: "org",
+      repos: ["repo-a"],
+      includeIssues: false,
+      includePaths: ["docs"],
+    };
+    const entries = githubRepositoryEntriesDraft(config);
+    const baseline = {
+      owner: "org",
+      fingerprint: githubRepositoryDraftFingerprint(entries),
+    };
+    entries[0].settings.excludePaths = "docs/private";
+    const result = transformConfigArrayFields({
+      ...config,
+      repositoryEntries: entries,
+      repositoryLegacyBaseline: baseline,
+    });
+    expect(result.repos).toEqual(["org/repo-a"]);
+    expect(result.repositoryOverrides).toEqual([
+      {
+        repository: "org/repo-a",
+        includeIssues: false,
+        includePullRequests: true,
+        includeRepositoryFiles: false,
+        labelsToSkip: [],
+        fileTypes: [],
+        includePaths: ["docs"],
+        excludePaths: ["docs/private"],
+      },
+    ]);
+    expect(result).not.toHaveProperty("repositoryLegacyBaseline");
+  });
+  it("keeps qualified identities and complete settings when owner changes", () => {
+    const config = {
+      type: "github",
+      owner: "org",
+      repos: ["repo-a"],
+      includeIssues: false,
+    };
+    const entries = githubRepositoryEntriesDraft(config);
+    const result = transformConfigArrayFields({
+      ...config,
+      owner: "other",
+      repositoryEntries: entries,
+      repositoryLegacyBaseline: {
+        owner: "org",
+        fingerprint: githubRepositoryDraftFingerprint(entries),
+      },
+    });
+    expect(result.repos).toEqual(["org/repo-a"]);
+    expect(result.repositoryOverrides).toEqual([
+      {
+        repository: "org/repo-a",
+        includeIssues: false,
+        includePullRequests: true,
+        includeRepositoryFiles: false,
+        labelsToSkip: [],
+        fileTypes: [],
+        includePaths: [],
+        excludePaths: [],
+      },
+    ]);
+  });
+  it("hydrates only exact qualified canonical policies into their complete rows", () => {
+    const rows = githubRepositoryEntriesDraft({
+      owner: "alpha",
+      repos: ["alpha/docs", "beta/docs"],
+      includeIssues: true,
+      repositoryOverrides: [
+        { repository: "alpha/docs", includeIssues: false, includePaths: ["a"] },
+        {
+          repository: "beta/docs",
+          includePullRequests: false,
+          includePaths: [],
+        },
+      ],
+    });
+    expect(rows[0].settings).toMatchObject({
+      includeIssues: false,
+      includePullRequests: true,
+      includePaths: "a",
+    });
+    expect(rows[1].settings).toMatchObject({
+      includeIssues: true,
+      includePullRequests: false,
+      includePaths: "",
+    });
+  });
+  it("serializes only active Selected rows with explicit false and empty values", () => {
     const result = transformConfigArrayFields({
       type: "github",
       owner: "org",
       repos: [],
       includeIssues: false,
-      includeRepositoryFiles: true,
-      includePaths: ["legacy"],
       repositorySelectionMode: "selected",
       repositoryEntries: [
         {
-          repository: "org/repo-a",
-          isNew: true,
+          repository: " org/new ",
           settings: {
+            ...githubRepositoryStandardSettingsDraft(),
             includePullRequests: false,
-            labelsToSkip: "",
-            unexpected: "private-draft",
+            includePaths: "",
+            unexpected: "draft",
           },
         },
       ],
-      repositoryOverrides: [
-        { repository: "repo-a", includeIssues: false },
-        { repository: "other/repo-a", includeIssues: false },
-        { repository: "inactive", includePaths: ["keep"] },
-      ],
+      repositoryOverrides: [{ repository: "org/inactive" }],
+      repositoryApplyShared: true,
+      repositorySharedSettings: { includeIssues: false },
     });
     expect(result.repositoryOverrides).toEqual([
-      { repository: "other/repo-a", includeIssues: false },
-      { repository: "inactive", includePaths: ["keep"] },
       {
-        repository: "org/repo-a",
+        repository: "org/new",
         includeIssues: true,
         includePullRequests: false,
         includeRepositoryFiles: false,
@@ -43,221 +168,43 @@ describe("transformConfigArrayFields", () => {
         excludePaths: [],
       },
     ]);
-    expect(result.repos).toEqual(["org/repo-a"]);
-    expect(result.includePaths).toEqual(["legacy"]);
-    expect(result).not.toHaveProperty("repositoryEntries");
+    expect(result.repos).toEqual(["org/new"]);
+    expect(result).not.toHaveProperty("repositorySharedSettings");
   });
-  it("preserves untouched raw legacy identities only in the original owner context", () => {
-    const original = {
+  it("applies only active All settings and strips inactive drafts", () => {
+    const result = transformConfigArrayFields({
       type: "github",
       owner: "org",
-      repos: ["repo-a"],
-      repositoryEntries: [
-        {
-          repository: "org/repo-a",
-          originalRepository: "repo-a",
-          originalDisplayRepository: "org/repo-a",
-          originalOwner: "org",
-        },
-      ],
-    };
-    expect(transformConfigArrayFields(original)).toEqual({
-      type: "github",
-      owner: "org",
-      repos: ["repo-a"],
-    });
-    expect(
-      transformConfigArrayFields({ ...original, owner: "other" }).repos,
-    ).toEqual(["org/repo-a"]);
-    expect(
-      transformConfigArrayFields({
-        ...original,
-        repositoryEntries: [
-          { ...original.repositoryEntries[0], repository: "other/renamed" },
-        ],
-      }).repos,
-    ).toEqual(["other/renamed"]);
-  });
-  it("applies All shared drafts uniformly only when explicitly requested", () => {
-    const config = {
-      type: "github",
-      owner: "org",
-      repos: [],
+      repos: ["org/manual"],
       includeIssues: true,
-      repositoryOverrides: [{ repository: "repo-a", includeIssues: true }],
-      repositoryPathFilters: [{ repository: "legacy" }],
-      repositorySharedSettings: {
-        includeIssues: false,
-        includePaths: "",
-        labelsToSkip: "skip",
-      },
-    };
-    expect(transformConfigArrayFields(config).repositoryOverrides).toEqual([
-      { repository: "repo-a", includeIssues: true },
-    ]);
-    const shared = transformConfigArrayFields({
-      ...config,
       repositorySelectionMode: "all",
       repositoryApplyShared: true,
+      repositorySharedSettings: githubRepositorySettingsDraft({
+        includeIssues: false,
+        includePaths: ["shared"],
+      }),
+      repositoryEntries: [
+        {
+          repository: "org/manual",
+          settings: githubRepositoryStandardSettingsDraft(),
+        },
+      ],
+      repositoryOverrides: [
+        { repository: "org/manual", includePaths: ["manual"] },
+      ],
     });
-    expect(shared).toEqual({
+    expect(result).toEqual({
       type: "github",
       owner: "org",
       repos: [],
       includeIssues: false,
-      includePaths: [],
-      labelsToSkip: ["skip"],
+      includePullRequests: true,
+      includeRepositoryFiles: false,
+      labelsToSkip: [],
+      fileTypes: [],
+      includePaths: ["shared"],
+      excludePaths: [],
       repositoryOverrides: [],
-    });
-    const manual = transformConfigArrayFields({
-      ...config,
-      repositorySelectionMode: "selected",
-      repositoryApplyShared: true,
-      repositoryEntries: [{ repository: "org/repo-b" }],
-    });
-    expect(manual.includeIssues).toBe(true);
-    expect(manual.repositoryOverrides).toEqual([
-      { repository: "repo-a", includeIssues: true },
-    ]);
-    expect(manual).not.toHaveProperty("repositorySharedSettings");
-    expect(manual).not.toHaveProperty("repositoryApplyShared");
-  });
-
-  it("serializes explicit entry names without leaking UI association or mode fields", () => {
-    const result = transformConfigArrayFields({
-      type: "github",
-      repos: ["old"],
-      repositorySelectionMode: "selected",
-      repositoryEntries: [
-        {
-          repository: " repo-a ",
-          overrideIndex: 1,
-          ownsOverride: true,
-          sourceRepository: "old",
-        },
-      ],
-      repositoryOverrides: [
-        { repository: "repo-a", includeIssues: false, includePaths: [] },
-      ],
-    });
-    expect(result).toEqual({
-      type: "github",
-      repos: ["repo-a"],
-      repositoryOverrides: [
-        { repository: "repo-a", includeIssues: false, includePaths: [] },
-      ],
-    });
-    expect(
-      transformConfigArrayFields({
-        ...result,
-        repositorySelectionMode: "all",
-        repos: [],
-        repositoryEntries: [{ repository: "repo-a" }],
-      }).repos,
-    ).toEqual([]);
-  });
-
-  it("serializes independent repository filters and preserves them after edit/reload", () => {
-    const config = {
-      type: "github",
-      includePaths: ["legacy"],
-      repositoryPathFilters: [
-        {
-          repository: " repo-a ",
-          includePaths: "docs, handbook, ",
-          excludePaths: "docs/internal, generated",
-        },
-        { repository: "org/repo-b", includePaths: "", excludePaths: "private" },
-        { repository: "repo-c", excludePaths: ["build"] },
-      ],
-    };
-    const result = transformConfigArrayFields(config);
-    expect(result.repositoryOverrides).toEqual([
-      {
-        repository: "repo-a",
-        includePaths: ["docs", "handbook"],
-        excludePaths: ["docs/internal", "generated"],
-      },
-      { repository: "org/repo-b", includePaths: [], excludePaths: ["private"] },
-      { repository: "repo-c", excludePaths: ["build"] },
-    ]);
-    expect(result.includePaths).toEqual(["legacy"]);
-    expect(
-      transformConfigArrayFields(JSON.parse(JSON.stringify(result))),
-    ).toEqual(result);
-    expect(config.repositoryPathFilters[0].includePaths).toBe(
-      "docs, handbook, ",
-    );
-  });
-
-  it("preserves inheritance, explicit false and empty overrides, and canonical precedence", () => {
-    expect(
-      transformConfigArrayFields({
-        type: "github",
-        repositoryPathFilters: [{ repository: "old", includePaths: ["docs"] }],
-        repositoryOverrides: [
-          {
-            repository: " org/repo ",
-            includeIssues: false,
-            includePullRequests: true,
-            includePaths: undefined,
-            labelsToSkip: "",
-            excludePaths: "",
-            fileTypes: "",
-          },
-        ],
-      }),
-    ).toEqual({
-      type: "github",
-      repositoryOverrides: [
-        {
-          repository: "org/repo",
-          includeIssues: false,
-          includePullRequests: true,
-          labelsToSkip: [],
-          excludePaths: [],
-          fileTypes: [],
-        },
-      ],
-    });
-    expect(
-      transformConfigArrayFields({
-        type: "github",
-        repositoryOverrides: [],
-        repositoryPathFilters: [{ repository: "old" }],
-      }),
-    ).toEqual({ type: "github", repositoryOverrides: [] });
-  });
-
-  it("omits form inheritance sentinels only for known override settings", () => {
-    const result = transformConfigArrayFields({
-      type: "github",
-      excludePaths: null,
-      repositoryOverrides: [
-        {
-          repository: "repo-a",
-          includeIssues: null,
-          includePullRequests: false,
-          includeRepositoryFiles: null,
-          labelsToSkip: [],
-          fileTypes: null,
-          includePaths: null,
-          excludePaths: null,
-          unknownMetadata: null,
-        },
-      ],
-    });
-    expect(result).toEqual({
-      type: "github",
-      excludePaths: null,
-      repositoryOverrides: [
-        {
-          repository: "repo-a",
-          includePullRequests: false,
-          labelsToSkip: [],
-          unknownMetadata: null,
-        },
-      ],
     });
   });
 

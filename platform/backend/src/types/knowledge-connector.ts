@@ -225,7 +225,7 @@ export const GithubConfigSchema = z.object({
         repository: z
           .string()
           .trim()
-          .regex(/^[^/\\\s]+(?:\/[^/\\\s]+)?$/),
+          .regex(/^[^/\\\s]+\/[^/\\\s]+$/),
         includeIssues: z.boolean().optional(),
         includePullRequests: z.boolean().optional(),
         includeRepositoryFiles: z.boolean().optional(),
@@ -240,35 +240,6 @@ export const GithubConfigSchema = z.object({
         new Set(overrides.map((override) => override.repository.toLowerCase()))
           .size === overrides.length,
       "Repository overrides must be unique",
-    )
-    .optional(),
-  /** Legacy path-only alias; the current UI converts it to repositoryOverrides on save. */
-  repositoryPathFilters: z
-    .array(
-      z.object({
-        repository: z
-          .string()
-          .trim()
-          .regex(/^[^/\\\s]+(?:\/[^/\\\s]+)?$/),
-        includePaths: z
-          .array(z.string())
-          .optional()
-          .describe(
-            "Omitted inherits global includePaths; an empty list includes the whole repository.",
-          ),
-        excludePaths: z
-          .array(z.string())
-          .optional()
-          .describe(
-            "Files or folders to skip. Exclusions take precedence over includes; / excludes every file.",
-          ),
-      }),
-    )
-    .refine(
-      (filters) =>
-        new Set(filters.map((filter) => filter.repository.toLowerCase()))
-          .size === filters.length,
-      "Repository path filters must be unique",
     )
     .optional(),
   labelsToSkip: z.array(z.string()).optional(),

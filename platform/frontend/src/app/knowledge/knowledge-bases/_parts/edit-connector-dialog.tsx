@@ -66,10 +66,7 @@ import { PerforcePermissionSyncFields } from "./perforce-config-fields";
 import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
 import { SchedulePicker } from "./schedule-picker";
 import { TextSearchLanguagePicker } from "./text-search-language-picker";
-import {
-  githubRepositoryOverrideDraft,
-  transformConfigArrayFields,
-} from "./transform-config-array-fields";
+import { transformConfigArrayFields } from "./transform-config-array-fields";
 
 type ConnectorItem = Pick<
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number],
@@ -105,18 +102,6 @@ type EditConnectorFormValues = {
 };
 
 function editableConnectorConfig(connector: ConnectorItem) {
-  if (connector.connectorType === "github") {
-    const config = connector.config as Record<string, unknown>;
-    const overrides =
-      config.repositoryOverrides ?? config.repositoryPathFilters ?? [];
-    return {
-      ...config,
-      repositoryOverrides: Array.isArray(overrides)
-        ? overrides.map(githubRepositoryOverrideDraft)
-        : overrides,
-    };
-  }
-
   if (connector.connectorType === "salesforce") {
     return {
       ...connector.config,

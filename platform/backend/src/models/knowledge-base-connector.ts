@@ -15,7 +15,6 @@ import {
 import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, softDelete } from "@/database/soft-delete";
-import { getGithubRepositoryOverrides } from "@/knowledge-base/connectors/github/github-repository-settings";
 import { connectorInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import type {
   InsertKnowledgeBaseConnector,
@@ -1125,16 +1124,6 @@ class KnowledgeBaseConnectorModel {
       configKeys,
       ...(row.config?.type === "github"
         ? {
-            githubPathFilters: {
-              defaultIncludePaths: row.config.includePaths ?? [],
-              repositories: (row.config.repositoryPathFilters ?? []).map(
-                ({ repository, includePaths, excludePaths }) => ({
-                  repository,
-                  includePaths: includePaths ?? null,
-                  excludePaths: excludePaths ?? [],
-                }),
-              ),
-            },
             githubRepositorySettings: {
               defaults: {
                 includeIssues: row.config.includeIssues ?? true,
@@ -1146,7 +1135,7 @@ class KnowledgeBaseConnectorModel {
                 includePaths: row.config.includePaths ?? [],
                 excludePaths: row.config.excludePaths ?? [],
               },
-              repositories: getGithubRepositoryOverrides(row.config).map(
+              repositories: (row.config.repositoryOverrides ?? []).map(
                 ({
                   repository,
                   includeIssues,

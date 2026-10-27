@@ -109806,7 +109806,7 @@
         "tags": [
           "Auto Routing"
         ],
-        "description": "Re-solve the active plan's fit sample at a budget and return per-session estimates and routes, without publishing\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProxy:read`: View the LLM Proxy and its connection details",
+        "description": "Re-solve the current fit history, at the active plan's scorer version and tiers, at a budget and return per-session estimates and routes, without publishing\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProxy:read`: View the LLM Proxy and its connection details",
         "parameters": [
           {
             "schema": {
@@ -109847,24 +109847,6 @@
                         "q": {
                           "type": "number"
                         },
-                        "usdPerToken": {
-                          "type": "array",
-                          "items": {
-                            "anyOf": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              }
-                            ]
-                          },
-                          "minItems": 3,
-                          "maxItems": 3
-                        },
                         "tierSessionShare": {
                           "type": "array",
                           "items": {
@@ -109884,28 +109866,81 @@
                           "maxItems": 3
                         },
                         "sizeFit": {
-                          "type": "object",
-                          "properties": {
-                            "testSessions": {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "ok"
+                                  ]
+                                },
+                                "testSessions": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "plotted": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "excluded": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "spearman": {
+                                  "nullable": true,
+                                  "type": "number"
+                                },
+                                "medianRealizedOverPredicted": {
+                                  "nullable": true,
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "testSessions",
+                                "plotted",
+                                "excluded",
+                                "spearman",
+                                "medianRealizedOverPredicted"
+                              ],
+                              "additionalProperties": false
                             },
-                            "spearman": {
-                              "nullable": true,
-                              "type": "number"
+                            {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "no_holdout"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "status"
+                              ],
+                              "additionalProperties": false
                             },
-                            "medianRealizedOverPredicted": {
-                              "nullable": true,
-                              "type": "number"
+                            {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "failed"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "status"
+                              ],
+                              "additionalProperties": false
                             }
-                          },
-                          "required": [
-                            "testSessions",
-                            "spearman",
-                            "medianRealizedOverPredicted"
-                          ],
-                          "additionalProperties": false
+                          ]
                         },
                         "sessions": {
                           "type": "array",
@@ -109985,7 +110020,6 @@
                         "savedBudgetUsdPerDay",
                         "lamStar",
                         "q",
-                        "usdPerToken",
                         "tierSessionShare",
                         "sizeFit",
                         "sessions"

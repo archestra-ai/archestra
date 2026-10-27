@@ -25,7 +25,8 @@ use serde::Serialize;
 
 use crate::allocate::{Draw, Hull, WeightedSession, solve};
 use crate::estimate::{
-    BlockPrices, Estimator, MAX_NEWTON_ITERATIONS, fit_long_share, fit_mixes, fit_size,
+    BlockPrices, Estimator, MAX_NEWTON_ITERATIONS, SessionEstimate, fit_long_share, fit_mixes,
+    fit_size,
 };
 use crate::plan::{holdout, summarize};
 
@@ -171,16 +172,10 @@ pub fn decide(
     features: &SessionFeatures,
     u: f64,
 ) -> Result<Decision, RouterError> {
-    plan.validate()?;
-    policy.validate()?;
+    let estimator = validated_estimator(plan, policy)?;
     if !(0.0..1.0).contains(&u) {
         return Err(RouterError::InvalidUniform(u));
     }
-    let estimator = Estimator {
-        size_model: &plan.size_model,
-        long_share: &plan.long_share,
-        prices: BlockPrices::new(&plan.tiers_fingerprint, &plan.token_mix),
-    };
     let estimate = estimator.estimate(features);
     let Draw {
         tier_index,
@@ -188,15 +183,11 @@ pub fn decide(
     } = Hull::new(estimate.price, estimate.adequacy)
         .route(policy)
         .draw(policy.q, u);
-    let expected_cost_usd = estimate.size * estimate.price[tier_index];
-    if !expected_cost_usd.is_finite() {
-        return Err(RouterError::NonFiniteEstimate(expected_cost_usd));
-    }
     Ok(Decision {
         tier_index,
         propensity,
         lambda: policy.lam_star,
-        expected_cost_usd,
+        expected_cost_usd: finite_cost(&estimate, tier_index)?,
     })
 }
 
@@ -215,25 +206,41 @@ pub fn assess(
     plan: &Plan,
     features: &[SessionFeatures],
 ) -> Result<Vec<SessionAssessment>, RouterError> {
-    plan.validate()?;
-    let estimator = Estimator {
-        size_model: &plan.size_model,
-        long_share: &plan.long_share,
-        prices: BlockPrices::new(&plan.tiers_fingerprint, &plan.token_mix),
-    };
-    Ok(features
+    let estimator = validated_estimator(plan, &plan.policy)?;
+    features
         .iter()
         .map(|f| {
             let estimate = estimator.estimate(f);
             let route = Hull::new(estimate.price, estimate.adequacy).route(&plan.policy);
-            SessionAssessment {
+            for tier in std::iter::once(route.base).chain(route.tie) {
+                finite_cost(&estimate, tier)?;
+            }
+            Ok(SessionAssessment {
                 predicted_tokens: estimate.size,
                 usd_per_token: estimate.price,
                 base_tier: route.base,
                 tie_tier: route.tie,
-            }
+            })
         })
-        .collect())
+        .collect()
+}
+
+fn validated_estimator<'a>(plan: &'a Plan, policy: &Policy) -> Result<Estimator<'a>, RouterError> {
+    plan.validate()?;
+    policy.validate()?;
+    Ok(Estimator {
+        size_model: &plan.size_model,
+        long_share: &plan.long_share,
+        prices: BlockPrices::new(&plan.tiers_fingerprint, &plan.token_mix),
+    })
+}
+
+fn finite_cost(estimate: &SessionEstimate, tier: usize) -> Result<f64, RouterError> {
+    let cost = estimate.size * estimate.price[tier];
+    match cost.is_finite() {
+        true => Ok(cost),
+        false => Err(RouterError::NonFiniteEstimate(cost)),
+    }
 }
 
 #[cfg(test)]
@@ -576,8 +583,7 @@ mod tests {
         assert!(decision.expected_cost_usd.is_finite() && decision.expected_cost_usd > 0.0);
     }
 
-    #[test]
-    fn non_finite_expected_cost_is_an_error() {
+    fn overflowing_plan() -> Plan {
         let mut plan = plan(input(4.0)).unwrap();
         let tier = |id: &str| TierSpec {
             model_id: ModelId::new(id.into()).unwrap(),
@@ -588,6 +594,12 @@ mod tests {
             TierSet::new([tier("fast"), tier("normal"), tier("smart")], None).unwrap();
         let SizeModel::PoissonGlm { intercept, .. } = &mut plan.size_model;
         *intercept = 100.0;
+        plan
+    }
+
+    #[test]
+    fn non_finite_expected_cost_is_an_error() {
+        let plan = overflowing_plan();
         assert!(matches!(
             decide(&plan, &plan.policy, &features("main"), 0.5),
             Err(RouterError::NonFiniteEstimate(_))
@@ -622,5 +634,24 @@ mod tests {
             assert!((cost - base.expected_cost_usd).abs() <= 1e-12 * cost);
         }
         assert!(assessed[0].tie_tier.is_some());
+    }
+
+    #[test]
+    fn assess_validates_as_decide() {
+        let mut plan = plan(input(4.0)).unwrap();
+        plan.policy.q = 1.5;
+        assert!(matches!(
+            assess(&plan, &[features("main")]),
+            Err(RouterError::InvalidPolicy { .. })
+        ));
+    }
+
+    #[test]
+    fn assess_refuses_a_non_finite_cost() {
+        let plan = overflowing_plan();
+        assert!(matches!(
+            assess(&plan, &[features("main")]),
+            Err(RouterError::NonFiniteEstimate(_))
+        ));
     }
 }

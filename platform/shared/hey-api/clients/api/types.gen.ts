@@ -31009,20 +31009,22 @@ export type GetAutoRoutingDiagnosticsResponses = {
         savedBudgetUsdPerDay: number;
         lamStar: number;
         q: number;
-        usdPerToken: [
-            number,
-            number,
-            number
-        ];
         tierSessionShare: [
             number,
             number,
             number
         ];
         sizeFit: {
+            status: 'ok';
             testSessions: number;
+            plotted: number;
+            excluded: number;
             spearman: number | null;
             medianRealizedOverPredicted: number | null;
+        } | {
+            status: 'no_holdout';
+        } | {
+            status: 'failed';
         };
         sessions: Array<{
             tierNeeded: [

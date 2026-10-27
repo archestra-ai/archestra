@@ -192,9 +192,9 @@ export function useSimulateAutoRouting(body: AutoRoutingSimulateBody | null) {
 }
 
 /**
- * The active plan's sample re-solved at `budgetUsdPerDay` (its saved budget
- * when null). Admitted like a simulation, so a refused call is retried; the
- * previous budget's answer stays on screen meanwhile.
+ * The current history re-solved at `budgetUsdPerDay` (the saved budget when
+ * null). One runs per organization at a time, so a refused call is retried; the
+ * previous budget's answer is the placeholder meanwhile.
  */
 export function useAutoRoutingDiagnostics(budgetUsdPerDay: number | null) {
   return useQuery({
@@ -207,6 +207,7 @@ export function useAutoRoutingDiagnostics(budgetUsdPerDay: number | null) {
       return data ?? null;
     },
     placeholderData: keepPreviousData,
+    staleTime: DIAGNOSTICS_STALE_MS,
     retry: (failures, error) =>
       failures < SIMULATION_RETRIES &&
       getApiErrorType(error.cause) === "api_rate_limit_error",
@@ -214,6 +215,7 @@ export function useAutoRoutingDiagnostics(budgetUsdPerDay: number | null) {
   });
 }
 
+const DIAGNOSTICS_STALE_MS = 60_000;
 const SIMULATION_RETRIES = 10;
 const SIMULATION_RETRY_DELAY_MS = 1000;
 

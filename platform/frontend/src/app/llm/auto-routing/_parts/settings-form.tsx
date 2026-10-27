@@ -26,6 +26,7 @@ import {
   useUpdateAutoRoutingSettings,
 } from "@/lib/auto-routing.query";
 import { useLlmModels } from "@/lib/llm-models.query";
+import { MAX_BUDGET, MIN_BUDGET } from "./budget-scale";
 import { TIER_NAMES, type TierName } from "./tiers";
 
 type FormValues = {
@@ -185,10 +186,6 @@ const TIER_LABELS: Record<TierName, string> = {
   normal: "Normal model",
   smart: "Smart model",
 };
-
-// The `routing_plans.budget_usd_per_day` column bounds.
-const MIN_BUDGET = 0.01;
-const MAX_BUDGET = 9_999_999_999.99;
 
 /** Disabled routing may stay without a budget; the API refuses enabling one. */
 function validateBudget(value: string, enabled: boolean): true | string {

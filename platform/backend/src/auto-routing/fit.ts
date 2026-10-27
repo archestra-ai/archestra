@@ -150,35 +150,35 @@ export function simulateFit(
   organizationId: string,
   params: { budgetUsdPerDay: number; volumeMultiplier: number },
 ): Promise<AutoRoutingSimulateResponse> {
-  return withFitAdmission(organizationId, () =>
+  return simulationAdmission(organizationId, () =>
     simulate(organizationId, params),
   );
 }
 
 /**
- * Runs `work`, an unpublished fit over the whole usage window, under the
- * simulation admission: one per organization and `MAX_SIMULATIONS` per
- * process; excess calls are refused with a 429.
+ * A pool admitting unpublished `kind` runs over the whole usage window: one
+ * per organization and `maxInFlight` per process; excess calls are refused
+ * with a 429.
  */
-export async function withFitAdmission<T>(
-  organizationId: string,
-  work: () => Promise<T>,
-): Promise<T> {
-  if (simulationsInFlight.has(organizationId)) {
-    throw new ApiError(
-      429,
-      "A simulation is already running for this organization; retry when it finishes.",
-    );
-  }
-  if (simulationsInFlight.size >= MAX_SIMULATIONS) {
-    throw new ApiError(429, "Too many simulations are running; retry shortly.");
-  }
-  simulationsInFlight.add(organizationId);
-  try {
-    return await work();
-  } finally {
-    simulationsInFlight.delete(organizationId);
-  }
+export function fitAdmission(kind: string, maxInFlight: number) {
+  const inFlight = new Set<string>();
+  return async <T>(organizationId: string, work: () => Promise<T>) => {
+    if (inFlight.has(organizationId)) {
+      throw new ApiError(
+        429,
+        `A ${kind} is already running for this organization; retry when it finishes.`,
+      );
+    }
+    if (inFlight.size >= maxInFlight) {
+      throw new ApiError(429, `Too many ${kind}s are running; retry shortly.`);
+    }
+    inFlight.add(organizationId);
+    try {
+      return await work();
+    } finally {
+      inFlight.delete(organizationId);
+    }
+  };
 }
 
 /**
@@ -356,8 +356,8 @@ export async function fitNow(
 
 // === Internal ===
 
-const simulationsInFlight = new Set<string>();
 const MAX_SIMULATIONS = 4;
+const simulationAdmission = fitAdmission("simulation", MAX_SIMULATIONS);
 
 async function simulate(
   organizationId: string,

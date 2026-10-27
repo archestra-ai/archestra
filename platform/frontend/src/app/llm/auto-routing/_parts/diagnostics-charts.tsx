@@ -1,5 +1,22 @@
 "use client";
 
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  LabelList,
+  ReferenceLine,
+  Scatter,
+  ScatterChart,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
+  type ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
 import type { AutoRoutingDiagnostics } from "@/lib/auto-routing.query";
 import { formatCompactNumber } from "@/lib/utils/format-compact-number";
 import { centroid, type Point, routingRegions } from "./routing-regions";
@@ -7,6 +24,7 @@ import { TIER_NAMES, type TierName } from "./tiers";
 
 type Ready = Extract<AutoRoutingDiagnostics, { status: "ready" }>;
 type Session = Ready["sessions"][number];
+type TierTriple = Session["usdPerToken"];
 
 /** Validated categorical slots (aqua, blue, orange), stepped per theme. */
 export const TIER_COLOR: Record<
@@ -30,15 +48,19 @@ export const TIER_COLOR: Record<
   },
 };
 
-const BAR = "fill-[#2a78d6] dark:fill-[#3987e5]";
-const GRID = "stroke-border";
+const SERIES: ChartConfig = {
+  sessions: {
+    label: "% of sessions",
+    theme: { light: "#2a78d6", dark: "#3987e5" },
+  },
+};
 const TICK = "fill-muted-foreground text-[10px]";
 const LABEL = "fill-foreground stroke-background text-sm font-semibold";
 
 // === Jev answers ===
 
 const BINS = 20;
-const HIST = { w: 220, h: 150, left: 28, right: 6, top: 18, bottom: 18 };
+const HIST_TOP = 18;
 const PANELS = [
   { label: "p_fast", value: (s: Session) => s.tierNeeded[0] },
   { label: "p_normal", value: (s: Session) => s.tierNeeded[1] },
@@ -53,248 +75,183 @@ export function JevHistograms({ sessions }: { sessions: Session[] }) {
     for (const v of values) counts[Math.min(BINS - 1, Math.floor(v * BINS))]++;
     return {
       label,
-      percents: counts.map((c) => (100 * c) / Math.max(values.length, 1)),
+      bins: counts.map((c, bin) => ({
+        x: (bin + 0.5) / BINS,
+        sessions: (100 * c) / Math.max(values.length, 1),
+      })),
       median: median(values),
     };
   });
-  const all = panels.flatMap((p) => p.percents);
+  const all = panels.flatMap((p) => p.bins.map((b) => b.sessions));
   const top = Math.max(...all, 1);
   // One spike would flatten every other bin: cap the shared axis and label the spike.
-  const rest = all.filter((v) => v < top / 2);
-  const restMax = Math.max(...rest, 0);
+  const restMax = Math.max(...all.filter((v) => v < top / 2), 0);
   const yMax = restMax > 0 && top > 2.5 * restMax ? restMax * 1.25 : top;
-  const ticks = niceTicks(yMax);
 
   return (
     <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-      {panels.map((panel, index) => {
-        const { w, h, left, right, top: t, bottom } = HIST;
-        const x = (v: number) => left + v * (w - left - right);
-        const y = (v: number) => h - bottom - (v / yMax) * (h - t - bottom);
-        const binWidth = (w - left - right) / BINS;
-        return (
-          <figure key={panel.label} className="min-w-0">
-            <figcaption className="text-center text-xs font-medium">
-              {panel.label}
-            </figcaption>
-            <svg
-              viewBox={`0 0 ${w} ${h}`}
-              className="w-full"
-              role="img"
-              aria-label={panel.label}
+      {panels.map((panel, index) => (
+        <figure key={panel.label} className="min-w-0">
+          <figcaption className="text-center text-xs font-medium">
+            {panel.label}
+          </figcaption>
+          <ChartContainer config={SERIES} className="aspect-[3/2] w-full">
+            <BarChart
+              data={panel.bins}
+              margin={{ top: HIST_TOP, right: 6, bottom: 0, left: 0 }}
+              barCategoryGap={1}
             >
-              {ticks.map((tick) => (
-                <g key={tick}>
-                  <line
-                    x1={left}
-                    x2={w - right}
-                    y1={y(tick)}
-                    y2={y(tick)}
-                    className={GRID}
-                    strokeWidth={0.5}
-                  />
-                  {index === 0 && (
-                    <text
-                      x={left - 4}
-                      y={y(tick) + 3}
-                      textAnchor="end"
-                      className={TICK}
-                    >
-                      {tick}
-                    </text>
-                  )}
-                </g>
-              ))}
-              {panel.percents.map((pct, bin) => (
-                <rect
-                  // biome-ignore lint/suspicious/noArrayIndexKey: bins are positional
-                  key={bin}
-                  x={x(bin / BINS) + 0.5}
-                  y={y(Math.min(pct, yMax))}
-                  width={binWidth - 1}
-                  height={Math.max(0, h - bottom - y(Math.min(pct, yMax)))}
-                  rx={1.5}
-                  className={BAR}
-                >
-                  <title>{`${(bin / BINS).toFixed(2)}–${((bin + 1) / BINS).toFixed(2)}: ${pct.toFixed(1)}%`}</title>
-                </rect>
-              ))}
-              {panel.percents.map((pct, bin) =>
-                pct > yMax ? (
-                  <text
-                    // biome-ignore lint/suspicious/noArrayIndexKey: bins are positional
-                    key={`spike-${bin}`}
-                    x={x((bin + 1) / BINS) + 2}
-                    y={t + 8}
-                    className={TICK}
-                  >
-                    {`▲ ${pct.toFixed(0)}%`}
-                  </text>
-                ) : null,
-              )}
-              <line
-                x1={x(panel.median)}
-                x2={x(panel.median)}
-                y1={t - 4}
-                y2={h - bottom}
-                className="stroke-foreground"
-                strokeWidth={1}
+              <CartesianGrid vertical={false} />
+              <XAxis
+                dataKey="x"
+                type="number"
+                domain={[0, 1]}
+                ticks={[0, 0.5, 1]}
+                tickLine={false}
               />
-              <text
-                x={x(panel.median) + (panel.median > 0.6 ? -3 : 3)}
-                y={t - 6}
-                textAnchor={panel.median > 0.6 ? "end" : "start"}
-                className="fill-foreground text-[10px]"
+              <YAxis
+                domain={[0, yMax]}
+                ticks={niceTicks(yMax)}
+                allowDataOverflow
+                tick={index === 0}
+                tickFormatter={(v) => `${v}%`}
+                tickLine={false}
+                axisLine={false}
+                width={28}
+              />
+              <ChartTooltip
+                cursor={false}
+                content={
+                  <ChartTooltipContent
+                    hideLabel
+                    formatter={(v) => `${Number(v).toFixed(1)}%`}
+                  />
+                }
+              />
+              <Bar
+                dataKey="sessions"
+                fill="var(--color-sessions)"
+                radius={1.5}
+                isAnimationActive={false}
               >
-                {`median ${panel.median.toFixed(2)}`}
-              </text>
-              {[0, 0.5, 1].map((tick) => (
-                <text
-                  key={tick}
-                  x={x(tick)}
-                  y={h - 4}
-                  textAnchor="middle"
-                  className={TICK}
-                >
-                  {tick}
-                </text>
-              ))}
-              {index === 0 && (
-                <text
-                  transform={`translate(8 ${(h - bottom + t) / 2}) rotate(-90)`}
-                  textAnchor="middle"
-                  className={TICK}
-                >
-                  % of sessions
-                </text>
-              )}
-            </svg>
-          </figure>
-        );
-      })}
+                <LabelList
+                  dataKey="sessions"
+                  content={({ x, width, value }) =>
+                    Number(value) > yMax ? (
+                      <text
+                        x={Number(x) + Number(width) + 2}
+                        y={HIST_TOP + 8}
+                        className={TICK}
+                      >
+                        {`▲ ${Number(value).toFixed(0)}%`}
+                      </text>
+                    ) : null
+                  }
+                />
+              </Bar>
+              <ReferenceLine
+                x={panel.median}
+                className="stroke-foreground"
+                label={{
+                  value: `median ${panel.median.toFixed(2)}`,
+                  position:
+                    panel.median > 0.6 ? "insideTopRight" : "insideTopLeft",
+                  className: "fill-foreground text-[10px]",
+                }}
+              />
+            </BarChart>
+          </ChartContainer>
+        </figure>
+      ))}
     </div>
   );
 }
 
 // === Predicted vs realized ===
 
-const SCATTER = { w: 640, h: 320, left: 52, right: 12, top: 12, bottom: 34 };
-
 export function SizeScatter({ sessions }: { sessions: Session[] }) {
   const points = sessions.flatMap((s) =>
     s.predictedTokens !== null && s.predictedTokens > 0 && s.realizedTokens > 0
-      ? [[Math.log10(s.predictedTokens), Math.log10(s.realizedTokens)]]
+      ? [
+          {
+            predicted: Math.log10(s.predictedTokens),
+            realized: Math.log10(s.realizedTokens),
+          },
+        ]
       : [],
   );
   if (points.length === 0) return null;
-  const domain = (values: number[]) => {
-    const lo = Math.floor(Math.min(...values));
-    return { lo, hi: Math.max(lo + 1, Math.ceil(Math.max(...values))) };
-  };
-  const dx = domain(points.map(([px]) => px));
-  const dy = domain(points.map(([, py]) => py));
-  const decades = ({ lo, hi }: { lo: number; hi: number }) =>
-    Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
-  const { w, h, left, right, top, bottom } = SCATTER;
-  const x = (v: number) =>
-    left + ((v - dx.lo) / (dx.hi - dx.lo)) * (w - left - right);
-  const y = (v: number) =>
-    h - bottom - ((v - dy.lo) / (dy.hi - dy.lo)) * (h - top - bottom);
-  const diagonal = {
-    lo: Math.max(dx.lo, dy.lo),
-    hi: Math.min(dx.hi, dy.hi),
-  };
+  const dx = decades(points.map((p) => p.predicted));
+  const dy = decades(points.map((p) => p.realized));
+  const diagonal = [Math.max(dx[0], dy[0]), Math.min(last(dx), last(dy))];
+  const compact = (log: unknown) => formatCompactNumber(10 ** Number(log));
 
   return (
-    <svg
-      viewBox={`0 0 ${w} ${h}`}
-      className="mx-auto block w-full max-w-[760px]"
-      role="img"
-      aria-label="Predicted vs realized tokens"
+    <ChartContainer
+      config={SERIES}
+      className="mx-auto aspect-[2/1] w-full max-w-[760px]"
     >
-      {decades(dy).map((d) => (
-        <g key={`y${d}`}>
-          <line
-            x1={left}
-            x2={w - right}
-            y1={y(d)}
-            y2={y(d)}
-            className={GRID}
-            strokeWidth={0.5}
-          />
-          <text x={left - 6} y={y(d) + 3} textAnchor="end" className={TICK}>
-            {formatCompactNumber(10 ** d)}
-          </text>
-        </g>
-      ))}
-      {decades(dx).map((d) => (
-        <g key={`x${d}`}>
-          <line
-            x1={x(d)}
-            x2={x(d)}
-            y1={top}
-            y2={h - bottom}
-            className={GRID}
-            strokeWidth={0.5}
-          />
-          <text
-            x={x(d)}
-            y={h - bottom + 14}
-            textAnchor="middle"
-            className={TICK}
-          >
-            {formatCompactNumber(10 ** d)}
-          </text>
-        </g>
-      ))}
-      {diagonal.hi > diagonal.lo && (
-        <>
-          <line
-            x1={x(diagonal.lo)}
-            y1={y(diagonal.lo)}
-            x2={x(diagonal.hi)}
-            y2={y(diagonal.hi)}
+      <ScatterChart margin={{ top: 12, right: 12, bottom: 16, left: 4 }}>
+        <CartesianGrid />
+        <XAxis
+          type="number"
+          dataKey="predicted"
+          name="predicted"
+          domain={[dx[0], last(dx)]}
+          ticks={dx}
+          tickFormatter={compact}
+          label={{
+            value: "predicted tokens",
+            position: "insideBottom",
+            offset: -10,
+            className: TICK,
+          }}
+        />
+        <YAxis
+          type="number"
+          dataKey="realized"
+          name="realized"
+          domain={[dy[0], last(dy)]}
+          ticks={dy}
+          tickFormatter={compact}
+          label={{
+            value: "realized tokens",
+            angle: -90,
+            position: "insideLeft",
+            className: TICK,
+          }}
+        />
+        {diagonal[1] > diagonal[0] && (
+          <ReferenceLine
+            segment={[
+              { x: diagonal[0], y: diagonal[0] },
+              { x: diagonal[1], y: diagonal[1] },
+            ]}
             className="stroke-muted-foreground"
-            strokeWidth={1}
+            label={{
+              value: "y = x",
+              position: "insideTopRight",
+              className: TICK,
+            }}
           />
-          <text
-            x={x(diagonal.hi) - 4}
-            y={y(diagonal.hi) + 12}
-            textAnchor="end"
-            className={TICK}
-          >
-            y = x
-          </text>
-        </>
-      )}
-      {points.map(([px, py], i) => (
-        <circle
-          // biome-ignore lint/suspicious/noArrayIndexKey: points are positional
-          key={i}
-          cx={x(px)}
-          cy={y(py)}
-          r={2.5}
-          className={`${BAR} opacity-50`}
-        >
-          <title>{`predicted ${formatCompactNumber(10 ** px)} · realized ${formatCompactNumber(10 ** py)}`}</title>
-        </circle>
-      ))}
-      <text
-        x={(left + w - right) / 2}
-        y={h - 4}
-        textAnchor="middle"
-        className={TICK}
-      >
-        predicted tokens
-      </text>
-      <text
-        transform={`translate(10 ${(top + h - bottom) / 2}) rotate(-90)`}
-        textAnchor="middle"
-        className={TICK}
-      >
-        realized tokens
-      </text>
-    </svg>
+        )}
+        <ChartTooltip
+          cursor={false}
+          content={
+            <ChartTooltipContent
+              hideLabel
+              formatter={(value, name) => `${name} ${compact(value)}`}
+            />
+          }
+        />
+        <Scatter
+          data={points}
+          fill="var(--color-sessions)"
+          fillOpacity={0.5}
+          isAnimationActive={false}
+        />
+      </ScatterChart>
+    </ChartContainer>
   );
 }
 
@@ -309,12 +266,16 @@ export function RoutingTriangle({ data }: { data: Ready }) {
   const y = (v: number) => size - pad - v * span;
   const path = (polygon: Point[]) =>
     `M${polygon.map(([px, py]) => `${x(px)},${y(py)}`).join("L")}Z`;
-  const regions = routingRegions(data.lamStar, data.usdPerToken);
-  const routedSmart = data.sessions.filter((s) => s.tier === "smart");
-  const smartAnchor: Point | null =
-    regions.smart.length === 0 && routedSmart.length > 0
-      ? centroid(routedSmart.map((s) => [s.tierNeeded[1], s.tierNeeded[2]]))
+  // Region boundaries hold at one set of prices; long-context pricing gives each session its own.
+  const prices = sharedPrices(data.sessions);
+  const regions = prices && routingRegions(data.lamStar, prices);
+  const anchor = (tier: TierName): Point | null => {
+    if (regions && regions[tier].length > 0) return centroid(regions[tier]);
+    const routed = data.sessions.filter((s) => s.tier === tier);
+    return routed.length > 0
+      ? centroid(routed.map((s) => [s.tierNeeded[1], s.tierNeeded[2]]))
       : null;
+  };
   const ticks = [0, 0.25, 0.5, 0.75, 1];
 
   return (
@@ -324,16 +285,18 @@ export function RoutingTriangle({ data }: { data: Ready }) {
       role="img"
       aria-label="Routing regions"
     >
-      {TIER_NAMES.map((tier) =>
-        regions[tier].length > 0 ? (
-          <path
-            key={tier}
-            d={path(regions[tier])}
-            className={`${TIER_COLOR[tier].region} stroke-background`}
-            strokeWidth={2}
-          />
-        ) : null,
-      )}
+      {regions &&
+        TIER_NAMES.map((tier) =>
+          regions[tier].length > 0 ? (
+            <path
+              key={tier}
+              data-tier={tier}
+              d={path(regions[tier])}
+              className={`${TIER_COLOR[tier].region} stroke-background`}
+              strokeWidth={2}
+            />
+          ) : null,
+        )}
       <path
         d={path([
           [0, 0],
@@ -362,6 +325,7 @@ export function RoutingTriangle({ data }: { data: Ready }) {
         <circle
           // biome-ignore lint/suspicious/noArrayIndexKey: points are positional
           key={i}
+          data-tier={s.tier}
           cx={x(s.tierNeeded[1])}
           cy={y(s.tierNeeded[2])}
           r={3}
@@ -372,13 +336,12 @@ export function RoutingTriangle({ data }: { data: Ready }) {
         </circle>
       ))}
       {TIER_NAMES.map((tier) => {
-        if (regions[tier].length === 0) return null;
-        const [cx, cy] = centroid(regions[tier]);
-        return (
+        const at = anchor(tier);
+        return at ? (
           <text
             key={tier}
-            x={x(cx)}
-            y={y(cy)}
+            x={x(at[0])}
+            y={y(at[1])}
             textAnchor="middle"
             className={LABEL}
             strokeWidth={4}
@@ -386,19 +349,8 @@ export function RoutingTriangle({ data }: { data: Ready }) {
           >
             {tier}
           </text>
-        );
+        ) : null;
       })}
-      {smartAnchor && (
-        <text
-          x={x(smartAnchor[0]) + 10}
-          y={y(smartAnchor[1]) - 10}
-          className={LABEL}
-          strokeWidth={4}
-          paintOrder="stroke"
-        >
-          smart
-        </text>
-      )}
       <text x={size / 2} y={size - 4} textAnchor="middle" className={TICK}>
         p_normal
       </text>
@@ -411,6 +363,29 @@ export function RoutingTriangle({ data }: { data: Ready }) {
       </text>
     </svg>
   );
+}
+
+function sharedPrices(sessions: Session[]): TierTriple | null {
+  const [first] = sessions;
+  const same = (a: number, b: number) =>
+    Math.abs(a - b) <= 1e-9 * Math.max(Math.abs(a), Math.abs(b));
+  return first &&
+    sessions.every((s) =>
+      s.usdPerToken.every((price, k) => same(price, first.usdPerToken[k])),
+    )
+    ? first.usdPerToken
+    : null;
+}
+
+/** Whole powers of ten spanning `logs`, at least one decade apart. */
+function decades(logs: number[]): number[] {
+  const lo = Math.floor(Math.min(...logs));
+  const hi = Math.max(lo + 1, Math.ceil(Math.max(...logs)));
+  return Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
+}
+
+function last(values: number[]): number {
+  return values[values.length - 1];
 }
 
 function median(values: number[]): number {

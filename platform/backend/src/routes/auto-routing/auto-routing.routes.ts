@@ -187,7 +187,7 @@ const autoRoutingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetAutoRoutingDiagnostics,
         description:
-          "Re-solve the active plan's fit sample at a budget and return per-session estimates and routes, without publishing",
+          "Re-solve the current fit history, at the active plan's scorer version and tiers, at a budget and return per-session estimates and routes, without publishing",
         tags: TAGS,
         querystring: AutoRoutingDiagnosticsQuerySchema,
         response: {

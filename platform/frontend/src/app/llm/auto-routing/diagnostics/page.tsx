@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { RotateCw } from "lucide-react";
+import { useMemo, useState } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
@@ -11,6 +13,7 @@ import {
 } from "@/lib/auto-routing.query";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { formatCurrency } from "@/lib/utils/format-currency";
+import { budgetScale } from "../_parts/budget-scale";
 import {
   JevHistograms,
   RoutingTriangle,
@@ -19,11 +22,10 @@ import {
 } from "../_parts/diagnostics-charts";
 import { TIER_NAMES } from "../_parts/tiers";
 
+type Ready = Extract<AutoRoutingDiagnostics, { status: "ready" }>;
+
 export default function AutoRoutingDiagnosticsPage() {
   const saved = useAutoRoutingDiagnostics(null);
-  const [budget, setBudget] = useState<number | null>(null);
-  const debouncedBudget = useDebouncedValue(budget, 300);
-  const routed = useAutoRoutingDiagnostics(debouncedBudget);
 
   if (saved.isLoadingError) {
     return (
@@ -47,8 +49,7 @@ export default function AutoRoutingDiagnosticsPage() {
       );
   }
 
-  const shown = routed.data ?? data;
-  const sliderValue = budget ?? data.savedBudgetUsdPerDay;
+  const fit = data.sizeFit.status === "ok" ? data.sizeFit : null;
   return (
     <div className="space-y-8">
       <Block title="Jev answers">
@@ -57,51 +58,93 @@ export default function AutoRoutingDiagnosticsPage() {
       <Block
         title="Predicted vs realized tokens"
         metrics={[
-          { label: "Spearman", value: formatNumber(data.sizeFit.spearman) },
+          { label: "Spearman", value: formatNumber(fit?.spearman) },
           {
             label: "Median realized / predicted",
             value:
-              data.sizeFit.medianRealizedOverPredicted === null
+              fit?.medianRealizedOverPredicted == null
                 ? "–"
-                : `${data.sizeFit.medianRealizedOverPredicted.toFixed(2)}×`,
+                : `${fit.medianRealizedOverPredicted.toFixed(2)}×`,
           },
+          { label: "Plotted", value: fit ? String(fit.plotted) : "–" },
+          { label: "Excluded", value: fit ? String(fit.excluded) : "–" },
         ]}
       >
         <SizeScatter sessions={data.sessions} />
       </Block>
-      <Block
-        title="Routing regions"
-        metrics={
-          shown.status === "ready"
-            ? TIER_NAMES.map((tier, i) => ({
-                label: tier,
-                swatch: TIER_COLOR[tier].swatch,
-                value: `${Math.round(shown.tierSessionShare[i] * 100)}%`,
-              }))
-            : []
-        }
-      >
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>Budget</Label>
-            <span className="text-sm tabular-nums">
-              {formatCurrency(sliderValue)}/day
-            </span>
-          </div>
-          <Slider
-            aria-label="Budget"
-            min={1}
-            max={Math.ceil(data.savedBudgetUsdPerDay * 4)}
-            step={1}
-            value={[sliderValue]}
-            onValueChange={([value]) => setBudget(value)}
-          />
-        </div>
-        <div className={routed.isFetching ? "opacity-60" : undefined}>
-          <RoutedView data={shown} />
-        </div>
-      </Block>
+      <RoutingBlock saved={data} />
     </div>
+  );
+}
+
+/** Each result is shown under the budget it was solved at, the previous one dimmed while the next is pending. */
+function RoutingBlock({ saved }: { saved: Ready }) {
+  const scale = useMemo(
+    () => budgetScale(saved.savedBudgetUsdPerDay),
+    [saved.savedBudgetUsdPerDay],
+  );
+  const [position, setPosition] = useState(scale.savedPosition);
+  const requested = scale.budgetAt(position);
+  const debounced = useDebouncedValue(requested, 300);
+  const routed = useAutoRoutingDiagnostics(
+    debounced === saved.savedBudgetUsdPerDay ? null : debounced,
+  );
+  const [shown, setShown] = useState<AutoRoutingDiagnostics>(saved);
+  if (routed.data && !routed.isPlaceholderData && routed.data !== shown) {
+    setShown(routed.data);
+  }
+  const shownBudget =
+    shown.status === "cold_start" ? null : shown.budgetUsdPerDay;
+
+  return (
+    <Block
+      title="Routing regions"
+      metrics={
+        shown.status === "ready"
+          ? TIER_NAMES.map((tier, i) => ({
+              label: tier,
+              swatch: TIER_COLOR[tier].swatch,
+              value: `${Math.round(shown.tierSessionShare[i] * 100)}%`,
+            }))
+          : []
+      }
+    >
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <Label>Budget</Label>
+          <div className="flex items-center gap-1">
+            {routed.isError && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Retry"
+                className="text-destructive"
+                onClick={() => routed.refetch()}
+              >
+                <RotateCw />
+              </Button>
+            )}
+            <output aria-label="Shown budget" className="text-sm tabular-nums">
+              {shownBudget === null
+                ? "–"
+                : `${formatCurrency(shownBudget)}/day`}
+            </output>
+          </div>
+        </div>
+        <Slider
+          aria-label="Budget"
+          aria-valuetext={`${formatCurrency(requested)}/day`}
+          min={0}
+          max={scale.steps}
+          step={1}
+          value={[position]}
+          onValueChange={([value]) => setPosition(value)}
+        />
+      </div>
+      <div className={requested !== shownBudget ? "opacity-60" : undefined}>
+        <RoutedView data={shown} />
+      </div>
+    </Block>
   );
 }
 
@@ -156,6 +199,6 @@ function EmptyLine({ children }: { children: React.ReactNode }) {
   return <p className="text-sm text-muted-foreground">{children}</p>;
 }
 
-function formatNumber(value: number | null): string {
-  return value === null ? "–" : value.toFixed(2);
+function formatNumber(value: number | null | undefined): string {
+  return value == null ? "–" : value.toFixed(2);
 }

@@ -12,24 +12,36 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 import type { AutoRoutingDiagnostics } from "@/lib/auto-routing.query";
+import { budgetScale } from "../_parts/budget-scale";
 import AutoRoutingDiagnosticsPage from "./page";
 
 const API_ORIGIN = "http://localhost:9000";
+const SAVED = 50;
+const scale = budgetScale(SAVED);
+/** The budgets one and two slider steps above the saved one. */
+const [STEP_1, STEP_2] = [1, 2].map((k) =>
+  scale.budgetAt(Math.round(scale.savedPosition) + k),
+);
+const PRICES: [number, number, number] = [1e-7, 6e-7, 2e-6];
 
+/** Its smart share, budget / 200, identifies the budget a result was solved at. */
 function ready(budgetUsdPerDay: number): AutoRoutingDiagnostics {
-  const smart = budgetUsdPerDay > 50 ? 0.25 : 0.05;
+  const smart = budgetUsdPerDay / 200;
   return {
     status: "ready",
     budgetUsdPerDay,
-    savedBudgetUsdPerDay: 50,
+    savedBudgetUsdPerDay: SAVED,
     lamStar: 200_000,
     q: 0.4,
-    usdPerToken: [1e-7, 6e-7, 2e-6],
-    tierSessionShare: [0.55, 0.95 - 0.55 - smart + 0.05, smart],
+    tierSessionShare: [0.6, 0.4 - smart, smart],
     sizeFit: {
+      status: "ok",
       testSessions: 2,
+      plotted: 2,
+      excluded: 0,
       spearman: 0.53,
       medianRealizedOverPredicted: 0.79,
     },
@@ -39,7 +51,7 @@ function ready(budgetUsdPerDay: number): AutoRoutingDiagnostics {
         pLong: 0.2,
         realizedTokens: 120_000,
         predictedTokens: null,
-        usdPerToken: [1e-7, 6e-7, 2e-6],
+        usdPerToken: PRICES,
         tier: "fast",
       },
       {
@@ -47,29 +59,42 @@ function ready(budgetUsdPerDay: number): AutoRoutingDiagnostics {
         pLong: 0.5,
         realizedTokens: 3_000_000,
         predictedTokens: 2_000_000,
-        usdPerToken: [1e-7, 6e-7, 2e-6],
+        usdPerToken: PRICES,
         tier: "normal",
-      },
-      {
-        tierNeeded: [0, 0.3, 0.7],
-        pLong: 0.6,
-        realizedTokens: 9_000_000,
-        predictedTokens: 12_000_000,
-        usdPerToken: [1e-7, 6e-7, 2e-6],
-        tier: "smart",
       },
     ],
   };
 }
 
-let response: (budget: string | null) => AutoRoutingDiagnostics;
-const requestedBudgets: (string | null)[] = [];
+const failure = (status: 429 | 500) =>
+  HttpResponse.json(
+    {
+      error: {
+        message: "refused",
+        type:
+          status === 429 ? "api_rate_limit_error" : "api_internal_server_error",
+      },
+    },
+    { status },
+  );
+
+let respond: (budget: number | null) => Promise<Response> | Response;
+const requestedBudgets: (number | null)[] = [];
+const gates = new Map<number, () => void>();
+/** Answers a changed budget only once its gate is opened. */
+const gated = async (budget: number | null) => {
+  if (budget !== null) {
+    await new Promise<void>((open) => gates.set(budget, open));
+  }
+  return HttpResponse.json(ready(budget ?? SAVED));
+};
 
 const server = setupServer(
   http.get(`${API_ORIGIN}/api/auto-routing/diagnostics`, ({ request }) => {
-    const budget = new URL(request.url).searchParams.get("budgetUsdPerDay");
+    const param = new URL(request.url).searchParams.get("budgetUsdPerDay");
+    const budget = param === null ? null : Number(param);
     requestedBudgets.push(budget);
-    return HttpResponse.json(response(budget));
+    return respond(budget);
   }),
 );
 
@@ -79,9 +104,13 @@ beforeAll(() => {
 });
 beforeEach(() => {
   requestedBudgets.length = 0;
-  response = (budget) => ready(budget === null ? 50 : Number(budget));
+  gates.clear();
+  respond = (budget) => HttpResponse.json(ready(budget ?? SAVED));
 });
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  vi.useRealTimers();
+});
 afterAll(() => server.close());
 
 function renderPage() {
@@ -95,6 +124,21 @@ function renderPage() {
   );
 }
 
+const routing = () => screen.getByRole("region", { name: "Routing regions" });
+const shownBudget = () => screen.getByRole("status", { name: "Shown budget" });
+const share = (budget: number) => `${Math.round((budget / 200) * 100)}%`;
+
+async function step(user: ReturnType<typeof userEvent.setup>, budget: number) {
+  (await screen.findByRole("slider")).focus();
+  await user.keyboard("{ArrowRight}");
+  await waitFor(() => expect(requestedBudgets).toContain(budget));
+}
+
+function expectShown(budget: number) {
+  expect(shownBudget()).toHaveTextContent(`$${budget.toFixed(2)}/day`);
+  expect(within(routing()).getByText(share(budget))).toBeInTheDocument();
+}
+
 describe("AutoRoutingDiagnosticsPage", () => {
   it("renders the Jev, size and routing blocks with their metrics", async () => {
     renderPage();
@@ -106,26 +150,89 @@ describe("AutoRoutingDiagnosticsPage", () => {
     });
     expect(within(size).getByText("0.53")).toBeInTheDocument();
     expect(within(size).getByText("0.79×")).toBeInTheDocument();
-    const routing = screen.getByRole("region", { name: "Routing regions" });
-    expect(within(routing).getByText("5%")).toBeInTheDocument();
+    expectShown(SAVED);
     expect(requestedBudgets).toEqual([null]);
   });
 
-  it("re-solves at the budget the slider moves to", async () => {
+  it("shows no size metrics without a holdout", async () => {
+    respond = () =>
+      HttpResponse.json({ ...ready(SAVED), sizeFit: { status: "no_holdout" } });
+    renderPage();
+
+    const size = await screen.findByRole("region", {
+      name: "Predicted vs realized tokens",
+    });
+    expect(
+      within(size)
+        .getAllByRole("definition")
+        .map((d) => d.textContent),
+    ).toEqual(["–", "–", "–", "–"]);
+  });
+
+  it("keeps the shown budget's result until the next one arrives", async () => {
+    respond = gated;
     const user = userEvent.setup();
     renderPage();
-    const slider = await screen.findByRole("slider");
 
-    slider.focus();
-    await user.keyboard("{ArrowRight}");
+    await step(user, STEP_1);
+    expectShown(SAVED);
 
-    await waitFor(() => expect(requestedBudgets).toContain("51"));
-    const routing = screen.getByRole("region", { name: "Routing regions" });
-    expect(await within(routing).findByText("25%")).toBeInTheDocument();
+    gates.get(STEP_1)?.();
+    await waitFor(() => expectShown(STEP_1));
+  });
+
+  it("shows only the latest budget's result after rapid changes", async () => {
+    respond = gated;
+    const user = userEvent.setup();
+    renderPage();
+
+    await step(user, STEP_1);
+    await step(user, STEP_2);
+    gates.get(STEP_1)?.();
+    await new Promise((settle) => setTimeout(settle, 100));
+    expectShown(SAVED);
+
+    gates.get(STEP_2)?.();
+    await waitFor(() => expectShown(STEP_2));
+  });
+
+  it("keeps the shown result and offers a retry when a budget fails", async () => {
+    respond = (budget) =>
+      budget === null ? HttpResponse.json(ready(SAVED)) : failure(500);
+    const user = userEvent.setup();
+    renderPage();
+
+    await step(user, STEP_1);
+    const retry = await screen.findByRole("button", { name: "Retry" });
+    expectShown(SAVED);
+
+    respond = (budget) => HttpResponse.json(ready(budget ?? SAVED));
+    await user.click(retry);
+    await waitFor(() => expectShown(STEP_1));
+    expect(
+      screen.queryByRole("button", { name: "Retry" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers a retry once refused runs exhaust their retries", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    respond = (budget) =>
+      budget === null ? HttpResponse.json(ready(SAVED)) : failure(429);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderPage();
+
+    await step(user, STEP_1);
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    expect(
+      await screen.findByRole("button", { name: "Retry" }),
+    ).toBeInTheDocument();
+    expect(requestedBudgets.filter((b) => b === STEP_1)).toHaveLength(11);
+    expectShown(SAVED);
   });
 
   it("shows no blocks without an active plan", async () => {
-    response = () => ({ status: "cold_start" });
+    respond = () => HttpResponse.json({ status: "cold_start" });
     renderPage();
 
     await waitFor(() => expect(requestedBudgets).toEqual([null]));

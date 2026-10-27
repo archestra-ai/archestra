@@ -1,34 +1,44 @@
 import { assess, plan as fitPlan } from "@archestra/router-rs";
 import { z } from "zod";
 import logger from "@/logging";
+import RoutingBackfillModel from "@/models/routing-backfill";
 import RoutingPlanModel from "@/models/routing-plan";
-import type { AutoRoutingDiagnostics } from "@/types/auto-routing-api";
+import RoutingUsageModel from "@/models/routing-usage";
+import type { RoutingPlan } from "@/types/auto-routing";
+import type {
+  AutoRoutingDiagnostics,
+  AutoRoutingSizeFit,
+} from "@/types/auto-routing-api";
 import {
   CodedErrorSchema,
   cheapestBudget,
   type FitHistory,
+  fitAdmission,
   planInput,
   readFitHistory,
-  withFitAdmission,
 } from "./fit";
 import { routerFeatures } from "./signals";
 import { type RouterTierSet, TIER_NAMES } from "./tiers";
 
 /**
- * The active plan's fit sample re-solved at `budgetUsdPerDay` (its own budget
- * by default) and read back per session; publishes nothing. Admitted like a
- * simulation, as it fits the whole usage window twice.
+ * The current fit history, read at the active plan's scorer version and
+ * tiers, re-solved at `budgetUsdPerDay` (the plan's budget by default) and
+ * read back per displayed session; publishes nothing. Diagnostics admit
+ * apart from simulations so browsing budgets never starves them.
  */
 export function diagnoseAutoRouting(
   organizationId: string,
   budgetUsdPerDay: number | undefined,
 ): Promise<AutoRoutingDiagnostics> {
-  return withFitAdmission(organizationId, () =>
+  return diagnosticsAdmission(organizationId, () =>
     diagnose(organizationId, budgetUsdPerDay),
   );
 }
 
 // === Internal ===
+
+const MAX_DIAGNOSTICS = 2;
+const diagnosticsAdmission = fitAdmission("diagnostic", MAX_DIAGNOSTICS);
 
 const MAX_POINTS = 5000;
 /** Each client's earliest share of sessions the out-of-sample size model is fitted on. */
@@ -37,6 +47,8 @@ const TRAIN_SHARE = 0.7;
 const UNBOUNDED_BUDGET_USD_PER_DAY = 1e12;
 /** Low-discrepancy uniforms for the tie draw: stable, and close to q of a tie cohort upgrades. */
 const GOLDEN_RATIO_CONJUGATE = (Math.sqrt(5) - 1) / 2;
+const BASIS_TTL_MS = 5 * 60 * 1000;
+const MAX_BASES = 16;
 
 const TierTripleSchema = z.tuple([z.number(), z.number(), z.number()]);
 const TierIndexSchema = z.number().int().min(0).max(2);
@@ -75,6 +87,29 @@ type Assessment = z.infer<typeof AssessmentsSchema>[number];
 type Features = ReturnType<typeof routerFeatures>;
 type Row = FitHistory["sample"][number];
 
+/** Everything diagnostics read that no budget changes. */
+type Basis = {
+  history: FitHistory;
+  /** The displayed sessions, a deterministic spread over the sample. */
+  display: {
+    index: number;
+    features: Features;
+    realizedTokens: number;
+    predictedTokens: number | null;
+  }[];
+  sizeFit: AutoRoutingSizeFit;
+};
+
+type Holdout =
+  | { status: "ok"; predictions: (number | null)[] }
+  | { status: "no_holdout" | "failed" };
+
+/** Per organization, least recently used first. */
+const bases = new Map<
+  string,
+  { identity: string; expiresAt: number; basis: Basis }
+>();
+
 async function diagnose(
   organizationId: string,
   requestedBudget: number | undefined,
@@ -82,17 +117,12 @@ async function diagnose(
   const active = await RoutingPlanModel.findActive(organizationId);
   if (!active) return { status: "cold_start" };
   const tiers = StoredTierSetSchema.parse(active.tiersFingerprint);
-  const history = await readFitHistory({
-    organizationId,
-    scorerVersionId: active.scorerVersionId,
-    inputWatermark: active.inputWatermark,
-    longContextThreshold: tiers.long_context_threshold,
-  });
-  if (history.sample.length === 0) return { status: "cold_start" };
+  const basis = await cachedBasis(active, tiers);
+  if (basis.history.sample.length === 0) return { status: "cold_start" };
 
   const savedBudgetUsdPerDay = Number(active.budgetUsdPerDay);
   const budgetUsdPerDay = requestedBudget ?? savedBudgetUsdPerDay;
-  const solved = await solve(history, tiers, budgetUsdPerDay);
+  const solved = await solve(basis.history, tiers, budgetUsdPerDay);
   if (solved.kind === "infeasible") {
     return {
       status: "infeasible",
@@ -102,12 +132,9 @@ async function diagnose(
     };
   }
   const plan = SolvedPlanSchema.parse(JSON.parse(solved.planJson));
-  const features = history.sample.map((row) => routerFeatures(row.features));
-  const routed = assessSessions(solved.planJson, features);
-  const predicted = await predictOutOfSample(history, tiers, features);
-  const realized = history.sample.map(realizedTokens);
-  const tested = predicted.flatMap((p, i) =>
-    p === null ? [] : [{ predicted: p, realized: realized[i] }],
+  const routed = assessSessions(
+    solved.planJson,
+    basis.display.map((d) => d.features),
   );
   const { q } = plan.policy;
 
@@ -117,29 +144,110 @@ async function diagnose(
     savedBudgetUsdPerDay,
     lamStar: plan.policy.lam_star,
     q,
-    usdPerToken: [0, 1, 2].map((tier) =>
-      median(routed.map((a) => a.usd_per_token[tier])),
-    ) as [number, number, number],
     tierSessionShare: plan.summary.tier_session_share,
-    sizeFit: {
-      testSessions: tested.length,
-      spearman: spearman(
-        tested.map((t) => t.predicted),
-        tested.map((t) => t.realized),
-      ),
-      medianRealizedOverPredicted:
-        tested.length === 0
-          ? null
-          : median(tested.map((t) => t.realized / t.predicted)),
-    },
-    sessions: pointIndices(features.length).map((i) => ({
-      tierNeeded: features[i].tier_needed,
-      pLong: features[i].p_long,
-      realizedTokens: realized[i],
-      predictedTokens: predicted[i],
-      usdPerToken: routed[i].usd_per_token,
-      tier: TIER_NAMES[drawTier(routed[i], q, i)],
+    sizeFit: basis.sizeFit,
+    sessions: basis.display.map((d, k) => ({
+      tierNeeded: d.features.tier_needed,
+      pLong: d.features.p_long,
+      realizedTokens: d.realizedTokens,
+      predictedTokens: d.predictedTokens,
+      usdPerToken: routed[k].usd_per_token,
+      tier: TIER_NAMES[drawTier(routed[k], q, d.index)],
     })),
+  };
+}
+
+/** The basis of the active plan, rebuilt once its history may have changed or its entry expired. */
+async function cachedBasis(
+  active: RoutingPlan,
+  tiers: RouterTierSet,
+): Promise<Basis> {
+  const { organizationId } = active;
+  const [usageAt, backfill] = await Promise.all([
+    RoutingUsageModel.findLatestCreatedAt(),
+    RoutingBackfillModel.findLatest(organizationId),
+  ]);
+  const identity = JSON.stringify([
+    active.id,
+    active.scorerVersionId,
+    usageAt?.getTime() ?? null,
+    backfill?.id ?? null,
+    backfill?.updatedAt.getTime() ?? null,
+  ]);
+  const cached = bases.get(organizationId);
+  bases.delete(organizationId);
+  const entry =
+    cached?.identity === identity && cached.expiresAt > Date.now()
+      ? cached
+      : {
+          identity,
+          expiresAt: Date.now() + BASIS_TTL_MS,
+          basis: await buildBasis(active, tiers),
+        };
+  bases.set(organizationId, entry);
+  for (const key of bases.keys()) {
+    if (bases.size <= MAX_BASES) break;
+    bases.delete(key);
+  }
+  return entry.basis;
+}
+
+async function buildBasis(
+  active: RoutingPlan,
+  tiers: RouterTierSet,
+): Promise<Basis> {
+  const history = await readFitHistory({
+    organizationId: active.organizationId,
+    scorerVersionId: active.scorerVersionId,
+    inputWatermark: active.inputWatermark,
+    longContextThreshold: tiers.long_context_threshold,
+  });
+  const features = history.sample.map((row) => routerFeatures(row.features));
+  const realized = history.sample.map(realizedTokens);
+  const holdout = await predictOutOfSample(history, tiers, features);
+  const display = pointIndices(features.length).map((index) => ({
+    index,
+    features: features[index],
+    realizedTokens: realized[index],
+    predictedTokens:
+      holdout.status === "ok" ? holdout.predictions[index] : null,
+  }));
+  return {
+    history,
+    display,
+    sizeFit: summarizeSizeFit(holdout, realized, display),
+  };
+}
+
+function summarizeSizeFit(
+  holdout: Holdout,
+  realized: number[],
+  display: Basis["display"],
+): AutoRoutingSizeFit {
+  if (holdout.status !== "ok") return { status: holdout.status };
+  const tested = holdout.predictions.flatMap((p, i) =>
+    p === null ? [] : [{ predicted: p, realized: realized[i] }],
+  );
+  const shown = display.flatMap((d) =>
+    d.predictedTokens === null
+      ? []
+      : [d.predictedTokens > 0 && d.realizedTokens > 0],
+  );
+  const plotted = shown.filter(Boolean).length;
+  return {
+    status: "ok",
+    testSessions: tested.length,
+    plotted,
+    excluded: shown.length - plotted,
+    spearman: spearman(
+      tested.map((t) => t.predicted),
+      tested.map((t) => t.realized),
+    ),
+    medianRealizedOverPredicted: median(
+      tested.flatMap((t) =>
+        t.predicted > 0 ? [t.realized / t.predicted] : [],
+      ),
+    ),
   };
 }
 
@@ -176,14 +284,13 @@ function assessSessions(planJson: string, features: Features[]): Assessment[] {
 
 /**
  * Sizes of each client's latest sessions, predicted by a size model fitted on
- * its earliest `TRAIN_SHARE`; null for the training sessions, or for all when
- * that fit fails.
+ * its earliest `TRAIN_SHARE`; null for the training sessions.
  */
 async function predictOutOfSample(
   history: FitHistory,
   tiers: RouterTierSet,
   features: Features[],
-): Promise<(number | null)[]> {
+): Promise<Holdout> {
   const byClient = new Map<string, number[]>();
   features.forEach(({ source }, i) => {
     const indices = byClient.get(source) ?? [];
@@ -200,9 +307,8 @@ async function predictOutOfSample(
     const trainSize = Math.round(indices.length * TRAIN_SHARE);
     for (const i of indices.slice(trainSize)) test.add(i);
   }
-  const predictions: (number | null)[] = features.map(() => null);
   const train = history.sample.filter((_, i) => !test.has(i));
-  if (train.length === 0 || test.size === 0) return predictions;
+  if (train.length === 0 || test.size === 0) return { status: "no_holdout" };
   try {
     const trained = await fitPlan(
       JSON.stringify(
@@ -218,15 +324,17 @@ async function predictOutOfSample(
       trained,
       order.map((i) => features[i]),
     );
+    const predictions: (number | null)[] = features.map(() => null);
     order.forEach((i, k) => {
       predictions[i] = assessed[k].predicted_tokens;
     });
+    return { status: "ok", predictions };
   } catch (error) {
     const coded = CodedErrorSchema.safeParse(error);
     if (!coded.success) throw error;
     logger.warn(coded.data, "[AutoRouting] Out-of-sample size fit failed");
+    return { status: "failed" };
   }
-  return predictions;
 }
 
 function drawTier(assessment: Assessment, q: number, index: number): number {
@@ -247,7 +355,8 @@ function pointIndices(n: number): number[] {
   return Array.from({ length: count }, (_, k) => Math.floor((k * n) / count));
 }
 
-function median(values: number[]): number {
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
   const sorted = values.toSorted((a, b) => a - b);
   const mid = sorted.length >> 1;
   return sorted.length % 2 === 1

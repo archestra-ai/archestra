@@ -190,11 +190,31 @@ export const AutoRoutingDiagnosticsQuerySchema = z.object({
 const TierTripleSchema = z.tuple([z.number(), z.number(), z.number()]);
 
 /**
- * The active plan's fit sample re-solved at `budgetUsdPerDay` without
- * publishing. Each session carries its Jev reading, realized tokens, the size
- * predicted by a fit on each client's earliest 70% of sessions (null for those
- * training sessions), its per-token tier prices and the tier the re-solved
- * policy routes it to (a tie drawn with probability q).
+ * How the size model predicts sessions it was not fitted on: none without a
+ * holdout (a client with too few sessions), nor when that fit failed.
+ * `plotted` and `excluded` count the displayed held-out sessions with and
+ * without a positive predicted and realized size.
+ */
+const AutoRoutingSizeFitSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("ok"),
+    testSessions: z.number().int().nonnegative(),
+    plotted: z.number().int().nonnegative(),
+    excluded: z.number().int().nonnegative(),
+    spearman: z.number().nullable(),
+    medianRealizedOverPredicted: z.number().nullable(),
+  }),
+  z.object({ status: z.literal("no_holdout") }),
+  z.object({ status: z.literal("failed") }),
+]);
+export type AutoRoutingSizeFit = z.infer<typeof AutoRoutingSizeFitSchema>;
+
+/**
+ * The current fit history re-solved at `budgetUsdPerDay` without publishing.
+ * Each displayed session carries its Jev reading, realized tokens, the size
+ * predicted by a fit on each client's earliest 70% of sessions (null for
+ * those training sessions), its per-token tier prices and the tier the
+ * re-solved policy routes it to (a tie drawn with probability q).
  */
 export const AutoRoutingDiagnosticsResponseSchema = z.discriminatedUnion(
   "status",
@@ -205,14 +225,9 @@ export const AutoRoutingDiagnosticsResponseSchema = z.discriminatedUnion(
       savedBudgetUsdPerDay: z.number(),
       lamStar: z.number(),
       q: z.number(),
-      /** Median USD per token of each tier over the sample. */
-      usdPerToken: TierTripleSchema,
+      /** Over the whole history, not only the displayed sessions. */
       tierSessionShare: TierTripleSchema,
-      sizeFit: z.object({
-        testSessions: z.number().int().nonnegative(),
-        spearman: z.number().nullable(),
-        medianRealizedOverPredicted: z.number().nullable(),
-      }),
+      sizeFit: AutoRoutingSizeFitSchema,
       sessions: z.array(
         z.object({
           tierNeeded: TierTripleSchema,

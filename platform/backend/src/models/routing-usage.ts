@@ -34,6 +34,12 @@ class RoutingUsageModel {
       .onConflictDoNothing({ target: usage.interactionId });
   }
 
+  /** When usage was last recorded in any organization: an index-only probe that history changed. */
+  static async findLatestCreatedAt(): Promise<Date | null> {
+    const [row] = await db.select({ at: max(usage.createdAt) }).from(usage);
+    return row?.at ?? null;
+  }
+
   /** The window a fit started at `inputWatermark` would read: the cold-start progress, and what a refit would change. */
   static async findFitVolume(params: FitWindow): Promise<FitVolume> {
     const window = fitWindow(params);

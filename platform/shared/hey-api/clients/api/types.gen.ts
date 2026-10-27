@@ -54625,7 +54625,9 @@ export type GetReadyErrors = {
         name: string;
         status: 'degraded';
         version: string;
-        database: 'disconnected';
+        database: 'connected' | 'disconnected';
+        openappa?: 'starting' | 'unavailable';
+        openappaReason?: string;
     };
 };
 
@@ -54640,6 +54642,7 @@ export type GetReadyResponses = {
         status: 'ok' | 'maintenance';
         version: string;
         database: 'connected' | 'not_checked';
+        openappa: 'ready' | 'disabled' | 'not_checked';
         sandbox: 'ready' | 'initializing' | 'disabled' | 'unreachable';
         sandboxReason?: string;
     };

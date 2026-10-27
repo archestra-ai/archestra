@@ -102,7 +102,9 @@ import { createCachedOpenApiRouteHandler } from "@/openapi/cached-openapi-route"
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import {
   declareOpenappaInstalls,
+  openappaReadiness,
   recompileAllOnStart,
+  startOpenappaRuntime,
 } from "@/openappa/service";
 import { initializeLlmProxyPlugins } from "@/proxy/plugins/registry";
 import guardrailsNoopAnnotatorRoutes from "@/routes/guardrails-policy/guardrails-noop-annotator.routes";
@@ -914,6 +916,7 @@ const startWebServer = async () => {
     // text does not declare.
     await declareOpenappaInstalls();
     void recompileAllOnStart();
+    void startOpenappaRuntime();
 
     // With basic auth disabled, a password session that predates the flag
     // would otherwise stay valid until it expired. Runs after seeding so the
@@ -1494,6 +1497,7 @@ const startWorker = async () => {
     // carries the legacy rows into the text first, exactly as `start` does.
     await declareOpenappaInstalls();
     void recompileAllOnStart();
+    void startOpenappaRuntime();
 
     registerTaskHandlers(taskQueueService);
     await taskQueueService.seedPeriodicTasks();
@@ -1562,7 +1566,17 @@ const startWorker = async () => {
       if (!dbHealthy) {
         return reply.status(503).send({ status: "error", reason: "database" });
       }
-      return { status: "ok" };
+      const openappa = await openappaReadiness();
+      switch (openappa.state) {
+        case "disabled":
+        case "ready":
+          return { status: "ok" };
+        case "starting":
+        case "unavailable":
+          return reply
+            .status(503)
+            .send({ status: "error", reason: "openappa" });
+      }
     });
 
     // Auth plugin decorates request.user / request.organizationId which route

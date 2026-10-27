@@ -226,6 +226,77 @@ test("LLM-only installations recheck live proxy read access without creating or 
   });
 });
 
+test.for([
+  "azure",
+  "github-copilot",
+] as const)("runtime refresh publishes %s models through Model Router", async (provider, {
+  makeMember,
+  makeAgent,
+  makeSecret,
+  makeLlmProviderApiKey,
+}) => {
+  await makeMember(ctx.user.id, ctx.organizationId);
+  const proxy = await makeAgent({
+    organizationId: ctx.organizationId,
+    agentType: "llm_proxy",
+  });
+  const secret = await makeSecret();
+  const key = await makeLlmProviderApiKey(ctx.organizationId, secret.id, {
+    provider,
+    userId: ctx.user.id,
+    isPrimary: true,
+    baseUrl: "https://models.example/openai",
+  });
+  const model = await ModelModel.create({
+    provider,
+    modelId: "custom-deployment",
+    externalId: `${provider}-runtime`,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+  });
+  await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [model.id]);
+  const virtualKey = await VirtualApiKeyModel.create({
+    organizationId: ctx.organizationId,
+    name: "Managed runtime test",
+    scope: "personal",
+    authorId: ctx.user.id,
+    providerApiKeys: [{ provider, providerApiKeyId: key.id }],
+  });
+  const { setup, rawToken } = await ConnectionSetupModel.create({
+    organizationId: ctx.organizationId,
+    userId: ctx.user.id,
+    clientId: "opencode",
+    baseUrl: "https://deployment.example.com/v1",
+    llmProxyId: proxy.id,
+    provider,
+    proxyAuth: "virtual-key",
+    virtualApiKeyId: virtualKey.virtualKey.id,
+    expiresAt: new Date(Date.now() + 60000),
+  });
+  await ConnectionSetupModel.claimByToken({ rawToken });
+  const response = await fetchRuntime(tokenFor(setup.id));
+  expect(response.statusCode, response.body).toBe(200);
+  for (const artifact of ["routing-v1.mjs", "routing-v2.mjs"]) {
+    const source = response.json().artifacts[artifact].source as string;
+    expect(source).toContain(
+      `"archestra-${provider}":"https://deployment.example.com/v1/model-router/${proxy.id}"`,
+    );
+    expect(source).toContain('"id":"custom-deployment"');
+    expect(source).not.toContain(virtualKey.value);
+    expect(source).not.toContain("/connection-setup/");
+  }
+  await LlmProviderApiKeyModelLinkModel.unlinkModelFromApiKey({
+    apiKeyId: key.id,
+    provider,
+    modelId: model.modelId,
+  });
+  const revised = await fetchRuntime(tokenFor(setup.id));
+  expect(revised.statusCode, revised.body).toBe(200);
+  expect(revised.json().artifacts["routing-v2.mjs"].source).not.toContain(
+    '"id":"custom-deployment"',
+  );
+});
+
 test("runtime artifacts follow live authorized models without provisioning rows or embedding the key", async ({
   makeMember,
   makeAgent,

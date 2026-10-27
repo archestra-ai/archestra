@@ -802,6 +802,7 @@ describe("POST /api/connection-setups", () => {
     "bedrock",
     "vllm",
     "azure",
+    "github-copilot",
   ] as const)("OpenCode virtual key installs %s models without leaking other mappings", async (provider, {
     makeSecret,
     makeLlmProviderApiKey,
@@ -824,6 +825,7 @@ describe("POST /api/connection-setups", () => {
     expect(previous.statusCode).toBe(200);
     const key = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider,
+      userId: user.id,
       isPrimary: false,
       baseUrl: "https://models.example/v1",
     });
@@ -869,12 +871,19 @@ describe("POST /api/connection-setups", () => {
       url: `/api/connection-setups/script/${rawToken}`,
     });
     expect(script.statusCode).toBe(200);
-    // None of these providers has an OpenCode provider of its own, so the
-    // installer carries no route for it and never adds an Archestra one.
-    expect(script.body).not.toContain(`"archestra-${provider}"`);
-    expect(script.body).not.toContain("example/coder");
-    expect(script.body).toContain('"routes":{}');
-    expect(script.body).toMatch(/"unsupported":\["Test API Key [0-9a-f]{8}"\]/);
+    if (provider === "azure" || provider === "github-copilot") {
+      expect(script.body).toContain(`"archestra-${provider}"`);
+      expect(script.body).toContain("example/coder");
+      expect(script.body).toContain('"modelRouter":{');
+      expect(script.body).toContain('"unsupported":[]');
+    } else {
+      expect(script.body).not.toContain(`"archestra-${provider}"`);
+      expect(script.body).not.toContain("example/coder");
+      expect(script.body).toContain('"routes":{}');
+      expect(script.body).toMatch(
+        /"unsupported":\["Test API Key [0-9a-f]{8}"\]/,
+      );
+    }
     expect(script.body).not.toContain('"archestra-openai"');
     expect(script.body).toContain("opencode-primary-state.json");
   });

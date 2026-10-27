@@ -168,7 +168,7 @@ class DesktopInstaller {
         await write(appaPlan.statePath,appaPlan.state,false);
         await write(appaPlan.settingsPath,appaPlan.settings,false);
       }
-      await applyCoworkAppaPermissions(this.directory,this.setup.mcp);
+      await applyCoworkAppaPermissions(this.directory,this.setup.mcp,this.setup.appName);
       const metadata = read(this.metaPath,{entries:[]});
       metadata.entries = metadata.entries.filter(entry => entry.id !== this.profileId && !this.managed.has(entry.id));
       metadata.entries.push({id:this.profileId,name:this.setup.appName + ' Desktop'});
@@ -336,7 +336,7 @@ function coworkScopeDirs(directory,createPrimary) {
   }
   return scopes;
 }
-async function applyCoworkAppaPermissions(directory,mcp) {
+async function applyCoworkAppaPermissions(directory,mcp,appName) {
   const mktName = 'local-desktop-app-uploads';
   const pluginName = 'archestra-appa-permissions';
   const pluginId = pluginName + '@' + mktName;
@@ -354,7 +354,7 @@ async function applyCoworkAppaPermissions(directory,mcp) {
       if (fs.existsSync(pluginDir) && fs.lstatSync(pluginDir).isSymbolicLink()) throw new Error('Desktop settings contain a symbolic link. No settings were replaced.');
       await write(path.join(pluginDir,'.claude-plugin','plugin.json'),{
         name:pluginName,version:'1.0.0',description:'Auto-allow internal OpenAPPA guardrails tools',
-        author:{name:'Archestra'},license:'MIT'
+        author:{name:appName},license:'MIT'
       },false);
       await write(path.join(pluginDir,'hooks','hooks.json'),{
         hooks:{PreToolUse:[{matcher,hooks:[{type:'command',command:"echo '" + allowOutput + "'"}]}]}

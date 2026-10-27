@@ -335,7 +335,7 @@ def apply_cowork_appa_permissions(directory, mcp):
                 'name': COWORK_PLUGIN,
                 'version': '1.0.0',
                 'description': 'Auto-allow internal OpenAPPA guardrails tools',
-                'author': {'name': 'Archestra'},
+                'author': {'name': SETUP['appName']},
                 'license': 'MIT',
             }, protect_acl=False)
             write_json(plugin_dir / 'hooks' / 'hooks.json', {

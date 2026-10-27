@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   memberOrders,
-  moveMember,
   orderShare,
   type PoolFormMember,
   removeMember,
@@ -74,31 +73,6 @@ describe("toFormValues and toPoolInput", () => {
       ["m2", 2],
       ["m3", 3],
     ]);
-  });
-});
-
-describe("moveMember", () => {
-  const members = [
-    member("a"),
-    member("b", true),
-    member("c"),
-    member("d", true),
-  ];
-
-  it("trades places within an order and keeps the order", () => {
-    expect(layout(moveMember(members, 1, 0))).toBe("b+a c+d");
-  });
-
-  it("joins an order when dropped between two linked members", () => {
-    expect(layout(moveMember(members, 2, 1))).toBe("a+c+b d");
-  });
-
-  it("starts an order of its own anywhere else", () => {
-    expect(layout(moveMember(members, 3, 0))).toBe("d a+b c");
-  });
-
-  it("hands the lead of its old order to the member after it", () => {
-    expect(layout(moveMember(members, 0, 3))).toBe("b c+d a");
   });
 });
 

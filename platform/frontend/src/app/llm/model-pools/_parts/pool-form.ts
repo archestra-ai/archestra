@@ -79,37 +79,6 @@ export function memberOrders(members: { linked: boolean }[]): number[] {
   return orders;
 }
 
-/**
- * The members after one moves from `from` to `to`. Dropped between two linked
- * members, it joins their order; anywhere else it starts an order of its own.
- * A member that followed it in its old order now leads that order. Moved
- * within its own order, it only trades places.
- */
-export function moveMember(
-  members: PoolFormMember[],
-  from: number,
-  to: number,
-): PoolFormMember[] {
-  const orders = memberOrders(members);
-  if (orders[from] === orders[to]) {
-    // Within one order, the rows trade places and the order stays as it is.
-    const next = [...members];
-    const [moved] = next.splice(from, 1);
-    if (!moved) return members;
-    next.splice(to, 0, moved);
-    return next.map((member, index) => ({
-      ...member,
-      linked: members[index]?.linked ?? false,
-    }));
-  }
-  const next = unlinkFollower(members, from);
-  const [moved] = next.splice(from, 1);
-  if (!moved) return members;
-  const insideOrder = to > 0 && next[to]?.linked === true;
-  next.splice(to, 0, { ...moved, linked: insideOrder });
-  return leadWithUnlinked(next);
-}
-
 /** The members after one is removed, keeping the others' orders. */
 export function removeMember(
   members: PoolFormMember[],
@@ -255,7 +224,7 @@ export function usePoolProblem(
   return null;
 }
 
-export function hasRepeatedMember(members: PoolFormMember[]) {
+function hasRepeatedMember(members: PoolFormMember[]) {
   const keys = members.map(
     (member) => `${member.providerApiKeyId}|${member.modelId.trim()}`,
   );

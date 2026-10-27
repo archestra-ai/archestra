@@ -2,33 +2,40 @@
 
 import { DocsPage, type SupportedProvider } from "@archestra/shared";
 import {
+  type CollisionDetection,
   closestCenter,
   DndContext,
   type DragEndEvent,
+  DragOverlay,
   KeyboardSensor,
+  MeasuringStrategy,
   PointerSensor,
+  pointerWithin,
+  type UniqueIdentifier,
+  useDroppable,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
 import {
   SortableContext,
+  type SortingStrategy,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  ArrowDown,
+  CircleAlert,
   CircleHelp,
   GripVertical,
   Info,
-  Link2,
   Plus,
   TriangleAlert,
-  Unlink2,
   X,
 } from "lucide-react";
-import { useState } from "react";
-import { Controller, useFieldArray } from "react-hook-form";
+import { type ReactNode, useState } from "react";
+import { Controller } from "react-hook-form";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   LlmModelSearchableSelect,
@@ -55,17 +62,16 @@ import { cn } from "@/lib/utils/tailwind";
 import { MemberCooldown } from "./member-status";
 import { poolModelName, suggestModelId } from "./model-name";
 import {
-  hasRepeatedMember,
   isValidWeight,
   MAX_WEIGHT,
-  memberOrders,
-  moveMember,
-  orderShare,
   type PoolForm,
-  type PoolFormMember,
   type PoolOptions,
-  removeMember,
 } from "./pool-form";
+import {
+  type OrderBucket,
+  type OrderMember,
+  useOrderBuckets,
+} from "./use-order-buckets";
 
 type SavedMember = ModelPool["members"][number];
 
@@ -137,40 +143,69 @@ export function ModelNameField({
   );
 }
 
-// Order, key, model, weight, traffic, on, remove.
+// Handle, key, model, weight, traffic, on, remove.
 const MEMBER_COLUMNS =
-  "@3xl:grid-cols-[4.25rem_minmax(0,1fr)_minmax(0,1.25fr)_4.5rem_4.5rem_3.25rem_2.25rem]";
+  "@3xl:grid-cols-[1.75rem_minmax(0,1fr)_minmax(0,1.25fr)_4rem_4.5rem_2.75rem_2.25rem]";
 
-/**
- * The members in the order requests try them. Drag a row to change its order;
- * link it to the row above to share that order and split traffic by weight.
- * In a wide dialog each row is one line under column headers; in a narrow one
- * it wraps.
- */
-export function MembersEditor({
-  form,
-  options,
-  disabled,
-  savedMembers,
-}: {
+type MembersEditorProps = {
   form: PoolForm;
   options: PoolOptions;
   disabled: boolean;
   /** The saved members, with live cooldowns. Empty for a new pool. */
   savedMembers: SavedMember[];
-}) {
-  const { fields, append, move, remove } = useFieldArray({
-    control: form.control,
-    name: "members",
-  });
-  const name = form.watch("name").trim();
-  const members = form.watch("members");
-  const orders = memberOrders(members);
-  const { sharedKeys, modelIdsByKey } = options;
-  const nextKey =
-    sharedKeys.find(
-      (key) => !members.some((member) => member.providerApiKeyId === key.id),
-    ) ?? sharedKeys[0];
+};
+
+type DropTarget =
+  | { kind: "order"; order: number; position?: number }
+  | { kind: "gap"; before: number }
+  | { kind: "new" };
+
+/** What a drop on `id` means: a card, a gap between cards, or a member row. */
+function dropTarget(
+  id: UniqueIdentifier,
+  buckets: OrderBucket[],
+): DropTarget | null {
+  const key = String(id);
+  if (key === "zone:new") return { kind: "new" };
+  if (key.startsWith("zone:order:")) {
+    return { kind: "order", order: Number(key.slice("zone:order:".length)) };
+  }
+  if (key.startsWith("zone:gap:")) {
+    return { kind: "gap", before: Number(key.slice("zone:gap:".length)) };
+  }
+  for (const bucket of buckets) {
+    const position = bucket.members.findIndex((member) => member.id === key);
+    if (position >= 0) return { kind: "order", order: bucket.order, position };
+  }
+  return null;
+}
+
+// A member row under the pointer wins over the card that holds it.
+const collision: CollisionDetection = (args) => {
+  const hits = pointerWithin(args);
+  const pool = hits.length > 0 ? hits : closestCenter(args);
+  const first =
+    pool.find((hit) => !String(hit.id).startsWith("zone:")) ?? pool[0];
+  return first ? [first] : [];
+};
+
+// Rows only make room for the dragged member inside its own card.
+const withinOrder: SortingStrategy = (args) =>
+  args.activeIndex < 0 || args.overIndex < 0
+    ? null
+    : verticalListSortingStrategy(args);
+
+/**
+ * The members as one card per order. Requests try order 1 first; members of
+ * an order split its traffic by weight. Drag a member into another card, or
+ * between two cards to give it an order of its own.
+ */
+export function MembersEditor(props: MembersEditorProps) {
+  const { disabled, options } = props;
+  const editor = useOrderBuckets(props);
+  const { buckets, count, canAdd } = editor;
+  const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
+  const [overId, setOverId] = useState<UniqueIdentifier | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, {
@@ -178,192 +213,334 @@ export function MembersEditor({
     }),
   );
 
-  // The field array moves and removes rows; which rows are linked follows.
-  const relink = (next: PoolFormMember[]) => {
-    next.forEach((member, index) => {
-      if (form.getValues(`members.${index}.linked`) !== member.linked) {
-        form.setValue(`members.${index}.linked`, member.linked, {
-          shouldDirty: true,
-        });
-      }
-    });
-  };
-  const moveRow = (from: number, to: number) => {
-    if (from === to || to < 0 || to >= fields.length) return;
-    const next = moveMember(form.getValues("members"), from, to);
-    move(from, to);
-    relink(next);
-  };
-  const removeRow = (index: number) => {
-    const next = removeMember(form.getValues("members"), index);
-    remove(index);
-    relink(next);
+  const members = buckets.flatMap((bucket) => bucket.members);
+  const active = members.find((member) => member.id === activeId) ?? null;
+  const dragging = active !== null;
+  const target = overId === null ? null : dropTarget(overId, buckets);
+  const canDrag = !disabled && count > 1;
+
+  const endDrag = () => {
+    setActiveId(null);
+    setOverId(null);
   };
   const handleDragEnd = ({ active, over }: DragEndEvent) => {
-    if (!over || active.id === over.id) return;
-    moveRow(
-      fields.findIndex((field) => field.id === active.id),
-      fields.findIndex((field) => field.id === over.id),
-    );
+    endDrag();
+    const from = members.find((member) => member.id === active.id)?.index;
+    if (from === undefined || !over || over.id === active.id) return;
+    const drop = dropTarget(over.id, buckets);
+    if (drop?.kind === "order") {
+      editor.moveToOrder(from, drop.order, drop.position);
+    }
+    if (drop?.kind === "gap") editor.moveToNewOrderBefore(from, drop.before);
+    if (drop?.kind === "new") editor.moveToOrder(from, buckets.length + 1);
   };
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+    <div className="@container space-y-2">
+      <div className="space-y-0.5">
         <Label>Members</Label>
-        {fields.length > 0 ? (
-          <span className="text-xs text-muted-foreground">
-            Tried top to bottom. Link rows to split traffic by weight.
-          </span>
+        {count > 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Order 1 is tried first. Members of an order split its traffic by
+            weight.
+          </p>
         ) : null}
       </div>
-      {fields.length === 0 ? (
+      {count === 0 ? (
         <p className="text-sm text-muted-foreground">
           Add the provider keys that serve this model.
         </p>
       ) : (
-        <div className="@container rounded-md border">
-          <div
-            className={cn(
-              "hidden gap-2 border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground @3xl:grid",
-              MEMBER_COLUMNS,
-            )}
-          >
-            <span>Order</span>
-            <span>Provider key</span>
-            <span>Model</span>
-            <span className="flex items-center gap-1">
-              Weight
-              <HelpTip topic="Weight">
-                Splits traffic between linked rows. 3 and 1 means 75% and 25%.
-              </HelpTip>
-            </span>
-            <span>Traffic</span>
-            <span className="flex items-center gap-1">
-              On
-              <HelpTip topic="On">
-                Off keeps the member but sends it no traffic.
-              </HelpTip>
-            </span>
-          </div>
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={fields.map((field) => field.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              <ul>
-                {fields.map((field, index) => {
-                  const member = members[index];
-                  if (!member) return null;
-                  const order = orders[index] ?? 1;
-                  const shared =
-                    orders.filter((other) => other === order).length > 1;
-                  return (
-                    <MemberRow
-                      key={field.id}
-                      fieldId={field.id}
-                      form={form}
-                      options={options}
-                      disabled={disabled}
-                      index={index}
-                      count={fields.length}
-                      member={member}
-                      order={order}
-                      shared={shared}
-                      share={orderShare(members, index)}
-                      poolName={name}
-                      saved={
-                        savedMembers.find(
-                          (row) =>
-                            row.providerApiKeyId === member.providerApiKeyId &&
-                            row.modelId === member.modelId,
-                        ) ?? null
-                      }
-                      onMove={moveRow}
-                      onRemove={() => removeRow(index)}
-                    />
-                  );
-                })}
-              </ul>
-            </SortableContext>
-          </DndContext>
-        </div>
-      )}
-      <div className="flex flex-wrap items-center gap-3 pt-1">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={disabled || !nextKey}
-          onClick={() =>
-            nextKey &&
-            append({
-              providerApiKeyId: nextKey.id,
-              modelId: suggestModelId(
-                name,
-                nextKey.provider,
-                modelIdsByKey.get(nextKey.id),
-              ),
-              linked: false,
-              weight: 1,
-              enabled: true,
-            })
-          }
+        <DndContext
+          sensors={sensors}
+          collisionDetection={collision}
+          measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+          onDragStart={({ active }) => setActiveId(active.id)}
+          onDragOver={({ over }) => setOverId(over?.id ?? null)}
+          onDragEnd={handleDragEnd}
+          onDragCancel={endDrag}
         >
-          <Plus />
-          <span>Add member</span>
-        </Button>
-        {sharedKeys.length === 0 ? (
-          <span className="text-xs text-muted-foreground">
-            No shared provider keys yet.
-          </span>
-        ) : null}
-        {hasRepeatedMember(members) ? (
-          <span className="text-xs text-destructive">
-            A key and model ID can be a member only once.
-          </span>
-        ) : null}
-      </div>
+          {/* One block, so the parent's spacing doesn't part connectors from cards. */}
+          <div>
+            <DropSlot
+              id="zone:gap:1"
+              active={dragging}
+              label="Drop here for a new order 1"
+            />
+            {buckets.map((bucket) => (
+              <div key={bucket.order}>
+                {bucket.order > 1 ? (
+                  <DropSlot
+                    id={`zone:gap:${bucket.order}`}
+                    active={dragging}
+                    label={`Drop here for a new order between ${bucket.order - 1} and ${bucket.order}`}
+                  >
+                    <div className="flex h-8 items-center gap-2 text-xs text-muted-foreground">
+                      <span
+                        className="ml-[22px] h-full w-px bg-border"
+                        aria-hidden="true"
+                      />
+                      <ArrowDown className="size-3.5" aria-hidden="true" />
+                      <span>If every member above is unavailable</span>
+                    </div>
+                  </DropSlot>
+                ) : null}
+                <OrderCard
+                  bucket={bucket}
+                  editor={props}
+                  canDrag={canDrag}
+                  canAdd={canAdd}
+                  highlighted={
+                    dragging &&
+                    target?.kind === "order" &&
+                    target.order === bucket.order
+                  }
+                  onAdd={() => editor.addToOrder(bucket.order)}
+                  onRemove={editor.removeAt}
+                />
+              </div>
+            ))}
+            <DragOverlay dropAnimation={null}>
+              {active ? (
+                <DragPreview member={active} options={options} />
+              ) : null}
+            </DragOverlay>
+            <div className="pt-2">
+              <DropSlot
+                id="zone:new"
+                active={dragging}
+                label="Drop here for a new order"
+              >
+                <AddOrder
+                  count={count}
+                  canAdd={canAdd}
+                  disabled={disabled}
+                  onAdd={() => editor.addToOrder(buckets.length + 1)}
+                />
+              </DropSlot>
+            </div>
+          </div>
+        </DndContext>
+      )}
+      {count === 0 ? (
+        <AddOrder
+          count={count}
+          canAdd={canAdd}
+          disabled={disabled}
+          onAdd={() => editor.addToOrder(1)}
+        />
+      ) : null}
     </div>
   );
 }
 
-function MemberRow({
-  fieldId,
-  form,
-  options,
-  disabled,
-  index,
+function AddOrder({
   count,
-  member,
-  order,
-  shared,
-  share,
-  poolName,
-  saved,
-  onMove,
+  canAdd,
+  disabled,
+  onAdd,
+}: {
+  count: number;
+  canAdd: boolean;
+  disabled: boolean;
+  onAdd: () => void;
+}) {
+  return (
+    <div className="flex min-h-8 flex-wrap items-center gap-3">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={disabled || !canAdd}
+        onClick={onAdd}
+      >
+        <Plus />
+        <span>{count === 0 ? "Add member" : "Add order"}</span>
+      </Button>
+      {canAdd ? null : (
+        <span className="text-xs text-muted-foreground">
+          No shared provider keys yet.
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** A drop target that shows its normal content until a drag starts. */
+function DropSlot({
+  id,
+  active,
+  label,
+  children,
+}: {
+  id: string;
+  active: boolean;
+  label: string;
+  children?: ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div ref={setNodeRef}>
+      {active ? (
+        <div
+          className={cn(
+            "my-0.5 flex h-7 items-center justify-center gap-1.5 rounded-md border border-dashed text-xs text-muted-foreground transition-colors",
+            isOver && "border-primary bg-primary/5 text-primary",
+          )}
+        >
+          <Plus className="size-3.5" aria-hidden="true" />
+          <span>{label}</span>
+        </div>
+      ) : (
+        children
+      )}
+    </div>
+  );
+}
+
+function OrderCard({
+  bucket,
+  editor,
+  canDrag,
+  canAdd,
+  highlighted,
+  onAdd,
   onRemove,
 }: {
-  fieldId: string;
-  form: PoolForm;
-  options: PoolOptions;
-  disabled: boolean;
-  index: number;
-  count: number;
-  member: PoolFormMember;
+  bucket: OrderBucket;
+  editor: MembersEditorProps;
+  canDrag: boolean;
+  canAdd: boolean;
+  highlighted: boolean;
+  onAdd: () => void;
+  onRemove: (index: number) => void;
+}) {
+  const { order, members } = bucket;
+  const { setNodeRef } = useDroppable({ id: `zone:order:${order}` });
+  const shared = members.length > 1;
+
+  return (
+    <section
+      ref={setNodeRef}
+      aria-label={`Order ${order}`}
+      className={cn(
+        "rounded-lg border bg-card transition-colors",
+        order === 1 && "border-primary/30",
+        highlighted && "border-primary bg-primary/5 ring-2 ring-primary/20",
+      )}
+    >
+      <header className="flex items-center gap-2 border-b px-3 py-2">
+        <span
+          className={cn(
+            "flex size-5 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums",
+            order === 1
+              ? "bg-primary text-primary-foreground"
+              : "border bg-muted text-muted-foreground",
+          )}
+          aria-hidden="true"
+        >
+          {order}
+        </span>
+        <span className="text-sm font-medium">Order {order}</span>
+      </header>
+      <ColumnHeaders shared={shared} />
+      <SortableContext
+        items={members.map((member) => member.id)}
+        strategy={withinOrder}
+      >
+        <ul className="divide-y">
+          {members.map((member) => (
+            <MemberRow
+              key={member.id}
+              row={member}
+              order={order}
+              editor={editor}
+              shared={shared}
+              canDrag={canDrag}
+              onRemove={() => onRemove(member.index)}
+            />
+          ))}
+        </ul>
+      </SortableContext>
+      <div className="border-t px-2 py-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          aria-label={`Add member to order ${order}`}
+          disabled={editor.disabled || !canAdd}
+          onClick={onAdd}
+          className="text-muted-foreground"
+        >
+          <Plus />
+          <span>Add member</span>
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The label strip under a card's title, on the rows' grid so each label sits
+ * over its field. Weight and Traffic stay blank in a one-member order. In a
+ * narrow dialog the rows label their own controls instead.
+ */
+function ColumnHeaders({ shared }: { shared: boolean }) {
+  return (
+    <div
+      className={cn(
+        "hidden h-7 items-center gap-2 border-b bg-muted/40 px-3 text-xs font-medium text-muted-foreground @3xl:grid",
+        MEMBER_COLUMNS,
+      )}
+    >
+      <span />
+      <span>Provider key</span>
+      <span>Model</span>
+      {shared ? (
+        <span className="flex items-center gap-1">
+          Weight
+          <HelpTip topic="Weight">
+            Splits an order&apos;s traffic between its members. 3 and 1 means
+            75% and 25%.
+          </HelpTip>
+        </span>
+      ) : (
+        <span />
+      )}
+      {shared ? <span>Traffic</span> : <span />}
+      <span className="flex items-center gap-1">
+        On
+        <HelpTip topic="On">
+          Off keeps the member but sends it no traffic.
+        </HelpTip>
+      </span>
+      <span />
+    </div>
+  );
+}
+
+// Outlines the key and model pickers of a repeated member.
+const INVALID_FIELD =
+  "[&_button]:border-destructive [&_button]:ring-2 [&_button]:ring-destructive/20 dark:[&_button]:ring-destructive/40";
+
+function MemberRow({
+  row,
+  order,
+  editor,
+  shared,
+  canDrag,
+  onRemove,
+}: {
+  row: OrderMember;
   order: number;
+  editor: MembersEditorProps;
   /** Other members share this order. */
   shared: boolean;
-  share: number | null;
-  poolName: string;
-  saved: SavedMember | null;
-  onMove: (from: number, to: number) => void;
+  canDrag: boolean;
   onRemove: () => void;
 }) {
+  const { form, options, disabled } = editor;
+  const { index, member, repeatsOrder } = row;
   const {
     attributes,
     isDragging,
@@ -371,14 +548,14 @@ function MemberRow({
     setNodeRef,
     transform,
     transition,
-  } = useSortable({ id: fieldId, disabled: disabled || count < 2 });
+  } = useSortable({ id: row.id, disabled: !canDrag });
   const [keyOpen, setKeyOpen] = useState(false);
   const { sharedKeys, keysById, modelIdsByKey, modelIdsByProvider } = options;
+  const poolName = form.watch("name").trim();
   const provider = keysById.get(member.providerApiKeyId)?.provider;
-  const keyModels = modelIdsByKey.get(member.providerApiKeyId) ?? [];
   const modelOptions = toModelOptions({
     provider,
-    keyModels,
+    keyModels: modelIdsByKey.get(member.providerApiKeyId) ?? [],
     providerModels: provider ? (modelIdsByProvider.get(provider) ?? []) : [],
   });
   const modelName = provider
@@ -391,68 +568,34 @@ function MemberRow({
     options.modelNames.includes(poolName) &&
     options.modelNames.includes(modelName) &&
     modelName !== poolName;
+  const repeated = repeatsOrder !== null;
 
   return (
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 bg-background px-3 py-2.5",
+        "grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 bg-card px-3 py-2.5",
         MEMBER_COLUMNS,
-        index > 0 && !member.linked && "border-t",
-        isDragging && "z-10 opacity-70 shadow-md",
+        isDragging && "opacity-40",
       )}
     >
-      <div className="flex h-9 items-center gap-1">
+      <div className="flex h-9 items-center">
         <Button
           type="button"
           variant="ghost"
           size="icon-xs"
-          aria-label={`Drag member ${index + 1}`}
-          className="cursor-grab text-muted-foreground active:cursor-grabbing"
-          disabled={disabled || count < 2}
+          aria-label="Drag into another order"
+          className="cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
+          disabled={!canDrag}
           {...attributes}
           {...listeners}
-          onKeyDown={(event) => {
-            listeners?.onKeyDown?.(event);
-            if (event.key === "ArrowUp") {
-              event.preventDefault();
-              onMove(index, index - 1);
-            }
-            if (event.key === "ArrowDown") {
-              event.preventDefault();
-              onMove(index, index + 1);
-            }
-          }}
         >
           <GripVertical />
         </Button>
-        <span
-          role="img"
-          aria-label={`Order ${order}`}
-          className={cn(
-            "flex size-5 items-center justify-center rounded-full border text-[11px] font-medium tabular-nums",
-            shared
-              ? "border-primary/40 bg-primary/10 text-primary"
-              : "bg-muted",
-          )}
-        >
-          {order}
-        </span>
       </div>
-      {index > 0 ? (
-        <LinkToggle
-          linked={member.linked}
-          disabled={disabled}
-          onToggle={() =>
-            form.setValue(`members.${index}.linked`, !member.linked, {
-              shouldDirty: true,
-            })
-          }
-        />
-      ) : null}
       <div className="grid min-w-0 gap-2 @3xl:contents">
-        <div className="min-w-0 space-y-1">
+        <div className={cn("min-w-0 space-y-1", repeated && INVALID_FIELD)}>
           <LlmProviderApiKeyDropdown
             availableKeys={sharedKeys}
             selectedApiKeyId={member.providerApiKeyId || null}
@@ -477,28 +620,30 @@ function MemberRow({
             triggerClassName="w-full"
             triggerAriaLabel="Provider key"
           />
-          <MemberCooldown saved={saved} />
+          <MemberCooldown saved={row.saved} />
         </div>
         <div className="min-w-0 space-y-1">
-          <Controller
-            control={form.control}
-            name={`members.${index}.modelId`}
-            render={({ field }) => (
-              <LlmModelSearchableSelect
-                options={modelOptions}
-                value={field.value}
-                onValueChange={field.onChange}
-                disabled={disabled || !member.providerApiKeyId}
-                allowCustom
-                placeholder="Choose or type a model ID"
-                searchPlaceholder="Search or type a model ID"
-                emptyMessage="This key has no synced models. Type the model ID."
-                className="font-mono"
-                popoverContentClassName="w-[400px]"
-                popoverAlign="start"
-              />
-            )}
-          />
+          <div className={cn(repeated && INVALID_FIELD)}>
+            <Controller
+              control={form.control}
+              name={`members.${index}.modelId`}
+              render={({ field }) => (
+                <LlmModelSearchableSelect
+                  options={modelOptions}
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  disabled={disabled || !member.providerApiKeyId}
+                  allowCustom
+                  placeholder="Choose or type a model ID"
+                  searchPlaceholder="Search or type a model ID"
+                  emptyMessage="This key has no synced models. Type the model ID."
+                  className="font-mono"
+                  popoverContentClassName="w-[400px]"
+                  popoverAlign="start"
+                />
+              )}
+            />
+          </div>
           {provider === "bedrock" ? (
             <p className="flex items-center gap-1 pl-1 text-[11px] text-muted-foreground">
               <Info className="size-3 shrink-0" aria-hidden="true" />
@@ -512,6 +657,18 @@ function MemberRow({
             </p>
           ) : null}
         </div>
+        {repeated ? (
+          // Wide: its own line under the key and model, so the rest of the
+          // row keeps its cells.
+          <p className="flex items-center gap-1.5 text-xs text-destructive @3xl:col-span-2 @3xl:col-start-2 @3xl:row-start-2 @3xl:-mt-1">
+            <CircleAlert className="size-3.5 shrink-0" aria-hidden="true" />
+            <span>
+              {repeatsOrder === order
+                ? "Already in this order with this key and model."
+                : `Already in order ${repeatsOrder} with this key and model.`}
+            </span>
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 @3xl:contents">
           {shared ? (
             <Label className="gap-1.5 text-xs font-normal text-muted-foreground">
@@ -529,14 +686,13 @@ function MemberRow({
               />
             </Label>
           ) : (
-            <span className="hidden h-9 items-center pl-2 text-xs text-muted-foreground @3xl:flex">
-              —
-            </span>
+            <span className="hidden @3xl:block" />
           )}
-          <TrafficShare
-            share={share}
-            label={!member.enabled ? "Off" : order === 1 ? "All" : "Fallback"}
-          />
+          {shared ? (
+            <TrafficShare share={row.share} />
+          ) : (
+            <span className="hidden @3xl:block" />
+          )}
           <Controller
             control={form.control}
             name={`members.${index}.enabled`}
@@ -568,51 +724,27 @@ function MemberRow({
   );
 }
 
-/**
- * The chip on the line above a row: linked shares the order of the row above
- * and splits its traffic; unlinked makes the row a fallback for it.
- */
-function LinkToggle({
-  linked,
-  disabled,
-  onToggle,
+/** The chip that follows the pointer while a member is dragged. */
+function DragPreview({
+  member,
+  options,
 }: {
-  linked: boolean;
-  disabled: boolean;
-  onToggle: () => void;
+  member: OrderMember;
+  options: PoolOptions;
 }) {
+  const key = options.keysById.get(member.member.providerApiKeyId);
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <UnstyledButton
-          aria-label={
-            linked
-              ? "Stop sharing the order of the row above"
-              : "Share the order of the row above"
-          }
-          aria-pressed={linked}
-          disabled={disabled}
-          onClick={onToggle}
-          className={cn(
-            "absolute -top-2.5 left-[2.75rem] z-10 flex size-5 items-center justify-center rounded-full border bg-background disabled:pointer-events-none",
-            linked
-              ? "border-primary/50 text-primary"
-              : "text-muted-foreground/70 hover:text-foreground",
-          )}
-        >
-          {linked ? (
-            <Link2 className="size-3" aria-hidden="true" />
-          ) : (
-            <Unlink2 className="size-3" aria-hidden="true" />
-          )}
-        </UnstyledButton>
-      </TooltipTrigger>
-      <TooltipContent>
-        {linked
-          ? "Same order as the row above. Click to make it a fallback."
-          : "Fallback for the rows above. Click to split traffic with the row above."}
-      </TooltipContent>
-    </Tooltip>
+    <div className="flex w-fit max-w-80 cursor-grabbing items-center gap-2 rounded-md border bg-popover px-3 py-2 text-sm shadow-lg">
+      <GripVertical
+        className="size-4 text-muted-foreground"
+        aria-hidden="true"
+      />
+      {key ? <ProviderIcon provider={key.provider} size={14} /> : null}
+      <span className="truncate">{key?.name ?? "Provider key"}</span>
+      <span className="truncate font-mono text-xs text-muted-foreground">
+        {member.member.modelId}
+      </span>
+    </div>
   );
 }
 
@@ -639,19 +771,12 @@ function toModelOptions({
   }));
 }
 
-/** The member's percent of its order's traffic, with a bar. */
-function TrafficShare({
-  share,
-  label,
-}: {
-  share: number | null;
-  /** Shown instead of a percent when the member is off or alone. */
-  label: string;
-}) {
+/** The member's percent of its order's traffic, with a bar; "Off" when off. */
+function TrafficShare({ share }: { share: number | null }) {
   if (share === null) {
     return (
       <span className="flex h-9 items-center text-xs text-muted-foreground">
-        {label}
+        Off
       </span>
     );
   }

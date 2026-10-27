@@ -6,7 +6,7 @@ import {
 } from "./proxy-benchmark-baseline.mjs";
 
 export const benchmarkDocsPath =
-  "docs/pages/admin/observability/performance-benchmarks.md";
+  "docs/pages/admin/performance-benchmarks.md";
 export const benchmarkDocsCommit = "docs: update proxy benchmark results";
 const blocks = {
   chat: {

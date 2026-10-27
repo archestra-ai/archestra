@@ -22,6 +22,7 @@ case "$registry_host" in
   ghcr.io)
     # Public pulls still use an anonymous registry bearer token. Never forward
     # a Google credential to another registry.
+    # supply-chain-policy: allow-unverified-download anonymous auth API response; no downloaded code is executed
     access_token=$(curl --fail --silent --show-error --get \
       --data-urlencode "service=ghcr.io" \
       --data-urlencode "scope=repository:${registry_path}:pull" \

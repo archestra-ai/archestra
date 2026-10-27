@@ -10,8 +10,13 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: bootstrap-ghcr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   bootstrap:
+    name: Provision ${{ matrix.image }}
     if: ${{ github.repository == 'archestra-ai/archestra' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]' && contains(github.event.pull_request.labels.*.name, 'bootstrap-ghcr') }}
     runs-on: ubuntu-latest
     permissions:

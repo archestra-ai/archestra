@@ -228,6 +228,12 @@ def stop_retained_client(tmux, env):
                     pass
 
 
+def hermes_errors(runtime):
+    # Hermes logs MCP discovery and SDK import failures here, not on screen.
+    log = runtime / "hermes" / "logs" / "errors.log"
+    return "\n--- Hermes errors.log ---\n" + log.read_text(errors="replace")[-4000:] if log.exists() else ""
+
+
 class StartupTest(unittest.TestCase):
     if CLIENT == "hermes":
         def test_agent_build_starts_discovery(self):
@@ -453,7 +459,7 @@ class StartupTest(unittest.TestCase):
                     break
                 if mode == "interactive" and len(server.calls) == 3 and len(server.requests) >= 4 and (runtime / "readable-transcript.json").exists():
                     break
-            details = output.decode(errors="replace")[-6000:]
+            details = output.decode(errors="replace")[-6000:] + hermes_errors(runtime)
             self.assertNotIn("Update available", output.decode(errors="replace"), details)
             for path, binding in server.binding_headers:
                 self.assertEqual(binding, env["ARCHESTRA_AGENT_RUNTIME_BINDING"], f"{path}: missing or stale workspace binding")

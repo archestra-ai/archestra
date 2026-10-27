@@ -38,6 +38,8 @@ import {
   describeContextHeadroom,
   formatTokenCount as formatTokens,
   getContextWindowStatus,
+  reconcileContextWindowBreakdown,
+  resolveContextWindowUsage,
   usageStrokeColor,
   usageTextColor,
 } from "@/lib/chat/context-window-status";
@@ -134,13 +136,25 @@ export function ContextWindowDialog({
   children,
 }: ContextWindowDialogProps) {
   const appName = useAppName();
-  // The breakdown's own percentage wins once it arrives: it is measured on the
-  // same yardstick as the auto-compaction check, whereas tokensUsed/maxTokens
-  // is the pre-response seed.
+  // Resolve one authoritative (tokensUsed, maxTokens) pair shared with the
+  // toolbar's ContextIndicator: live tokensUsed wins once refined by provider
+  // usage or compaction, and maxTokens wins when the active model's window is
+  // known (e.g. after switching models in the composer).
+  const resolvedUsage = resolveContextWindowUsage({
+    tokensUsed,
+    maxTokens,
+    breakdown,
+  });
   const status = getContextWindowStatus(
-    breakdown?.usedTokens ?? tokensUsed,
-    breakdown?.contextLength ?? maxTokens,
+    resolvedUsage.tokensUsed,
+    resolvedUsage.maxTokens,
   );
+  const reconciledBreakdown = breakdown
+    ? reconcileContextWindowBreakdown(breakdown, {
+        tokensUsed: resolvedUsage.tokensUsed,
+        maxTokens: resolvedUsage.maxTokens,
+      })
+    : null;
 
   return (
     <Dialog>
@@ -151,8 +165,8 @@ export function ContextWindowDialog({
         <TooltipContent side="top" className="max-w-[260px]">
           <ContextUsageTooltip
             status={status}
-            tokensUsed={breakdown?.usedTokens ?? tokensUsed}
-            maxTokens={breakdown?.contextLength ?? maxTokens}
+            tokensUsed={resolvedUsage.tokensUsed}
+            maxTokens={resolvedUsage.maxTokens}
             cachedTokens={cachedTokens}
             isCompacting={isCompacting}
           />
@@ -167,17 +181,17 @@ export function ContextWindowDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {breakdown ? (
+        {reconciledBreakdown ? (
           <ContextWindowPanel
-            breakdown={breakdown}
+            breakdown={reconciledBreakdown}
             lastCompaction={lastCompaction}
             onCompact={onCompact}
             isCompacting={isCompacting}
           />
         ) : (
           <EmptyState
-            tokensUsed={tokensUsed}
-            maxTokens={maxTokens}
+            tokensUsed={resolvedUsage.tokensUsed}
+            maxTokens={resolvedUsage.maxTokens}
             appName={appName}
           />
         )}

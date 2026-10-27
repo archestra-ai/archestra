@@ -444,4 +444,32 @@ describe("ContextWindowDialog — compact action", () => {
       screen.queryByRole("button", { name: /compact now/i }),
     ).not.toBeInTheDocument();
   });
+
+  it("keeps the panel synchronized with the active model's maxTokens and refined tokensUsed", async () => {
+    // Reproduces the composer model-switch / post-turn refinement case:
+    // breakdown was built on a 328k window with 9.7k estimated tokens, then
+    // the user switched to a 16.4k model (gpt-3.5-turbo-0613).
+    await openDialog(
+      <ContextWindowDialog
+        breakdown={makeBreakdown({
+          usedTokens: 9_700,
+          contextLength: 328_000,
+          freeTokens: 318_300,
+          usedPercent: 2.957,
+        })}
+        tokensUsed={9_700}
+        maxTokens={16_385}
+        onCompact={vi.fn()}
+      >
+        <button type="button">Open</button>
+      </ContextWindowDialog>,
+    );
+
+    // 9.7k / 16.4k tokens → 59% used, 21% remaining until auto-compact (80% - 59.2%)
+    expect(screen.getByText(/9\.7k \/ 16\.4k tokens/)).toBeInTheDocument();
+    expect(screen.getByText("59")).toBeInTheDocument();
+    expect(
+      screen.getByText("21% of context remaining until auto-compact."),
+    ).toBeInTheDocument();
+  });
 });

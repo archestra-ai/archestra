@@ -2599,6 +2599,96 @@ describe("context window breakdown state", () => {
     expect(sessionA.current?.contextWindow).toBeNull();
     expect(sessionB.current?.contextWindow).toBeNull();
   });
+
+  it("reconciles contextWindow.usedTokens when data-token-usage refines the prompt token count", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-context-window-breakdown",
+        data: validBreakdown,
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextWindow?.usedTokens).toBe(84_200),
+    );
+    expect(latestSessionRef.current?.contextTokensUsed).toBe(84_200);
+
+    // Provider reports exact prompt tokens after the response finishes.
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-token-usage",
+        data: { inputTokens: 168_400, outputTokens: 120, totalTokens: 168_520 },
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextTokensUsed).toBe(168_400),
+    );
+    expect(latestSessionRef.current?.contextWindow?.usedTokens).toBe(168_400);
+    expect(latestSessionRef.current?.contextWindow?.freeTokens).toBe(
+      200_000 - 168_400,
+    );
+  });
+
+  it("clears stale contextWindow when compaction updates contextTokensUsed", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-context-window-breakdown",
+        data: validBreakdown,
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextWindow).not.toBeNull(),
+    );
+
+    act(() => {
+      latestSessionRef.current?.recordContextCompaction({
+        trigger: "manual",
+        originalTokenEstimate: 84_200,
+        compactedTokenEstimate: 12_000,
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.contextTokensUsed).toBe(12_000),
+    );
+    expect(latestSessionRef.current?.contextWindow).toBeNull();
+  });
 });
 
 describe("ChatProvider app-tool cache invalidation", () => {

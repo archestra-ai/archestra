@@ -1455,14 +1455,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       } satisfies TokenUsage,
                     });
 
-                    // After a tool-call step the next model call will receive a
-                    // larger prompt (tool results appended). Re-emit the breakdown
-                    // with the provider's exact input-token count so the panel
-                    // headline stays accurate between steps. Category proportions
-                    // are kept from the initial estimate — they are still the best
-                    // available approximation of where tokens went.
+                    // Re-emit the breakdown with the provider's exact input-token
+                    // count on every finished step (both intermediate tool-call
+                    // steps and the final response step) so the panel headline and
+                    // composer ring stay in lockstep with `data-token-usage`.
+                    // Category proportions are kept from the initial estimate —
+                    // they are still the best available approximation of where
+                    // tokens went.
                     if (
-                      finishReason === "tool-calls" &&
                       latestBreakdown !== null &&
                       usage.inputTokens != null &&
                       usage.inputTokens > 0

@@ -1036,6 +1036,7 @@ Required RBAC permission: [`app:read`](/docs/reference/permissions#app:read)
 | `get_schedule_trigger` | Read one scheduled agent trigger, including the message template sent to the agent on every run. | [`project:read`](/docs/reference/permissions#project:read) † |
 | `list_schedule_trigger_runs` | List a scheduled task's run history, newest first: whether each run was due or manual, how it ended, when it started and completed, its failure text, and the chat conversation holding its transcript. | [`project:read`](/docs/reference/permissions#project:read) † |
 | `get_schedule_trigger_run` | Read one run of a scheduled task, including its full error text. | [`project:read`](/docs/reference/permissions#project:read) † |
+| `get_schedule_trigger_run_transcript` | Read what one scheduled task run did: its messages and every tool call with arguments, result and error, including guardrails rulings, remedy offers and review outcomes returned to the agent. | [`project:read`](/docs/reference/permissions#project:read) † |
 | `enable_schedule_trigger` | Enable a scheduled task so it is picked up again when due. | [`project:update`](/docs/reference/permissions#project:update) † |
 | `disable_schedule_trigger` | Disable a scheduled task so it stops firing, leaving its configuration and run history intact. | [`project:update`](/docs/reference/permissions#project:update) † |
 | `run_schedule_trigger_now` | Start a scheduled task immediately, outside its cron schedule. | [`project:create`](/docs/reference/permissions#project:create) † |
@@ -1419,6 +1420,58 @@ Additional access requirement: Requires a user token. The caller must be the sch
 | `chat_conversation_id` | `string \| null` | Yes | Chat conversation holding the run's transcript, when linked. |
 | `runtime_task_id` | `string \| null` | Yes | Agent Runtime task id, when the run executed on the runtime. |
 | `created_at` | `string` | Yes | ISO 8601 creation timestamp. |
+
+#### get_schedule_trigger_run_transcript
+
+Required RBAC permission: [`project:read`](/docs/reference/permissions#project:read)
+
+Additional access requirement: Requires a user token. The caller must be the schedule actor, or hold both organization-wide Projects **Can read** access and [`log:admin`](/docs/reference/permissions#log:admin). Project membership or Projects read alone shows run status but not the transcript.
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `schedule_trigger_id` | `string` | Yes | Id of the schedule the run belongs to. |
+| `run_id` | `string` | Yes | Id of the run to read. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `run` | `object` | Yes |  |
+| `run.blocked_by` | `object \| null` | Yes | Why this tick was skipped, including the blocking run and its frozen deadline. |
+| `run.blocked_by.phase` | `"starting" \| "running" \| "stopping"` | Yes |  |
+| `run.blocked_by.runId` | `string \| null` | Yes |  |
+| `run.blocked_by.runtimeTaskId` | `string \| null` | Yes |  |
+| `run.blocked_by.startedAt` | `string` | Yes |  |
+| `run.blocked_by.elapsedSeconds` | `integer` | Yes |  |
+| `run.blocked_by.deadline` | `string \| null` | Yes |  |
+| `run.blocked_by.maximumDurationSeconds` | `integer \| null` | Yes |  |
+| `run.id` | `string` | Yes | The run's id — pass it to get_schedule_trigger_run. |
+| `run.trigger_id` | `string` | Yes | Id of the schedule this run belongs to. |
+| `run.run_kind` | `"due" \| "manual"` | Yes | `due` = fired by the schedule; `manual` = started by a person. |
+| `run.status` | `"running" \| "success" \| "failed" \| "cancelled"` | Yes | Current state of the run. |
+| `run.started_at` | `string \| null` | Yes | ISO 8601 timestamp the run started. |
+| `run.completed_at` | `string \| null` | Yes | ISO 8601 timestamp the run settled; null while still running. |
+| `run.error` | `string \| null` | Yes | Failure text when the run failed or was skipped — for example a run skipped because the previous one was still in progress. |
+| `run.chat_conversation_id` | `string \| null` | Yes | Chat conversation holding the run's transcript, when linked. |
+| `run.runtime_task_id` | `string \| null` | Yes | Agent Runtime task id, when the run executed on the runtime. |
+| `run.created_at` | `string` | Yes | ISO 8601 creation timestamp. |
+| `session_id` | `string` | Yes | The run's session id. Pass it to list_openappa_consults or list_openappa_yells. |
+| `source` | `"conversation" \| "interactions" \| "encrypted" \| "runtime" \| "pending" \| "none"` | Yes | `conversation` = the run's chat; `interactions` = rebuilt from its LLM calls; `encrypted` = the chat is encrypted and cannot be read here; `runtime` = it ran on the Agent Runtime, whose output is read on its run page; `pending` = it finished under a minute ago with nothing recorded yet; its record may still be written, so read it again shortly; `none` = nothing was recorded. |
+| `messages` | `object[]` | Yes | The run's messages in order, with long values shortened. |
+| `messages[].role` | `string` | Yes |  |
+| `messages[].parts` | `object[]` | Yes |  |
+| `messages[].parts[].type` | `string` | Yes | `text`, `tool`, or the UI part type when it is something else. |
+| `messages[].parts[].text` | `string` | No | Message text, for a text part. |
+| `messages[].parts[].tool_name` | `string` | No | Tool called, for a tool part. |
+| `messages[].parts[].tool_call_id` | `string` | No | The tool call's id. |
+| `messages[].parts[].parent_tool_call_id` | `string` | No | For a delegated agent's call, the delegation call that started that agent. |
+| `messages[].parts[].state` | `string` | No | The tool call's final state. |
+| `messages[].parts[].input` | `string` | No | The tool call's arguments as JSON. |
+| `messages[].parts[].output` | `string` | No | The tool result as JSON, including any guardrails ruling. |
+| `messages[].parts[].error_text` | `string` | No | The tool call's error text. |
+| `truncated` | `boolean` | Yes | True when parts were left out to keep the result small. |
 
 #### enable_schedule_trigger
 

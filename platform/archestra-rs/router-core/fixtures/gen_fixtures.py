@@ -27,6 +27,8 @@ SOURCES = {"claude_main": 0.0, "claude_sub": -0.8, "codex_main": 0.3, "cursor_ma
 SOURCE_P = (0.45, 0.25, 0.2, 0.1)
 # weakest adequate tier, in twentieths: few distinct values so sessions tie at λ*
 TIER_NEEDED = ((14, 4, 2), (10, 6, 4), (6, 8, 6), (4, 6, 10), (2, 4, 14), (8, 8, 4), (2, 1, 17), (12, 1, 7))
+# log-size effects of tier_needed normal and smart (fast is the reference level)
+TIER_EFFECT = (0.8, -0.5)
 BASE_MIX = (0.05, 0.80, 0.08, 0.07)
 THRESHOLD = 100_000
 
@@ -55,7 +57,8 @@ def history(rng: np.random.Generator) -> list[dict]:
         sub = source.endswith("_sub")
         p_long = int(rng.integers(0, 11)) / 10
         k = TIER_NEEDED[int(rng.integers(len(TIER_NEEDED)))]
-        size = math.exp(math.log(3e5) + SOURCES[source] + 1.2 * p_long) * rng.lognormal(0, 0.6)
+        tier_effect = TIER_EFFECT[0] * k[1] / 20 + TIER_EFFECT[1] * k[2] / 20
+        size = math.exp(math.log(3e5) + SOURCES[source] + 1.2 * p_long + tier_effect) * rng.lognormal(0, 0.6)
         share = float(np.clip(0.15 * math.log(size / 2e5) + 0.1 * sub - 0.05 + rng.normal(0, 0.05), 0, 0.95))
         rows.append({
             "features": {
@@ -109,9 +112,12 @@ def main() -> None:
     total = np.array([sum(r["short"].values()) + sum(r["long"].values()) for r in rows], dtype=float)
     long_total = np.array([sum(r["long"].values()) for r in rows], dtype=float)
     p_long = np.array([f["p_long"] for f in features])
+    tier_needed = np.array([f["tier_needed"] for f in features])
 
     others = sorted({f["source"] for f in features} - {BASELINE})
-    x = np.column_stack([*[[f["source"] == s for f in features] for s in others], p_long]).astype(float)
+    x = np.column_stack(
+        [*[[f["source"] == s for f in features] for s in others], p_long, tier_needed[:, 1], tier_needed[:, 2]]
+    ).astype(float)
     glm = PoissonRegressor(alpha=1e-6, tol=1e-12, max_iter=10000, solver="newton-cholesky")
     glm.fit(x, total / TOKEN_SCALE)
     size = glm.predict(x) * TOKEN_SCALE
@@ -178,8 +184,10 @@ def main() -> None:
         },
         "expected": {
             "size_intercept": float(glm.intercept_),
-            "size_source_effects": dict(zip(others, map(float, glm.coef_[:-1]))),
-            "size_p_long": float(glm.coef_[-1]),
+            "size_source_effects": dict(zip(others, map(float, glm.coef_[:-3]))),
+            "size_p_long": float(glm.coef_[-3]),
+            "size_p_normal": float(glm.coef_[-2]),
+            "size_p_smart": float(glm.coef_[-1]),
             "long_share": {"intercept": float(ls.intercept_), "log_size": float(ls.coef_[0])},
             "policy": {"lam_star": float(lam_star), "q": float(q)},
             "expected_spend": float(expected_spend),

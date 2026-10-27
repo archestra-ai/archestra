@@ -177,6 +177,10 @@ impl TierNeeded {
         }
     }
 
+    pub(crate) fn probabilities(&self) -> [f64; TIER_COUNT] {
+        self.0
+    }
+
     /// P(tier t is adequate) = P(weakest adequate tier ≤ t).
     pub(crate) fn adequacy(&self) -> [f64; TIER_COUNT] {
         let [fast, normal, smart] = self.0;

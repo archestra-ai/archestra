@@ -42,7 +42,10 @@ post-run signals ┘   (later: calibration, learning)
 For each session `i` and tier `k`:
 
 - **Size** `s_i` (expected tokens): a Poisson GLM,
-  `log E[s / 1e6] = b0 + effect(source) + b_p · p_long`. Sources outside the most frequent
+  `log E[s / 1e6] = b0 + effect(source) + b_p · p_long + b_n · tier_needed_normal + b_s · tier_needed_smart`.
+  Fast is the `tier_needed` reference level, since the three probabilities sum to 1. The tier
+  terms matter because the allocator upgrades sessions by `tier_needed`: without them, the
+  upgraded sessions' sizes are biased and so is the spend they are planned at. Sources outside the most frequent
   `MAX_FIT_SOURCES`, and sources never seen in training, use the baseline's zero effect. The
   fit is L2-penalized Newton with step halving. Each Newton step is solved as a weighted
   least-squares problem, not by forming the Hessian.

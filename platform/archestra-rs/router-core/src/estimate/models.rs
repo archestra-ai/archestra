@@ -30,12 +30,16 @@ pub struct SourceEffect {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SizeModel {
-    /// log E[tokens/1e6] = intercept + effect(source) + p_long·p_long; baseline source has no effect.
+    /// log E[tokens/1e6] = intercept + effect(source) + p_long·p_long + p_normal·tier_needed[1] +
+    /// p_smart·tier_needed[2]. The baseline source has no effect; fast is the `tier_needed`
+    /// reference level.
     PoissonGlm {
         baseline: Source,
         intercept: f64,
         source_effects: Vec<SourceEffect>,
         p_long: f64,
+        p_normal: f64,
+        p_smart: f64,
     },
 }
 
@@ -48,14 +52,21 @@ impl SizeModel {
                 intercept,
                 source_effects,
                 p_long,
+                p_normal,
+                p_smart,
                 ..
             } => {
                 let effect = source_effects
                     .iter()
                     .find(|e| e.source == features.source)
                     .map_or(0.0, |e| e.coef);
-                ((intercept + effect + p_long * features.p_long.get()).exp() * TOKEN_SCALE)
-                    .clamp(MIN_SESSION_TOKENS, MAX_SESSION_TOKENS)
+                let [_, normal, smart] = features.tier_needed.probabilities();
+                let eta = intercept
+                    + effect
+                    + p_long * features.p_long.get()
+                    + p_normal * normal
+                    + p_smart * smart;
+                (eta.exp() * TOKEN_SCALE).clamp(MIN_SESSION_TOKENS, MAX_SESSION_TOKENS)
             }
         }
     }
@@ -66,16 +77,19 @@ impl SizeModel {
                 intercept,
                 source_effects,
                 p_long,
+                p_normal,
+                p_smart,
                 ..
             } => std::iter::once(*intercept)
                 .chain(source_effects.iter().map(|e| e.coef))
-                .chain(std::iter::once(*p_long))
+                .chain([*p_long, *p_normal, *p_smart])
                 .collect(),
         }
     }
 }
 
-/// Poisson GLM on [1, one-hot(source ≠ baseline), p_long], sources lexicographic after the baseline.
+/// Poisson GLM on [1, one-hot(source ≠ baseline), p_long, tier_needed normal, tier_needed smart],
+/// sources lexicographic after the baseline.
 /// Only the `MAX_FIT_SOURCES` most frequent non-baseline sources (ties by label) get a column;
 /// the rest are fit, and later predicted, as the baseline.
 pub(crate) fn fit_size(
@@ -96,7 +110,7 @@ pub(crate) fn fit_size(
     ranked.truncate(MAX_FIT_SOURCES);
     let mut others: Vec<&Source> = ranked.into_iter().map(|(s, _)| s).collect();
     others.sort();
-    let width = others.len() + 2;
+    let width = others.len() + 4;
     let design: Vec<Vec<f64>> = rows
         .iter()
         .map(|r| {
@@ -105,7 +119,8 @@ pub(crate) fn fit_size(
             if let Ok(j) = others.binary_search(&&r.features.source) {
                 x[1 + j] = 1.0;
             }
-            x[width - 1] = r.features.p_long.get();
+            let [_, normal, smart] = r.features.tier_needed.probabilities();
+            x[width - 3..].copy_from_slice(&[r.features.p_long.get(), normal, smart]);
             x
         })
         .collect();
@@ -119,13 +134,15 @@ pub(crate) fn fit_size(
         intercept: b[0],
         source_effects: others
             .iter()
-            .zip(&b[1..width - 1])
+            .zip(&b[1..width - 3])
             .map(|(s, &coef)| SourceEffect {
                 source: (*s).clone(),
                 coef,
             })
             .collect(),
-        p_long: b[width - 1],
+        p_long: b[width - 3],
+        p_normal: b[width - 2],
+        p_smart: b[width - 1],
     })
 }
 
@@ -381,6 +398,38 @@ mod tests {
         );
     }
 
+    #[test]
+    fn poisson_recovers_known_source_p_long_and_tier_coefficients() {
+        let (intercept, other, p_long, p_normal, p_smart) = (0.2_f64.ln(), 0.4, -0.3, 0.8, -0.6);
+        let tiers = [
+            [0.7, 0.2, 0.1],
+            [0.2, 0.6, 0.2],
+            [0.1, 0.3, 0.6],
+            [0.4, 0.1, 0.5],
+        ];
+        let mut rows = vec![];
+        for source in ["base", "other"] {
+            for long in [0.0, 0.5, 1.0] {
+                for t in tiers {
+                    let eta = intercept
+                        + other * f64::from(u8::from(source == "other"))
+                        + p_long * long
+                        + p_normal * t[1]
+                        + p_smart * t[2];
+                    let mut r = row(source, long, 0, 0);
+                    r.features.tier_needed = TierNeeded::new(t).unwrap();
+                    r.short.input = (eta.exp() * TOKEN_SCALE).round() as u64;
+                    rows.push(r);
+                }
+            }
+        }
+        let model = fit_size(&rows, &Source("base".into()), MAX_NEWTON_ITERATIONS).unwrap();
+        let expected = [intercept, other, p_long, p_normal, p_smart];
+        for (fit, truth) in model.coefficients().iter().zip(expected) {
+            assert!((fit - truth).abs() < 1e-4, "{model:?}");
+        }
+    }
+
     /// s00..s03 seen once, s04/s05 twice, s06..s24 three times: the cap keeps s06..s24 plus s04,
     /// which wins the count tie with s05 on label.
     fn many_sources() -> Vec<HistoryRow> {
@@ -434,6 +483,8 @@ mod tests {
             intercept: -7.0,
             source_effects: vec![],
             p_long,
+            p_normal: 0.0,
+            p_smart: 0.0,
         };
         let mut features = row("base", 1.0, 0, 0).features;
         assert_eq!(model(1178.0).predict(&features), MAX_SESSION_TOKENS);

@@ -7,7 +7,7 @@ use crate::estimate::{
     LongShareModel, MAX_NEWTON_ITERATIONS, SessionEstimate, SizeModel, TokenMixes, fit_size,
 };
 
-pub const PLAN_FORMAT_VERSION: u32 = 2;
+pub const PLAN_FORMAT_VERSION: u32 = 3;
 const HOLDOUT_WINDOW_MS: i64 = 10 * 24 * 60 * 60 * 1000;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

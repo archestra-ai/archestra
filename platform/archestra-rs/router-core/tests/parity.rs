@@ -16,6 +16,8 @@ struct Expected {
     size_intercept: f64,
     size_source_effects: BTreeMap<String, f64>,
     size_p_long: f64,
+    size_p_normal: f64,
+    size_p_smart: f64,
     long_share: LongShareModel,
     policy: Policy,
     expected_spend: f64,
@@ -50,10 +52,14 @@ fn matches_reference_fit_and_policy() {
         intercept,
         source_effects,
         p_long,
+        p_normal,
+        p_smart,
         ..
     } = &plan.size_model;
     assert_close("intercept", *intercept, expected.size_intercept, COEF_RTOL);
     assert_close("p_long", *p_long, expected.size_p_long, COEF_RTOL);
+    assert_close("p_normal", *p_normal, expected.size_p_normal, COEF_RTOL);
+    assert_close("p_smart", *p_smart, expected.size_p_smart, COEF_RTOL);
     assert_eq!(source_effects.len(), expected.size_source_effects.len());
     for effect in source_effects {
         let reference = expected.size_source_effects[&effect.source.0];

@@ -3,10 +3,10 @@
 import {
   DocsPage,
   GITHUB_ACTIONS_ACCESS_MAX_ENTRIES,
+  GITHUB_ACTIONS_REPOSITORY_MESSAGE,
+  GITHUB_ACTIONS_REPOSITORY_REGEX,
   GITHUB_JOB_WORKFLOW_REF_MESSAGE,
   GITHUB_JOB_WORKFLOW_REF_REGEX,
-  GITHUB_REPOSITORY_FULL_NAME_MESSAGE,
-  GITHUB_REPOSITORY_FULL_NAME_REGEX,
   type GitHubActionsAccess,
   GitHubActionsAccessSchema,
   isGitHubActionsAppCredential,
@@ -173,11 +173,11 @@ export function GitHubActionsAccessSection({
 
           <ListEditor
             label="Repositories"
-            description="Pull requests in these repositories may ask. Pull requests from forks never can."
-            placeholder="owner/name"
+            description="Pull requests in these repositories may ask; owner/* covers all of an owner's repositories. Pull requests from forks never can."
+            placeholder="owner/name or owner/*"
             values={value.repositories}
-            pattern={GITHUB_REPOSITORY_FULL_NAME_REGEX}
-            invalidMessage={GITHUB_REPOSITORY_FULL_NAME_MESSAGE}
+            pattern={GITHUB_ACTIONS_REPOSITORY_REGEX}
+            invalidMessage={GITHUB_ACTIONS_REPOSITORY_MESSAGE}
             caseInsensitive
             onChange={(repositories) => onChange({ ...value, repositories })}
           />

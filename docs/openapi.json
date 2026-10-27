@@ -49556,28 +49556,18 @@
                                     "type": "object",
                                     "properties": {
                                       "githubAppCredentialKey": {
-                                        "type": "string",
-                                        "minLength": 1,
-                                        "maxLength": 200
+                                        "type": "string"
                                       },
                                       "repositories": {
-                                        "minItems": 1,
-                                        "maxItems": 50,
                                         "type": "array",
                                         "items": {
-                                          "type": "string",
-                                          "maxLength": 140,
-                                          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                                          "type": "string"
                                         }
                                       },
                                       "workflows": {
-                                        "minItems": 1,
-                                        "maxItems": 50,
                                         "type": "array",
                                         "items": {
-                                          "type": "string",
-                                          "maxLength": 400,
-                                          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                                          "type": "string"
                                         }
                                       }
                                     },
@@ -51296,28 +51286,18 @@
                             "type": "object",
                             "properties": {
                               "githubAppCredentialKey": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 200
+                                "type": "string"
                               },
                               "repositories": {
-                                "minItems": 1,
-                                "maxItems": 50,
                                 "type": "array",
                                 "items": {
-                                  "type": "string",
-                                  "maxLength": 140,
-                                  "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                                  "type": "string"
                                 }
                               },
                               "workflows": {
-                                "minItems": 1,
-                                "maxItems": 50,
                                 "type": "array",
                                 "items": {
-                                  "type": "string",
-                                  "maxLength": 400,
-                                  "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                                  "type": "string"
                                 }
                               }
                             },
@@ -53196,28 +53176,18 @@
                       "type": "object",
                       "properties": {
                         "githubAppCredentialKey": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
+                          "type": "string"
                         },
                         "repositories": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 140,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                            "type": "string"
                           }
                         },
                         "workflows": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 400,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                            "type": "string"
                           }
                         }
                       },
@@ -58450,28 +58420,18 @@
                       "type": "object",
                       "properties": {
                         "githubAppCredentialKey": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
+                          "type": "string"
                         },
                         "repositories": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 140,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                            "type": "string"
                           }
                         },
                         "workflows": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 400,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                            "type": "string"
                           }
                         }
                       },
@@ -59879,28 +59839,18 @@
                           "type": "object",
                           "properties": {
                             "githubAppCredentialKey": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 200
+                              "type": "string"
                             },
                             "repositories": {
-                              "minItems": 1,
-                              "maxItems": 50,
                               "type": "array",
                               "items": {
-                                "type": "string",
-                                "maxLength": 140,
-                                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                                "type": "string"
                               }
                             },
                             "workflows": {
-                              "minItems": 1,
-                              "maxItems": 50,
                               "type": "array",
                               "items": {
-                                "type": "string",
-                                "maxLength": 400,
-                                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                                "type": "string"
                               }
                             }
                           },
@@ -60981,28 +60931,18 @@
                       "type": "object",
                       "properties": {
                         "githubAppCredentialKey": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
+                          "type": "string"
                         },
                         "repositories": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 140,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                            "type": "string"
                           }
                         },
                         "workflows": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 400,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                            "type": "string"
                           }
                         }
                       },
@@ -62012,7 +61952,7 @@
                         "items": {
                           "type": "string",
                           "maxLength": 140,
-                          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/(?:[A-Za-z0-9._-]{1,100}|\\*)$"
                         }
                       },
                       "workflows": {
@@ -62538,28 +62478,18 @@
                       "type": "object",
                       "properties": {
                         "githubAppCredentialKey": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
+                          "type": "string"
                         },
                         "repositories": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 140,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                            "type": "string"
                           }
                         },
                         "workflows": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 400,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                            "type": "string"
                           }
                         }
                       },
@@ -65271,28 +65201,18 @@
                       "type": "object",
                       "properties": {
                         "githubAppCredentialKey": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
+                          "type": "string"
                         },
                         "repositories": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 140,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                            "type": "string"
                           }
                         },
                         "workflows": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 400,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                            "type": "string"
                           }
                         }
                       },
@@ -66490,28 +66410,18 @@
                       "type": "object",
                       "properties": {
                         "githubAppCredentialKey": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
+                          "type": "string"
                         },
                         "repositories": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 140,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                            "type": "string"
                           }
                         },
                         "workflows": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 400,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                            "type": "string"
                           }
                         }
                       },
@@ -74520,28 +74430,18 @@
                       "type": "object",
                       "properties": {
                         "githubAppCredentialKey": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
+                          "type": "string"
                         },
                         "repositories": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 140,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                            "type": "string"
                           }
                         },
                         "workflows": {
-                          "minItems": 1,
-                          "maxItems": 50,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "maxLength": 400,
-                            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                            "type": "string"
                           }
                         }
                       },
@@ -135201,28 +135101,18 @@
                               "type": "object",
                               "properties": {
                                 "githubAppCredentialKey": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 200
+                                  "type": "string"
                                 },
                                 "repositories": {
-                                  "minItems": 1,
-                                  "maxItems": 50,
                                   "type": "array",
                                   "items": {
-                                    "type": "string",
-                                    "maxLength": 140,
-                                    "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                                    "type": "string"
                                   }
                                 },
                                 "workflows": {
-                                  "minItems": 1,
-                                  "maxItems": 50,
                                   "type": "array",
                                   "items": {
-                                    "type": "string",
-                                    "maxLength": 400,
-                                    "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                                    "type": "string"
                                   }
                                 }
                               },
@@ -138268,28 +138158,18 @@
                                   "type": "object",
                                   "properties": {
                                     "githubAppCredentialKey": {
-                                      "type": "string",
-                                      "minLength": 1,
-                                      "maxLength": 200
+                                      "type": "string"
                                     },
                                     "repositories": {
-                                      "minItems": 1,
-                                      "maxItems": 50,
                                       "type": "array",
                                       "items": {
-                                        "type": "string",
-                                        "maxLength": 140,
-                                        "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}$"
+                                        "type": "string"
                                       }
                                     },
                                     "workflows": {
-                                      "minItems": 1,
-                                      "maxItems": 50,
                                       "type": "array",
                                       "items": {
-                                        "type": "string",
-                                        "maxLength": 400,
-                                        "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/[A-Za-z0-9._-]{1,100}\\/\\.github\\/workflows\\/[A-Za-z0-9._/-]+\\.ya?ml@(?:refs\\/heads\\/[^\\s@]+|refs\\/tags\\/[^\\s@]+|[0-9a-f]{40})$"
+                                        "type": "string"
                                       }
                                     }
                                   },

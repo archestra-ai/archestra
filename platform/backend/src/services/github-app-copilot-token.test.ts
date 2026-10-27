@@ -6,6 +6,7 @@ import {
   encodeGithubAppCredential,
   type GithubAppCredential,
   githubAppCopilotTokenManager,
+  githubAppIntegrationIdCandidates,
   validateGithubAppCredential,
 } from "@/services/github-app-copilot-token";
 import {
@@ -219,117 +220,163 @@ describe("githubAppCopilotTokenManager", () => {
   });
 });
 
+/** GET /app answer for the App the credential belongs to. */
+function appResponse() {
+  return Response.json({
+    id: 4242,
+    slug: "acme-copilot",
+    client_id: "Iv23abc",
+  });
+}
+
+function isAppCall(input: unknown): boolean {
+  return String(input).endsWith("/app");
+}
+
+const mismatch = () =>
+  Response.json(
+    {
+      message:
+        "bad request: the Copilot-Integration-Id header does not match the GitHub App that issued this installation access token",
+    },
+    { status: 400 },
+  );
+
+describe("githubAppIntegrationIdCandidates", () => {
+  test("orders client id, slug, numeric id and falls back to the App ID", () => {
+    expect(
+      githubAppIntegrationIdCandidates({
+        identity: { id: 4242, slug: "acme-copilot", clientId: "Iv23abc" },
+        appId: "4242",
+      }),
+    ).toEqual(["Iv23abc", "acme-copilot", "4242"]);
+    expect(
+      githubAppIntegrationIdCandidates({ identity: null, appId: "7" }),
+    ).toEqual(["7"]);
+  });
+});
+
 describe("detectGithubAppWireMode", () => {
-  test("uses mode A when Copilot accepts the token with editor headers", async () => {
+  test("uses the client id bare (B) when Copilot accepts it", async () => {
     const credential = uniqueCredential();
-    const fetchMock = vi.fn(async (input: unknown) =>
-      isMintCall(input) ? mintResponse() : Response.json({ data: [] }),
-    );
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      if (isMintCall(input)) return mintResponse();
+      if (isAppCall(input)) return appResponse();
+      const headers = new Headers(init?.headers);
+      return headers.get("copilot-integration-id") === "Iv23abc"
+        ? Response.json({ data: [] })
+        : mismatch();
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     const mode = await detectGithubAppWireMode({ credential });
 
-    expect(mode).toBe("A");
-    const [, init] = fetchMock.mock.calls[1] as unknown as [
-      string,
-      RequestInit,
-    ];
-    const headers = new Headers(init.headers);
+    expect(mode).toEqual({ mode: "B", integrationId: "Iv23abc" });
+    const probe = fetchMock.mock.calls.find(([input]) =>
+      String(input).endsWith("/models"),
+    ) as unknown as [string, RequestInit];
+    const headers = new Headers(probe[1].headers);
     expect(headers.get("authorization")).toBe("Bearer ghs_installation");
-    expect(headers.get("copilot-integration-id")).toBe("vscode-chat");
+    expect(headers.has("editor-version")).toBe(false);
   });
 
-  test("falls through to mode B without editor headers", async () => {
-    const credential = uniqueCredential();
-    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
-      if (isMintCall(input)) return mintResponse();
-      const headers = new Headers(init?.headers);
-      return headers.has("editor-version")
-        ? Response.json({ message: "bad integration" }, { status: 400 })
-        : Response.json({ data: [] });
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    expect(await detectGithubAppWireMode({ credential })).toBe("B");
-  });
-
-  test("falls through to mode C through the token exchange", async () => {
+  test("moves past a 'does not match' 400 to the next candidate, with editor headers (A)", async () => {
     const credential = uniqueCredential();
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: unknown, init?: RequestInit) => {
-        const url = String(input);
-        if (isMintCall(url)) return mintResponse();
-        if (url.includes("copilot_internal")) {
-          expect(new Headers(init?.headers).get("authorization")).toBe(
-            "token ghs_installation",
-          );
-          return Response.json({
-            token: "copilot-bearer",
-            expires_at: Math.floor(Date.now() / 1000) + 1800,
-          });
-        }
-        const auth = new Headers(init?.headers).get("authorization");
-        return auth === "Bearer copilot-bearer"
+        if (isMintCall(input)) return mintResponse();
+        if (isAppCall(input)) return appResponse();
+        const headers = new Headers(init?.headers);
+        return headers.get("copilot-integration-id") === "acme-copilot" &&
+          headers.has("editor-version")
           ? Response.json({ data: [] })
-          : Response.json({ message: "unauthorized" }, { status: 401 });
+          : mismatch();
       }),
     );
 
-    expect(await detectGithubAppWireMode({ credential })).toBe("C");
+    expect(await detectGithubAppWireMode({ credential })).toEqual({
+      mode: "A",
+      integrationId: "acme-copilot",
+    });
   });
 
-  test("lists every attempt when all modes fail", async () => {
+  test("falls back to the App ID when GET /app fails", async () => {
+    const credential = uniqueCredential();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown, init?: RequestInit) => {
+        if (isMintCall(input)) return mintResponse();
+        if (isAppCall(input))
+          return Response.json({ message: "Not Found" }, { status: 404 });
+        return new Headers(init?.headers).get("copilot-integration-id") ===
+          credential.appId
+          ? Response.json({ data: [] })
+          : mismatch();
+      }),
+    );
+
+    expect(await detectGithubAppWireMode({ credential })).toEqual({
+      mode: "B",
+      integrationId: credential.appId,
+    });
+  });
+
+  test("ends with the token exchange (C) and lists every attempt", async () => {
     const credential = uniqueCredential();
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: unknown) => {
         const url = String(input);
-        // A fresh token, so no earlier test's cached exchange is reused.
         if (isMintCall(url)) return mintResponse("ghs_all_fail");
+        if (isAppCall(url)) return appResponse();
         if (url.includes("copilot_internal"))
           return Response.json({ message: "Not Found" }, { status: 404 });
-        return Response.json({ message: "bad credentials" }, { status: 401 });
+        return mismatch();
       }),
     );
 
     await expect(detectGithubAppWireMode({ credential })).rejects.toThrow(
-      /A: 401 bad credentials; B: 401 bad credentials; C: .*404/,
+      /B\(Iv23abc\): 400 .*does not match.*; A\(Iv23abc\): 400 .*; B\(acme-copilot\): 400 .*; A\(acme-copilot\): 400 .*; B\(4242\): 400 .*; A\(4242\): 400 .*; C: .*404/,
     );
   });
 
   test("stops at a 403 saying App-token requests are not enabled", async () => {
     const credential = uniqueCredential();
-    const fetchMock = vi.fn(async (input: unknown) =>
-      isMintCall(input)
-        ? mintResponse()
-        : Response.json(
-            {
-              message:
-                "Copilot requests from GitHub App installations are not enabled for this organization",
-            },
-            { status: 403 },
-          ),
-    );
+    const fetchMock = vi.fn(async (input: unknown) => {
+      if (isMintCall(input)) return mintResponse();
+      if (isAppCall(input)) return appResponse();
+      return Response.json(
+        {
+          message:
+            "Copilot requests from GitHub App installations are not enabled for this organization",
+        },
+        { status: 403 },
+      );
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(detectGithubAppWireMode({ credential })).rejects.toThrow(
-      /^GitHub Copilot did not accept .* A: 403 Copilot requests from GitHub App installations are not enabled/,
+      /B\(Iv23abc\): 403 Copilot requests from GitHub App installations are not enabled/,
     );
-    // One mint and one probe: B and C were not tried.
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // Mint, GET /app and one probe: no further candidates were tried.
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });
 
 describe("createGithubCopilotFetch with a GitHub App credential", () => {
-  test("re-mints and retries once when Copilot answers 401", async () => {
+  test("sends the remembered integration id and retries a 401 once with a new token", async () => {
     const credential = uniqueCredential();
-    githubAppCopilotTokenManager.setWireMode(credential, "B");
+    githubAppCopilotTokenManager.setWireMode(credential, {
+      mode: "B",
+      integrationId: "Iv23abc",
+    });
     const mints = ["ghs_first", "ghs_second"];
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       if (isMintCall(input)) return mintResponse(mints.shift());
-      const auth = new Headers(init?.headers).get("authorization");
-      return auth === "Bearer ghs_second"
+      const headers = new Headers(init?.headers);
+      expect(headers.get("copilot-integration-id")).toBe("Iv23abc");
+      return headers.get("authorization") === "Bearer ghs_second"
         ? Response.json({ ok: true })
         : Response.json({ message: "expired" }, { status: 401 });
     });

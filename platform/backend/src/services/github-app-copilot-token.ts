@@ -24,20 +24,42 @@ export interface GithubAppCredential {
   privateKey: string;
 }
 
-/** How a minted installation token is presented to Copilot. */
+/**
+ * How a minted installation token is presented to Copilot. Copilot requires
+ * `copilot-integration-id` to identify the App that issued the token, so the
+ * Bearer modes carry the integration id that worked.
+ */
 export type CopilotAppWireMode =
-  /** Installation token as Bearer, with the editor-identity headers. */
-  | "A"
-  /** Installation token as Bearer, no editor-identity headers. */
-  | "B"
+  /** Bearer token with only `copilot-integration-id: <integrationId>`. */
+  | { mode: "B"; integrationId: string }
+  /** Bearer token with the editor headers, integration id overridden. */
+  | { mode: "A"; integrationId: string }
   /** Installation token exchanged at copilot_internal/v2/token first. */
-  | "C";
+  | { mode: "C" };
 
-export const COPILOT_APP_WIRE_MODES: readonly CopilotAppWireMode[] = [
-  "A",
-  "B",
-  "C",
-];
+/** Public, non-secret identity of a GitHub App (GET /app). */
+interface GithubAppIdentity {
+  id: number | null;
+  slug: string | null;
+  clientId: string | null;
+}
+
+/**
+ * Integration ids to try for an App, in order: client id, slug, numeric id.
+ * Falls back to the App ID from the credential when GET /app failed.
+ */
+export function githubAppIntegrationIdCandidates(params: {
+  identity: GithubAppIdentity | null;
+  appId: string;
+}): string[] {
+  const { identity, appId } = params;
+  const candidates = [
+    identity?.clientId,
+    identity?.slug,
+    identity?.id != null ? String(identity.id) : appId,
+  ].filter((value): value is string => typeof value === "string" && !!value);
+  return [...new Set(candidates)];
+}
 
 export function encodeGithubAppCredential(
   credential: GithubAppCredential,
@@ -138,7 +160,60 @@ class GithubAppCopilotTokenManager {
   private wireModes = new LRUCacheManager<CopilotAppWireMode>({
     maxSize: MAX_CACHED_TOKENS,
   });
+  private identities = new LRUCacheManager<GithubAppIdentity>({
+    maxSize: MAX_CACHED_TOKENS,
+  });
   private inFlight = new Map<string, Promise<InstallationToken>>();
+
+  /**
+   * The App's public identity from GET /app, cached per credential. Returns
+   * null when GitHub refuses (logged); callers then fall back to the App ID.
+   */
+  async getAppIdentity(
+    credential: GithubAppCredential,
+  ): Promise<GithubAppIdentity | null> {
+    const cacheKey = credentialCacheKey(credential);
+    const cached = this.identities.get(cacheKey);
+    if (cached) return cached;
+    const response = await fetch(
+      `${config.llm["github-copilot"].appApiBaseUrl.replace(/\/$/, "")}/app`,
+      {
+        headers: {
+          accept: "application/vnd.github+json",
+          authorization: `Bearer ${createGithubAppJwt(credential)}`,
+          "x-github-api-version": "2022-11-28",
+        },
+      },
+    );
+    if (!response.ok) {
+      logger.info(
+        {
+          status: response.status,
+          message: await githubErrorMessage(response),
+          appId: credential.appId,
+        },
+        "[GithubAppCopilot] GET /app failed",
+      );
+      return null;
+    }
+    const payload = (await response.json()) as {
+      id?: unknown;
+      slug?: unknown;
+      client_id?: unknown;
+    };
+    const identity: GithubAppIdentity = {
+      id: typeof payload.id === "number" ? payload.id : null,
+      slug: typeof payload.slug === "string" ? payload.slug : null,
+      clientId:
+        typeof payload.client_id === "string" ? payload.client_id : null,
+    };
+    this.identities.set(cacheKey, identity);
+    logger.info(
+      { appId: credential.appId, ...identity },
+      "[GithubAppCopilot] App identity",
+    );
+    return identity;
+  }
 
   /** A valid installation token for the credential, minting when needed. */
   async getInstallationToken(

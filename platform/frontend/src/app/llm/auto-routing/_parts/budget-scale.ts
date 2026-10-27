@@ -19,6 +19,8 @@ export function budgetScale(saved: number) {
   return {
     steps: STEPS,
     savedPosition,
+    positionOf: (budget: number) =>
+      Math.min(STEPS, Math.max(0, position(budget))),
     budgetAt(at: number): number {
       if (Math.abs(at - savedPosition) < 0.5) return saved;
       const cents = Math.round(lo * Math.exp((at / STEPS) * ratio) * 100);

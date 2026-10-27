@@ -34,9 +34,21 @@ class RoutingUsageModel {
       .onConflictDoNothing({ target: usage.interactionId });
   }
 
-  /** When usage was last recorded in any organization: an index-only probe that history changed. */
-  static async findLatestCreatedAt(): Promise<Date | null> {
-    const [row] = await db.select({ at: max(usage.createdAt) }).from(usage);
+  /** The organization's latest usage recorded since `since`: a range probe over recent usage only. */
+  static async findLatestCreatedAt(
+    organizationId: string,
+    since: Date,
+  ): Promise<Date | null> {
+    const [row] = await db
+      .select({ at: max(usage.createdAt) })
+      .from(usage)
+      .innerJoin(decisions, eq(decisions.id, usage.decisionId))
+      .where(
+        and(
+          gte(usage.createdAt, since),
+          eq(decisions.organizationId, organizationId),
+        ),
+      );
     return row?.at ?? null;
   }
 

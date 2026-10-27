@@ -49,6 +49,11 @@ const UNBOUNDED_BUDGET_USD_PER_DAY = 1e12;
 const GOLDEN_RATIO_CONJUGATE = (Math.sqrt(5) - 1) / 2;
 const BASIS_TTL_MS = 5 * 60 * 1000;
 const MAX_BASES = 16;
+/**
+ * Usage is stamped at its transaction's start, so a row committed after a
+ * build may predate it; rows older than this are left to the TTL.
+ */
+const USAGE_COMMIT_SLACK_MS = 60 * 1000;
 
 const TierTripleSchema = z.tuple([z.number(), z.number(), z.number()]);
 const TierIndexSchema = z.number().int().min(0).max(2);
@@ -107,7 +112,7 @@ type Holdout =
 /** Per organization, least recently used first. */
 const bases = new Map<
   string,
-  { identity: string; expiresAt: number; basis: Basis }
+  { identity: string; usageSince: Date; expiresAt: number; basis: Basis }
 >();
 
 async function diagnose(
@@ -163,33 +168,46 @@ async function cachedBasis(
   tiers: RouterTierSet,
 ): Promise<Basis> {
   const { organizationId } = active;
-  const [usageAt, backfill] = await Promise.all([
-    RoutingUsageModel.findLatestCreatedAt(),
-    RoutingBackfillModel.findLatest(organizationId),
-  ]);
-  const identity = JSON.stringify([
-    active.id,
-    active.scorerVersionId,
-    usageAt?.getTime() ?? null,
-    backfill?.id ?? null,
-    backfill?.updatedAt.getTime() ?? null,
-  ]);
+  const now = Date.now();
   const cached = bases.get(organizationId);
   bases.delete(organizationId);
-  const entry =
-    cached?.identity === identity && cached.expiresAt > Date.now()
-      ? cached
-      : {
-          identity,
-          expiresAt: Date.now() + BASIS_TTL_MS,
-          basis: await buildBasis(active, tiers),
-        };
+  let entry = cached && cached.expiresAt > now ? cached : undefined;
+  if (
+    !entry ||
+    (await basisIdentity(active, entry.usageSince)) !== entry.identity
+  ) {
+    const usageSince = new Date(now - USAGE_COMMIT_SLACK_MS);
+    entry = {
+      identity: await basisIdentity(active, usageSince),
+      usageSince,
+      expiresAt: now + BASIS_TTL_MS,
+      basis: await buildBasis(active, tiers),
+    };
+  }
   bases.set(organizationId, entry);
   for (const key of bases.keys()) {
     if (bases.size <= MAX_BASES) break;
     bases.delete(key);
   }
   return entry.basis;
+}
+
+/** What a basis was built from: the plan, the organization's usage since `usageSince`, and its latest backfill. */
+async function basisIdentity(
+  active: RoutingPlan,
+  usageSince: Date,
+): Promise<string> {
+  const [usageAt, backfill] = await Promise.all([
+    RoutingUsageModel.findLatestCreatedAt(active.organizationId, usageSince),
+    RoutingBackfillModel.findLatest(active.organizationId),
+  ]);
+  return JSON.stringify([
+    active.id,
+    active.scorerVersionId,
+    usageAt?.getTime() ?? null,
+    backfill?.id ?? null,
+    backfill?.updatedAt.getTime() ?? null,
+  ]);
 }
 
 async function buildBasis(

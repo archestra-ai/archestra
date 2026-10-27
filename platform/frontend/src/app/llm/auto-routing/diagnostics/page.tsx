@@ -83,11 +83,14 @@ function RoutingBlock({ saved }: { saved: Ready }) {
     () => budgetScale(saved.savedBudgetUsdPerDay),
     [saved.savedBudgetUsdPerDay],
   );
-  const [position, setPosition] = useState(scale.savedPosition);
-  const requested = scale.budgetAt(position);
+  // An absolute budget, so a refreshed saved budget never reinterprets it; null follows the saved one.
+  const [selected, setSelected] = useState<number | null>(null);
+  const requested = selected ?? saved.savedBudgetUsdPerDay;
   const debounced = useDebouncedValue(requested, 300);
   const routed = useAutoRoutingDiagnostics(
-    debounced === saved.savedBudgetUsdPerDay ? null : debounced,
+    selected === null || debounced === saved.savedBudgetUsdPerDay
+      ? null
+      : debounced,
   );
   const [shown, setShown] = useState<AutoRoutingDiagnostics>(saved);
   if (routed.data && !routed.isPlaceholderData && routed.data !== shown) {
@@ -137,8 +140,8 @@ function RoutingBlock({ saved }: { saved: Ready }) {
           min={0}
           max={scale.steps}
           step={1}
-          value={[position]}
-          onValueChange={([value]) => setPosition(value)}
+          value={[scale.positionOf(requested)]}
+          onValueChange={([value]) => setSelected(scale.budgetAt(value))}
         />
       </div>
       <div className={requested !== shownBudget ? "opacity-60" : undefined}>

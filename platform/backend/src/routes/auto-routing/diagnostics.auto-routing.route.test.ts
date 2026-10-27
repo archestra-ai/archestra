@@ -5,9 +5,10 @@ import { activeSourceVersion } from "@/auto-routing/signals";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { beforeEach, describe, expect, test } from "@/test";
-import { configureAutoRouting } from "@/test/auto-routing";
+import { configureAutoRouting, plannedDecision } from "@/test/auto-routing";
 import { seedFitHistory } from "@/test/auto-routing-fit";
 import { useRouteTestApp } from "@/test/route-test-app";
+import { RoutingSessionKeySchema } from "@/types/auto-routing";
 import type { AutoRoutingDiagnostics } from "@/types/auto-routing-api";
 import autoRoutingRoutes from "./auto-routing.routes";
 
@@ -148,35 +149,59 @@ describe("GET /api/auto-routing/diagnostics", () => {
     expect(body.sessions.every((s) => s.predictedTokens === null)).toBe(true);
   });
 
-  test("a budget change reuses the history and holdout fit until usage is recorded", async () => {
+  test("a budget change reuses the history and holdout fit until the organization records usage", async ({
+    makeOrganization,
+  }) => {
     await withActivePlan();
     const sizes = (body: Ready) =>
       body.sessions.map((s) => [s.pLong, s.predictedTokens]);
     const first = await ready();
     const budget = first.budgetUsdPerDay * 2;
+    const own = eq(
+      schema.routingDecisionsTable.organizationId,
+      ctx.organizationId,
+    );
+    const [decision] = await db
+      .select()
+      .from(schema.routingDecisionsTable)
+      .where(own)
+      .limit(1);
     await db
       .update(schema.routingDecisionsTable)
       .set({
         features: sql`jsonb_set(features, '{signals,jev-session,p_long}', to_jsonb(1 - (features #>> '{signals,jev-session,p_long}')::float))`,
       })
-      .where(
-        eq(schema.routingDecisionsTable.organizationId, ctx.organizationId),
-      );
+      .where(own);
+    const recordUsage = (decisionId: string) =>
+      db.insert(schema.routingUsageTable).values({
+        interactionId: randomUUID(),
+        decisionId,
+        input: 1,
+        cacheRead: 0,
+        cacheWrite: 0,
+        cacheWrite1h: 0,
+        output: 1,
+        estimated: false,
+      });
 
+    const other = await makeOrganization();
+    const [foreign] = await db
+      .insert(schema.routingDecisionsTable)
+      .values(
+        plannedDecision({
+          organizationId: other.id,
+          sessionKey: RoutingSessionKeySchema.parse(randomUUID()),
+          modelId: decision.modelId,
+          scorerVersionId: (await activeSourceVersion()).id,
+        }),
+      )
+      .returning();
+    await recordUsage(foreign.id);
     const rebudgeted = await ready(budget);
     expect(rebudgeted.budgetUsdPerDay).toBe(budget);
     expect(sizes(rebudgeted)).toEqual(sizes(first));
 
-    await db.insert(schema.routingUsageTable).values({
-      interactionId: randomUUID(),
-      decisionId: randomUUID(),
-      input: 1,
-      cacheRead: 0,
-      cacheWrite: 0,
-      cacheWrite1h: 0,
-      output: 1,
-      estimated: false,
-    });
+    await recordUsage(decision.id);
     expect(sizes(await ready(budget))).not.toEqual(sizes(first));
   });
 

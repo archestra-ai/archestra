@@ -28,12 +28,15 @@ const [STEP_1, STEP_2] = [1, 2].map((k) =>
 const PRICES: [number, number, number] = [1e-7, 6e-7, 2e-6];
 
 /** Its smart share, budget / 200, identifies the budget a result was solved at. */
-function ready(budgetUsdPerDay: number): AutoRoutingDiagnostics {
+function ready(
+  budgetUsdPerDay: number,
+  savedBudgetUsdPerDay = SAVED,
+): AutoRoutingDiagnostics {
   const smart = budgetUsdPerDay / 200;
   return {
     status: "ready",
     budgetUsdPerDay,
-    savedBudgetUsdPerDay: SAVED,
+    savedBudgetUsdPerDay,
     lamStar: 200_000,
     q: 0.4,
     tierSessionShare: [0.6, 0.4 - smart, smart],
@@ -117,11 +120,12 @@ function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  render(
     <QueryClientProvider client={queryClient}>
       <AutoRoutingDiagnosticsPage />
     </QueryClientProvider>,
   );
+  return queryClient;
 }
 
 const routing = () => screen.getByRole("region", { name: "Routing regions" });
@@ -229,6 +233,40 @@ describe("AutoRoutingDiagnosticsPage", () => {
     ).toBeInTheDocument();
     expect(requestedBudgets.filter((b) => b === STEP_1)).toHaveLength(11);
     expectShown(SAVED);
+  });
+
+  it("names the slider thumb and gives its value in dollars", async () => {
+    renderPage();
+
+    const slider = await screen.findByRole("slider", { name: "Budget" });
+
+    expect(slider).toHaveAttribute(
+      "aria-valuetext",
+      `$${SAVED.toFixed(2)}/day`,
+    );
+  });
+
+  it("keeps following the saved budget when it refreshes", async () => {
+    let saved = 0.01;
+    respond = (budget) => HttpResponse.json(ready(budget ?? saved, saved));
+    const queryClient = renderPage();
+    await screen.findByRole("slider", { name: "Budget" });
+
+    saved = SAVED;
+    await queryClient.refetchQueries();
+    await waitFor(() => expectShown(SAVED));
+    await new Promise((settle) => setTimeout(settle, 400));
+
+    expect(requestedBudgets).toEqual([null, null]);
+    const slider = screen.getByRole("slider", { name: "Budget" });
+    expect(slider).toHaveAttribute(
+      "aria-valuenow",
+      String(scale.savedPosition),
+    );
+    expect(slider).toHaveAttribute(
+      "aria-valuetext",
+      `$${SAVED.toFixed(2)}/day`,
+    );
   });
 
   it("shows no blocks without an active plan", async () => {

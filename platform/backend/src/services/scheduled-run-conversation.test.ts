@@ -804,6 +804,7 @@ test("readRunTranscript prefers the run's interactions over a prompt-only chat, 
   if (!linkedRun) throw new Error("run missing");
 
   const promptOnly = await readRunTranscript({
+    userId: actor.id,
     trigger,
     run: linkedRun,
     organizationId: org.id,
@@ -844,6 +845,7 @@ test("readRunTranscript prefers the run's interactions over a prompt-only chat, 
   expect(
     (
       await readRunTranscript({
+        userId: actor.id,
         trigger,
         run: { ...linkedRun, status: "running" },
         organizationId: org.id,
@@ -886,6 +888,7 @@ test("readRunTranscript prefers the run's interactions over a prompt-only chat, 
   }
 
   const transcript = await readRunTranscript({
+    userId: actor.id,
     trigger,
     run: { ...linkedRun, status: "failed" },
     organizationId: org.id,
@@ -923,6 +926,7 @@ test("readRunTranscript says when a run's record is on the runtime or not writte
   });
   const read = (overrides: Partial<typeof run>) =>
     readRunTranscript({
+      userId: actor.id,
       trigger,
       run: { ...run, ...overrides },
       organizationId: org.id,
@@ -986,6 +990,7 @@ test("readRunTranscript keeps only the run's own turn of a chat that was continu
 
   // Settled seconds ago with only the prompt: its turn may still be written.
   const settling = await readRunTranscript({
+    userId: actor.id,
     trigger,
     run: { ...linkedRun, status: "failed", completedAt: new Date() },
     organizationId: org.id,
@@ -1004,6 +1009,7 @@ test("readRunTranscript keeps only the run's own turn of a chat that was continu
   ]);
 
   const transcript = await readRunTranscript({
+    userId: actor.id,
     trigger,
     run: { ...linkedRun, status: "failed" },
     organizationId: org.id,

@@ -333,6 +333,8 @@ export async function readRunTranscript(params: {
   trigger: ScheduleTrigger;
   run: ScheduleTriggerRun;
   organizationId: string;
+  /** The requesting viewer, which may differ from the schedule's actor. */
+  userId: string;
 }): Promise<{
   source:
     | "conversation"
@@ -343,11 +345,12 @@ export async function readRunTranscript(params: {
     | "none";
   messages: PartialUIMessage[];
 }> {
-  const { trigger, run, organizationId } = params;
+  const { trigger, run, organizationId, userId } = params;
   const conversation = run.chatConversationId
     ? await ConversationModel.findByIdInOrganization({
         id: run.chatConversationId,
         organizationId,
+        viewer: { kind: "caller", userId, organizationId },
       })
     : null;
   if (conversation?.encryptedChat) return { source: "encrypted", messages: [] };

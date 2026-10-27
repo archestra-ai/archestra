@@ -26,6 +26,7 @@ describe("OpenCode passthrough provider routes", () => {
       zhipuai: "https://example.com/v1/zhipuai",
       minimax: "https://example.com/v1/minimax",
       moonshotai: "https://example.com/v1/kimi",
+      "kimi-code-plan-global": "https://example.com/v1/kimi-code",
     });
   });
 });

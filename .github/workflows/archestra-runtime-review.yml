@@ -1,10 +1,12 @@
 name: Archestra Runtime Review
 
-# Reviews each pull request on an Archestra Agent Runtime, beside the Claude
-# core-team review. The run acts as the person who caused the event (the
-# author on open, the pusher on synchronize) with their Archestra platform
-# token (secret ARCHESTRA_TOKEN_<LOGIN>); without one, the job skips with a
-# notice. The shared workflow in archestra-ai/.github has the setup.
+# Reviews a maintainer's pull request on an Archestra Agent Runtime, beside
+# the Claude core-team review. The shared workflow reviews only a pull request
+# whose author has the admin or maintain role here and started the run; any
+# other pull request, or a push by someone else, gets a passing job and a
+# notice. The run uses the author's Archestra platform token (secret
+# ARCHESTRA_TOKEN_<LOGIN>); without one, the job skips with a notice. The
+# shared workflow in archestra-ai/.github has the setup.
 
 on:
   pull_request:

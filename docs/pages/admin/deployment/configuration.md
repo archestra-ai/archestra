@@ -526,8 +526,8 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS`** - How long the session scorer may take before the router falls back to the normal model.
   - Default: `2000`
 
-- **`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`** - Finished sessions needed before auto routing publishes a plan instead of using the normal model.
-  - Default: `100`
+- **`ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS`** - Finished sessions needed before auto routing publishes a plan instead of using the normal model. Scored past sessions count toward it.
+  - Default: `1000`
 
 - **`ARCHESTRA_VLLM_BASE_URL`** - Base URL of your OpenAI-compatible server (vLLM, llama.cpp, LM Studio, SGLang, TGI, LocalAI).
   - Default: unset (provider off)

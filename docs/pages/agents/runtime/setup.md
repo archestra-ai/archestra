@@ -4,7 +4,7 @@ sidebarTitle: Setup
 description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
 order: 1
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-27
 ---
 
 Prepare your cluster once, and every agent can get a dedicated runtime. Each run becomes a pod with its own persistent volume, created by the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).
@@ -73,6 +73,8 @@ After installing the controller extensions above, set [`ARCHESTRA_AGENT_RUNTIME_
 Pools go to the Agents with the most recent runs. Agents with no run in the last 7 days get no spare, so idle Agents don't hold cluster capacity.
 
 Assigned containers never return to the pool. Without a spare, a run starts a new container. Setting the size to `0` removes unused spares and preserves assigned runs.
+
+Archestra maintains the configured pool replica count. An HPA targeting these pools would compete with Archestra; use [node autoscaling](/docs/admin/deployment/production#agent-runtime) to grow cluster capacity as runtime demand increases.
 
 ## Privileged Containers
 

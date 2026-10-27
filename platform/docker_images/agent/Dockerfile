@@ -137,6 +137,7 @@ RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/workspace-files.py \
  && python3 /tmp/agent-image-tests/interactive-resume.py \
+ && python3 /tmp/agent-image-tests/tui-exec.py \
  && python3 /tmp/agent-image-tests/development-tools.py \
  && node /tmp/agent-image-tests/npm-http.cjs
 

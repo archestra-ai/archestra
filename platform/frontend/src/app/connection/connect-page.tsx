@@ -567,32 +567,36 @@ function Tile({
           : "text-muted-foreground hover:bg-linear-to-b hover:from-muted/50 hover:to-muted/50 hover:text-foreground",
       )}
     >
-      {marker && <span className="absolute top-1.5 right-1.5">{marker}</span>}
+      {/* The top-right corner: guardrails on top, last connected below it,
+          stacked so neither reaches the client logo. */}
+      {(marker || guardrailsSupported) && (
+        <span className="absolute top-1.5 right-1.5 flex flex-col items-center gap-0.5">
+          {guardrailsSupported && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  role="img"
+                  aria-label="Supports LLM proxy guardrails"
+                  className="grid size-5 place-items-center"
+                >
+                  <ShieldCheck className="size-3.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-60">
+                <span>
+                  Supports LLM proxy guardrails out of the box. Enforcement
+                  depends on your organization&apos;s settings.
+                </span>
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {marker}
+        </span>
+      )}
       {icon}
       {/* Labels wrap to two lines rather than truncate. */}
-      <span className="flex max-w-full items-center justify-center gap-1.5">
-        <span className="line-clamp-2 min-w-0 text-center leading-tight break-words">
-          {label}
-        </span>
-        {guardrailsSupported && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span
-                role="img"
-                aria-label="Supports LLM proxy guardrails"
-                className="shrink-0"
-              >
-                <ShieldCheck className="size-3.5" />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-60">
-              <span>
-                Supports LLM proxy guardrails out of the box. Enforcement
-                depends on your organization&apos;s settings.
-              </span>
-            </TooltipContent>
-          </Tooltip>
-        )}
+      <span className="line-clamp-2 w-full text-center leading-tight break-words">
+        {label}
       </span>
       {sub && (
         <span className="-mt-1 w-full text-center text-xs leading-tight font-normal text-muted-foreground">

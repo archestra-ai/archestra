@@ -451,7 +451,7 @@ jobs:
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-platform-docker-image-to-dockerhub:
-    name: Build and push platform Docker image to DockerHub
+    name: Build and push platform Docker image to Docker Hub
     # The platform Docker image references the MCP server base image tag via
     # ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE env var, but does NOT use it as a FROM base image.
     # The tag is baked as a default value at build time, so the MCP server image doesn't need to
@@ -576,8 +576,8 @@ jobs:
       - name: Log in to Docker Hub
         uses: $/.github/actions/docker-login
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Log in to GHCR
         uses: $/.github/actions/docker-login

@@ -6,6 +6,8 @@ Archestra uses two release pipelines:
 
 [Release-please](https://github.com/googleapis/release-please-action#supporting-multiple-release-branches) manages versions and changelogs. GitHub Actions builds the artifacts. `archestra/platform:latest` follows the newest published release, RCs included, and never moves backward. Every other image's `latest` moves only on stable releases, because stable platforms reference the agent images by that tag.
 
+New companion and agent images publish to `ghcr.io/archestra-ai`. The platform image remains on Docker Hub at `archestra/platform`, and the Helm OCI chart keeps its existing GAR URL. Scanned OCI archives upload by immutable digest without temporary `candidate-` tags. Existing released images remain at their original addresses.
+
 ## Image CVE Gate
 
 Release Please PR updates on `main` and `release/X.Y` must pass image scanning before queue entry. Every update builds the Platform full/slim, MCP Server Base, and p4 Shim candidates from that event's synthetic merge commit. A successful scan applies only to that PR head, base, and merge candidate; a changed revision requires a new run. An API error, build error, scanner error, cancellation, or missing result blocks the gate. The policy remains fixable critical/high CVEs.

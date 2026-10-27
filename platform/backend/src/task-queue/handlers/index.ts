@@ -1,6 +1,7 @@
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { threadStates } from "@/openappa/thread-state";
 import { deleteExpiredUnenforcedRecords } from "@/openappa/unenforced";
+import { handleJiraChatOpsEvent } from "@/services/jira-chatops-events";
 import { pollJiraChatOps } from "@/services/jira-chatops-poll";
 import {
   checkDueAppaGithubSyncs,
@@ -23,7 +24,6 @@ import { handleContentEncryptionBackfill } from "./content-encryption-backfill-h
 import { handleContentRetentionCleanup } from "./content-retention-cleanup-handler.ee";
 import { handleInteractionSessionPreviewBackfill } from "./interaction-session-preview-backfill-handler";
 import { handleInteractionUserActivityRebuild } from "./interaction-user-activity-rebuild-handler";
-import { handleJiraChatOpsEvent } from "./jira-chatops-event-handler";
 import { handleKbBm25StatsRefresh } from "./kb-bm25-stats-refresh-handler";
 import { handleLlmModelSync } from "./llm-model-sync-handler";
 import { handleMcpToolDescriptionBackfill } from "./mcp-tool-description-backfill-handler";

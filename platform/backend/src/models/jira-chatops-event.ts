@@ -125,16 +125,6 @@ class JiraChatOpsEventModel {
       .where(and(eq(table.id, params.id), eq(table.claimId, params.claimId)));
   }
 
-  static async counts(integrationId: string): Promise<Record<string, number>> {
-    const table = schema.jiraChatOpsEventsTable;
-    const rows = await db
-      .select({ state: table.state, count: sql<number>`count(*)::int` })
-      .from(table)
-      .where(eq(table.integrationId, integrationId))
-      .groupBy(table.state);
-    return Object.fromEntries(rows.map((row) => [row.state, row.count]));
-  }
-
   private static async save(
     params: { id: string; claimId: string },
     changes: Partial<

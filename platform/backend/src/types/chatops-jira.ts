@@ -2,6 +2,18 @@ import { z } from "zod";
 
 export const JiraIngressModeSchema = z.enum(["hmac", "automation", "poll"]);
 
+export const JiraCommentEventSchema = z.object({
+  webhookEvent: z.enum(["comment_created", "comment_updated"]),
+  issue: z.object({ id: z.string().regex(/^\d+$/).max(32) }),
+  comment: z.object({
+    id: z.string().regex(/^\d+$/).max(32),
+    updated: z
+      .string()
+      .max(64)
+      .refine((value) => Number.isFinite(Date.parse(value))),
+  }),
+});
+
 const JiraBotConfigSchema = z.object({
   id: z.string().uuid(),
   agentId: z.string().uuid(),

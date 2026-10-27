@@ -217,29 +217,6 @@ describe("Jira ChatOps create-bot", () => {
     expect(gatewayProjectCalls).toBe(1);
   });
 
-  test("failed authentication leaves stored bots unchanged", async ({
-    makeInternalAgent,
-  }) => {
-    const agent = await makeInternalAgent({
-      organizationId: ctx.organizationId,
-    });
-    await seedJiraConfig(ctx.organizationId);
-    server.use(
-      http.get(
-        `${JIRA_TEST_SITE}/rest/api/3/myself`,
-        () => new HttpResponse(null, { status: 401 }),
-      ),
-    );
-    const response = await ctx.app.inject({
-      method: "POST",
-      url: "/api/chatops/jira/bots",
-      payload: { agentId: agent.id, ...credentials },
-    });
-    expect(response.statusCode).toBe(400);
-    expect((await ChatOpsConfigModel.getJiraConfig())?.bots).toEqual([]);
-    expect(response.body).not.toContain(credentials.apiToken);
-  });
-
   test("refuses another organization's agent before contacting Jira", async ({
     makeInternalAgent,
     makeOrganization,

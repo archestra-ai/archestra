@@ -23,6 +23,7 @@ import type {
 } from "@/types/chatops";
 import {
   type JiraBotConfig,
+  JiraCommentEventSchema,
   type JiraDbConfig,
   normalizeJiraSiteUrl,
 } from "@/types/chatops-jira";
@@ -129,7 +130,7 @@ export default class JiraProvider implements ChatOpsProvider {
     headers: Record<string, string | string[] | undefined> = {},
   ): Promise<IncomingChatMessage | null> {
     if (!this.isConfigured()) return null;
-    const event = jiraWebhookSchema.safeParse(payload);
+    const event = JiraCommentEventSchema.safeParse(payload);
     if (!event.success) return null;
     const issueId = event.data.issue.id;
     const commentId = event.data.comment.id;
@@ -285,30 +286,12 @@ export default class JiraProvider implements ChatOpsProvider {
       options.originalMessage.metadata?.jiraPlaceholderCommentId;
     if (typeof placeholderId === "string") {
       const body = { body: jiraReplyDocument(text) };
-      const commentId = await executeJiraChatOpsOutbound({
-        integrationId: this.jiraConfig.id,
-        botId: this.bot.id,
+      const commentId = await this.replaceComment({
         issueId,
+        commentId: placeholderId,
         operationKey: operationKey(options.originalMessage, "reply"),
         body,
-        method: "replace",
-        send: async () =>
-          (
-            await this.request(
-              `/rest/api/3/issue/${issueId}/comment/${numericId(placeholderId)}`,
-              jiraCommentSchema,
-              { method: "PUT", body },
-            )
-          ).id,
-        reconcile: async () => {
-          const existing = await this.request(
-            `/rest/api/3/issue/${issueId}/comment/${numericId(placeholderId)}`,
-            jiraCommentSchema,
-          );
-          return jiraMessageText(existing.body) === text.trim()
-            ? existing.id
-            : null;
-        },
+        reconcileText: text.trim(),
       });
       if (options.originalMessage.metadata)
         options.originalMessage.metadata.jiraPlaceholderReplaced = true;
@@ -476,30 +459,12 @@ export default class JiraProvider implements ChatOpsProvider {
         `${options.toolName}: ${options.approved ? "Approved" : "Declined"}.${options.decidedByName ? ` Reviewed by ${options.decidedByName}.` : ""}`,
       ),
     };
-    await executeJiraChatOpsOutbound({
-      integrationId: this.jiraConfig.id,
-      botId: this.bot.id,
+    await this.replaceComment({
       issueId: prompt.issueId,
+      commentId: prompt.commentId,
       operationKey: `${prompt.operationKey}:resolution`,
-      method: "replace",
       body,
-      send: async () =>
-        (
-          await this.request(
-            `/rest/api/3/issue/${numericId(prompt.issueId)}/comment/${numericId(prompt.commentId ?? undefined)}`,
-            jiraCommentSchema,
-            { method: "PUT", body },
-          )
-        ).id,
-      reconcile: async () => {
-        const existing = await this.request(
-          `/rest/api/3/issue/${numericId(prompt.issueId)}/comment/${numericId(prompt.commentId ?? undefined)}`,
-          jiraCommentSchema,
-        );
-        return jiraMessageText(existing.body) === jiraMessageText(body.body)
-          ? existing.id
-          : null;
-      },
+      reconcileText: jiraMessageText(body.body),
     });
   }
 
@@ -568,30 +533,12 @@ export default class JiraProvider implements ChatOpsProvider {
     const body = {
       body: jiraReplyDocument(`Resolved. Open Archestra UI: ${params.runUrl}`),
     };
-    await executeJiraChatOpsOutbound({
-      integrationId: this.jiraConfig.id,
-      botId: this.bot.id,
+    await this.replaceComment({
       issueId,
+      commentId: params.commentId,
       operationKey: `runtime-attention:${params.noticeId}:resolved`,
-      method: "replace",
       body,
-      send: async () =>
-        (
-          await this.request(
-            `/rest/api/3/issue/${issueId}/comment/${numericId(params.commentId)}`,
-            jiraCommentSchema,
-            { method: "PUT", body },
-          )
-        ).id,
-      reconcile: async () => {
-        const existing = await this.request(
-          `/rest/api/3/issue/${issueId}/comment/${numericId(params.commentId)}`,
-          jiraCommentSchema,
-        );
-        return jiraMessageText(existing.body) === jiraMessageText(body.body)
-          ? existing.id
-          : null;
-      },
+      reconcileText: jiraMessageText(body.body),
     });
   }
 
@@ -792,6 +739,37 @@ export default class JiraProvider implements ChatOpsProvider {
     return comments.slice(0, limit);
   }
 
+  private async replaceComment(params: {
+    issueId: string;
+    commentId: string;
+    operationKey: string;
+    body: { body: ReturnType<typeof jiraReplyDocument> };
+    reconcileText: string;
+  }): Promise<string> {
+    const path = `/rest/api/3/issue/${numericId(params.issueId)}/comment/${numericId(params.commentId)}`;
+    return executeJiraChatOpsOutbound({
+      integrationId: this.jiraConfig.id,
+      botId: this.bot.id,
+      issueId: params.issueId,
+      operationKey: params.operationKey,
+      method: "replace",
+      body: params.body,
+      send: async () =>
+        (
+          await this.request(path, jiraCommentSchema, {
+            method: "PUT",
+            body: params.body,
+          })
+        ).id,
+      reconcile: async () => {
+        const existing = await this.request(path, jiraCommentSchema);
+        return jiraMessageText(existing.body) === params.reconcileText
+          ? existing.id
+          : null;
+      },
+    });
+  }
+
   private async postComment(
     issueId: string,
     text: string,
@@ -986,15 +964,6 @@ const jiraIssueSchema = z.object({
     security: z.unknown().optional(),
   }),
 });
-const jiraWebhookSchema = z.object({
-  webhookEvent: z.enum(["comment_created", "comment_updated"]),
-  issue: z.object({ id: z.string().regex(/^\d+$/) }),
-  comment: z.object({
-    id: z.string().regex(/^\d+$/),
-    updated: z.string().min(1),
-  }),
-});
-
 async function jiraRequest<T>(params: {
   siteUrl: string;
   email: string;

@@ -1,44 +1,28 @@
-import { z } from "zod";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import JiraProvider from "@/agents/chatops/jira-provider";
 import logger from "@/logging";
 import ChatOpsConfigModel from "@/models/chatops-config";
 import JiraChatOpsEventModel from "@/models/jira-chatops-event";
 import { getHiddenMessagingChannels } from "@/services/integration-overrides";
+import { JiraCommentEventSchema } from "@/types/chatops-jira";
 
 // Store identifiers only. Canonical issue/comment content is fetched with the
 // selected bot's permissions at dispatch; request headers never enter storage.
-const eventSchema = z.object({
-  webhookEvent: z.enum(["comment_created", "comment_updated"]),
-  issue: z.object({ id: z.string().regex(/^\d+$/).max(32) }),
-  comment: z.object({
-    id: z.string().regex(/^\d+$/).max(32),
-    updated: z
-      .string()
-      .max(64)
-      .refine((value) => Number.isFinite(Date.parse(value))),
-  }),
-});
-
 export async function enqueueJiraChatOpsEvent(params: {
   integrationId: string;
   botId: string;
   organizationId: string;
   eventId?: string;
   payload: unknown;
-  headers?: Record<string, string | string[] | undefined>;
 }): Promise<{ id: string; created: boolean } | null> {
-  const event = eventSchema.safeParse(params.payload);
+  const event = JiraCommentEventSchema.safeParse(params.payload);
   if (!event.success) return null;
-  const deliveryId =
-    params.eventId ?? params.headers?.["x-atlassian-webhook-identifier"];
   return JiraChatOpsEventModel.enqueue({
     integrationId: params.integrationId,
     botId: params.botId,
     organizationId: params.organizationId,
     eventKey: `${event.data.issue.id}:${event.data.comment.id}:${new Date(event.data.comment.updated).toISOString()}`,
-    deliveryId:
-      typeof deliveryId === "string" ? deliveryId.slice(0, 256) : undefined,
+    deliveryId: params.eventId?.slice(0, 256),
     payload: event.data,
   });
 }

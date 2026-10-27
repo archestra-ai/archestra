@@ -916,6 +916,18 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       "Kimi API key is required. Please configure ARCHESTRA_CHAT_KIMI_API_KEY.",
   },
 
+  "kimi-code": {
+    // Kimi Code's models think too (k3.1-pro only thinks) and replay
+    // `reasoning_content` on tool-call turns.
+    createModel: reasoningCompatibleCreateModel({
+      name: "kimi-code",
+      missingBaseUrlMessage: "Kimi Code base URL is required.",
+    }),
+    defaultBaseUrl: config.llm["kimi-code"].baseUrl,
+    apiKeyRequiredMessage:
+      "Kimi Code API key is required. Please configure ARCHESTRA_CHAT_KIMI_CODE_API_KEY.",
+  },
+
   "github-copilot": {
     // The model always talks to the local LLM proxy (buildProxyBaseUrl), and
     // the proxy's github-copilot adapter exchanges the GitHub OAuth token for

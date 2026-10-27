@@ -383,6 +383,11 @@ export const RouteId = {
   KimiChatCompletionsWithDefaultAgent: "kimiChatCompletionsWithDefaultAgent",
   KimiChatCompletionsWithAgent: "kimiChatCompletionsWithAgent",
 
+  // Proxy Routes - Kimi Code (membership plans)
+  KimiCodeChatCompletionsWithDefaultAgent:
+    "kimiCodeChatCompletionsWithDefaultAgent",
+  KimiCodeChatCompletionsWithAgent: "kimiCodeChatCompletionsWithAgent",
+
   // Proxy Routes - AWS Bedrock
   BedrockConverseWithDefaultAgent: "bedrockConverseWithDefaultAgent",
   BedrockConverseWithAgent: "bedrockConverseWithAgent",

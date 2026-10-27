@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { anthropicAdapterFactory } from "../adapters/anthropic";
+import { kimiCodeAdapterFactory } from "../adapters/kimi-code";
 import { openaiAdapterFactory } from "../adapters/openai";
 import { openAiResponsesAdapterFactory } from "../adapters/openai-responses";
 import { xaiAdapterFactory } from "../adapters/xai";
@@ -195,6 +196,21 @@ describe("xai isSubscriptionCredential (X Premium credential format)", () => {
   });
 
   test("undefined credential stays metered", () => {
+    expect(isSubscription(undefined)).toBe(false);
+  });
+});
+
+describe("kimi-code isSubscriptionCredential (credential format)", () => {
+  const isSubscription = (credential: string | undefined) =>
+    kimiCodeAdapterFactory.isSubscriptionCredential?.(credential) ?? false;
+
+  test("Kimi Code membership key draws on the plan => subscription", () => {
+    expect(isSubscription("Bearer sk-kimi-abc123")).toBe(true);
+    expect(isSubscription("sk-kimi-abc123")).toBe(true);
+  });
+
+  test("any other key format stays metered", () => {
+    expect(isSubscription("Bearer sk-abc123")).toBe(false);
     expect(isSubscription(undefined)).toBe(false);
   });
 });

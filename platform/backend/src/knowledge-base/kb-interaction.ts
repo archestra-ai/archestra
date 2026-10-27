@@ -287,6 +287,7 @@ const PROVIDER_CHAT_INTERACTION_TYPE: Record<
   deepseek: "deepseek:chatCompletions",
   minimax: "minimax:chatCompletions",
   kimi: "kimi:chatCompletions",
+  "kimi-code": "kimi-code:chatCompletions",
   azure: "azure:chatCompletions",
   "github-copilot": "github-copilot:chatCompletions",
   "microsoft-365-copilot": "microsoft-365-copilot:chatCompletions",

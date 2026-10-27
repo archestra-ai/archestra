@@ -299,10 +299,14 @@ describe("ModelsDevClient", () => {
       expect(modelsDevClient.mapProvider("unknown-provider")).toBeNull();
     });
 
-    test("maps Moonshot's platform and both Kimi for Coding catalogs to kimi", () => {
+    test("maps Moonshot's platform catalog to kimi and both Kimi Code plan catalogs to kimi-code", () => {
       expect(modelsDevClient.mapProvider("moonshotai")).toBe("kimi");
-      expect(modelsDevClient.mapProvider("kimi-code-plan-global")).toBe("kimi");
-      expect(modelsDevClient.mapProvider("kimi-code-plan-cn")).toBe("kimi");
+      expect(modelsDevClient.mapProvider("kimi-code-plan-global")).toBe(
+        "kimi-code",
+      );
+      expect(modelsDevClient.mapProvider("kimi-code-plan-cn")).toBe(
+        "kimi-code",
+      );
     });
   });
 
@@ -493,10 +497,10 @@ describe("ModelsDevClient", () => {
       );
     });
 
-    test("keeps one Kimi plan model per id, from the global catalog", async () => {
-      // Both Kimi for Coding regions publish the same plan ids. The China
-      // catalog comes first here so the outcome shows the preference, not
-      // the input order. The platform catalog's ids do not collide.
+    test("keeps one Kimi Code plan model per id, from the global catalog", async () => {
+      // Both Kimi Code regions publish the same plan ids. The China catalog
+      // comes first here so the outcome shows the preference, not the input
+      // order. The platform catalog's ids belong to the kimi provider.
       const mockResponse = createMockApiResponse({
         "kimi-code-plan-cn": createMockProvider("kimi-code-plan-cn", {
           "k3.1-pro": createMockModel({
@@ -530,9 +534,12 @@ describe("ModelsDevClient", () => {
 
       expect(count).toBe(2);
       const planModel = await ModelModel.findByProviderAndModelId(
-        "kimi",
+        "kimi-code",
         "k3.1-pro",
       );
+      expect(
+        await ModelModel.findByProviderAndModelId("kimi", "k3.1-pro"),
+      ).toBeFalsy();
       expect(planModel?.externalId).toBe("kimi-code-plan-global/k3.1-pro");
       expect(planModel?.description).toBe("K3.1 Pro (kimi.ai)");
       // The plan's zero rates must persist as zeros (the column is a

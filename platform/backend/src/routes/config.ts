@@ -309,6 +309,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
       deepseek: config.llm.deepseek.baseUrl || null,
       archestra: config.llm.archestra.baseUrl || null,
       kimi: config.llm.kimi.baseUrl || null,
+      "kimi-code": config.llm["kimi-code"].baseUrl || null,
       "github-copilot": config.llm["github-copilot"].baseUrl || null,
       "microsoft-365-copilot":
         config.llm["microsoft-365-copilot"].baseUrl || null,

@@ -60,11 +60,14 @@ export function describeModelOrigin(params: {
   model: string;
   interactionType: string | null | undefined;
 }): ModelOrigin {
-  const maker = makerProviderForModel(params.model);
+  const servedBy = params.interactionType?.split(":")[0];
+  // Kimi Code serves Moonshot's models under plan ids (k3.1-pro, k3, ...).
+  const maker =
+    makerProviderForModel(params.model) ??
+    (servedBy === "kimi-code" && /^k\d/i.test(params.model) ? "kimi" : null);
   if (maker) {
     return { kind: "maker", provider: maker, name: MODEL_MAKER_NAMES[maker] };
   }
-  const servedBy = params.interactionType?.split(":")[0];
   const aggregator = AGGREGATOR_PROVIDERS.find(
     (provider) => provider === servedBy,
   );

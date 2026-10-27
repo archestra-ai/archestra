@@ -44,6 +44,7 @@ const UNTRUSTED = {
 };
 const ACCESS_TOKENS_URL =
   "https://api.github.com/app/installations/456/access_tokens";
+const GITHUB_USER_URL = "https://api.github.com/user";
 const HOUR = 60 * 60 * 1000;
 
 // The GitHub App's own key, which signs its requests for installation tokens.
@@ -84,6 +85,17 @@ const server = useMswServer(
   http.get("https://api.github.com/repos/:owner/:repo/pulls/:number", () =>
     HttpResponse.json(pullRequest),
   ),
+  // A user token `ghu_<id>` (see `connectGitHub`) is the GitHub account `<id>`.
+  http.get(GITHUB_USER_URL, ({ request }) => {
+    const id = Number(
+      /^Bearer ghu_(\d+)$/.exec(
+        request.headers.get("authorization") ?? "",
+      )?.[1],
+    );
+    return id
+      ? HttpResponse.json({ id, login: `user-${id}` })
+      : HttpResponse.json({ message: "Bad credentials" }, { status: 401 });
+  }),
 );
 setupTestCacheManager();
 
@@ -551,6 +563,52 @@ describe("POST /api/github-actions/token", () => {
     expect(refreshes).toBe(1);
   });
 
+  test("treats a connection GitHub no longer accepts as not linked, though it has not expired here", async () => {
+    server.use(
+      http.get(GITHUB_USER_URL, () =>
+        HttpResponse.json({ message: "Bad credentials" }, { status: 401 }),
+      ),
+    );
+
+    const response = await exchange({ token: await oidcToken() });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({
+      error: "not_linked",
+      login: AUTHOR.login,
+    });
+    expect(response.json().message).toContain("connect GitHub again");
+    expect(scopedTokenRequests).toHaveLength(0);
+  });
+
+  test("treats a connection whose token acts as another GitHub account as not linked", async () => {
+    server.use(
+      http.get(GITHUB_USER_URL, () =>
+        HttpResponse.json({ id: 1, login: "someone-else" }),
+      ),
+    );
+
+    const response = await exchange({ token: await oidcToken() });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error).toBe("not_linked");
+    expect(scopedTokenRequests).toHaveLength(0);
+  });
+
+  test("reports GitHub failing to check the author's connection", async () => {
+    server.use(
+      http.get(GITHUB_USER_URL, () =>
+        HttpResponse.json({ message: "Server Error" }, { status: 500 }),
+      ),
+    );
+
+    const response = await exchange({ token: await oidcToken() });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json().error).toBe("github_error");
+    expect(scopedTokenRequests).toHaveLength(0);
+  });
+
   test("refuses a GitHub account connected by more than one member", async ({
     makeUser,
     makeMember,
@@ -696,7 +754,7 @@ describe("POST /api/github-actions/token", () => {
       userId,
       credentialId: "github",
       value: JSON.stringify({
-        accessToken: "ghu_user_token",
+        accessToken: `ghu_${account.id}`,
         refreshToken: "ghr_user_refresh",
         expiresAt: lifetimes.expiresAt ?? Date.now() + 8 * HOUR,
         refreshExpiresAt:

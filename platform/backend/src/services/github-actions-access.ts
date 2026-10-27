@@ -34,6 +34,7 @@ import {
   type AgentAccessContext,
   type AgentType,
   ApiError,
+  GITHUB_COM_API_URL,
   GitHubUserIdSchema,
 } from "@/types";
 import type {
@@ -182,13 +183,21 @@ export async function exchangeGitHubActionsToken(params: {
       login,
     );
 
-  if (
-    !(await hasUsableConnection({
+  let linked: boolean;
+  try {
+    linked = await hasUsableConnection({
       organizationId: gateway.organizationId,
       userId,
       credentialKeys: connections.map((entry) => entry.credentialKey),
-    }))
-  )
+      githubId: pullRequest.user.id,
+    });
+  } catch (error) {
+    // GitHub could not say whether the connection still works.
+    if (error instanceof ApiError && error.statusCode === 502)
+      return githubFailure({ error, gatewayId, repository });
+    throw error;
+  }
+  if (!linked)
     return refuse(
       403,
       "not_linked",
@@ -340,6 +349,9 @@ const OidcClaimsSchema = z.object({
   actor: z.string().optional(),
 });
 type OidcClaims = z.infer<typeof OidcClaimsSchema>;
+
+/** The account `GET /user` names for a user token. */
+const GitHubAccountSchema = z.object({ id: z.number() });
 
 const PullRequestSchema = z.object({
   user: z.object({ id: GitHubUserIdSchema, login: z.string() }),
@@ -553,23 +565,25 @@ async function userCanUseGateway(params: {
 }
 
 /**
- * Whether one of the user's connections still yields a GitHub token, resolved
- * as a runtime launch would (refreshing it when due). A revoked or expired
- * authorization no longer counts as a link.
+ * Whether one of the user's connections still acts as the author on GitHub.
+ * Each is resolved as a runtime launch would (refreshing it when due), then
+ * shown to GitHub: a stored token that has not expired locally may still have
+ * been revoked. Throws a 502 `ApiError` when GitHub cannot answer.
  */
 async function hasUsableConnection(params: {
   organizationId: string;
   userId: string;
   credentialKeys: string[];
+  githubId: number;
 }): Promise<boolean> {
   for (const credentialId of params.credentialKeys) {
+    let resolved: { value: string } | null;
     try {
-      const resolved = await githubUserConnectionManager.resolve({
+      resolved = await githubUserConnectionManager.resolve({
         organizationId: params.organizationId,
         userId: params.userId,
         credentialId,
       });
-      if (resolved) return true;
     } catch (error) {
       // GitHub sign-in reports a revoked, expired, or reconfigured
       // authorization as a 400; anything else is a failure of its own.
@@ -578,9 +592,59 @@ async function hasUsableConnection(params: {
         { userId: params.userId, credentialId, error: error.message },
         "[github-actions] A GitHub connection can no longer be used",
       );
+      continue;
     }
+    if (!resolved) continue;
+    if (
+      await gitHubAcceptsAs({
+        token: resolved.value,
+        githubId: params.githubId,
+      })
+    )
+      return true;
+    logger.info(
+      { userId: params.userId, credentialId },
+      "[github-actions] GitHub refused a connection's token, or it acts as another account",
+    );
   }
   return false;
+}
+
+/** Whether GitHub accepts the user token, as the given account. */
+async function gitHubAcceptsAs(params: {
+  token: string;
+  githubId: number;
+}): Promise<boolean> {
+  let response: Response;
+  try {
+    response = await fetch(`${GITHUB_COM_API_URL}/user`, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${params.token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      redirect: "error",
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    throw new ApiError(
+      502,
+      "GitHub could not be reached to check the author's GitHub connection. Try again.",
+    );
+  }
+  if (response.status === 401 || response.status === 403) return false;
+  if (!response.ok)
+    throw new ApiError(
+      502,
+      `GitHub returned HTTP ${response.status} while checking the author's GitHub connection`,
+    );
+  const user = GitHubAccountSchema.safeParse(await response.json());
+  if (!user.success)
+    throw new ApiError(
+      502,
+      "GitHub returned an unexpected account while checking the author's GitHub connection",
+    );
+  return user.data.id === params.githubId;
 }
 
 /** Record the token's `jti` until it expires; false when it is already there. */

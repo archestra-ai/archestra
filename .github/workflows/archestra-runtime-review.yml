@@ -1,58 +1,64 @@
 name: Archestra Runtime Review
 
 # Reviews a maintainer's pull request on an Archestra Agent Runtime, beside
-# the Claude core-team review. The shared workflow reviews only a pull request
-# whose author has the admin or maintain role here and started the run; any
-# other pull request, or a push by someone else, gets a passing job and a
-# notice. The run uses the author's Archestra platform token (secret
-# ARCHESTRA_TOKEN_<LOGIN>); without one, the job skips with a notice. The
-# shared workflow in archestra-ai/.github has the setup.
+# the Claude core-team review, and posts as the Archestra Lobster App.
+#
+# - Automatically, when the author, a maintainer, opens, pushes to, reopens or
+#   readies it.
+# - On demand, when a maintainer requests a review from the
+#   @archestra-ai/archestra-review team. The run uses that maintainer's
+#   account, and the team's request is cleared when the review ends.
+# - Anything else, such as a contributor's pull request, or a push or request
+#   by someone who is not a maintainer, runs nothing and says nothing. The
+#   shared workflow's gate decides that, not this file, which a pull request
+#   can edit.
+# - A blocking finding requests changes; a later review that finds nothing
+#   blocking dismisses the request, and fixed findings' threads are resolved.
+#
+# The job signs in to Archestra with its GitHub Actions identity, so no
+# secrets are needed. The shared workflow in archestra-ai/.github has the
+# setup.
 
 on:
   pull_request:
-    types: [opened, synchronize, ready_for_review, reopened]
+    types: [opened, synchronize, ready_for_review, reopened, review_requested]
 
 permissions: {}
 
+# The shared review job replaces an older review of the pull request, so an
+# event its gate stops cannot cancel one. This group only keeps two deliveries
+# of the same event apart.
 concurrency:
-  group: archestra-runtime-review-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: archestra-runtime-review-${{ github.event.pull_request.number || github.ref }}-${{ github.sha }}-${{ github.event.action }}-${{ github.event.requested_team.slug || 'none' }}
+  cancel-in-progress: false
 
 jobs:
-  actor:
-    name: Resolve the actor
-    # The same filters as the review job, so that no runner starts for an event the review skips.
-    if: >-
-      github.repository == 'archestra-ai/archestra' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      !github.event.pull_request.draft &&
-      !contains(github.event.pull_request.title, '[WIP]')
-    uses: archestra-ai/code-review-action/.github/workflows/resolve-actor-token.yml@9c1bcf2430c7701d68f18f6d263b5d302bea414d # v0.2.2
-
   review:
     name: Archestra Review
-    needs: actor
+    # A review request starts a run only when it names the review team; a
+    # request for a person or another team starts nothing.
     if: >-
       github.repository == 'archestra-ai/archestra' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.action == 'review_requested' && github.event.requested_team.slug == 'archestra-review' ||
+      github.event.action != 'review_requested' &&
       !github.event.pull_request.draft &&
-      !contains(github.event.pull_request.title, '[WIP]')
+      !contains(github.event.pull_request.title, '[WIP]'))
     permissions:
       contents: read
-      pull-requests: write # Post the review comment and inline comments.
+      pull-requests: write # Post the review, its comments, and clear the team's request.
       checks: read # Count the failing checks of the reviewed commit.
       actions: read # The shared job asks for it (CI triage); unused by a review.
-      id-token: write # Short-lived identity for the staging-only IAP HTTPS tunnel.
-    uses: archestra-ai/.github/.github/workflows/archestra-runtime-review.yml@f728c0fc68a64796ce4e0898b469d920ec0f3f65 # v1.9.2
+      id-token: write # Archestra sign-in and the staging-only IAP HTTPS tunnel.
+    uses: archestra-ai/.github/.github/workflows/archestra-runtime-review.yml@a49ee27772c23da0accdd63f1e8efdb1baa3869e # v1.10.0
     with:
       kind: review
+      archestra-auth: github-actions
       gateway-url: ${{ vars.ARCHESTRA_REVIEW_GATEWAY_URL }}
       private-staging-access: true
       agents: ${{ vars.ARCHESTRA_REVIEW_AGENTS }}
-      # No GitHub App for pushes yet: the comment offers no fix commands.
+      review-team: archestra-review
+      review-event: request-changes
+      # The GitHub Actions sign-in serves reviews only: no fix commands.
       fix-commands: false
       timeout-minutes: 90
-    # GitHub resolves this lookup before starting the called job; only the
-    # matching token is passed, not the caller's complete secrets context.
-    secrets:
-      ARCHESTRA_TOKEN: ${{ secrets[needs.actor.outputs.secret_name] }} # zizmor: ignore[overprovisioned-secrets,obfuscation]

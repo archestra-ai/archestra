@@ -8,55 +8,98 @@ beta: "Set [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED=true`](/docs/admin/deployment/con
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-A model pool serves one model name from several provider keys. Clients keep asking for the same name, such as `glm-5.3`. The LLM Proxy picks a member to answer, spreads traffic between members, and moves on to another member when one fails. Clients don't change anything.
+Keep a model answering when one provider key hits its rate limit or goes down. A model pool serves one model name, such as `glm-5.3`, from several provider keys: Zhipu AI first, and Bedrock when Zhipu AI fails. Clients keep asking for `glm-5.3` with the key they already have. Archestra picks the key, spreads the load, and moves to the next key before the client sees an error.
 
-Create pools under **LLM > Model Pools**. Each member is a shared provider key and the model ID that key uses for the model. Bedrock, for example, calls `glm-5.3` `us.zai.glm-5.3`.
+```mermaid
+flowchart LR
+    Client["Claude Code · Your apps"] -->|"glm-5.3"| Pool["Model pool"]
+    Pool --> Order1["Order 1: two Zhipu AI keys"]
+    Pool -.->|"If order 1 is unavailable"| Order2["Order 2: Bedrock key"]
+    class Pool accent
+```
+
+## Create a Pool
+
+A pool is a model name and its members. Each member is a shared provider key and the model ID that key uses, since providers spell the same model differently: Bedrock calls `glm-5.3` `us.zai.glm-5.3`.
+
+Before you start, add a shared key for each provider on [Model Providers](/docs/llm-proxy/providers). Personal and subscription keys can't be members. Creating a pool needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
+
+1. Go to **LLM → Model Pools** and click **Create pool**.
+2. Under **Model name**, pick or type the name clients ask for.
+3. Under **Members**, click **Add member**. Pick a **Provider key**, then the **Model** that key serves the model as. If the key has no synced models, type the model ID.
+4. Click **Add member** inside the same order to share its traffic. Click **Add order** to add a fallback.
+5. Click **Create pool**.
+
+The dialog then shows that the pool is ready, with a request you can copy. Send it, and the answer carries `x-archestra-pool: glm-5.3` and `x-archestra-attempts: 1` headers.
+
+- **Name it after the model.** When the name matches a model ID, such as `claude-sonnet-4-6`, every request for that model from a caller who can use the pool goes to the pool. Deleting the pool sends those requests back to the caller's own key.
+- **Switch a member off** to stop sending it traffic and keep it in the pool.
 
 ## Order and Weight
 
-Pools use the same two settings as LiteLLM.
+Order sets which members a request tries first, and weight splits traffic between members that share an order. Order and weight work as in LiteLLM.
 
-- **Order** is the sequence requests try. The list in the pool form is that sequence: drag a member up or down to change it. Requests go to order 1 first, and to the next order only when every member before it has failed or is cooling down.
-- **Weight** splits traffic between members that share an order. Link a member to the one above it to give it the same order. Weights of 3 and 1 send 75% and 25% of requests to each.
+- **Order:** requests go to order 1. They go to order 2 only when every member of order 1 has failed or is cooling down. Drag a member into another order to move it, or between two orders to give it an order of its own.
+- **Weight:** members of one order share its traffic by weight.
 
-A member that is not linked to the one above it is a fallback for every member above it. Switching a member off keeps it in the pool but sends it no traffic.
+For example, a pool with two Zhipu AI keys of weight 3 and 1 in order 1, and a Bedrock key in order 2, sends 75% of requests to the first Zhipu AI key and 25% to the second. Bedrock answers only while both Zhipu AI keys are unavailable.
 
-## How Failover Works
+## When a Member Fails
 
-| When                              | What happens                                                                                                                      |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| A member answers 429 or 5xx       | The request moves to the next member, without retrying the first one.                                                            |
-| A member times out or can't connect | The request moves to the next member.                                                                                           |
-| A member is silent                | No first chunk in 30 s, or no answer in 3 min plus 1 s per 20 tokens the request allows (at most 30 min), unless it is the last member. |
-| A key is refused                  | A 401, 403 or 404 from that key, or a key that can't be loaded, moves the request to the next member.                             |
-| The request itself is invalid     | The error goes back to the client. Other members would refuse it too.                                                             |
-| After a failure                   | The member cools down for its `Retry-After`, or 30 s without one, and at most 60 s. The pool form shows how long is left.          |
-| A conversation continues          | It stays on the same member, to keep the prompt cache warm.                                                                       |
-| The answer has started            | Errors go to the client. A pool never switches members mid-answer.                                                                |
+A request moves to the next member when a member fails before it starts to answer. The client sees an error only when the last member fails, or when the request itself is at fault.
+
+| When the member | What happens |
+| --- | --- |
+| Answers `429` or a `5xx` error, or can't be reached | The request moves to the next member. |
+| Answers `401`, `403`, or `404`, or its key can't be loaded | The request moves to the next member. The key was revoked, or it doesn't serve that model. |
+| Stays silent: no first chunk of a stream in 30 s, or no full answer in 3 min plus 1 s per 20 tokens the request lets the model write (at most 30 min) | The request moves to the next member. |
+| Rejects the request as invalid, such as a `400` | The error goes to the client. Other members would reject it too. |
+| Fails after it starts to answer | The error goes to the client. A pool never switches members mid-answer. |
+
+A failed member cools down for as long as its `Retry-After` header asks, or 30 s without one, and never longer than 60 s. Other requests skip it while it cools down. The pool's members show **Cooling down** with the seconds left, and the reason on hover.
+
+- The last member has nowhere to move to, so the pool doesn't time it out, and it gets the usual connection retries.
+- When every member is cooling down, requests still try them, the one back soonest first.
+- A conversation stays on the same member while that member is healthy, which keeps the provider's prompt cache warm.
 
 ## Who Can Use a Pool
 
-A pool is open to any credential that can already reach one of its members:
+A pool is open to any credential that can already reach one of its members. People who connected through [Connect](/docs/get-started/connect) use the pool without changing anything, when their key is one of its members.
 
-- a [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) that maps a member's provider key,
-- an OAuth client whose provider keys include a member's key,
-- people who connected through Connect, whose keys map a member's key.
+- A [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) that maps a member's provider key.
+- An [OAuth client](/docs/llm-proxy/authentication#oauth-clients) whose provider keys include a member's key.
 
-To let a virtual key or an OAuth client use a pool without mapping any of its members, add the pool under **Model pools** when you create or edit it. Only client credentials OAuth clients take pools.
+To let a virtual key or an OAuth client use a pool without mapping any of its members, add the pool under **Model pools** when you create or edit it. Only OAuth clients that [call as the app](/docs/llm-proxy/authentication#call-as-the-app) take pools. Setting **Model pools** needs [`llmModel:update`](/docs/reference/permissions#llmModel:update).
 
-## Connect Clients
+A caller who can't use a pool is not refused. Their request for that name goes to their own key, as it would without a pool.
 
-Ask for the pool's name as the model, on any of these endpoints:
+## Connect a Client
 
-- the [Model Router](/docs/llm-proxy/model-router), `https://<archestra-host>/v1/model-router`,
-- the Anthropic API route, `https://<archestra-host>/v1/anthropic`, which Claude Code uses,
-- the OpenAI API route, `https://<archestra-host>/v1/openai`.
+Point a client at any of these endpoints and ask for the pool's name as the model. Click **Connect** on a pool, pick an **Endpoint** and how to **Sign in with**, and copy the base URL and the request.
 
-Choose **Connect** on a pool to copy a request for each endpoint, signed with a virtual key or an OAuth client token.
+| Endpoint | Base URL | Use it for |
+| --- | --- | --- |
+| **Model Router** | `https://<archestra-host>/v1/model-router` | Any OpenAI-compatible client. `/models` lists the pool under its plain name. |
+| **Anthropic API** | `https://<archestra-host>/v1/anthropic` | Claude Code and the Anthropic SDK |
+| **OpenAI API** | `https://<archestra-host>/v1/openai` | The OpenAI SDK, on Chat Completions |
 
-Claude Code assumes a 200k context window for a model name it doesn't know. Set `CLAUDE_CODE_MAX_CONTEXT_TOKENS` to the smallest context window among the pool's members.
+To use a pool from Claude Code, pick it as the model, for example `claude --model glm-5.3`. A pool named after a Claude model needs nothing.
+
+- **Context window:** Claude Code assumes a 200k context window for a model name it doesn't know. Set `CLAUDE_CODE_MAX_CONTEXT_TOKENS` to the smallest context window among the pool's members.
+- **Members on another API:** Claude Code and OpenAI clients reach every member, whatever API its provider speaks. Archestra translates the request. Anthropic-only features, such as prompt caching hints and thinking blocks, are dropped on the way to a member that doesn't speak Anthropic's API. Claude models on Bedrock keep them.
+
+## See Which Member Answered
+
+Every attempt is a request in [Logs](/docs/admin/logs) under **Logs → LLM Proxy**, so a request that failed over shows each member it tried. Open a request to see its **Model pool**, the member's **Provider key**, the **Outcome** (**Answered**, **Failed over**, or **Failed**), and the **Reason**.
+
+Each attempt is priced as the member that made it, with that member's provider and model ID:
+
+- An attempt that was refused costs $0.
+- An attempt that was cut off for being silent carries an estimated input cost, because the provider read the prompt and bills it.
+- A member's model with no price in the catalog falls back to the default price. Set its price under **Models**, as for [custom models](/docs/llm-proxy/costs-and-limits#where-token-prices-come-from).
 
 ## Limits in the Beta
 
-- Requests on the Anthropic API route skip Bedrock members. A pool whose members are all on Bedrock doesn't answer there yet.
-- OpenCode calls the OpenAI Responses API, which pools don't serve yet.
+- Clients on the OpenAI Responses API, such as OpenCode, can't use pools yet. That includes `/responses` on the Model Router.
+- Members can be keys for Anthropic, AWS Bedrock, OpenAI, Azure AI Foundry, and OpenAI-compatible providers such as vLLM, OpenRouter, and Mistral AI. Gemini and Vertex AI keys can't be members yet.
+- Timeouts and cooldowns are fixed. Pools don't route by a key's rate or token limits.

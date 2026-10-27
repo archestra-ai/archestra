@@ -34,6 +34,7 @@ describe("OpenCode passthrough provider routes", () => {
       minimax: "https://example.com/v1/minimax",
       moonshotai: "https://example.com/v1/kimi",
       "kimi-code-plan-global": "https://example.com/v1/kimi-code",
+      "kimi-code-plan-cn": "https://example.com/v1/kimi-code",
     });
   });
 });

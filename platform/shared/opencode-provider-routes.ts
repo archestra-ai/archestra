@@ -18,12 +18,6 @@ export interface OpenCodeProviderRoute {
   provider: SupportedProvider;
   openCodeProviderId: string;
   pathSuffix: string;
-  /**
-   * Other stock provider ids that list the same models, such as a region's
-   * catalog. A pin on one of them moves to `openCodeProviderId`, so the client
-   * lists those models once.
-   */
-  aliasProviderIds?: readonly string[];
 }
 
 /**
@@ -63,14 +57,28 @@ export const OPENCODE_PASSTHROUGH_PROVIDER_ROUTES = [
   { provider: "zhipuai", openCodeProviderId: "zhipuai", pathSuffix: "" },
   { provider: "minimax", openCodeProviderId: "minimax", pathSuffix: "" },
   { provider: "kimi", openCodeProviderId: "moonshotai", pathSuffix: "" },
+  // OpenCode lists the Kimi Code plan as two catalogs of the same models. Both
+  // go to the Kimi Code route, which calls the key's Base URL (global or China).
   {
     provider: "kimi-code",
     openCodeProviderId: "kimi-code-plan-global",
     pathSuffix: "",
-    // The China endpoint is a Base URL on the key; the plan's model ids match.
-    aliasProviderIds: ["kimi-code-plan-cn"],
+  },
+  {
+    provider: "kimi-code",
+    openCodeProviderId: "kimi-code-plan-cn",
+    pathSuffix: "",
   },
 ] as const satisfies readonly OpenCodeProviderRoute[];
+
+/** The Archestra providers with a passthrough row, each once. */
+export function openCodePassthroughProviders(): SupportedProvider[] {
+  return [
+    ...new Set(
+      OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map((route) => route.provider),
+    ),
+  ];
+}
 
 export function openCodePassthroughBaseUrl(
   baseUrl: string,

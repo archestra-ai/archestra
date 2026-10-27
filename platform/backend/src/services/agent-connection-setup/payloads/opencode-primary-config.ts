@@ -32,8 +32,8 @@ export interface ManagedRuntimeCatalog {
   passthrough: string[];
   /**
    * `archestra-<provider>` ids that earlier setups wrote into the client's
-   * config, and stock ids that list the same models (a region's catalog) →
-   * the stock id that now serves those models, so a pin on one keeps working.
+   * config → the stock id that now serves the same models, so a pin on one
+   * keeps working.
    */
   legacy: Record<string, string>;
 }
@@ -59,9 +59,7 @@ function openCodeCatalog(params: {
     legacy: {},
   };
   const shown = new Set<SupportedProvider>();
-  const routes: readonly OpenCodeProviderRoute[] =
-    OPENCODE_PASSTHROUGH_PROVIDER_ROUTES;
-  for (const route of routes) {
+  for (const route of OPENCODE_PASSTHROUGH_PROVIDER_ROUTES) {
     const id = route.openCodeProviderId;
     const entry = params.primaryProviders?.find(
       (candidate) => candidate.provider === route.provider,
@@ -70,13 +68,11 @@ function openCodeCatalog(params: {
       params.passthroughProviders?.includes(route.provider) ?? false;
     if (!entry && !passthrough) continue;
     catalog.routes[id] = params.routeUrl(route);
-    for (const alias of route.aliasProviderIds ?? []) {
-      catalog.legacy[alias] = id;
-    }
     if (entry) {
       shown.add(entry.provider);
       catalog.managed[id] = entry.models.map((model) => model.id);
-      catalog.legacy[`archestra-${route.provider}`] = id;
+      // A provider with two catalogs keeps an earlier pin on its first one.
+      catalog.legacy[`archestra-${route.provider}`] ??= id;
     }
     if (passthrough) catalog.passthrough.push(id);
   }

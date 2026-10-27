@@ -441,9 +441,7 @@ export const ${OPENCODE_V1_OAUTH_EXPORT} = async () => ({
  *
  * This variant has no config hook, so a pin on a model the connection does
  * not serve fails closed in `model.request`; the installer warns about such a
- * pin at setup. A pin on an id the catalog maps to a routed provider (an id
- * an earlier setup wrote, or a region's catalog of the same models) goes to
- * that provider's route.
+ * pin at setup.
  *
  * Inject values only with JSON.stringify. The return value is JavaScript source.
  */
@@ -555,12 +553,11 @@ export default {
       }
     });
     await ctx.session.hook("model.request", (event) => {
-      const requestedId = event.model.providerID;
-      const providerId = !Object.hasOwn(activeRoutes, requestedId) && Object.hasOwn(legacyProviderIds, requestedId) ? legacyProviderIds[requestedId] : requestedId;
+      const providerId = event.model.providerID;
       const route = Object.hasOwn(activeRoutes, providerId) ? activeRoutes[providerId] : undefined;
       if (!route) {
         throw new Error(
-          'OpenCode provider "' + requestedId + '" is not supported by the connected ' + appName + ' LLM proxy. Disconnect or reconfigure the proxy before using it.',
+          'OpenCode provider "' + providerId + '" is not supported by the connected ' + appName + ' LLM proxy. Disconnect or reconfigure the proxy before using it.',
         );
       }
       const managedAlias = managedProviders.has(providerId);
@@ -638,5 +635,6 @@ const OPENCODE_CREDENTIAL_ENV_BY_PROVIDER: Record<string, readonly string[]> = {
   minimax: ["MINIMAX_API_KEY"],
   moonshotai: ["MOONSHOT_API_KEY"],
   "kimi-code-plan-global": ["KIMI_API_KEY"],
+  "kimi-code-plan-cn": ["KIMI_API_KEY"],
   xai: ["XAI_API_KEY"],
 };

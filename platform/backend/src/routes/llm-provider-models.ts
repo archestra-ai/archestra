@@ -779,20 +779,27 @@ export async function getAvailableLlmModels(params: {
       embeddingDimensions: model.embeddingDimensions,
     }));
 
-  const perUserModels = await getPerUserProviderModels({
-    organizationId,
-    provider,
-    isEmbedding,
-    connectedProviders: new Set(
-      apiKeys
-        .filter(
-          (key) =>
-            providerRequiresPerUserCredential(key.provider) &&
-            !key.isGithubAppKey,
-        )
-        .map((key) => key.provider),
-    ),
-  });
+  // Picking a GitHub App key shows that key's own models only; the personal
+  // Copilot catalog belongs to the personal sign-in path.
+  const pickedAppKey = apiKeys.some(
+    (key) => key.id === apiKeyId && key.isGithubAppKey,
+  );
+  const perUserModels = pickedAppKey
+    ? []
+    : await getPerUserProviderModels({
+        organizationId,
+        provider,
+        isEmbedding,
+        connectedProviders: new Set(
+          apiKeys
+            .filter(
+              (key) =>
+                providerRequiresPerUserCredential(key.provider) &&
+                !key.isGithubAppKey,
+            )
+            .map((key) => key.provider),
+        ),
+      });
 
   const models = [...keyLinkedModels, ...perUserModels];
 

@@ -149,7 +149,7 @@ export async function planModelPool(params: {
     return null;
   }
   const reachable = pool.members.filter((member) =>
-    canReachMember(params.inbound, member),
+    canReachMember(params.inbound, member.provider),
   );
   if (reachable.length < pool.members.length) {
     logger.info(

@@ -207,14 +207,16 @@ describe("planModelPool", () => {
       },
     });
 
-    // Anthropic's wire reaches OpenAI-style members, not Converse ones.
+    // Anthropic's wire reaches OpenAI-style and Converse members alike.
     const plan = await planModelPool({
       organizationId: org.id,
       name: "glm-5",
       inbound: "anthropic",
       caller: { providerApiKeyIds: [zai.id] },
     });
-    expect(plan?.members.map((m) => m.providerApiKeyId)).toEqual([zai.id]);
+    expect(plan?.members.map((m) => m.providerApiKeyId).sort()).toEqual(
+      [zai.id, bedrock.id].sort(),
+    );
     // Converse reaches only Converse members.
     const conversePlan = await planModelPool({
       organizationId: org.id,

@@ -80,13 +80,12 @@ export function inboundPoolWire(
   return null;
 }
 
-/** Whether a client on `inbound` can be answered by a member. */
+/** Whether a client on `inbound` can be answered by a member on `provider`. */
 export function canReachMember(
   inbound: PoolWire,
-  member: { provider: SupportedProvider; modelId: string },
+  provider: SupportedProvider,
 ): boolean {
-  if (claudeOnBedrock(inbound, member)) return true;
-  const target = wireOf(member.provider);
+  const target = wireOf(provider);
   if (!target) return false;
   return target === inbound || TRANSLATED.has(`${inbound}>${target}`);
 }
@@ -235,6 +234,47 @@ export function memberTransport(params: {
     };
   }
 
+  if (inbound === "anthropic" && target === "bedrock-converse") {
+    // No direct translator: go through the OpenAI chat shape, which both the
+    // Anthropic and the Converse translators speak. Anthropic-only fields
+    // (cache_control, thinking blocks) don't survive the middle step.
+    const viaOpenai = memberTransport({
+      inbound: "openai-chat",
+      provider,
+      modelId,
+      client,
+    });
+    return {
+      async execute(request) {
+        const { openaiBody, anthropicContext } = anthropicToOpenai(
+          request as Anthropic.Types.MessagesRequest,
+        );
+        const response = await viaOpenai.execute(openaiBody);
+        return openaiResponseToAnthropic(
+          response as OpenAi.Types.ChatCompletionsResponse,
+          anthropicContext,
+        );
+      },
+      async executeStream(request) {
+        const { openaiBody, anthropicContext } = anthropicToOpenai(
+          request as Anthropic.Types.MessagesRequest,
+        );
+        const chunks = await viaOpenai.executeStream({
+          ...openaiBody,
+          stream: true,
+        });
+        const translator =
+          createOpenaiToAnthropicStreamTranslator(anthropicContext);
+        return mapStream(
+          chunks,
+          (chunk) =>
+            translator.translate(chunk as OpenAi.Types.ChatCompletionChunk),
+          translator.finish,
+        );
+      },
+    };
+  }
+
   throw new Error(`A ${inbound} request cannot reach a ${target} member`);
 }
 
@@ -297,6 +337,7 @@ const TRANSLATED = new Set([
   "openai-chat>anthropic",
   "openai-chat>bedrock-converse",
   "anthropic>openai-chat",
+  "anthropic>bedrock-converse",
 ]);
 
 /** A Claude member on Bedrock, which an Anthropic client reaches as is. */

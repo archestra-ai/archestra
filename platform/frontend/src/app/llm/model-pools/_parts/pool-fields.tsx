@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  DocsPage,
-  isClaudeOnBedrock,
-  type SupportedProvider,
-} from "@archestra/shared";
+import { DocsPage, type SupportedProvider } from "@archestra/shared";
 import {
   type CollisionDetection,
   closestCenter,
@@ -33,7 +29,6 @@ import {
   CircleAlert,
   CircleHelp,
   GripVertical,
-  Info,
   Plus,
   TriangleAlert,
   X,
@@ -649,12 +644,6 @@ function MemberRow({
               )}
             />
           </div>
-          {provider === "bedrock" && !isClaudeOnBedrock(member.modelId) ? (
-            <p className="flex items-center gap-1 pl-1 text-[11px] text-muted-foreground">
-              <Info className="size-3 shrink-0" aria-hidden="true" />
-              <span>Claude Code reaches Claude on Bedrock only.</span>
-            </p>
-          ) : null}
           {otherModel ? (
             <p className="flex items-center gap-1 pl-1 text-[11px] text-amber-700 dark:text-amber-400">
               <TriangleAlert className="size-3 shrink-0" aria-hidden="true" />

@@ -1,4 +1,3 @@
-import type { SupportedProvider } from "@archestra/shared";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   canReachMember,
@@ -47,32 +46,13 @@ describe("which members a client's wire reaches", () => {
   });
 
   test("reaches the same wire and the pairs a translator connects", () => {
-    const on = (provider: SupportedProvider, modelId = "some-model") => ({
-      provider,
-      modelId,
-    });
-    expect(canReachMember("openai-chat", on("zhipuai"))).toBe(true);
-    expect(canReachMember("openai-chat", on("anthropic"))).toBe(true);
-    expect(canReachMember("openai-chat", on("bedrock"))).toBe(true);
-    expect(canReachMember("anthropic", on("zhipuai"))).toBe(true);
-    expect(canReachMember("anthropic", on("bedrock", "us.zai.glm-5"))).toBe(
-      false,
-    );
-    expect(canReachMember("bedrock-converse", on("zhipuai"))).toBe(false);
-    expect(canReachMember("openai-chat", on("gemini"))).toBe(false);
-  });
-
-  test("reaches Claude on Bedrock from an Anthropic client", () => {
-    for (const modelId of [
-      "anthropic.claude-haiku-4-5-20251001-v1:0",
-      "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-      "global.anthropic.claude-opus-4-8",
-      "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-    ]) {
-      expect(
-        canReachMember("anthropic", { provider: "bedrock", modelId }),
-      ).toBe(true);
-    }
+    expect(canReachMember("openai-chat", "zhipuai")).toBe(true);
+    expect(canReachMember("openai-chat", "anthropic")).toBe(true);
+    expect(canReachMember("openai-chat", "bedrock")).toBe(true);
+    expect(canReachMember("anthropic", "zhipuai")).toBe(true);
+    expect(canReachMember("anthropic", "bedrock")).toBe(true);
+    expect(canReachMember("bedrock-converse", "zhipuai")).toBe(false);
+    expect(canReachMember("openai-chat", "gemini")).toBe(false);
   });
 });
 
@@ -204,6 +184,108 @@ describe("memberTransport", () => {
       "us.anthropic.claude-haiku-4-5",
       body,
     );
+  });
+
+  test("sends Claude in every Bedrock id form through InvokeModel", async () => {
+    for (const modelId of [
+      "anthropic.claude-haiku-4-5-20251001-v1:0",
+      "global.anthropic.claude-opus-4-8",
+      "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    ]) {
+      const client = { invoke: vi.fn().mockResolvedValue({}) };
+      await memberTransport({
+        inbound: "anthropic",
+        provider: "bedrock",
+        modelId,
+        client,
+      }).execute({ model: "claude", max_tokens: 10, messages: [] });
+      expect(client.invoke).toHaveBeenCalledWith(modelId, expect.anything());
+    }
+  });
+
+  test("answers a Claude Code request from another model on Bedrock", async () => {
+    // biome-ignore lint/style/noNonNullAssertion: bedrock is poolable
+    const adapter = memberAdapter("bedrock")!;
+    const execute = vi.spyOn(adapter, "execute").mockResolvedValue({
+      output: { message: { role: "assistant", content: [{ text: "Hi" }] } },
+      stopReason: "end_turn",
+      usage: { inputTokens: 3, outputTokens: 1, totalTokens: 4 },
+    });
+    const transport = memberTransport({
+      inbound: "anthropic",
+      provider: "bedrock",
+      modelId: "us.zai.glm-5",
+      client: "client",
+    });
+
+    const response = await transport.execute({
+      model: "glm-5",
+      max_tokens: 100,
+      system: "Be brief.",
+      messages: [{ role: "user", content: "hello" }],
+    });
+
+    expect(execute).toHaveBeenCalledWith(
+      "client",
+      expect.objectContaining({
+        modelId: "us.zai.glm-5",
+        messages: [{ role: "user", content: [{ text: "hello" }] }],
+      }),
+    );
+    expect(response).toEqual(
+      expect.objectContaining({
+        type: "message",
+        role: "assistant",
+        content: [{ type: "text", text: "Hi" }],
+        stop_reason: "end_turn",
+      }),
+    );
+  });
+
+  test("streams another Bedrock model back to a Claude Code request", async () => {
+    // biome-ignore lint/style/noNonNullAssertion: bedrock is poolable
+    const adapter = memberAdapter("bedrock")!;
+    vi.spyOn(adapter, "executeStream").mockResolvedValue(
+      from([
+        { messageStart: { role: "assistant" } },
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { text: "Hi" } } },
+        { contentBlockStop: { contentBlockIndex: 0 } },
+        { messageStop: { stopReason: "end_turn" } },
+        {
+          metadata: {
+            usage: { inputTokens: 3, outputTokens: 1, totalTokens: 4 },
+          },
+        },
+      ]) as never,
+    );
+    const transport = memberTransport({
+      inbound: "anthropic",
+      provider: "bedrock",
+      modelId: "us.zai.glm-5",
+      client: "client",
+    });
+
+    const events = await collect(
+      await transport.executeStream({
+        model: "glm-5",
+        max_tokens: 100,
+        stream: true,
+        messages: [{ role: "user", content: "hello" }],
+      }),
+    );
+
+    expect(events).toContainEqual({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "text_delta", text: "Hi" },
+    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "message_delta",
+        delta: { stop_reason: "end_turn", stop_sequence: null },
+      }),
+    );
+    expect(events.at(-1)).toEqual({ type: "message_stop" });
   });
 
   test("answers an OpenAI request from an Anthropic member, usage last", async () => {

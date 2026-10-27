@@ -60,6 +60,7 @@ test("shares the cost/model scan, reconciles legacy totals, and isolates mixed o
       inputTokens: 1_500_000_000,
       outputTokens: 10,
       cacheReadTokens: 20,
+      cacheWriteTokens: 7,
       createdAt: new Date(`2026-08-01T0${hour}:00:00Z`),
     });
   }
@@ -113,6 +114,25 @@ test("shares the cost/model scan, reconciles legacy totals, and isolates mixed o
       0,
     ),
   ).toBe(4_500_000_000);
+  expect(
+    body.models.reduce(
+      (sum: number, model: { cacheWriteTokens: number }) =>
+        sum + model.cacheWriteTokens,
+      0,
+    ),
+  ).toBe(21);
+  expect(
+    body.models
+      .flatMap(
+        (model: { timeSeries: { cacheWriteTokens: number }[] }) =>
+          model.timeSeries,
+      )
+      .reduce(
+        (sum: number, point: { cacheWriteTokens: number }) =>
+          sum + point.cacheWriteTokens,
+        0,
+      ),
+  ).toBe(21);
   expect(response.body).not.toContain(someone.email);
   const { statements } = await recordQueries(() =>
     StatisticsModel.getCostStatistics({

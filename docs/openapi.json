@@ -437413,6 +437413,9 @@
                             "cacheReadTokens": {
                               "type": "number"
                             },
+                            "cacheWriteTokens": {
+                              "type": "number"
+                            },
                             "billedCost": {
                               "type": "number"
                             },
@@ -437786,6 +437789,9 @@
                             "cacheReadTokens": {
                               "type": "number"
                             },
+                            "cacheWriteTokens": {
+                              "type": "number"
+                            },
                             "billedCost": {
                               "type": "number"
                             },
@@ -438125,6 +438131,9 @@
                       "cacheReadTokens": {
                         "type": "number"
                       },
+                      "cacheWriteTokens": {
+                        "type": "number"
+                      },
                       "cost": {
                         "type": "number"
                       },
@@ -438152,6 +438161,9 @@
                               "type": "number"
                             },
                             "cacheReadTokens": {
+                              "type": "number"
+                            },
+                            "cacheWriteTokens": {
                               "type": "number"
                             },
                             "billedCost": {
@@ -438648,6 +438660,9 @@
                                       "cacheReadTokens": {
                                         "type": "number"
                                       },
+                                      "cacheWriteTokens": {
+                                        "type": "number"
+                                      },
                                       "billedCost": {
                                         "type": "number"
                                       },
@@ -438698,6 +438713,9 @@
                                   "type": "number"
                                 },
                                 "cacheReadTokens": {
+                                  "type": "number"
+                                },
+                                "cacheWriteTokens": {
                                   "type": "number"
                                 },
                                 "billedCost": {
@@ -439154,6 +439172,9 @@
                                 "cacheReadTokens": {
                                   "type": "number"
                                 },
+                                "cacheWriteTokens": {
+                                  "type": "number"
+                                },
                                 "billedCost": {
                                   "type": "number"
                                 },
@@ -439204,6 +439225,9 @@
                             "type": "number"
                           },
                           "cacheReadTokens": {
+                            "type": "number"
+                          },
+                          "cacheWriteTokens": {
                             "type": "number"
                           },
                           "billedCost": {
@@ -441272,6 +441296,9 @@
                           "cacheReadTokens": {
                             "type": "number"
                           },
+                          "cacheWriteTokens": {
+                            "type": "number"
+                          },
                           "cost": {
                             "type": "number"
                           },
@@ -441299,6 +441326,9 @@
                                   "type": "number"
                                 },
                                 "cacheReadTokens": {
+                                  "type": "number"
+                                },
+                                "cacheWriteTokens": {
                                   "type": "number"
                                 },
                                 "billedCost": {

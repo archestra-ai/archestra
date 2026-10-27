@@ -52,6 +52,7 @@ export const StatisticsTimeSeriesPointSchema = z.object({
   inputTokens: z.number().optional(),
   outputTokens: z.number().optional(),
   cacheReadTokens: z.number().optional(),
+  cacheWriteTokens: z.number().optional(),
   billedCost: z.number().optional(),
   subscriptionCost: z.number().optional(),
 });
@@ -87,6 +88,7 @@ export const ModelStatisticsSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number().optional(),
   cost: z.number(),
   percentage: z.number(),
   timeSeries: z.array(StatisticsTimeSeriesPointSchema),

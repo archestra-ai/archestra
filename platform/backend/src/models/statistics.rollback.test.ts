@@ -649,6 +649,7 @@ describe("StatisticsModel", () => {
           inputTokens: 1000,
           outputTokens: 500,
           cacheReadTokens: 100,
+          cacheWriteTokens: 7,
           cost: 0.05,
         },
         {
@@ -658,6 +659,7 @@ describe("StatisticsModel", () => {
           inputTokens: 500,
           outputTokens: 250,
           cacheReadTokens: 8448,
+          cacheWriteTokens: 11,
           cost: 0.025,
         },
       ];
@@ -676,6 +678,9 @@ describe("StatisticsModel", () => {
       // value — regression guard for cache reads vanishing at fine timeframes.
       expect((result[0] as { cacheReadTokens: number }).cacheReadTokens).toBe(
         8548,
+      );
+      expect((result[0] as { cacheWriteTokens: number }).cacheWriteTokens).toBe(
+        18,
       );
     });
 

@@ -278,17 +278,23 @@ export default function CostExplorer() {
             </div>
             {!cube.isLoading && headline.top && (
               <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
-                <Stat label={`Top ${dim.label.toLowerCase()}`}>
-                  <span className="max-w-48 truncate">
-                    {headline.top.label}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {(headline.topShare * 100).toFixed(0)}%
-                  </span>
-                </Stat>
-                <Stat label={dim.plural.replace(/^./, (c) => c.toUpperCase())}>
-                  {cube.rows.length}
-                </Stat>
+                {q.group !== "time" && (
+                  <>
+                    <Stat label={`Top ${dim.label.toLowerCase()}`}>
+                      <span className="max-w-48 truncate">
+                        {headline.top.label}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {(headline.topShare * 100).toFixed(0)}%
+                      </span>
+                    </Stat>
+                    <Stat
+                      label={dim.plural.replace(/^./, (c) => c.toUpperCase())}
+                    >
+                      {cube.rows.length}
+                    </Stat>
+                  </>
+                )}
                 {headline.trend !== null && (
                   <Stat label="2nd half vs 1st">
                     <span
@@ -448,7 +454,7 @@ export default function CostExplorer() {
               <SummaryTable
                 cube={cube}
                 metric={q.metric}
-                dimLabel={dim.label}
+                dimLabel={q.group === "time" ? "Scope" : dim.label}
                 splitLabel={hasSplit ? DIMS[q.split as DimId].label : null}
                 focus={focus}
                 onToggle={toggleFocus}
@@ -457,7 +463,7 @@ export default function CostExplorer() {
               <PivotTable
                 cube={cube}
                 metric={q.metric}
-                dimLabel={dim.label}
+                dimLabel={q.group === "time" ? "Scope" : dim.label}
                 bySplit={pivotBySplit}
                 focus={focus}
                 onToggle={toggleFocus}

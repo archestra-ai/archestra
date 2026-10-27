@@ -141,6 +141,20 @@ async function renderGithubConfigureStep() {
   return { ...result, user };
 }
 
+async function addGithubRepository(
+  user: ReturnType<typeof userEvent.setup>,
+  repository: string,
+) {
+  await user.click(screen.getByRole("button", { name: "Add repository" }));
+  const row = within(
+    screen.getByRole("group", { name: "Repository New repository" }),
+  );
+  await user.click(row.getByLabelText("Repository"));
+  const name = repository.trim();
+  await user.paste(name.includes("/") ? repository : ` example-org/${name} `);
+  await user.tab();
+}
+
 describe("CreateConnectorDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -153,6 +167,206 @@ describe("CreateConnectorDialog", () => {
       new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
     );
     vi.mocked(usePathname).mockReturnValue("/knowledge/knowledge-bases");
+  });
+
+  it("keeps selected repository settings separate from an unsaved All draft", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "connector-1" });
+    const { user } = await renderGithubConfigureStep();
+    for (const [label, value] of [
+      [/^Name$/, "Scoped folders"],
+      [/^Owner$/, "example-org"],
+      [/Personal Access Token/, "local-placeholder"],
+    ] as const)
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("switch", { name: "Include Repository Files" }),
+    );
+    fireEvent.change(screen.getByLabelText("Folders (optional)"), {
+      target: { value: "docs" },
+    });
+    await user.click(
+      screen.getByRole("radio", { name: "Selected repositories" }),
+    );
+    await addGithubRepository(user, "repo-a");
+    const row = within(
+      screen.getByRole("group", { name: "Repository example-org/repo-a" }),
+    );
+    expect(
+      row.getByRole("switch", { name: "Include Repository Files" }),
+    ).not.toBeChecked();
+    await user.click(
+      row.getByRole("switch", { name: "Include Repository Files" }),
+    );
+    fireEvent.change(row.getByLabelText("Folders (optional)"), {
+      target: { value: "manual-docs" },
+    });
+    fireEvent.change(row.getByLabelText("Exclude paths"), {
+      target: { value: "generated" },
+    });
+    await user.click(screen.getByRole("button", { name: "Create Connector" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    const config = mockMutateAsync.mock.calls[0][0].config;
+    expect(config.includePaths ?? []).toEqual([]);
+    expect(config.repositoryOverrides).toEqual([
+      {
+        repository: "example-org/repo-a",
+        includeIssues: true,
+        includePullRequests: true,
+        labelsToSkip: [],
+        fileTypes: [],
+        includeRepositoryFiles: true,
+        includePaths: ["manual-docs"],
+        excludePaths: ["generated"],
+      },
+    ]);
+    expect(config.repos).toEqual(["example-org/repo-a"]);
+    expect(config).not.toHaveProperty("repositoryEntries");
+    expect(config).not.toHaveProperty("repositorySelectionMode");
+  });
+
+  it("creates independent repository settings using production switches and inputs", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "connector-1" });
+    const { user } = await renderGithubConfigureStep();
+    for (const [label, value] of [
+      [/^Name$/, "Repository documentation"],
+      [/^Owner$/, "example-org"],
+      [/Personal Access Token/, "local-placeholder"],
+    ] as const)
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("radio", { name: "Selected repositories" }),
+    );
+    for (const [repository, folders, exclude] of [
+      [" repo-a ", "docs, handbook", "docs/internal"],
+      [" example-org/repo-b ", "guides", "guides/drafts"],
+    ]) {
+      await addGithubRepository(user, repository);
+      const row = within(
+        screen.getByRole("group", {
+          name: `Repository ${repository.trim().includes("/") ? repository.trim() : `example-org/${repository.trim()}`}`,
+        }),
+      );
+      await user.click(
+        row.getByRole("switch", { name: "Include Repository Files" }),
+      );
+      fireEvent.change(row.getByLabelText("Folders (optional)"), {
+        target: { value: folders },
+      });
+      fireEvent.change(row.getByLabelText("Exclude paths"), {
+        target: { value: exclude },
+      });
+    }
+    const row = within(
+      screen.getByRole("group", { name: "Repository example-org/repo-b" }),
+    );
+    await user.click(row.getByRole("switch", { name: "Include Issues" }));
+    fireEvent.change(row.getByLabelText("Labels to Skip (optional)"), {
+      target: { value: "temporary" },
+    });
+    fireEvent.change(row.getByLabelText("Labels to Skip (optional)"), {
+      target: { value: "" },
+    });
+    expect(screen.queryByText("Repository defaults")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Customize|Reset|Done/ }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create Connector" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    expect(mockMutateAsync.mock.calls[0][0].config.repositoryOverrides).toEqual(
+      [
+        {
+          repository: "example-org/repo-a",
+          includeIssues: true,
+          includePullRequests: true,
+          labelsToSkip: [],
+          fileTypes: [],
+          includeRepositoryFiles: true,
+          includePaths: ["docs", "handbook"],
+          excludePaths: ["docs/internal"],
+        },
+        {
+          repository: "example-org/repo-b",
+          includeRepositoryFiles: true,
+          includeIssues: false,
+          includePullRequests: true,
+          fileTypes: [],
+          labelsToSkip: [],
+          includePaths: ["guides"],
+          excludePaths: ["guides/drafts"],
+        },
+      ],
+    );
+  });
+
+  it("does not turn a cleared explicit repository selection into discovery", async () => {
+    const { user } = await renderGithubConfigureStep();
+    for (const [label, value] of [
+      [/^Name$/, "Explicit repositories"],
+      [/^Owner$/, "example-org"],
+      [/Personal Access Token/, "local-placeholder"],
+    ] as const) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("radio", {
+        name: "Selected repositories",
+      }),
+    );
+    await addGithubRepository(user, "repo-a");
+    await user.click(
+      screen.getByRole("button", {
+        name: "Remove repository example-org/repo-a",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Create Connector" }));
+    expect(
+      await screen.findByText(
+        "Add at least one repository or choose All accessible repositories.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("radio", { name: "Selected repositories" }),
+    ).toBeChecked();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("keeps required General errors visible before repository validation errors", async () => {
+    const { user } = await renderGithubConfigureStep();
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    await user.click(
+      screen.getByRole("radio", {
+        name: "Selected repositories",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Create Connector" }));
+    expect(await screen.findByLabelText(/^Name$/)).toBeVisible();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("shows shared production controls directly in All mode without repository actions", async () => {
+    const { user } = await renderGithubConfigureStep();
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    expect(
+      screen.getByRole("switch", { name: "Include Issues" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Add repository" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Repository settings for/ }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("radio", { name: "Selected repositories" }),
+    );
+    expect(
+      screen.queryByRole("switch", { name: "Include Issues" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Add repository" }),
+    ).toBeVisible();
   });
 
   // SPDX-SnippetBegin
@@ -279,18 +493,20 @@ describe("CreateConnectorDialog", () => {
 
       expect(screen.getByText("Owner")).toBeInTheDocument();
       expect(screen.getByText("Credential")).toBeInTheDocument();
-      expect(screen.getByText("Labels to Skip (optional)")).not.toBeVisible();
+      expect(
+        screen.getByLabelText("Labels to Skip (optional)"),
+      ).not.toBeVisible();
 
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
 
-      await waitFor(() => {
-        expect(
-          screen.getByText("Include Repository Files"),
-        ).toBeInTheDocument();
-      });
-      expect(screen.getByText("Labels to Skip (optional)")).toBeInTheDocument();
       expect(
-        screen.queryByText("File Types (optional)"),
+        screen.getByRole("switch", { name: "Include Repository Files" }),
+      ).toBeVisible();
+      expect(
+        screen.getByLabelText("Labels to Skip (optional)"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByLabelText("File Types (optional)"),
       ).not.toBeInTheDocument();
 
       await user.click(
@@ -298,7 +514,9 @@ describe("CreateConnectorDialog", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("File Types (optional)")).toBeInTheDocument();
+        expect(
+          screen.getByLabelText("File Types (optional)"),
+        ).toBeInTheDocument();
       });
     });
 
@@ -307,11 +525,9 @@ describe("CreateConnectorDialog", () => {
 
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
 
-      await waitFor(() => {
-        expect(
-          screen.getByText("Include Repository Files"),
-        ).toBeInTheDocument();
-      });
+      expect(
+        screen.getByRole("switch", { name: "Include Repository Files" }),
+      ).toBeVisible();
 
       expect(screen.getAllByText("Credential")).toHaveLength(1);
     });

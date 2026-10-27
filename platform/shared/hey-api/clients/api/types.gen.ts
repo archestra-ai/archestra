@@ -81159,6 +81159,17 @@ export type GetConnectorsResponses = {
                 includeRepositoryFiles?: boolean;
                 fileTypes?: Array<string>;
                 includePaths?: Array<string>;
+                excludePaths?: Array<string>;
+                repositoryOverrides?: Array<{
+                    repository: string;
+                    includeIssues?: boolean;
+                    includePullRequests?: boolean;
+                    includeRepositoryFiles?: boolean;
+                    labelsToSkip?: Array<string>;
+                    fileTypes?: Array<string>;
+                    includePaths?: Array<string>;
+                    excludePaths?: Array<string>;
+                }>;
                 labelsToSkip?: Array<string>;
             } | {
                 type: 'gitlab';
@@ -81395,6 +81406,17 @@ export type CreateConnectorData = {
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             includePaths?: Array<string>;
+            excludePaths?: Array<string>;
+            repositoryOverrides?: Array<{
+                repository: string;
+                includeIssues?: boolean;
+                includePullRequests?: boolean;
+                includeRepositoryFiles?: boolean;
+                labelsToSkip?: Array<string>;
+                fileTypes?: Array<string>;
+                includePaths?: Array<string>;
+                excludePaths?: Array<string>;
+            }>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -81704,6 +81726,17 @@ export type CreateConnectorResponses = {
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             includePaths?: Array<string>;
+            excludePaths?: Array<string>;
+            repositoryOverrides?: Array<{
+                repository: string;
+                includeIssues?: boolean;
+                includePullRequests?: boolean;
+                includeRepositoryFiles?: boolean;
+                labelsToSkip?: Array<string>;
+                fileTypes?: Array<string>;
+                includePaths?: Array<string>;
+                excludePaths?: Array<string>;
+            }>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -82091,6 +82124,17 @@ export type GetConnectorResponses = {
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             includePaths?: Array<string>;
+            excludePaths?: Array<string>;
+            repositoryOverrides?: Array<{
+                repository: string;
+                includeIssues?: boolean;
+                includePullRequests?: boolean;
+                includeRepositoryFiles?: boolean;
+                labelsToSkip?: Array<string>;
+                fileTypes?: Array<string>;
+                includePaths?: Array<string>;
+                excludePaths?: Array<string>;
+            }>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -82309,6 +82353,17 @@ export type UpdateConnectorData = {
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             includePaths?: Array<string>;
+            excludePaths?: Array<string>;
+            repositoryOverrides?: Array<{
+                repository: string;
+                includeIssues?: boolean;
+                includePullRequests?: boolean;
+                includeRepositoryFiles?: boolean;
+                labelsToSkip?: Array<string>;
+                fileTypes?: Array<string>;
+                includePaths?: Array<string>;
+                excludePaths?: Array<string>;
+            }>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -82600,6 +82655,17 @@ export type UpdateConnectorResponses = {
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
             includePaths?: Array<string>;
+            excludePaths?: Array<string>;
+            repositoryOverrides?: Array<{
+                repository: string;
+                includeIssues?: boolean;
+                includePullRequests?: boolean;
+                includeRepositoryFiles?: boolean;
+                labelsToSkip?: Array<string>;
+                fileTypes?: Array<string>;
+                includePaths?: Array<string>;
+                excludePaths?: Array<string>;
+            }>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';

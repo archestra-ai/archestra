@@ -37,6 +37,10 @@ import { reconcileP4ShimForConnector } from "@/knowledge-base/connectors/perforc
 import { getConnector } from "@/knowledge-base/connectors/registry";
 import { toKnowledgeBaseUserMessage } from "@/knowledge-base/errors";
 import {
+  githubRepositorySettingsWriteError,
+  githubSyncConfigurationChanged,
+} from "@/knowledge-base/github-settings-compatibility";
+import {
   deleteConnector,
   deleteKnowledgeBase,
 } from "@/knowledge-base/knowledge-source-deletion";
@@ -1294,6 +1298,16 @@ async function handleUpdateKnowledgeConnector(params: {
     ) {
       return knowledgeConnectorNotFound(args.id);
     }
+    if (
+      existingConnector.config.type === "github" &&
+      updates.config?.type === "github"
+    ) {
+      const compatibilityError = githubRepositorySettingsWriteError(
+        existingConnector.config,
+        updates.config,
+      );
+      if (compatibilityError) return errorResult(compatibilityError);
+    }
     const nextVisibility = updates.visibility ?? existingConnector.visibility;
     // The permission-sync switch after this update. The request still names it
     // through the visibility input; the stored switch is the column.
@@ -1356,10 +1370,14 @@ async function handleUpdateKnowledgeConnector(params: {
         );
     }
 
-    const connector = await KnowledgeBaseConnectorModel.update(
-      args.id,
-      updates,
-    );
+    const githubConfigAffectsSync =
+      existingConnector.config.type === "github" &&
+      updates.config?.type === "github" &&
+      githubSyncConfigurationChanged(existingConnector.config, updates.config);
+    const connector = await KnowledgeBaseConnectorModel.update(args.id, {
+      ...updates,
+      ...(githubConfigAffectsSync ? { checkpoint: null } : {}),
+    });
     if (!connector) {
       return knowledgeConnectorNotFound(args.id);
     }

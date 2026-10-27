@@ -7,7 +7,9 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Button } from "@/components/ui/button";
 import { EditConnectorDialog } from "./edit-connector-dialog";
 
 // Radix Popper / floating-ui needs ResizeObserver as a real constructor
@@ -110,6 +112,401 @@ function renderDialog(connector: ConnectorFixture = makeAsanaConnector()) {
 
   return { onOpenChange };
 }
+
+describe("EditConnectorDialog - GitHub repository settings", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockMutateAsync.mockResolvedValue({ id: "conn-github" });
+  });
+
+  const legacyConnector = () =>
+    ({
+      ...makeAsanaConnector(),
+      id: "conn-github",
+      connectorType: "github",
+      config: {
+        type: "github",
+        githubUrl: "https://api.github.com",
+        owner: "example-org",
+        repos: ["repo-a", "repo-b"],
+        includeIssues: false,
+        includePullRequests: true,
+        includeRepositoryFiles: true,
+        includePaths: ["legacy"],
+        labelsToSkip: ["skip"],
+      },
+    }) as ConnectorFixture;
+
+  function loadedOverridesConnector(): ConnectorFixture {
+    const connector = legacyConnector();
+    connector.config = {
+      ...connector.config,
+      includeIssues: true,
+      includePaths: ["docs"],
+      repositoryOverrides: [
+        {
+          repository: "example-org/repo-a",
+          includeIssues: false,
+          includePaths: ["custom-docs"],
+        },
+      ],
+    } as ConnectorFixture["config"];
+    return connector;
+  }
+
+  async function advanced(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+  }
+  async function openRow(
+    user: ReturnType<typeof userEvent.setup>,
+    repository = "example-org/repo-a",
+  ) {
+    const row = within(
+      screen.getByRole("group", { name: `Repository ${repository}` }),
+    );
+    await user.click(
+      row.getByRole("button", {
+        name: `Repository settings for ${repository}`,
+      }),
+    );
+    return row;
+  }
+  async function save(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    return mockMutateAsync.mock.calls[0][0].body.config;
+  }
+  it("shows qualified legacy cards and preserves the actual flat config on unchanged save", async () => {
+    const user = userEvent.setup();
+    const connector = legacyConnector();
+    renderDialog(connector);
+    await advanced(user);
+    const row = await openRow(user);
+    expect(row.getByLabelText("Repository")).toHaveValue("example-org/repo-a");
+    expect(
+      row.getByRole("switch", { name: "Include Issues" }),
+    ).not.toBeChecked();
+    expect(row.getByLabelText("Folders (optional)")).toHaveValue("legacy");
+    expect(
+      screen.queryByText(/Issues:|Pull Requests:|Repository Files:/),
+    ).not.toBeInTheDocument();
+    await user.click(row.getByLabelText("Repository"));
+    await user.tab();
+    expect(await save(user)).toEqual(connector.config);
+  });
+  it("hydrates qualified canonical policies as independent concrete settings", async () => {
+    const user = userEvent.setup();
+    renderDialog(loadedOverridesConnector());
+    await advanced(user);
+    const row = await openRow(user);
+    expect(
+      row.getByRole("switch", { name: "Include Issues" }),
+    ).not.toBeChecked();
+    expect(row.getByLabelText("Folders (optional)")).toHaveValue("custom-docs");
+    await user.click(row.getByRole("switch", { name: "Include Issues" }));
+    fireEvent.change(row.getByLabelText("Folders (optional)"), {
+      target: { value: "" },
+    });
+    fireEvent.change(row.getByLabelText("Labels to Skip (optional)"), {
+      target: { value: "" },
+    });
+    const config = await save(user);
+    expect(config.repos).toEqual(["example-org/repo-a", "example-org/repo-b"]);
+    expect(config.repositoryOverrides).toEqual([
+      {
+        repository: "example-org/repo-a",
+        includeIssues: true,
+        includePullRequests: true,
+        includeRepositoryFiles: true,
+        labelsToSkip: [],
+        fileTypes: [],
+        includePaths: [],
+        excludePaths: [],
+      },
+      {
+        repository: "example-org/repo-b",
+        includeIssues: true,
+        includePullRequests: true,
+        includeRepositoryFiles: true,
+        labelsToSkip: ["skip"],
+        fileTypes: [],
+        includePaths: ["docs"],
+        excludePaths: [],
+      },
+    ]);
+  });
+  it.each([
+    "mode",
+    "owner",
+  ])("keeps settings attached through a blank rename and %s change", async (boundary) => {
+    const user = userEvent.setup();
+    renderDialog(loadedOverridesConnector());
+    await advanced(user);
+    const row = await openRow(user);
+    fireEvent.change(row.getByLabelText("Repository"), {
+      target: { value: "" },
+    });
+    if (boundary === "mode") {
+      await user.click(
+        screen.getByRole("radio", { name: "All accessible repositories" }),
+      );
+      await user.click(
+        screen.getByRole("radio", { name: "Selected repositories" }),
+      );
+    } else {
+      await user.click(screen.getByRole("button", { name: /General/ }));
+      fireEvent.change(screen.getByLabelText(/^Owner$/), {
+        target: { value: "other-owner" },
+      });
+      await advanced(user);
+    }
+    const draft = within(
+      screen.getByRole("group", { name: "Repository New repository" }),
+    );
+    fireEvent.change(draft.getByLabelText("Repository"), {
+      target: { value: "example-org/renamed" },
+    });
+    const config = await save(user);
+    expect(config.repositoryOverrides[0]).toMatchObject({
+      repository: "example-org/renamed",
+      includeIssues: false,
+      includePaths: ["custom-docs"],
+    });
+  });
+  it("keeps displayed identities and settings when Owner changes without retargeting bare names", async () => {
+    const user = userEvent.setup();
+    renderDialog(legacyConnector());
+    fireEvent.change(screen.getByLabelText(/^Owner$/), {
+      target: { value: "other-owner" },
+    });
+    await advanced(user);
+    const row = await openRow(user);
+    expect(row.getByLabelText("Folders (optional)")).toHaveValue("legacy");
+    const config = await save(user);
+    expect(config.repos).toEqual(["example-org/repo-a", "example-org/repo-b"]);
+    expect(config.repositoryOverrides[0]).toMatchObject({
+      repository: "example-org/repo-a",
+      includeIssues: false,
+      includePaths: ["legacy"],
+    });
+  });
+  it("removes one complete row while retaining the other's independent settings", async () => {
+    const user = userEvent.setup();
+    renderDialog(loadedOverridesConnector());
+    await advanced(user);
+    await user.click(
+      screen.getByRole("button", {
+        name: "Remove repository example-org/repo-a",
+      }),
+    );
+    const config = await save(user);
+    expect(config.repos).toEqual(["example-org/repo-b"]);
+    expect(config.repositoryOverrides).toHaveLength(1);
+    expect(config.repositoryOverrides[0]).toMatchObject({
+      repository: "example-org/repo-b",
+      includeIssues: true,
+      includePaths: ["docs"],
+    });
+  });
+  it("starts All to Selected empty and new cards use standard defaults", async () => {
+    const connector = legacyConnector();
+    connector.config = {
+      ...connector.config,
+      repos: [],
+    } as ConnectorFixture["config"];
+    const user = userEvent.setup();
+    renderDialog(connector);
+    await advanced(user);
+    await user.click(
+      screen.getByRole("radio", { name: "Selected repositories" }),
+    );
+    expect(
+      screen.queryByRole("group", { name: /Repository / }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add repository" }));
+    const row = within(
+      screen.getByRole("group", { name: "Repository New repository" }),
+    );
+    fireEvent.change(row.getByLabelText("Repository"), {
+      target: { value: "example-org/new-repo" },
+    });
+    expect(row.getByRole("switch", { name: "Include Issues" })).toBeChecked();
+    expect(
+      row.getByRole("switch", { name: "Include Repository Files" }),
+    ).not.toBeChecked();
+    expect(row.getByLabelText("Labels to Skip (optional)")).toHaveValue("");
+    const config = await save(user);
+    expect(config.repositoryOverrides).toEqual([
+      {
+        repository: "example-org/new-repo",
+        includeIssues: true,
+        includePullRequests: true,
+        includeRepositoryFiles: false,
+        labelsToSkip: [],
+        fileTypes: [],
+        includePaths: [],
+        excludePaths: [],
+      },
+    ]);
+  });
+  it.each([
+    "",
+    "repo-a",
+    "invalid/owner/repo",
+    "org/a,org/b",
+  ])("keeps invalid repository %s visible on save", async (name) => {
+    const user = userEvent.setup();
+    renderDialog(legacyConnector());
+    await advanced(user);
+    await user.click(screen.getByRole("button", { name: "Add repository" }));
+    const row = within(
+      screen.getByRole("group", { name: "Repository New repository" }),
+    );
+    fireEvent.change(row.getByLabelText("Repository"), {
+      target: { value: name },
+    });
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(
+      await screen.findByText(
+        name ? "Use owner/repo" : "Repository is required",
+      ),
+    ).toBeVisible();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+  it("rejects duplicate qualified names ignoring case", async () => {
+    const user = userEvent.setup();
+    renderDialog(legacyConnector());
+    await advanced(user);
+    await user.click(screen.getByRole("button", { name: "Add repository" }));
+    const row = within(
+      screen.getByRole("group", { name: "Repository New repository" }),
+    );
+    fireEvent.change(row.getByLabelText("Repository"), {
+      target: { value: "EXAMPLE-ORG/REPO-A" },
+    });
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(
+      (await screen.findAllByText("Each repository can be selected only once"))
+        .length,
+    ).toBeGreaterThan(0);
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+  it("does not turn removing all selected repositories into discovery", async () => {
+    const user = userEvent.setup();
+    renderDialog(legacyConnector());
+    await advanced(user);
+    for (const name of ["example-org/repo-a", "example-org/repo-b"])
+      await user.click(
+        screen.getByRole("button", { name: `Remove repository ${name}` }),
+      );
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(
+      await screen.findByText(
+        "Add at least one repository or choose All accessible repositories.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("radio", { name: "Selected repositories" }),
+    ).toBeChecked();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+  it("preserves flat All settings on untouched save", async () => {
+    const user = userEvent.setup();
+    const connector = legacyConnector();
+    connector.config = {
+      ...connector.config,
+      repos: [],
+    } as ConnectorFixture["config"];
+    renderDialog(connector);
+    await advanced(user);
+    expect(
+      screen.getByRole("switch", { name: "Include Issues" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Add repository" }),
+    ).not.toBeInTheDocument();
+    expect(await save(user)).toEqual(connector.config);
+  });
+  it("keeps independent mode drafts and saves only the active configuration", async () => {
+    const user = userEvent.setup();
+    renderDialog(loadedOverridesConnector());
+    await advanced(user);
+    const row = await openRow(user);
+    fireEvent.change(row.getByLabelText("Folders (optional)"), {
+      target: { value: "manual-only" },
+    });
+    await user.click(
+      screen.getByRole("radio", { name: "All accessible repositories" }),
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Folders (optional)" }),
+      { target: { value: "shared-only" } },
+    );
+    await user.click(
+      screen.getByRole("radio", { name: "Selected repositories" }),
+    );
+    expect(
+      within(
+        screen.getByRole("group", { name: "Repository example-org/repo-a" }),
+      ).getByLabelText("Folders (optional)"),
+    ).toHaveValue("manual-only");
+    await user.click(
+      screen.getByRole("radio", { name: "All accessible repositories" }),
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Folders (optional)" }),
+    ).toHaveValue("shared-only");
+    const config = await save(user);
+    expect(config).toMatchObject({
+      repos: [],
+      repositoryOverrides: [],
+      includePaths: ["shared-only"],
+    });
+    expect(config).not.toHaveProperty("repositoryEntries");
+    expect(config).not.toHaveProperty("repositoryLegacyBaseline");
+  });
+  it("discards unsaved mode and repository edits on cancel and reopen", async () => {
+    const user = userEvent.setup();
+    const connector = loadedOverridesConnector();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <Button onClick={() => setOpen(true)}>Reopen connector</Button>
+          <EditConnectorDialog
+            connector={connector}
+            open={open}
+            onOpenChange={setOpen}
+          />
+        </>
+      );
+    }
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Harness />
+      </QueryClientProvider>,
+    );
+    await advanced(user);
+    const row = await openRow(user);
+    fireEvent.change(row.getByLabelText("Repository"), {
+      target: { value: "example-org/unsaved" },
+    });
+    await user.click(
+      screen.getByRole("radio", { name: "All accessible repositories" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Reopen connector" }));
+    await advanced(user);
+    const restored = await openRow(user);
+    expect(restored.getByLabelText("Folders (optional)")).toHaveValue(
+      "custom-docs",
+    );
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+});
 
 describe("EditConnectorDialog - Asana", () => {
   beforeEach(() => {

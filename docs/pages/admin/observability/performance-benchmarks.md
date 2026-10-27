@@ -24,7 +24,7 @@ Added latency is the time spent in Archestra, excluding that request's upstream 
 <!-- proxy-benchmark-results:start -->
 | Runner resources | Concurrent HTTP requests | Median added latency | P95 added latency | P99 added latency |
 | --- | ---: | ---: | ---: | ---: |
-| 16 vCPU / ~62 GiB RAM | 50 | 6.07 ms | 11.72 ms | 14.36 ms |
+| 16 vCPU / ~63 GiB RAM | 50 | 7.70 ms | 12.78 ms | 14.65 ms |
 <!-- proxy-benchmark-results:end -->
 
 The measurement includes authentication, routing and awaited request persistence. It subtracts the upstream call duration within each request before calculating percentiles; it does not subtract separate percentile values.
@@ -36,7 +36,7 @@ A tool call through the MCP gateway gets its user's access checks and a call log
 <!-- mcp-gateway-benchmark-results:start -->
 | Runner resources | Concurrent tool calls | Median added latency | P95 added latency | P99 added latency |
 | --- | ---: | ---: | ---: | ---: |
-| 16 vCPU / ~62 GiB RAM | 50 | 77.77 ms | 106.22 ms | 117.83 ms |
+| 16 vCPU / ~63 GiB RAM | 50 | 79.39 ms | 85.75 ms | 93.33 ms |
 <!-- mcp-gateway-benchmark-results:end -->
 
 - Each call is a `tools/call` request to a gateway with one assigned tool, authenticated with a user token, against a mock MCP server on the same runner.

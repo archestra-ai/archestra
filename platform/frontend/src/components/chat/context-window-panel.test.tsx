@@ -500,4 +500,29 @@ describe("ContextWindowDialog — compact action", () => {
       screen.getByRole("button", { name: /compact now/i }),
     ).toBeInTheDocument();
   });
+
+  it("disables the compact button while compacting and shows auto-compaction wording in EmptyState", async () => {
+    await openDialog(
+      <ContextWindowDialog
+        breakdown={null}
+        tokensUsed={20_000}
+        maxTokens={200_000}
+        lastCompaction={{
+          originalTokenEstimate: 100_000,
+          compactedTokenEstimate: 20_000,
+          trigger: "auto",
+        }}
+        onCompact={vi.fn()}
+        isCompacting
+      >
+        <button type="button">Open</button>
+      </ContextWindowDialog>,
+    );
+
+    expect(
+      screen.getByText(/Auto-compaction summarized earlier turns and freed/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("80.0k tokens")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /compacting/i })).toBeDisabled();
+  });
 });

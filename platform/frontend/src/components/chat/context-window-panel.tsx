@@ -9,7 +9,7 @@ import {
 } from "@archestra/shared";
 import { ChevronRight, Loader2, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ProgressRing } from "@/components/chat/context-indicator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -140,21 +140,30 @@ export function ContextWindowDialog({
   // toolbar's ContextIndicator: live tokensUsed wins once refined by provider
   // usage or compaction, and maxTokens wins when the active model's window is
   // known (e.g. after switching models in the composer).
-  const resolvedUsage = resolveContextWindowUsage({
-    tokensUsed,
-    maxTokens,
-    breakdown,
-  });
-  const status = getContextWindowStatus(
-    resolvedUsage.tokensUsed,
-    resolvedUsage.maxTokens,
+  const resolvedUsage = useMemo(
+    () =>
+      resolveContextWindowUsage({
+        tokensUsed,
+        maxTokens,
+        breakdown,
+      }),
+    [tokensUsed, maxTokens, breakdown],
   );
-  const reconciledBreakdown = breakdown
-    ? reconcileContextWindowBreakdown(breakdown, {
-        tokensUsed: resolvedUsage.tokensUsed,
-        maxTokens: resolvedUsage.maxTokens,
-      })
-    : null;
+  const status = useMemo(
+    () =>
+      getContextWindowStatus(resolvedUsage.tokensUsed, resolvedUsage.maxTokens),
+    [resolvedUsage.tokensUsed, resolvedUsage.maxTokens],
+  );
+  const reconciledBreakdown = useMemo(
+    () =>
+      breakdown
+        ? reconcileContextWindowBreakdown(breakdown, {
+            tokensUsed: resolvedUsage.tokensUsed,
+            maxTokens: resolvedUsage.maxTokens,
+          })
+        : null,
+    [breakdown, resolvedUsage.tokensUsed, resolvedUsage.maxTokens],
+  );
 
   return (
     <Dialog>
@@ -321,8 +330,6 @@ export function ContextWindowPanel({
   const denominator = hasRealWindow ? contextLength : usedTokens || 1;
   const status = getContextWindowStatus(usedTokens, contextLength);
 
-  const compactionSaved = resolveCompactionSavings(lastCompaction);
-
   // Lookup by category for the stacked bar (only present categories have tokens).
   const segmentByCategory = Object.fromEntries(
     segments.map((s) => [s.category, s]),
@@ -396,66 +403,16 @@ export function ContextWindowPanel({
             to that sentence, so the action sits with it rather than after the
             closing footnote. */}
         {hasRealWindow && (
-          <PanelNote
-            icon={
-              <ProgressRing
-                percent={autoCompactProgressPercent(status)}
-                size="xs"
-                arcClassName={usageStrokeColor(status.usedPercent)}
-                trackClassName="stroke-muted-foreground/25"
-              />
-            }
-            className={cn(
-              status.nearAutoCompact && usageTextColor(status.usedPercent),
-            )}
-            action={
-              onCompact && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={status.nearAutoCompact ? "default" : "outline"}
-                  className="-my-1 shrink-0"
-                  disabled={isCompacting}
-                  onClick={() => void onCompact()}
-                  data-testid={E2eTestId.ChatContextCompactButton}
-                >
-                  {isCompacting ? (
-                    <>
-                      <Loader2 className="animate-spin" aria-hidden />
-                      <span>Compacting…</span>
-                    </>
-                  ) : (
-                    <span>Compact now</span>
-                  )}
-                </Button>
-              )
-            }
-          >
-            {describeContextHeadroom(status)}
-          </PanelNote>
+          <ContextHeadroomNote
+            status={status}
+            onCompact={onCompact}
+            isCompacting={isCompacting}
+          />
         )}
 
         {/* What the last compaction actually freed — a separate event from the
             headroom above, so a separate block. */}
-        {compactionSaved > 0 && (
-          <PanelNote
-            icon={
-              <Sparkles
-                className="size-3.5 shrink-0 text-violet-500"
-                aria-hidden
-              />
-            }
-          >
-            {lastCompaction?.trigger === "manual"
-              ? "Compaction"
-              : "Auto-compaction"}{" "}
-            summarized earlier turns and freed{" "}
-            <span className="font-medium text-foreground">
-              {formatTokens(compactionSaved)} tokens
-            </span>{" "}
-            in this conversation.
-          </PanelNote>
-        )}
+        <CompactionSavedNote lastCompaction={lastCompaction} />
       </div>
 
       {/* ── Per-category gauges — scrolls when tall ─────────────────────── */}
@@ -735,11 +692,10 @@ function EmptyState({
 }) {
   const hasRealWindow = maxTokens != null && maxTokens > 0;
   const status = getContextWindowStatus(tokensUsed, maxTokens);
-  const compactionSaved = resolveCompactionSavings(lastCompaction);
 
   return (
     <div className="flex flex-col gap-3 px-5 py-6 text-sm text-muted-foreground">
-      {tokensUsed > 0 && maxTokens ? (
+      {tokensUsed > 0 && hasRealWindow ? (
         <>
           <div className="flex flex-col gap-2">
             <p className="tabular-nums">
@@ -755,43 +711,11 @@ function EmptyState({
             </p>
             <p>Send a message to see the full per-category breakdown.</p>
           </div>
-          {hasRealWindow && onCompact && (
-            <PanelNote
-              icon={
-                <ProgressRing
-                  percent={autoCompactProgressPercent(status)}
-                  size="xs"
-                  arcClassName={usageStrokeColor(status.usedPercent)}
-                  trackClassName="stroke-muted-foreground/25"
-                />
-              }
-              className={cn(
-                status.nearAutoCompact && usageTextColor(status.usedPercent),
-              )}
-              action={
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={status.nearAutoCompact ? "default" : "outline"}
-                  className="-my-1 shrink-0"
-                  disabled={isCompacting}
-                  onClick={() => void onCompact()}
-                  data-testid={E2eTestId.ChatContextCompactButton}
-                >
-                  {isCompacting ? (
-                    <>
-                      <Loader2 className="animate-spin" aria-hidden />
-                      <span>Compacting…</span>
-                    </>
-                  ) : (
-                    <span>Compact now</span>
-                  )}
-                </Button>
-              }
-            >
-              {describeContextHeadroom(status)}
-            </PanelNote>
-          )}
+          <ContextHeadroomNote
+            status={status}
+            onCompact={onCompact}
+            isCompacting={isCompacting}
+          />
         </>
       ) : (
         <p>
@@ -800,26 +724,83 @@ function EmptyState({
         </p>
       )}
 
-      {compactionSaved > 0 && (
-        <PanelNote
-          icon={
-            <Sparkles
-              className="size-3.5 shrink-0 text-violet-500"
-              aria-hidden
-            />
-          }
-        >
-          {lastCompaction?.trigger === "manual"
-            ? "Compaction"
-            : "Auto-compaction"}{" "}
-          summarized earlier turns and freed{" "}
-          <span className="font-medium text-foreground">
-            {formatTokens(compactionSaved)} tokens
-          </span>{" "}
-          in this conversation.
-        </PanelNote>
-      )}
+      <CompactionSavedNote lastCompaction={lastCompaction} />
     </div>
+  );
+}
+
+function ContextHeadroomNote({
+  status,
+  onCompact,
+  isCompacting = false,
+}: {
+  status: ContextWindowStatus;
+  onCompact?: () => void | Promise<void>;
+  isCompacting?: boolean;
+}) {
+  return (
+    <PanelNote
+      icon={
+        <ProgressRing
+          percent={autoCompactProgressPercent(status)}
+          size="xs"
+          arcClassName={usageStrokeColor(status.usedPercent)}
+          trackClassName="stroke-muted-foreground/25"
+        />
+      }
+      className={cn(
+        status.nearAutoCompact && usageTextColor(status.usedPercent),
+      )}
+      action={
+        onCompact && (
+          <Button
+            type="button"
+            size="sm"
+            variant={status.nearAutoCompact ? "default" : "outline"}
+            className="-my-1 shrink-0"
+            disabled={isCompacting}
+            onClick={() => void onCompact()}
+            data-testid={E2eTestId.ChatContextCompactButton}
+          >
+            {isCompacting ? (
+              <>
+                <Loader2 className="animate-spin" aria-hidden />
+                <span>Compacting…</span>
+              </>
+            ) : (
+              <span>Compact now</span>
+            )}
+          </Button>
+        )
+      }
+    >
+      {describeContextHeadroom(status)}
+    </PanelNote>
+  );
+}
+
+function CompactionSavedNote({
+  lastCompaction,
+}: {
+  lastCompaction?: LastCompaction | null;
+}) {
+  const compactionSaved = resolveCompactionSavings(lastCompaction);
+  if (compactionSaved <= 0) {
+    return null;
+  }
+  return (
+    <PanelNote
+      icon={
+        <Sparkles className="size-3.5 shrink-0 text-violet-500" aria-hidden />
+      }
+    >
+      {lastCompaction?.trigger === "manual" ? "Compaction" : "Auto-compaction"}{" "}
+      summarized earlier turns and freed{" "}
+      <span className="font-medium text-foreground">
+        {formatTokens(compactionSaved)} tokens
+      </span>{" "}
+      in this conversation.
+    </PanelNote>
   );
 }
 

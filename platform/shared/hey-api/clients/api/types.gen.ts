@@ -31018,10 +31018,13 @@ export type CancelAutoRoutingBackfillResponses = {
             error: string | null;
             completedAt: string | null;
             awaitingFit: boolean;
+            fitBlockedReason: string | null;
         } | null;
         scoreOffer: {
             backfillId: string;
             scorerVersionId: string;
+            windowStart: string;
+            cutoff: string;
             sessions: number;
             remaining: number;
             estimatedCostUsd: number;
@@ -31139,10 +31142,13 @@ export type GetAutoRoutingBackfillResponses = {
             error: string | null;
             completedAt: string | null;
             awaitingFit: boolean;
+            fitBlockedReason: string | null;
         } | null;
         scoreOffer: {
             backfillId: string;
             scorerVersionId: string;
+            windowStart: string;
+            cutoff: string;
             sessions: number;
             remaining: number;
             estimatedCostUsd: number;
@@ -31260,10 +31266,13 @@ export type ScanAutoRoutingBackfillResponses = {
             error: string | null;
             completedAt: string | null;
             awaitingFit: boolean;
+            fitBlockedReason: string | null;
         } | null;
         scoreOffer: {
             backfillId: string;
             scorerVersionId: string;
+            windowStart: string;
+            cutoff: string;
             sessions: number;
             remaining: number;
             estimatedCostUsd: number;
@@ -31389,10 +31398,13 @@ export type ScoreAutoRoutingBackfillResponses = {
             error: string | null;
             completedAt: string | null;
             awaitingFit: boolean;
+            fitBlockedReason: string | null;
         } | null;
         scoreOffer: {
             backfillId: string;
             scorerVersionId: string;
+            windowStart: string;
+            cutoff: string;
             sessions: number;
             remaining: number;
             estimatedCostUsd: number;

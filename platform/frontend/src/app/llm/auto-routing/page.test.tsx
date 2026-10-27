@@ -30,6 +30,7 @@ import type {
 } from "@/lib/auto-routing.query";
 import type { LlmModel } from "@/lib/llm-models.query";
 import { useOrganization } from "@/lib/organization.query";
+import { formatDate } from "@/lib/utils/date-time";
 import AutoRoutingOverviewPage from "./page";
 import AutoRoutingPlansPage from "./plans/page";
 
@@ -796,11 +797,14 @@ describe("past sessions", () => {
     error: null,
     completedAt: null,
     awaitingFit: false,
+    fitBlockedReason: null,
     ...overrides,
   });
   const offer = {
     backfillId: "00000000-0000-4000-8000-000000000301",
     scorerVersionId: "00000000-0000-4000-8000-000000000009",
+    windowStart: "2026-09-27T00:00:00.000Z",
+    cutoff: "2026-10-26T00:00:00.000Z",
     sessions: 240,
     remaining: 240,
     estimatedCostUsd: 0.24,
@@ -913,6 +917,68 @@ describe("past sessions", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("stops polling once the requested fit cannot run, and says why", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let reads = 0;
+      const blocked: AutoRoutingBackfillState = {
+        backfill: scanned({
+          status: "done",
+          phase: "score",
+          fitBlockedReason: "No daily budget is set.",
+        }),
+        scoreOffer: null,
+      };
+      server.use(
+        http.get(`${API_ORIGIN}/api/auto-routing/backfill`, () => {
+          reads++;
+          return HttpResponse.json(blocked);
+        }),
+      );
+      renderPage();
+      const section = await screen.findByTestId("auto-routing-past-sessions");
+
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      expect(reads).toBe(1);
+      expect(section).toHaveTextContent("No daily budget is set.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("confirms the window of the scan it submits, not the newest job's", async () => {
+    const older = "00000000-0000-4000-8000-000000000303";
+    const scores = serveBackfill({
+      backfill: scanned({
+        status: "cancelled",
+        windowStart: "2026-10-20T00:00:00.000Z",
+        cutoff: "2026-10-27T00:00:00.000Z",
+      }),
+      scoreOffer: {
+        ...offer,
+        backfillId: older,
+        windowStart: "2026-08-01T00:00:00.000Z",
+        cutoff: "2026-09-01T00:00:00.000Z",
+      },
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: /^Score 240 sessions/ }),
+    );
+    const dialog = await screen.findByRole("dialog");
+
+    expect(dialog).toHaveTextContent(
+      `${formatDate({ date: "2026-08-01T00:00:00.000Z" })} to ${formatDate({ date: "2026-09-01T00:00:00.000Z" })}`,
+    );
+    expect(dialog).not.toHaveTextContent(
+      formatDate({ date: "2026-10-20T00:00:00.000Z" }),
+    );
+    await user.click(within(dialog).getByRole("button", { name: /sessions$/ }));
+    await waitFor(() => expect(scores).toMatchObject([{ backfillId: older }]));
   });
 
   it("scores only after the confirmation, with the ceiling the admin set", async () => {

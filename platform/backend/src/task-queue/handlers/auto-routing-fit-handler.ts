@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { runFit } from "@/auto-routing/fit";
+import { fitNow } from "@/auto-routing/fit";
 import config from "@/config";
 import logger from "@/logging";
 
@@ -8,7 +8,8 @@ export async function handleAutoRoutingFit(
 ): Promise<void> {
   const { organizationId } = FitPayloadSchema.parse(payload);
   if (!config.autoRouting.enabled) return;
-  const run = await runFit(organizationId);
+  // Refits a fit rejected for newer settings, so the generation that queued it gets an outcome.
+  const run = await fitNow(organizationId);
   if (!run) {
     logger.info(
       { organizationId },
@@ -16,14 +17,8 @@ export async function handleAutoRoutingFit(
     );
     return;
   }
-  const { inputs, published: result } = run;
   logger.info(
-    {
-      organizationId,
-      trigger: inputs.trigger,
-      status: result.plan.status,
-      ...(result.kind === "rejected" && { rejected: result.reason }),
-    },
+    { organizationId, status: run.fit.status },
     "[AutoRouting] Plan fit recorded",
   );
 }

@@ -90,6 +90,35 @@ export async function prepareFit(
   );
 }
 
+/** Whether a fit would run on `settings`, or why none would. */
+export async function fitReadiness(
+  settings: AutoRoutingSettings,
+): Promise<
+  | { kind: "ready"; trio: Trio; budgetUsdPerDay: string }
+  | { kind: "blocked"; reason: string }
+> {
+  if (!settings.enabled) {
+    return { kind: "blocked", reason: "Auto routing is off." };
+  }
+  if (settings.budgetUsdPerDay === null) {
+    return { kind: "blocked", reason: "No daily budget is set." };
+  }
+  const loaded = await loadTrio(settings);
+  switch (loaded.kind) {
+    case "missing":
+      return {
+        kind: "blocked",
+        reason: `The ${loaded.tier} tier's model is no longer available.`,
+      };
+    case "ok":
+      return {
+        kind: "ready",
+        trio: loaded.trio,
+        budgetUsdPerDay: settings.budgetUsdPerDay,
+      };
+  }
+}
+
 /**
  * The cheapest routing's USD/day when `settings` cannot be met on the current
  * usage, from a fit that publishes nothing; null when they can be, or no fit
@@ -195,7 +224,13 @@ export async function readFitWindow(params: {
 export async function completeFit(
   inputs: FitInputs,
 ): Promise<RoutingPublishResult> {
-  const fitted = await fit(inputs);
+  return publish(inputs, await fit(inputs));
+}
+
+function publish(
+  inputs: FitInputs,
+  fitted: Awaited<ReturnType<typeof fit>>,
+): Promise<RoutingPublishResult> {
   return RoutingPlanModel.publish({
     organizationId: inputs.organizationId,
     trigger: inputs.trigger,
@@ -236,6 +271,7 @@ export type FitSessions = { scorerVersionId: string; sessions: number };
  * when it read the caller's generation or a newer one; otherwise it runs the
  * next fit, which every caller still waiting shares. Null when auto routing
  * is not fully configured.
+ * @public — `fitNow` runs it; exported so tests can fit without its retries
  */
 export async function runFit(
   organizationId: string,
@@ -262,13 +298,13 @@ export async function runFit(
  * Fits and publishes in the caller's request, after its generation bump
  * committed. A fit rejected for newer settings refits on them; one rejected
  * for older usage than an accepted fit reports that fit, the newest outcome.
- * An unexpected error is reported as a failure without a plan; the generation
- * stays unplanned, so the dispatcher retries it. Null when auto routing is not
- * fully configured.
+ * An error that left no outcome recorded is reported as a failure without a
+ * plan; the generation stays unplanned, so the dispatcher retries it. Null
+ * when auto routing is not fully configured.
  */
 export async function fitNow(
   organizationId: string,
-  trigger: RoutingPlanTrigger,
+  trigger?: RoutingPlanTrigger,
 ): Promise<{
   fit: AutoRoutingFitResult;
   sessions: FitSessions | null;
@@ -370,10 +406,9 @@ async function readFitInputs(params: {
   maxSessions?: number;
 }): Promise<FitInputs | null> {
   const { organizationId, settings, scorerVersionId } = params;
-  if (!settings.enabled || settings.budgetUsdPerDay === null) return null;
-  const loaded = await loadTrio(settings);
-  if (loaded.kind !== "ok") return null;
-  const tiers = fitTiers(loaded.trio);
+  const readiness = await fitReadiness(settings);
+  if (readiness.kind !== "ready") return null;
+  const tiers = fitTiers(readiness.trio);
   const [latest] = await RoutingPlanModel.findHistory(organizationId, 1);
   const inputWatermark = new Date();
   const history =
@@ -401,7 +436,7 @@ async function readFitInputs(params: {
     generation: settings.generation,
     inputWatermark,
     tiers,
-    budgetUsdPerDay: settings.budgetUsdPerDay,
+    budgetUsdPerDay: readiness.budgetUsdPerDay,
     scorerVersionId,
     history,
   };
@@ -501,7 +536,26 @@ async function prepareAndComplete(
   trigger?: RoutingPlanTrigger,
 ): Promise<FitRun | null> {
   const inputs = await prepareFit(organizationId, trigger);
-  return inputs && { inputs, published: await completeFit(inputs) };
+  if (!inputs) return null;
+  try {
+    return { inputs, published: await completeFit(inputs) };
+  } catch (error) {
+    // Recorded, so the generation it read is planned rather than pending forever.
+    logger.error(
+      { err: error, organizationId },
+      "[AutoRouting] Plan fit failed unexpectedly",
+    );
+    const published = await publish(inputs, {
+      coreVersion: coreVersion(),
+      planFormatVersion: planFormatVersion(),
+      outcome: {
+        status: "failed",
+        error: "The plan fit failed unexpectedly.",
+        diagnostics: null,
+      },
+    });
+    return { inputs, published };
+  }
 }
 
 /** Unknown when the tiers could not be priced: no history was read. */

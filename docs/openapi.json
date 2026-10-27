@@ -109950,6 +109950,10 @@
                         },
                         "awaitingFit": {
                           "type": "boolean"
+                        },
+                        "fitBlockedReason": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -109968,7 +109972,8 @@
                         "progress",
                         "error",
                         "completedAt",
-                        "awaitingFit"
+                        "awaitingFit",
+                        "fitBlockedReason"
                       ],
                       "additionalProperties": false
                     },
@@ -109985,6 +109990,14 @@
                           "type": "string",
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "windowStart": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "cutoff": {
+                          "type": "string",
+                          "format": "date-time"
                         },
                         "sessions": {
                           "type": "integer",
@@ -110011,6 +110024,8 @@
                       "required": [
                         "backfillId",
                         "scorerVersionId",
+                        "windowStart",
+                        "cutoff",
                         "sessions",
                         "remaining",
                         "estimatedCostUsd",
@@ -110418,6 +110433,10 @@
                         },
                         "awaitingFit": {
                           "type": "boolean"
+                        },
+                        "fitBlockedReason": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -110436,7 +110455,8 @@
                         "progress",
                         "error",
                         "completedAt",
-                        "awaitingFit"
+                        "awaitingFit",
+                        "fitBlockedReason"
                       ],
                       "additionalProperties": false
                     },
@@ -110453,6 +110473,14 @@
                           "type": "string",
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "windowStart": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "cutoff": {
+                          "type": "string",
+                          "format": "date-time"
                         },
                         "sessions": {
                           "type": "integer",
@@ -110479,6 +110507,8 @@
                       "required": [
                         "backfillId",
                         "scorerVersionId",
+                        "windowStart",
+                        "cutoff",
                         "sessions",
                         "remaining",
                         "estimatedCostUsd",
@@ -110888,6 +110918,10 @@
                         },
                         "awaitingFit": {
                           "type": "boolean"
+                        },
+                        "fitBlockedReason": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -110906,7 +110940,8 @@
                         "progress",
                         "error",
                         "completedAt",
-                        "awaitingFit"
+                        "awaitingFit",
+                        "fitBlockedReason"
                       ],
                       "additionalProperties": false
                     },
@@ -110923,6 +110958,14 @@
                           "type": "string",
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "windowStart": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "cutoff": {
+                          "type": "string",
+                          "format": "date-time"
                         },
                         "sessions": {
                           "type": "integer",
@@ -110949,6 +110992,8 @@
                       "required": [
                         "backfillId",
                         "scorerVersionId",
+                        "windowStart",
+                        "cutoff",
                         "sessions",
                         "remaining",
                         "estimatedCostUsd",
@@ -111399,6 +111444,10 @@
                         },
                         "awaitingFit": {
                           "type": "boolean"
+                        },
+                        "fitBlockedReason": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -111417,7 +111466,8 @@
                         "progress",
                         "error",
                         "completedAt",
-                        "awaitingFit"
+                        "awaitingFit",
+                        "fitBlockedReason"
                       ],
                       "additionalProperties": false
                     },
@@ -111434,6 +111484,14 @@
                           "type": "string",
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "windowStart": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "cutoff": {
+                          "type": "string",
+                          "format": "date-time"
                         },
                         "sessions": {
                           "type": "integer",
@@ -111460,6 +111518,8 @@
                       "required": [
                         "backfillId",
                         "scorerVersionId",
+                        "windowStart",
+                        "cutoff",
                         "sessions",
                         "remaining",
                         "estimatedCostUsd",

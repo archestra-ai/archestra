@@ -99,7 +99,7 @@ export function PastSessions({
         </p>
       )}
       {backfill && scoreOffer && canUpdate && (
-        <ScoreAction backfill={backfill} offer={scoreOffer} />
+        <ScoreAction offer={scoreOffer} />
       )}
     </section>
   );
@@ -153,20 +153,22 @@ function BackfillStatus({
           <InlineNoticeText>{backfill.error}</InlineNoticeText>
         </InlineNotice>
       )}
+      {backfill.fitBlockedReason && (
+        <InlineNotice>
+          <AlertTriangle />
+          <span className="font-medium">
+            No plan is fitted on these sessions
+          </span>
+          <InlineNoticeText>{backfill.fitBlockedReason}</InlineNoticeText>
+        </InlineNotice>
+      )}
     </div>
   );
 }
 
-function ScoreAction({
-  backfill,
-  offer,
-}: {
-  backfill: Backfill;
-  offer: ScoreOffer;
-}) {
+function ScoreAction({ offer }: { offer: ScoreOffer }) {
   // What the admin confirms, frozen while the dialog is open.
   const [confirming, setConfirming] = useState<{
-    backfill: Backfill;
     offer: ScoreOffer;
     maxCostUsd: number;
   } | null>(null);
@@ -209,7 +211,7 @@ function ScoreAction({
         <Button
           size="sm"
           disabled={ceilingError !== null}
-          onClick={() => setConfirming({ backfill, offer, maxCostUsd })}
+          onClick={() => setConfirming({ offer, maxCostUsd })}
         >
           {verb} {offer.remaining.toLocaleString("en-US")} sessions (≤{" "}
           {ceilingError === null ? formatCurrency(maxCostUsd) : "?"})
@@ -246,8 +248,8 @@ function ScoreAction({
               <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
                 <dt className="text-muted-foreground">Window</dt>
                 <dd>
-                  {formatDate({ date: confirming.backfill.windowStart })} to{" "}
-                  {formatDate({ date: confirming.backfill.cutoff })}
+                  {formatDate({ date: confirming.offer.windowStart })} to{" "}
+                  {formatDate({ date: confirming.offer.cutoff })}
                 </dd>
                 <dt className="text-muted-foreground">Sessions</dt>
                 <dd>{confirming.offer.remaining.toLocaleString("en-US")}</dd>

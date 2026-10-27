@@ -21,6 +21,7 @@ import RoutingHistoryModel, {
 import { HISTORY_MS } from "@/models/routing-usage";
 import { ApiError } from "@/types";
 import type {
+  AutoRoutingSettings,
   RoutingBackfill,
   RoutingHistorySession,
 } from "@/types/auto-routing";
@@ -29,6 +30,7 @@ import type {
   AutoRoutingScoreBackfillBody,
 } from "@/types/auto-routing-api";
 import { firstUserText } from "./first-user-text";
+import { fitReadiness } from "./fit";
 import { activeSourceVersion, decisionFeatures, preRunSource } from "./signals";
 import type { JevSessionReading } from "./signals/jev-session";
 import { SignalSourceError } from "./signals/types";
@@ -160,10 +162,7 @@ export async function describeBackfill(
       progress,
       error: latest.error,
       completedAt: latest.completedAt,
-      awaitingFit:
-        latest.fitGeneration !== null &&
-        settings !== null &&
-        settings.plannedGeneration < latest.fitGeneration,
+      ...(await fitState(latest, settings)),
     },
     scoreOffer:
       latest?.status === "running" || !scan
@@ -268,6 +267,8 @@ async function scoreOffer(
   return {
     backfillId: scan.id,
     scorerVersionId,
+    windowStart: scan.windowStart,
+    cutoff: scan.cutoff,
     sessions,
     remaining,
     estimatedCostUsd,
@@ -275,6 +276,27 @@ async function scoreOffer(
     rescore:
       latest?.phase === "score" && latest.scorerVersionId !== scorerVersionId,
   };
+}
+
+/** Whether the fit the backfill's completion requested is still to come, or why it will not run. */
+async function fitState(
+  backfill: RoutingBackfill,
+  settings: AutoRoutingSettings | null,
+): Promise<{ awaitingFit: boolean; fitBlockedReason: string | null }> {
+  if (
+    backfill.fitGeneration === null ||
+    settings === null ||
+    settings.plannedGeneration >= backfill.fitGeneration
+  ) {
+    return { awaitingFit: false, fitBlockedReason: null };
+  }
+  const readiness = await fitReadiness(settings);
+  switch (readiness.kind) {
+    case "ready":
+      return { awaitingFit: true, fitBlockedReason: null };
+    case "blocked":
+      return { awaitingFit: false, fitBlockedReason: readiness.reason };
+  }
 }
 
 function attempted(progress: SampleProgress): number {
@@ -517,7 +539,7 @@ async function scoreSession(params: {
       maxAttempts: params.maxAttempts,
     });
     if (reservation.kind !== "reserved") return reservation.kind;
-    const reserved = reservation.amount;
+    let reserved = reservation.amount;
     reading = await preRunSource
       .read(input, {
         organizationId: backfill.organizationId,
@@ -541,11 +563,16 @@ async function scoreSession(params: {
           return reserved;
       }
     })();
+    if (spent > reserved) {
+      await RoutingBackfillModel.raiseReservation({
+        lease,
+        by: spent - reserved,
+      });
+      reserved = spent;
+    }
+    // One commit: if it fails, the next claim books the reservation as spent and the session may be paid once more.
     stored = await withDbTransaction(async (tx) => {
-      await RoutingBackfillModel.settle(
-        { id: backfill.id, reserved, spent },
-        tx,
-      );
+      await RoutingBackfillModel.settle({ lease, reserved, spent }, tx);
       if (!(await RoutingBackfillModel.lockOwned(lease, tx))) return false;
       const status = readingStatus(reading);
       if (status) {

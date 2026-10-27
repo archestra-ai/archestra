@@ -11,7 +11,9 @@ import AgentModel from "@/models/agent";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import RoutingBackfillModel from "@/models/routing-backfill";
 import RoutingHistoryModel from "@/models/routing-history";
+import RoutingPlanModel from "@/models/routing-plan";
 import { autoRoutingDispatcher } from "@/task-queue/handlers/auto-routing-dispatch-handler";
+import { handleAutoRoutingFit } from "@/task-queue/handlers/auto-routing-fit-handler";
 import { beforeEach, describe, expect, type TestFixtures, test } from "@/test";
 import {
   configureAutoRouting,
@@ -830,5 +832,188 @@ describe("auto routing backfill", () => {
         (row) => row.id,
       ),
     ).toEqual([waiting?.id]);
+  });
+
+  test("a late settlement from a reclaimed lease counts its call once and leaves the successor's reservation", async () => {
+    await sessions(2);
+    await scan();
+    await startScoring();
+    const claim = async () => {
+      const claimed = await RoutingBackfillModel.claimNext({
+        owner: "worker",
+        leaseTtlSeconds: -1,
+      });
+      if (!claimed) throw new Error("Nothing to claim");
+      return { id: claimed.id, epoch: claimed.leaseEpoch };
+    };
+    const reserve = async (lease: { id: string; epoch: number }) => {
+      const outcome = await RoutingBackfillModel.reserve({
+        lease,
+        minAmount: 0.001,
+        maxAttempts: 10,
+      });
+      if (outcome.kind !== "reserved") throw new Error(outcome.kind);
+      return outcome.amount;
+    };
+    const settle = (
+      lease: { id: string; epoch: number },
+      reserved: number,
+      spent: number,
+    ) =>
+      db.transaction((tx) =>
+        RoutingBackfillModel.settle({ lease, reserved, spent }, tx),
+      );
+    const costs = async () => {
+      const [row] = await db
+        .select()
+        .from(schema.routingBackfillsTable)
+        .where(eq(schema.routingBackfillsTable.organizationId, organizationId));
+      return {
+        spent: Number(row.spentCostUsd),
+        reserved: Number(row.reservedCostUsd),
+      };
+    };
+
+    const stale = await claim();
+    const first = await reserve(stale);
+    const second = await reserve(stale);
+    const current = await claim();
+    const successor = await reserve(current);
+    await settle(stale, first, first);
+    await settle(stale, second, 0.004);
+
+    expect(await costs()).toEqual({ spent: 0.005, reserved: successor });
+    await settle(current, successor, 0.002);
+    expect(await costs()).toEqual({ spent: 0.007, reserved: 0 });
+  });
+
+  test("a reading whose commit fails is paid at most once more, and its cost is never under-counted", async () => {
+    await sessions(1);
+    await scan();
+    await startScoring();
+    answerJev({ costUsd: 0.005 });
+    await db.execute(sql`
+      create function fail_history_score() returns trigger language plpgsql
+      as $$ begin raise exception 'score commit failed'; end $$`);
+    await db.execute(sql`
+      create trigger fail_history_score before insert on routing_history_scores
+      for each row execute function fail_history_score()`);
+
+    await runBackfill();
+    const [stranded] = await db
+      .select()
+      .from(schema.routingBackfillsTable)
+      .where(eq(schema.routingBackfillsTable.organizationId, organizationId));
+    expect(
+      Number(stranded.spentCostUsd) + Number(stranded.reservedCostUsd),
+    ).toBeGreaterThanOrEqual(0.005 * prompts.length);
+
+    await db.execute(
+      sql`drop trigger fail_history_score on routing_history_scores`,
+    );
+    await runBackfill();
+
+    const { backfill } = await describeBackfill(organizationId);
+    expect(backfill).toMatchObject({ status: "done", progress: { scored: 1 } });
+    expect(prompts.length).toBeLessThanOrEqual(2);
+    expect(backfill?.spentCostUsd).toBeGreaterThanOrEqual(
+      0.005 * prompts.length,
+    );
+  });
+
+  describe("the fit a completed backfill requested always ends", () => {
+    beforeEach(async () => {
+      await sessions(2);
+      await scanAndScore({});
+      expect((await describeBackfill(organizationId)).backfill).toMatchObject({
+        awaitingFit: true,
+        fitBlockedReason: null,
+      });
+    });
+
+    const fitState = async () => {
+      const { backfill } = await describeBackfill(organizationId);
+      return {
+        awaitingFit: backfill?.awaitingFit,
+        blocked: backfill?.fitBlockedReason !== null,
+      };
+    };
+
+    test("as blocked once auto routing is off", async () => {
+      await AutoRoutingSettingsModel.update(organizationId, { enabled: false });
+      await handleAutoRoutingFit({ organizationId });
+      expect(await fitState()).toEqual({ awaitingFit: false, blocked: true });
+    });
+
+    test("as blocked without a daily budget", async () => {
+      await AutoRoutingSettingsModel.update(organizationId, {
+        budgetUsdPerDay: null,
+      });
+      await handleAutoRoutingFit({ organizationId });
+      expect(await fitState()).toEqual({ awaitingFit: false, blocked: true });
+    });
+
+    test("as blocked when a tier's model is gone", async () => {
+      const settings = await AutoRoutingSettingsModel.find(organizationId);
+      await db
+        .delete(schema.modelsTable)
+        .where(eq(schema.modelsTable.id, settings?.fastModelId ?? ""));
+      await handleAutoRoutingFit({ organizationId });
+      expect(await fitState()).toEqual({ awaitingFit: false, blocked: true });
+    });
+
+    test("as planned after a rejected fit, by the refit", async () => {
+      const stale = await prepareFit(organizationId);
+      if (!stale) throw new Error("Auto routing is not configured");
+      await AutoRoutingSettingsModel.update(organizationId, {
+        budgetUsdPerDay: "45.00",
+      });
+      expect(await completeFit(stale)).toMatchObject({ kind: "rejected" });
+      expect(await fitState()).toEqual({ awaitingFit: true, blocked: false });
+
+      await handleAutoRoutingFit({ organizationId });
+      expect(await fitState()).toEqual({ awaitingFit: false, blocked: false });
+    });
+
+    test("as a recorded failure when the fit fails unexpectedly", async () => {
+      await db.execute(sql`
+        create function fail_plan() returns trigger language plpgsql
+        as $$ begin raise exception 'publish failed'; end $$`);
+      await db.execute(sql`
+        create trigger fail_plan before insert on routing_plans
+        for each row when (new.status <> 'failed') execute function fail_plan()`);
+      try {
+        await handleAutoRoutingFit({ organizationId });
+      } finally {
+        await db.execute(sql`drop trigger fail_plan on routing_plans`);
+      }
+
+      expect(await fitState()).toEqual({ awaitingFit: false, blocked: false });
+      const [plan] = await RoutingPlanModel.findHistory(organizationId, 1);
+      expect(plan.plan.status).toBe("failed");
+    });
+  });
+
+  test("the score offer carries the window of the scan it names, not of a newer job", async () => {
+    await sessions(2);
+    await scan();
+    const older = await RoutingBackfillModel.findLatest(organizationId);
+    const olderWindow = new Date(Date.now() - 20 * DAY_MS);
+    await db
+      .update(schema.routingBackfillsTable)
+      .set({ windowStart: olderWindow })
+      .where(eq(schema.routingBackfillsTable.id, older?.id ?? ""));
+    await startBackfillScan(organizationId, userId);
+    await cancelBackfill(organizationId);
+
+    const { backfill, scoreOffer } = await describeBackfill(organizationId);
+
+    expect(backfill?.status).toBe("cancelled");
+    expect(scoreOffer).toMatchObject({
+      backfillId: older?.id,
+      windowStart: olderWindow,
+      cutoff: older?.cutoff,
+    });
+    expect(backfill?.windowStart).not.toEqual(olderWindow);
   });
 });

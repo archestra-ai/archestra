@@ -253,8 +253,10 @@ export const AutoRoutingBackfillResponseSchema = z.object({
         .nullable(),
       error: z.string().nullable(),
       completedAt: z.date().nullable(),
-      /** The fit its completion requested has no outcome yet. */
+      /** The fit its completion requested has no outcome yet and will run. */
       awaitingFit: z.boolean(),
+      /** Why the fit its completion requested will not run while settings stay as they are. */
+      fitBlockedReason: z.string().nullable(),
     })
     .nullable(),
   /** What scoring the latest scan with the running scorer version would take; null when nothing is left to score. */
@@ -263,6 +265,9 @@ export const AutoRoutingBackfillResponseSchema = z.object({
       /** The scan and scorer version scoring would use; a score request names both. */
       backfillId: z.string().uuid(),
       scorerVersionId: z.string().uuid(),
+      /** That scan's window, which scoring reads. */
+      windowStart: z.date(),
+      cutoff: z.date(),
       sessions: z.number().int().positive(),
       remaining: z.number().int().positive(),
       estimatedCostUsd: z.number(),

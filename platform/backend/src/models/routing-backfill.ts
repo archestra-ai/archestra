@@ -315,21 +315,45 @@ class RoutingBackfillModel {
 
   /**
    * Swaps a reservation for what the call cost, raising later calls'
-   * reservations to it; recorded however the backfill ended meanwhile.
+   * reservations to it; recorded however the backfill ended meanwhile. A
+   * claim since the reservation already booked it as spent and holds only
+   * its successor's reservations, so a call from an older lease adds just
+   * what it cost beyond its reservation.
    */
   static async settle(
-    params: { id: string; reserved: number; spent: number },
+    params: { lease: BackfillLease; reserved: number; spent: number },
     tx: Transaction,
   ): Promise<void> {
     const spent = sql`${params.spent.toFixed(6)}::numeric`;
+    const reserved = sql`${params.reserved.toFixed(6)}::numeric`;
+    const current = sql`${t.leaseEpoch} = ${params.lease.epoch}`;
     await tx
       .update(t)
       .set({
-        reservedCostUsd: sql`greatest(${t.reservedCostUsd} - ${params.reserved.toFixed(6)}::numeric, 0)`,
-        spentCostUsd: sql`${t.spentCostUsd} + ${spent}`,
+        reservedCostUsd: sql`case when ${current} then greatest(${t.reservedCostUsd} - ${reserved}, 0) else ${t.reservedCostUsd} end`,
+        spentCostUsd: sql`${t.spentCostUsd} + case when ${current} then ${spent} else greatest(${spent} - ${reserved}, 0) end`,
         callCostUsd: sql`greatest(${t.callCostUsd}, ${spent})`,
       })
-      .where(eq(t.id, params.id));
+      .where(eq(t.id, params.lease.id));
+  }
+
+  /**
+   * Raises a reservation by what its call cost beyond it, so a claim that
+   * books the reservation before the call settled books what it cost.
+   */
+  static async raiseReservation(params: {
+    lease: BackfillLease;
+    by: number;
+  }): Promise<void> {
+    const by = sql`${params.by.toFixed(6)}::numeric`;
+    const current = sql`${t.leaseEpoch} = ${params.lease.epoch}`;
+    await db
+      .update(t)
+      .set({
+        reservedCostUsd: sql`${t.reservedCostUsd} + case when ${current} then ${by} else 0 end`,
+        spentCostUsd: sql`${t.spentCostUsd} + case when ${current} then 0 else ${by} end`,
+      })
+      .where(eq(t.id, params.lease.id));
   }
 
   static async renew(

@@ -171,7 +171,7 @@ async function fitAndDescribe(
     await loadAutoRoutingSettings(organizationId),
     inline?.sessions ?? null,
   );
-  // An unexpected fit error records no plan, so only `fit` carries it.
+  // An error before the fit recorded an outcome leaves no plan, so only `fit` carries it.
   const lastFitError =
     fit?.status === "failed" ? fit.error : described.status.lastFitError;
   return { ...described, status: { ...described.status, lastFitError }, fit };

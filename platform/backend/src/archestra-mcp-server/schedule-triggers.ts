@@ -669,6 +669,7 @@ const registry = defineArchestraTools([
           trigger,
           run,
           organizationId,
+          userId,
         });
         const { messages, truncated } = condenseTranscript(transcript.messages);
         return structuredSuccessResult({

@@ -1657,6 +1657,7 @@ describe("schedule trigger MCP tools", () => {
       makeUser,
       makeMember,
       makeCustomRole,
+      makeConversation,
     }) => {
       const owner = await makeUser();
       await makeMember(owner.id, organizationId, { role: "member" });
@@ -1666,6 +1667,25 @@ describe("schedule trigger MCP tools", () => {
         actorUserId: owner.id,
       });
       const run = await makeScheduleTriggerRun(trigger.id);
+      const conversation = await makeConversation(agent.id, {
+        userId: owner.id,
+        organizationId,
+      });
+      await ScheduleTriggerRunModel.setChatConversationId(
+        run.id,
+        conversation.id,
+      );
+      await MessageModel.bulkCreate([
+        {
+          conversationId: conversation.id,
+          role: "assistant",
+          content: {
+            id: "run-reply",
+            role: "assistant",
+            parts: [{ type: "text", text: "The scheduled run needs review." }],
+          },
+        },
+      ]);
       const args = { schedule_trigger_id: trigger.id, run_id: run.id };
 
       // Organization-wide Projects read, without log:admin.
@@ -1692,9 +1712,21 @@ describe("schedule trigger MCP tools", () => {
       expect(textOf(denied)).toContain("log:admin");
 
       await MemberModel.updateRole(userId, organizationId, "admin");
-      expect(
-        (await executeArchestraTool(GET_RUN_TRANSCRIPT, args, context)).isError,
-      ).toBe(false);
+      const allowed = await executeArchestraTool(
+        GET_RUN_TRANSCRIPT,
+        args,
+        context,
+      );
+      expect(allowed.isError, textOf(allowed)).toBe(false);
+      expect(allowed.structuredContent).toMatchObject({
+        source: "conversation",
+        messages: [
+          {
+            role: "assistant",
+            parts: [{ type: "text", text: "The scheduled run needs review." }],
+          },
+        ],
+      });
     });
 
     test("refuses a run of another member's schedule", async ({

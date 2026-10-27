@@ -595,6 +595,27 @@ describe("POST /api/github-actions/token", () => {
     expect(scopedTokenRequests).toHaveLength(0);
   });
 
+  test.each([
+    ["the primary limit", { "x-ratelimit-remaining": "0" }],
+    ["a secondary limit", { "retry-after": "60" }],
+  ])("reports %s on the connection check as a GitHub error, not as not linked", async (_case, headers) => {
+    server.use(
+      http.get(GITHUB_USER_URL, () =>
+        HttpResponse.json(
+          { message: "API rate limit exceeded" },
+          { status: 403, headers },
+        ),
+      ),
+    );
+
+    const response = await exchange({ token: await oidcToken() });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json().error).toBe("github_error");
+    expect(response.json().message).toContain("rate-limited");
+    expect(scopedTokenRequests).toHaveLength(0);
+  });
+
   test("reports GitHub failing to check the author's connection", async () => {
     server.use(
       http.get(GITHUB_USER_URL, () =>

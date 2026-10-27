@@ -632,6 +632,13 @@ async function gitHubAcceptsAs(params: {
       "GitHub could not be reached to check the author's GitHub connection. Try again.",
     );
   }
+  // GitHub also answers 403 when it throttles a valid token: that is a
+  // transient failure, not a revoked connection.
+  if (response.status === 403 && isRateLimited(response))
+    throw new ApiError(
+      502,
+      "GitHub rate-limited the check of the author's GitHub connection. Try again later.",
+    );
   if (response.status === 401 || response.status === 403) return false;
   if (!response.ok)
     throw new ApiError(
@@ -645,6 +652,14 @@ async function gitHubAcceptsAs(params: {
       "GitHub returned an unexpected account while checking the author's GitHub connection",
     );
   return user.data.id === params.githubId;
+}
+
+/** GitHub's primary limit (no requests left) or a secondary limit (it says when to retry). */
+function isRateLimited(response: Response): boolean {
+  return (
+    response.headers.get("x-ratelimit-remaining") === "0" ||
+    response.headers.has("retry-after")
+  );
 }
 
 /** Record the token's `jti` until it expires; false when it is already there. */

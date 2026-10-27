@@ -5,7 +5,7 @@ name: Archestra Runtime Review
 # author on open, the pusher on synchronize) with their Archestra platform
 # token (secret ARCHESTRA_TOKEN_<LOGIN>); without one, the job skips with a
 # notice. The review job is archestra-runtime-review-job.yml in this
-# repository, called by the commit that infra's Workload Identity trust pins.
+# repository, pinned to a commit that infra's Workload Identity trust accepts.
 
 on:
   pull_request:
@@ -41,9 +41,9 @@ jobs:
       pull-requests: write # Post the review comment and inline comments.
       checks: read # Count the failing checks of the reviewed commit.
       id-token: write # Short-lived identity for the staging-only IAP HTTPS tunnel.
-    # A pull request cannot change this pin's code: infra trusts only this commit of the job.
+    # A pull request cannot change the code this pin runs: infra trusts only pinned commits of the job.
     # It is a main commit, not a release, so no tag points at it.
-    uses: archestra-ai/archestra/.github/workflows/archestra-runtime-review-job.yml@afbd296b860220ff5a3a1a80dc8a20d8fba0b20e # zizmor: ignore[stale-action-refs]
+    uses: archestra-ai/archestra/.github/workflows/archestra-runtime-review-job.yml@5fb1a518ff78bd953d48319dfc482e9cceca6812 # zizmor: ignore[stale-action-refs]
     with:
       gateway-url: ${{ vars.ARCHESTRA_REVIEW_GATEWAY_URL }}
       agents: ${{ vars.ARCHESTRA_REVIEW_AGENTS }}

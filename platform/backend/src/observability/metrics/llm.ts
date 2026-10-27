@@ -94,6 +94,7 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   minimax: getMinimaxUsage,
   deepseek: getOpenAIUsage,
   kimi: getOpenAIUsage,
+  "kimi-code": getOpenAIUsage,
   "github-copilot": getOpenAIUsage,
   // Responses are OpenAI-shaped by our own Graph translation (usage estimated)
   "microsoft-365-copilot": getOpenAIUsage,

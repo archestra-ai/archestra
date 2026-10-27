@@ -43,7 +43,7 @@ describe("Kimi Code image entrypoint", () => {
           root,
           mode: "one_shot",
           ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR: state,
-          ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER: "kimi",
+          ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER: "kimi-code",
           ARCHESTRA_AGENT_RUNTIME_MODEL_CONTEXT_LENGTH: "262144",
           ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH: "32768",
           ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT: "Follow the team rules.",
@@ -198,7 +198,7 @@ describe("Kimi Code image entrypoint", () => {
         env: runtimeEnv({
           root,
           mode: "one_shot",
-          ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER: "kimi",
+          ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER: "kimi-code",
           ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: model,
         }),
       });

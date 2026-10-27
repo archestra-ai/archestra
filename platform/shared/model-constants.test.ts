@@ -162,6 +162,31 @@ describe("getAgentRuntimeModelCompatibility", () => {
     });
   });
 
+  test("runs the maintained Kimi Code runtime on Kimi Code models only", () => {
+    const runtime = {
+      inferenceProtocol: "openai_chat" as const,
+      runtimeCommand: ["archestra-kimi"],
+    };
+    expect(
+      getAgentRuntimeModelCompatibility({
+        ...runtime,
+        provider: "kimi-code",
+        modelId: "k3.1-pro",
+      }),
+    ).toEqual({ compatible: true });
+    // A Kimi API Platform key is the Moonshot (Kimi) provider, not Kimi Code.
+    for (const provider of ["kimi", "gemini"] as const) {
+      expect(
+        getAgentRuntimeProviderCompatibility({ ...runtime, provider }),
+      ).toMatchObject({
+        compatible: false,
+        message: expect.stringContaining(
+          "Kimi Code runtime requires a Kimi Code model",
+        ),
+      });
+    }
+  });
+
   test("allows only Claude Bedrock models for the maintained Claude Code runtime", () => {
     const runtime = {
       inferenceProtocol: "anthropic" as const,
@@ -212,10 +237,6 @@ describe("getAgentRuntimeModelCompatibility", () => {
         runtimeCommand: ["archestra-grok"],
         inferenceProtocol: "openai_chat",
       },
-      {
-        runtimeCommand: ["archestra-kimi"],
-        inferenceProtocol: "openai_chat",
-      },
     ] as const) {
       expect(
         getAgentRuntimeModelCompatibility({
@@ -232,32 +253,34 @@ describe("getAgentRuntimeModelCompatibility", () => {
     // The router refuses Kimi on /responses because its translation drops
     // the reasoning Kimi thinking models replay on tool-call turns, so the
     // picker and the launch preflight must refuse the same pairing.
-    for (const runtimeCommand of [null, ["archestra-opencode"]] as const) {
-      expect(
-        getAgentRuntimeModelCompatibility({
-          inferenceProtocol: "openai_responses",
-          runtimeCommand,
-          provider: "kimi",
-          modelId: "k3.1-pro",
-        }),
-      ).toMatchObject({
-        compatible: false,
-        message: expect.stringContaining("Chat Completions endpoint only"),
-      });
-    }
-    for (const runtimeCommand of [
-      null,
-      ["archestra-hermes"],
-      ["archestra-grok"],
-    ] as const) {
-      expect(
-        getAgentRuntimeModelCompatibility({
-          inferenceProtocol: "openai_chat",
-          runtimeCommand,
-          provider: "kimi",
-          modelId: "k3.1-pro",
-        }),
-      ).toEqual({ compatible: true });
+    for (const provider of ["kimi", "kimi-code"] as const) {
+      for (const runtimeCommand of [null, ["archestra-opencode"]] as const) {
+        expect(
+          getAgentRuntimeModelCompatibility({
+            inferenceProtocol: "openai_responses",
+            runtimeCommand,
+            provider,
+            modelId: "k3.1-pro",
+          }),
+        ).toMatchObject({
+          compatible: false,
+          message: expect.stringContaining("Chat Completions endpoint only"),
+        });
+      }
+      for (const runtimeCommand of [
+        null,
+        ["archestra-hermes"],
+        ["archestra-grok"],
+      ] as const) {
+        expect(
+          getAgentRuntimeModelCompatibility({
+            inferenceProtocol: "openai_chat",
+            runtimeCommand,
+            provider,
+            modelId: "k3.1-pro",
+          }),
+        ).toEqual({ compatible: true });
+      }
     }
   });
 

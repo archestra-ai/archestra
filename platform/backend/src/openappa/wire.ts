@@ -996,6 +996,7 @@ const APPA_WIRE_FAMILY_BY_INTERACTION_TYPE: Partial<
   "github-copilot:chatCompletions": "openai:chatCompletions",
   "groq:chatCompletions": "openai:chatCompletions",
   "kimi:chatCompletions": "openai:chatCompletions",
+  "kimi-code:chatCompletions": "openai:chatCompletions",
   "microsoft-365-copilot:chatCompletions": "openai:chatCompletions",
   "minimax:chatCompletions": "openai:chatCompletions",
   "mistral:chatCompletions": "openai:chatCompletions",

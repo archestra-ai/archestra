@@ -411,6 +411,7 @@ export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   fastify.register(routes.groqProxyRoutes);
   fastify.register(routes.jevProxyRoutes);
   fastify.register(routes.kimiProxyRoutes);
+  fastify.register(routes.kimiCodeProxyRoutes);
   fastify.register(routes.microsoft365CopilotProxyRoutes);
   fastify.register(routes.minimaxProxyRoutes);
   fastify.register(routes.modelRouterProxyRoutes);

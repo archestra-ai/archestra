@@ -87,6 +87,7 @@ const PROVIDER_CLIENT_VERSION_WORKFLOW_TARGETS = {
   deepseek: [],
   minimax: [],
   kimi: [],
+  "kimi-code": [],
   azure: [],
   "microsoft-365-copilot": [],
   archestra: [],

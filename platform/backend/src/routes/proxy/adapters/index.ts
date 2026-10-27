@@ -14,6 +14,7 @@ export { githubCopilotResponsesAdapterFactory } from "./github-copilot-responses
 export { groqAdapterFactory } from "./groq";
 export { jevAdapterFactory } from "./jev";
 export { kimiAdapterFactory } from "./kimi";
+export { kimiCodeAdapterFactory } from "./kimi-code";
 export { microsoft365CopilotAdapterFactory } from "./microsoft-365-copilot";
 export { minimaxAdapterFactory } from "./minimax";
 export { mistralAdapterFactory } from "./mistral";

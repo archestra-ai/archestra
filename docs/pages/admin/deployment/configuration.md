@@ -543,6 +543,9 @@ These variables set each provider's deployment-wide endpoint and authentication.
 - **`ARCHESTRA_KIMI_BASE_URL`** - Base URL for Kimi (Moonshot AI) API requests.
   - Default: `https://api.moonshot.ai/v1`
 
+- **`ARCHESTRA_KIMI_CODE_BASE_URL`** - Base URL for Kimi Code API requests. Set it to `https://api.kimi.com/coding/v1` to use the endpoint for China.
+  - Default: `https://api.kimi.ai/coding/v1`
+
 - **`ARCHESTRA_MINIMAX_BASE_URL`** - Base URL for MiniMax API requests.
   - Default: `https://api.minimax.io/v1`
 
@@ -632,6 +635,9 @@ At startup, Archestra creates an organization-wide key from each `ARCHESTRA_CHAT
   - Default: unset
 
 - **`ARCHESTRA_CHAT_KIMI_API_KEY`** - Kimi (Moonshot AI) API key.
+  - Default: unset
+
+- **`ARCHESTRA_CHAT_KIMI_CODE_API_KEY`** - Kimi Code membership API key.
   - Default: unset
 
 - **`ARCHESTRA_CHAT_MINIMAX_API_KEY`** - MiniMax API key.

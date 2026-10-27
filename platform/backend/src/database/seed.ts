@@ -909,6 +909,7 @@ function getProviderDisplayName(provider: SupportedProvider): string {
     zhipuai: "ZhipuAI",
     deepseek: "DeepSeek",
     kimi: "Moonshot (Kimi)",
+    "kimi-code": "Kimi Code",
     "github-copilot": "GitHub Copilot",
     "microsoft-365-copilot": "Microsoft 365 Copilot",
     bedrock: "AWS Bedrock",

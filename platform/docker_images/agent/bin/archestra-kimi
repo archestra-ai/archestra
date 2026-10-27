@@ -71,7 +71,8 @@ home, hook, bridge = sys.argv[1], sys.argv[2], sys.argv[3]
 env = os.environ
 session = env.get("ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID") or env["ARCHESTRA_AGENT_RUNTIME_TASK_ID"]
 model = env["ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL"]
-kimi_provider = env.get("ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER") == "kimi"
+# A Kimi Code membership key (the Kimi Code provider) or a Kimi API Platform key.
+kimi_provider = env.get("ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER") in ("kimi-code", "kimi")
 tracing = {
     "X-Archestra-Run-Id": env["ARCHESTRA_AGENT_RUNTIME_TASK_ID"],
     "X-Archestra-Session-Id": session,

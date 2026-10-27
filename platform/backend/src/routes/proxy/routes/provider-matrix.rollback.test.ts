@@ -39,6 +39,7 @@ import { githubCopilotAdapterFactory } from "../adapters/github-copilot";
 import { githubCopilotResponsesAdapterFactory } from "../adapters/github-copilot-responses";
 import { groqAdapterFactory } from "../adapters/groq";
 import { kimiAdapterFactory } from "../adapters/kimi";
+import { kimiCodeAdapterFactory } from "../adapters/kimi-code";
 import { microsoft365CopilotAdapterFactory } from "../adapters/microsoft-365-copilot";
 import { minimaxAdapterFactory } from "../adapters/minimax";
 import { mistralAdapterFactory } from "../adapters/mistral";
@@ -62,6 +63,7 @@ import geminiProxyRoutes from "./gemini";
 import githubCopilotProxyRoutes from "./github-copilot";
 import groqProxyRoutes from "./groq";
 import kimiProxyRoutes from "./kimi";
+import kimiCodeProxyRoutes from "./kimi-code";
 import microsoft365CopilotProxyRoutes from "./microsoft-365-copilot";
 import minimaxProxyRoutes from "./minimax";
 import mistralProxyRoutes from "./mistral";
@@ -1927,6 +1929,23 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeOpenAiCompatibleBuilder("kimi-k2-0711-preview"),
     model: "kimi-k2-0711-preview",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+  }),
+  "kimi-code": makeConfig({
+    providerName: "Kimi Code",
+    providerSlug: "kimi-code",
+    provider: "kimi-code",
+    family: "openai",
+    routePlugin: kimiCodeProxyRoutes,
+    adapterFactory: kimiCodeAdapterFactory,
+    endpoint: (agentId) => `/v1/kimi-code/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("k3.1-pro"),
+    model: "k3.1-pro",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
   }),

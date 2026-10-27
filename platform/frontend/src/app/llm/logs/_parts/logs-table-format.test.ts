@@ -49,6 +49,15 @@ describe("describeModelOrigin", () => {
     ).toEqual({ kind: "maker", provider: "gemini", name: "Google" });
   });
 
+  it("credits Moonshot with Kimi Code plan models", () => {
+    expect(
+      describeModelOrigin({
+        model: "k3.1-pro",
+        interactionType: "kimi-code:chatCompletions",
+      }),
+    ).toEqual({ kind: "maker", provider: "kimi", name: "Moonshot" });
+  });
+
   it("falls back to an aggregator that served an unrecognised model", () => {
     expect(
       describeModelOrigin({

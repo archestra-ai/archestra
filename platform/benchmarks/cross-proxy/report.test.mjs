@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { comparisonProfile } from "./profile.mjs";
 
 const report = fileURLToPath(new URL("./report.mjs", import.meta.url));
 test("report pools matching request metrics and refuses incomplete or failed evidence", async (t) => {
@@ -56,6 +57,22 @@ test("report pools matching request metrics and refuses incomplete or failed evi
   assert.equal(summary[0].clientAddedMs.p50, 20);
   assert.equal(summary[0].clientAddedMs.p99, 40);
   assert.equal(summary[0].samples, 4);
+  // Current runs select the conservative two-profile comparison; original
+  // three-profile archives above must continue to work unchanged.
+  for (let repeat = 1; repeat <= 4; repeat++)
+    await unlink(path.join(dir, `litellm-${repeat}.json`));
+  await writeFile(
+    path.join(dir, "profile.json"),
+    JSON.stringify(comparisonProfile()),
+  );
+  execFileSync(process.execPath, [report], { cwd, stdio: "pipe" });
+  const selected = JSON.parse(await readFile(path.join(dir, "summary.json")));
+  assert.equal(selected.length, 4);
+  assert.deepEqual(
+    [...new Set(selected.map((r) => r.target))],
+    ["archestra", "litellm-default"],
+  );
+  assert.equal(selected[0].clientAddedMs.p50, summary[0].clientAddedMs.p50);
   const invalid = fixture(4);
   invalid.blocks[0].errors = 1;
   await writeFile(path.join(dir, "archestra-4.json"), JSON.stringify(invalid));

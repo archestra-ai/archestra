@@ -109,7 +109,7 @@ snapshot_cgroups() {
   done
 }
 for ((repeat=1; repeat<=repeats; repeat++)); do
-  if ((repeat % 2)); then order='archestra litellm litellm-default'; else order='litellm-default litellm archestra'; fi
+  if ((repeat % 2)); then order='archestra litellm-default'; else order='litellm-default archestra'; fi
   for target in $order; do
     printf '%s repeat=%s target=%s\n' "$(date -u +%FT%TZ)" "$repeat" "$target" >> "$out/order.txt"
     if [[ "$mode" == sensitivity ]]; then

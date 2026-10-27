@@ -1,67 +1,64 @@
 ---
 title: Performance & Latency
-description: Latency added by the LLM proxy and the MCP gateway, measured with external HTTP requests
+description: Compare Archestra and LiteLLM latency and requests per second on the same hardware.
 order: 5
-lastUpdated: 2026-10-25
+lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json.
-Release benchmark CI updates only the marked results tables. Do not hand-edit
-its numbers or add run dates to this page's prose. Tested revisions, dates,
-host settings and raw measurements belong in the benchmark artifacts.
+Release benchmark CI updates only the marked MCP table. The LLM comparison is
+pinned to its published evidence; do not replace it with release measurements.
 -->
-
-See how much latency Archestra adds to an external HTTP request. The benchmark calls the LLM proxy directly using a production backend, virtual-key authentication and request persistence against a local mock provider.
 
 <span id="local-baseline"></span>
 <span id="complete-non-streaming-responses"></span>
 <span id="streaming-first-content"></span>
+<span id="results"></span>
 
-## Results
+## LLM Proxy Comparison
 
-Added latency is the time spent in Archestra, excluding that request's upstream provider call. The median, P95 and P99 pool successful requests at the stated concurrency after warmup.
+Archestra handled 851–859 requests per second versus LiteLLM’s 172–175 on the same machine.
 
-<!-- proxy-benchmark-results:start -->
-| Runner resources | Concurrent HTTP requests | Median added latency | P95 added latency | P99 added latency |
+| Proxy | Requests per Second | Median Added Latency | P95 Added Latency | P99 Added Latency |
 | --- | ---: | ---: | ---: | ---: |
-| 16 vCPU / ~62 GiB RAM | 50 | 6.07 ms | 11.72 ms | 14.36 ms |
-<!-- proxy-benchmark-results:end -->
+| Archestra | 851.5–859.5 | 58.71 ms | 88.13 ms | 99.44 ms |
+| LiteLLM | 172.3–174.5 | 266.18 ms | 331.34 ms | 822.92 ms |
 
-The measurement includes authentication, routing and awaited request persistence. It subtracts the upstream call duration within each request before calculating percentiles; it does not subtract separate percentile values.
+- Each proxy: four logical CPUs, 8 GiB RAM, one worker; 50 concurrent requests with authentication and usage accounting.
+- Per proxy: 10,000 non-streaming requests over two repeats after warmup, zero errors. RPS shows the repeat range, not maximum capacity.
+- Added latency is client response time minus that request’s mock-provider duration. Archestra awaits log writes; LiteLLM writes asynchronously with default content storage.
+
+[Full methodology and evidence](https://github.com/archestra-ai/archestra/blob/6d7e1a53d34a19984d661f8a68b2c691bad530a3/platform/benchmarks/cross-proxy/evidence/2026-10-26/sensitivity/SENSITIVITY.md): pinned versions, hardware, configuration, streaming results and raw measurements.
 
 ## MCP Gateway Results
 
-A tool call through the MCP gateway gets its user's access checks and a call log entry before the MCP server's answer reaches the client. The table shows the time that adds, excluding the MCP server's own response time.
+Tool calls include authentication, access checks and call logging.
 
 <!-- mcp-gateway-benchmark-results:start -->
-| Runner resources | Concurrent tool calls | Median added latency | P95 added latency | P99 added latency |
+| Gateway | Requests per Second | Median Added Latency | P95 Added Latency | P99 Added Latency |
 | --- | ---: | ---: | ---: | ---: |
-| 16 vCPU / ~62 GiB RAM | 50 | 77.77 ms | 106.22 ms | 117.83 ms |
+| Archestra | 605.5 | 77.77 ms | 106.22 ms | 117.83 ms |
+
+16 vCPU / ~62 GiB RAM; one worker, 50 concurrent calls, 600 measured calls and zero errors.
 <!-- mcp-gateway-benchmark-results:end -->
 
-- Each call is a `tools/call` request to a gateway with one assigned tool, authenticated with a user token, against a mock MCP server on the same runner.
-- The measurement covers authentication, tool lookup, access checks and the awaited call log write.
+Added latency uses the gateway’s internal timer minus the mock MCP server’s duration. It differs from the LLM comparison’s client timer.
 
 <span id="environment"></span>
 <span id="method"></span>
-
-## Test Setup
-
-An external HTTP client sends ordinary API requests to an OpenAI-compatible endpoint and receives non-streaming JSON responses. The test uses one production web process, PostgreSQL and a deterministic mock provider on a shared Linux runner with the resources shown in the table. Each request carries a short prompt and an output limit of 32 tokens, authenticated with a passthrough virtual key and a synthetic provider key.
-
-Response caching, configured key budgets and real inference are absent. Shared-runner results track release changes; compare only matching hardware, workloads, concurrency and enabled features. They are not a production capacity guarantee.
-
-## Automatic Updates
-
-Archestra automatically reruns these benchmarks and updates the results with every new release.
+<span id="test-setup"></span>
+<span id="automatic-updates"></span>
 
 ## Reproduction
 
-Run from a clean checkout's `platform/` directory with Node.js, pnpm, Rust and Docker installed:
+Both tests use local mock servers, with no real inference or provider spend.
+
+- LLM comparison: Archestra 1.5.0-rc.10 versus LiteLLM 1.106.4, using LiteLLM’s default content omission. Follow the [pinned harness](https://github.com/archestra-ai/archestra/tree/3a81c912e0adf44cae1f871b1d98a9d8ac9f3a6c/platform/benchmarks/cross-proxy) in clean-database sensitivity mode; select its `archestra` and `litellm-default` results.
+- MCP gateway: the table updates with each Archestra release. The [benchmark workflow](https://github.com/archestra-ai/archestra/actions/workflows/llm-proxy-benchmark.yml) retains measurements; the [benchmark README](https://github.com/archestra-ai/archestra/tree/main/platform/benchmarks) covers local setup.
+
+Run the MCP benchmark from `platform/` with Node.js, pnpm, Rust and Docker installed:
 
 ```bash
 pnpm install --frozen-lockfile
 bash benchmarks/ci.sh --requests=300 --stream-requests=300 --repeats=2
 ```
-
-The launcher creates and removes a disposable database. The [benchmark README](https://github.com/archestra-ai/archestra/tree/main/platform/benchmarks) describes workload options and timing boundaries; the [benchmark workflow](https://github.com/archestra-ai/archestra/actions/workflows/llm-proxy-benchmark.yml) retains each run's measurements and tested revision.

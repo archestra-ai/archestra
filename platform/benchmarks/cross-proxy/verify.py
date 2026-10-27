@@ -1,9 +1,10 @@
 import json, pathlib, sys, re
 from collections import defaultdict
 root=pathlib.Path(sys.argv[1])
-roles=['archestra','litellm','litellm-default']
 settings=json.loads((root/'profile.json').read_text()) if (root/'profile.json').exists() else {'mode':'primary'}
 assert settings['mode'] in ['primary','sensitivity']
+roles=settings.get('targets',['archestra','litellm','litellm-default'])
+assert roles in [['archestra','litellm-default'],['archestra','litellm','litellm-default']]
 sensitivity=settings['mode']=='sensitivity'
 repeats=2 if sensitivity else 4
 requests=5000 if sensitivity else 10000
@@ -85,7 +86,7 @@ for f in root.glob('direct-*.json'):
         direct.append({k:v for k,v in b.items() if k!='samples'})
 assert len(direct)==2*repeats*len(roles)
 summary=json.loads((root/'summary.json').read_text())
-assert len(summary)==6 and sum(s['samples'] for s in summary)==(requests+stream_requests)*repeats*len(roles) and all(s['errors']==0 for s in summary)
+assert len(summary)==2*len(roles) and sum(s['samples'] for s in summary)==(requests+stream_requests)*repeats*len(roles) and all(s['errors']==0 for s in summary)
 verification={'mode':settings['mode'],'measuredRequests':(requests+stream_requests)*repeats*len(roles),'upstreamRequestsIncludingWarmupProbesAndControls':len(upstream),'responseBytes':{str(k):list(v) for k,v in response_bytes.items()},'allConstantUser':True,'allCorrelationsUnique':True,'allAccountingChecksPassed':True,'allProxyLimitsMatched':True,'noProxyOOM':True,'resourcesWholeProcessLifetime':dict(resources),'directControlBlocks':direct,'profiles':observed}
 (root/'verification-recomputed.json').write_text(json.dumps(verification,indent=2))
 print(json.dumps({k:v for k,v in verification.items() if k not in ['directControlBlocks','profiles']},indent=2))

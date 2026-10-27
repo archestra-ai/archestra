@@ -4,6 +4,7 @@ export function comparisonProfile(mode = "primary") {
   const sensitivity = mode === "sensitivity";
   const profile = {
     mode,
+    targets: ["archestra", "litellm-default"],
     requests: sensitivity ? 5000 : 10000,
     streamRequests: sensitivity ? 1000 : 3000,
     warmup: 200,

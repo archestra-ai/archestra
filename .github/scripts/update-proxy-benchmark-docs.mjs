@@ -107,7 +107,7 @@ export async function verifyBenchmarkDocs({ github, context }) {
   const markdown = Buffer.from(file.content, "base64").toString("utf8");
   try {
     if (updateBenchmarkTable(markdown, summary) !== markdown)
-      return pending("Waiting for the generated LLM proxy and MCP tables");
+      return pending("Waiting for the generated benchmark tables");
   } catch {
     return pending("Benchmark record or generated tables are invalid");
   }
@@ -151,6 +151,10 @@ export function updateBenchmarkTable(markdown, summary) {
     throw new Error("Benchmark docs must contain exactly one results block");
   let updated = markdown;
   for (const [scenario, { start, end, requests }] of Object.entries(blocks)) {
+    // Existing release branches can still carry the former internal LLM table.
+    // The pinned public comparison has no such marker and must never be replaced.
+    if (scenario === "chat" && !updated.includes(start) && !updated.includes(end))
+      continue;
     if (
       updated.split(start).length !== 2 ||
       updated.split(end).length !== 2 ||
@@ -160,7 +164,13 @@ export function updateBenchmarkTable(markdown, summary) {
     const row = summary.rows.find(
       (candidate) => candidate.scenario === scenario,
     );
-    const table = [
+    const table = scenario === "mcp" ? [
+      "| Gateway | Requests per Second | Median Added Latency | P95 Added Latency | P99 Added Latency |",
+      "| --- | ---: | ---: | ---: | ---: |",
+      `| Archestra | ${row.requestsPerSecond.toFixed(1)} | ${["p50", "p95", "p99"].map((key) => `${row.overheadMs[key].toFixed(2)} ms`).join(" | ")} |`,
+      "",
+      `${summary.logicalCpus} vCPU / ~${Math.round(summary.memoryGiB)} GiB RAM; one worker, ${row.concurrency} concurrent calls, ${row.attempted} measured calls and zero errors.`,
+    ].join("\n") : [
       `| Runner resources | ${requests} | Median added latency | P95 added latency | P99 added latency |`,
       "| --- | ---: | ---: | ---: | ---: |",
       `| ${summary.logicalCpus} vCPU / ~${Math.round(summary.memoryGiB)} GiB RAM | ${row.concurrency} | ${["p50", "p95", "p99"].map((key) => `${row.overheadMs[key].toFixed(2)} ms`).join(" | ")} |`,

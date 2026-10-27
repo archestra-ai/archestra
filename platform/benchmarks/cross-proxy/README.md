@@ -30,10 +30,11 @@ use isolated databases in that same PostgreSQL instance with pool limit
 20. Runtime/OS differences are recorded; architectures, CPU allocation, memory,
 network path and workload are matched. Containers use host networking and loopback.
 
-Four fresh-process repeats alternate Archestra→LiteLLM→LiteLLM-default and the reverse order.
-LiteLLM-default keeps default prompt/response omission; LiteLLM enables full-content
-logging to match Archestra more closely. Both retain ordinary asynchronous spend writes. The
-other proxy is stopped. Database contents persist across repeats for each product.
+Four fresh-process repeats alternate Archestra→LiteLLM and the reverse order.
+The selected LiteLLM configuration keeps default prompt/response omission and ordinary
+asynchronous spend writes. It was the faster LiteLLM configuration in the recorded
+experiment, making it the conservative public comparison. The other proxy is stopped. Database contents persist across repeats
+for each product.
 Each workload warms 200 requests before 10,000 non-stream or 3,000 streaming
 requests, at concurrency 50 with HTTP/1.1 connection reuse. Direct controls run
 between proxy runs. The stub emits identical fixed content and synthetic usage
@@ -45,7 +46,7 @@ distinct end users or inflate identity/accounting cardinality. The mock validate
 
 Client added latency is computed **per request** as full client duration minus
 its correlated stub receipt-to-response-end duration. This includes gateway
-work, transport and serialization. It is not the public docs' internal
+work, transport and serialization. It is not the internal
 `archestra_overhead` timer; Archestra's timer is retained separately and LiteLLM
 has no asserted equivalent. Streaming first content measures a decoded content
 SSE event, not a role event or first byte. Successful samples use nearest-rank
@@ -55,11 +56,11 @@ and invalidate the complete summary.
 
 Both use virtual-key authentication and PostgreSQL usage accounting, without
 configured budgets or response caching. LiteLLM's prompt/response storage is
-enabled in the full-content profile to match Archestra's stored interactions more
-closely; the default-content profile explicitly disables it (the upstream default). Its
+explicitly disabled (the upstream default). Its
 ordinary asynchronous batching remains; Archestra's ordinary awaited persistence
 remains. **Durability semantics differ.** Do not describe these as strict parity
-or derive a ratio against the public headline row. Invalid-key denial, exact
+or compare client-added measurements with internal gateway-only timings.
+Invalid-key denial, exact
 response content, usage tokens and eventual persisted row/token/response counts
 must pass. Expected rejected-auth audit rows are recorded separately from successful
 usage rows. Streaming also checks all 20 decoded content events. Synthetic keys
@@ -82,3 +83,12 @@ Preserve or move previous result directories before rerunning locally.
 ## Database pressure sensitivity mode
 
 `gh workflow run llm-proxy-benchmark.yml --ref YOUR_BRANCH -f compare_litellm=true -f compare_litellm_sensitivity=true` runs a bounded two-repeat matrix with 5,000 JSON / 1,000 SSE measurements per repeat, the same warmup/client/proxy settings, an 8 GiB PostgreSQL limit and a fresh database per profile/run. The driver is capped at 15 minutes. No primary samples are replaced or pooled with this check. Before/after cgroup snapshots include memory events/pressure/peak/swap and CPU throttling/pressure counters. The verifier retains the original strict primary counts and checks separate known sensitivity counts; it writes `verification-recomputed.json`, preserving archived evidence bytes.
+
+## Published comparison
+
+The public page shows only Archestra and LiteLLM with default content omission.
+Current runs select these two profiles (`archestra`, `litellm-default`), including
+clean-database mode. Historical three-profile raw archives and published numbers
+remain unchanged; the reporter and verifier recognize their original profiles
+without relaxing sample, accounting, response or resource checks. Reproduce the
+published measurements at the pinned commits in the evidence, not a later harness.

@@ -863,6 +863,10 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "llmProviderApiKey",
     action: "llmProviderApiKey.deleted",
   },
+  "/api/github-copilot-app/organization/check": {
+    resourceType: "llmProviderApiKey",
+    action: "llmProviderApiKey.created",
+  },
   "/api/github-copilot-app/existing/validate": {
     resourceType: "llmProviderApiKey",
     action: "llmProviderApiKey.created",

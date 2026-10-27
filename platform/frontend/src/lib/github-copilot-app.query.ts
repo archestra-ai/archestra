@@ -160,3 +160,17 @@ export function useReplaceCopilotGithubAppPrivateKey() {
     },
   });
 }
+
+/** Check that a name or GitHub address names an organization, before a step uses it. */
+export function useCheckCopilotGithubOrganization() {
+  return useMutation({
+    mutationFn: async (
+      body: archestraApiTypes.CheckCopilotGithubOrganizationData["body"],
+    ) => {
+      const { data, error } =
+        await archestraApiSdk.checkCopilotGithubOrganization({ body });
+      if (error) throw toApiError(error);
+      return data;
+    },
+  });
+}

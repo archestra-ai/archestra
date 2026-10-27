@@ -1,24 +1,17 @@
 import { ResourcePermissionGrantSchema } from "@archestra/shared";
 import { z } from "zod";
 
-/** The GitHub to use: https://github.com, or an Enterprise address. */
-const GithubUrlSchema = z.string().trim().url().max(500);
-
-/** A GitHub organization login. */
-const GithubOrganizationSchema = z
-  .string()
-  .trim()
-  .max(39)
-  .regex(
-    /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9]))*$/,
-    "Use a GitHub organization name",
-  );
+/**
+ * The organization: its name on github.com, or its address on any GitHub host
+ * (https://github.com/my-org, https://github.example.com/my-org,
+ * https://my-company.ghe.com/my-org). The backend parses it.
+ */
+const GithubOrganizationSchema = z.string().trim().min(1).max(500);
 
 /** Who may use the new key; omitted, everyone in the organization. */
 const GrantsSchema = z.array(ResourcePermissionGrantSchema).max(200).optional();
 
 export const StartCopilotGithubAppSchema = z.object({
-  githubUrl: GithubUrlSchema.default("https://github.com"),
   organization: GithubOrganizationSchema,
 });
 
@@ -64,14 +57,26 @@ export const CopilotGithubAppInstallResultSchema = z.discriminatedUnion(
 );
 
 const ExistingAppFieldsSchema = z.object({
-  githubUrl: GithubUrlSchema.default("https://github.com"),
   appId: z.string().trim().regex(/^\d+$/, "GitHub App ID must be a number"),
-  organization: GithubOrganizationSchema,
+  /** Omitted when replacing a key's App: the key's own organization is used. */
+  organization: GithubOrganizationSchema.optional(),
   /** The App's private key (PEM). Never returned or logged. */
   privateKey: z.string().min(1).max(20_000),
+  /** Reconnect this key: its stored organization stands in for `organization`. */
+  replaceKeyId: z.string().uuid().optional(),
 });
 
 export const ValidateExistingCopilotGithubAppSchema = ExistingAppFieldsSchema;
+
+/** Any input the setup takes as an organization, checked before a step uses it. */
+export const CheckCopilotGithubOrganizationSchema = z.object({
+  organization: z.string().trim().max(500),
+});
+
+export const CopilotGithubOrganizationSchema = z.object({
+  /** The organization's login, as GitHub spells it. */
+  organization: z.string(),
+});
 
 export const ExistingCopilotGithubAppValidationSchema = z.object({
   /** GitHub's own fingerprint format, as on the App settings page. */
@@ -83,8 +88,6 @@ export const ExistingCopilotGithubAppValidationSchema = z.object({
 export const ConnectExistingCopilotGithubAppSchema =
   ExistingAppFieldsSchema.extend({
     grants: GrantsSchema,
-    /** Replace the App credentials of this key instead of adding a key. */
-    replaceKeyId: z.string().uuid().optional(),
   });
 
 export const CopilotGithubAppKeySummarySchema = z.object({

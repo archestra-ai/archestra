@@ -34,19 +34,19 @@ function githubFake(options: {
 }) {
   return vi.fn(async (input: unknown, _init?: RequestInit) => {
     const url = String(input);
-    if (url.endsWith("/users/acme"))
+    if (url.endsWith("/users/my-org"))
       return Response.json({
-        login: "acme",
+        login: "my-org",
         type: options.accountType ?? "Organization",
       });
     if (url.includes("/app-manifests/"))
       return Response.json({
         id: Number(options.appId),
-        slug: "archestra-copilot",
-        name: "Archestra Copilot",
+        slug: "my-org-copilot",
+        name: "My Org Copilot",
         pem: privateKey,
-        html_url: "https://github.com/apps/archestra-copilot",
-        owner: { login: "acme", id: 99, type: "Organization" },
+        html_url: "https://github.com/apps/my-org-copilot",
+        owner: { login: "my-org", id: 99, type: "Organization" },
       });
     if (url.endsWith("/app/installations"))
       return Response.json(
@@ -55,7 +55,7 @@ function githubFake(options: {
           : [
               {
                 id: 555,
-                account: { login: "acme", id: 99 },
+                account: { login: "my-org", id: 99 },
                 permissions: options.permissions ?? {
                   organization_copilot_requests: "read",
                 },
@@ -71,7 +71,7 @@ function githubFake(options: {
         { status: 201 },
       );
     if (url.endsWith("/app"))
-      return Response.json({ id: options.appId, name: "Archestra Copilot" });
+      return Response.json({ id: options.appId, name: "My Org Copilot" });
     if (url.endsWith("api.githubcopilot.com/models"))
       return (
         options.copilotModels?.clone() ??
@@ -123,7 +123,7 @@ describe("GitHub Copilot organization subscription setup", () => {
 
   async function createAppFromManifest() {
     const started = await post("/api/github-copilot-app/manifest", {
-      organization: "acme",
+      organization: "my-org",
     });
     expect(started.statusCode, started.body).toBe(200);
     const state = new URL(started.json().url).searchParams.get("state");
@@ -140,7 +140,7 @@ describe("GitHub Copilot organization subscription setup", () => {
 
     const { started, pending } = await createAppFromManifest();
     expect(started.url).toBe(
-      `https://github.com/organizations/acme/settings/apps/new?state=${new URL(started.url).searchParams.get("state")}`,
+      `https://github.com/organizations/my-org/settings/apps/new?state=${new URL(started.url).searchParams.get("state")}`,
     );
     expect(JSON.parse(started.manifest)).toMatchObject({
       public: false,
@@ -150,14 +150,14 @@ describe("GitHub Copilot organization subscription setup", () => {
     expect(JSON.parse(started.manifest).redirect_url).toMatch(
       /\/github\/copilot-app-setup$/,
     );
-    expect(pending).toMatchObject({ organization: "acme", appId });
+    expect(pending).toMatchObject({ organization: "my-org", appId });
 
     const installed = await post("/api/github-copilot-app/install");
     expect(installed.statusCode, installed.body).toBe(200);
     const result = installed.json();
     expect(result).toMatchObject({
       status: "installed",
-      organization: "acme",
+      organization: "my-org",
     });
     expect(result.modelIds).toEqual(
       expect.arrayContaining(["claude-sonnet-4", "gpt-4o"]),
@@ -195,11 +195,55 @@ describe("GitHub Copilot organization subscription setup", () => {
     expect(audited).not.toContain("github-app:");
   });
 
+  test("takes the organization's address instead of its name", async () => {
+    vi.stubGlobal("fetch", githubFake({ appId }));
+
+    const fromUrl = await post("/api/github-copilot-app/manifest", {
+      organization: "https://github.com/my-org/settings/copilot",
+    });
+    expect(fromUrl.statusCode, fromUrl.body).toBe(200);
+    expect(fromUrl.json().url).toMatch(
+      /^https:\/\/github\.com\/organizations\/my-org\/settings\/apps\/new\?state=/,
+    );
+
+    const garbage = await post("/api/github-copilot-app/manifest", {
+      organization: "not an org",
+    });
+    expect(garbage.statusCode).toBe(400);
+    expect(garbage.json().error.message).toBe(
+      "Enter an organization name or its GitHub address.",
+    );
+  });
+
+  test("checks the organization before the existing-App step", async () => {
+    vi.stubGlobal("fetch", githubFake({ appId }));
+    const ok = await post("/api/github-copilot-app/organization/check", {
+      organization: "https://github.com/my-org/",
+    });
+    expect(ok.json()).toEqual({ organization: "my-org" });
+
+    const empty = await post("/api/github-copilot-app/organization/check", {
+      organization: "",
+    });
+    expect(empty.statusCode).toBe(400);
+    expect(empty.json().error.message).toBe(
+      "Enter an organization name or its GitHub address.",
+    );
+
+    vi.stubGlobal("fetch", githubFake({ appId, accountType: "User" }));
+    const personal = await post("/api/github-copilot-app/organization/check", {
+      organization: "my-org",
+    });
+    expect(personal.json().error.message).toBe(
+      "GitHub Copilot needs an organization on Copilot Business or Enterprise.",
+    );
+  });
+
   test("refuses a personal GitHub account", async () => {
     vi.stubGlobal("fetch", githubFake({ appId, accountType: "User" }));
 
     const response = await post("/api/github-copilot-app/manifest", {
-      organization: "acme",
+      organization: "my-org",
     });
 
     expect(response.statusCode).toBe(400);
@@ -261,7 +305,7 @@ describe("GitHub Copilot organization subscription setup", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain(
-      "acme doesn't allow Copilot requests from GitHub Apps",
+      "my-org doesn't allow Copilot requests from GitHub Apps",
     );
     expect(
       await LlmProviderApiKeyModel.findByOrganizationId(organizationId),
@@ -273,7 +317,7 @@ describe("GitHub Copilot organization subscription setup", () => {
 
     const response = await post("/api/github-copilot-app/existing/validate", {
       appId,
-      organization: "ACME",
+      organization: "MY-ORG",
       privateKey,
     });
 
@@ -281,7 +325,7 @@ describe("GitHub Copilot organization subscription setup", () => {
     expect(response.json()).toEqual({
       fingerprint: expect.stringMatching(/^SHA256:[A-Za-z0-9+/]+=*$/),
       installationId: "555",
-      organization: "acme",
+      organization: "my-org",
     });
     expect(response.body).not.toContain("PRIVATE KEY");
   });
@@ -294,7 +338,7 @@ describe("GitHub Copilot organization subscription setup", () => {
     vi.stubGlobal("fetch", githubFake({ appId }));
     const connected = await post("/api/github-copilot-app/existing", {
       appId,
-      organization: "acme",
+      organization: "my-org",
       privateKey,
     });
     expect(connected.statusCode, connected.body).toBe(200);
@@ -340,7 +384,7 @@ describe("GitHub Copilot organization subscription setup", () => {
     vi.stubGlobal("fetch", githubFake({ appId }));
     const connected = await post("/api/github-copilot-app/existing", {
       appId,
-      organization: "acme",
+      organization: "my-org",
       privateKey,
     });
     const keyId = connected.json().id;
@@ -350,9 +394,9 @@ describe("GitHub Copilot organization subscription setup", () => {
       url: `/api/github-copilot-app/keys/${keyId}`,
     });
     expect(summary.json()).toEqual({
-      organization: "acme",
+      organization: "my-org",
       appId,
-      appName: "Archestra Copilot",
+      appName: "My Org Copilot",
       fingerprint: expect.stringMatching(/^SHA256:/),
       modelCount: expect.any(Number),
     });

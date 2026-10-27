@@ -29,11 +29,11 @@ const appKey = (overrides?: Partial<LlmProviderApiKeyResponse>) =>
   ({
     id: "key-1",
     provider: "github-copilot",
-    name: "GitHub Copilot (acme)",
+    name: "GitHub Copilot (my-org)",
     scope: "org",
     userId: null,
     isGithubAppKey: true,
-    githubOrganization: "acme",
+    githubOrganization: "my-org",
     requiresReauthentication: false,
     ...overrides,
   }) as LlmProviderApiKeyResponse;
@@ -79,7 +79,7 @@ describe("OrganizationSubscriptionCards", () => {
 
     expect(
       screen.getByText(
-        "Your organization's Copilot plan is linked through a GitHub App. Usage is billed to acme.",
+        "Your organization's Copilot plan is linked through a GitHub App. Usage is billed to my-org.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Connected")).toBeInTheDocument();

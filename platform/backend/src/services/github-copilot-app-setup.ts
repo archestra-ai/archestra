@@ -49,9 +49,9 @@ import { createGithubCopilotFetch } from "./github-copilot-token";
  *    answers, and creates the key.
  */
 class CopilotGithubAppSetup {
-  async start(params: Owner & { githubUrl: string; organization: string }) {
-    const { web, api } = parseGithubUrl(params.githubUrl);
-    const account = await lookupAccount({ api, login: params.organization });
+  async start(params: Owner & { organization: string }) {
+    const { web, api, login } = parseGithubOrganization(params.organization);
+    const account = await lookupAccount({ api, login });
     if (account.type !== "Organization")
       throw new ApiError(400, NOT_AN_ORGANIZATION);
     const state = randomBytes(32).toString("base64url");
@@ -210,15 +210,31 @@ class CopilotGithubAppSetup {
   }
 
   /** Check an existing App: its key, and its installation on the organization. */
-  async validateExisting(params: {
-    githubUrl: string;
-    appId: string;
-    organization: string;
-    privateKey: string;
-  }) {
+  /**
+   * Check what a person typed names a GitHub organization, before the
+   * existing-App step uses it: the same parsing and account check as `start`.
+   */
+  async checkOrganization(params: { organization: string }) {
+    const { api, login } = parseGithubOrganization(params.organization);
+    const account = await lookupAccount({ api, login });
+    if (account.type !== "Organization")
+      throw new ApiError(400, NOT_AN_ORGANIZATION);
+    return { organization: account.login };
+  }
+
+  async validateExisting(
+    params: Owner & {
+      appId: string;
+      organization?: string;
+      privateKey: string;
+      replaceKeyId?: string;
+    },
+  ) {
     const { appId, privateKey, fingerprint } =
       validateGithubAppPrivateKey(params);
-    const { web, api } = parseGithubUrl(params.githubUrl);
+    const { web, api, login } = parseGithubOrganization(
+      await this.organizationInput(params),
+    );
     let installations: Installation[];
     try {
       installations = await fetchAsGithubApp<Installation[]>({
@@ -236,15 +252,15 @@ class CopilotGithubAppSetup {
       throw error;
     }
     const installation = installations.find(
-      (entry) =>
-        entry.account?.login.toLowerCase() ===
-        params.organization.toLowerCase(),
+      (entry) => entry.account?.login.toLowerCase() === login.toLowerCase(),
     );
     if (!installation?.account)
       throw new ApiError(
         400,
-        `The App isn't installed on ${params.organization}. Install it on the organization on GitHub, then try again.`,
+        `The App isn't installed on ${login}. Install it on the organization on GitHub, then try again.`,
       );
+    if (installation.account.type === "User")
+      throw new ApiError(400, NOT_AN_ORGANIZATION);
     return {
       fingerprint,
       installationId: String(installation.id),
@@ -262,9 +278,8 @@ class CopilotGithubAppSetup {
 
   async connectExisting(
     params: Owner & {
-      githubUrl: string;
       appId: string;
-      organization: string;
+      organization?: string;
       privateKey: string;
       grants?: ResourcePermissionGrant[];
       replaceKeyId?: string;
@@ -304,18 +319,9 @@ class CopilotGithubAppSetup {
     params: Owner & { keyId: string; privateKey: string },
   ) {
     const credential = await this.storedCredential(params, "update");
-    const organization =
-      (await githubAppOrganization(credential)) ?? credential.organization;
-    if (!organization)
-      throw new ApiError(
-        400,
-        "The App's organization is unknown. Use Reconnect to enter the App again.",
-      );
     return this.connectExisting({
       ...params,
-      githubUrl: credential.githubUrl ?? "https://github.com",
       appId: credential.appId,
-      organization,
       privateKey: params.privateKey,
       replaceKeyId: params.keyId,
     });
@@ -488,6 +494,30 @@ class CopilotGithubAppSetup {
     return credential;
   }
 
+  /**
+   * The organization a step names: what the person typed, or, reconnecting a
+   * key, the organization stored on it (with its GitHub address).
+   */
+  private async organizationInput(
+    params: Owner & { organization?: string; replaceKeyId?: string },
+  ): Promise<string> {
+    if (params.organization) return params.organization;
+    if (!params.replaceKeyId)
+      throw new ApiError(400, ORGANIZATION_INPUT_INVALID);
+    const credential = await this.storedCredential(
+      { ...params, keyId: params.replaceKeyId },
+      "update",
+    );
+    const organization =
+      credential.organization ?? (await githubAppOrganization(credential));
+    if (!organization)
+      throw new ApiError(
+        400,
+        "The App's organization is unknown. Disconnect it and connect it again.",
+      );
+    return `${credential.githubUrl ?? "https://github.com"}/${organization}`;
+  }
+
   private fetchAsPending<T>(pending: StoredPendingApp, path: `/app${string}`) {
     const { privateKey } = SecretSchema.parse(
       decryptSecretValue(pending.secret),
@@ -512,10 +542,51 @@ class CopilotGithubAppSetup {
 
 export const copilotGithubAppSetup = new CopilotGithubAppSetup();
 
+/**
+ * The organization a person typed: a bare name (on github.com), or its
+ * address on any GitHub host (github.com, a GitHub Enterprise Server host, or
+ * a ghe.com subdomain). The web base is the address's origin and the
+ * organization its first path segment; anything after that is ignored.
+ *
+ * @public — exercised directly by unit tests (the accepted input shapes)
+ */
+export function parseGithubOrganization(input: string): {
+  web: string;
+  api: string;
+  login: string;
+} {
+  const value = input.trim();
+  if (GITHUB_LOGIN.test(value)) {
+    const api = getGithubApiBaseUrl("https://github.com");
+    return { web: getGithubWebOrigin(api), api, login: value };
+  }
+  let url: URL | null = null;
+  try {
+    url = new URL(
+      /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`,
+    );
+  } catch {
+    url = null;
+  }
+  const login = url?.pathname.split("/").filter(Boolean)[0] ?? "";
+  if (
+    !url ||
+    !["https:", "http:"].includes(url.protocol) ||
+    !url.hostname.includes(".") ||
+    !GITHUB_LOGIN.test(login)
+  )
+    throw new ApiError(400, ORGANIZATION_INPUT_INVALID);
+  const api = getGithubApiBaseUrl(url.origin);
+  return { web: getGithubWebOrigin(api), api, login };
+}
+
 // ===================== Internals =====================
 
 type Owner = { organizationId: string; userId: string };
 
+const ORGANIZATION_INPUT_INVALID =
+  "Enter an organization name or its GitHub address.";
+const GITHUB_LOGIN = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;
 const NOT_AN_ORGANIZATION =
   "GitHub Copilot needs an organization on Copilot Business or Enterprise.";
 const SECRET_NAME = "chatapikey-org-github-copilot-app";
@@ -560,7 +631,7 @@ const StoredPendingAppSchema = z.object({
 type StoredPendingApp = z.infer<typeof StoredPendingAppSchema>;
 type Installation = {
   id: number;
-  account: { login: string; id: number } | null;
+  account: { login: string; id: number; type?: string } | null;
   permissions?: Record<string, string>;
 };
 const AccountSchema = z.object({
@@ -647,26 +718,6 @@ function isAppGone(error: unknown) {
   return (
     error instanceof ApiError && error.internalCode === GITHUB_APP_NOT_FOUND
   );
-}
-
-/** A GitHub address becomes its web and API bases; any path is ignored. */
-function parseGithubUrl(value: string) {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new ApiError(
-      400,
-      "Use your GitHub's address, such as https://github.com.",
-    );
-  }
-  if (!["https:", "http:"].includes(url.protocol))
-    throw new ApiError(
-      400,
-      "Use your GitHub's address, such as https://github.com.",
-    );
-  const api = getGithubApiBaseUrl(url.origin);
-  return { web: getGithubWebOrigin(api), api };
 }
 
 /** The GitHub account that will own the App, from GitHub's public profile. */

@@ -556,13 +556,13 @@ describe("ApiKeysPage", () => {
     } as unknown as ReturnType<typeof useHasPermissions>);
     const appKey = {
       id: "copilot-app-key",
-      name: "GitHub Copilot (acme)",
+      name: "GitHub Copilot (my-org)",
       provider: "github-copilot",
       scope: "org",
       userId: null,
       secretId: "secret-1",
       isGithubAppKey: true,
-      githubOrganization: "acme",
+      githubOrganization: "my-org",
       requiresReauthentication: false,
     };
     mockUseLlmProviderApiKeys.mockReturnValue({
@@ -574,11 +574,13 @@ describe("ApiKeysPage", () => {
 
     expect(
       screen.getByText(
-        "Your organization's Copilot plan is linked through a GitHub App. Usage is billed to acme.",
+        "Your organization's Copilot plan is linked through a GitHub App. Usage is billed to my-org.",
       ),
     ).toBeInTheDocument();
     // Not a table row, and no extra header action.
-    expect(screen.queryByText("GitHub Copilot (acme)")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("GitHub Copilot (my-org)"),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Connect another/ }),
     ).not.toBeInTheDocument();
@@ -596,7 +598,7 @@ describe("ApiKeysPage", () => {
     const disconnects = screen.getAllByRole("button", { name: "Disconnect" });
     fireEvent.click(disconnects[disconnects.length - 1]);
     expect(await screen.findByTestId("delete-dialog")).toHaveTextContent(
-      "The GitHub App stays installed on acme. Uninstall it on GitHub if you no longer need it.",
+      "The GitHub App stays installed on my-org. Uninstall it on GitHub if you no longer need it.",
     );
   });
 

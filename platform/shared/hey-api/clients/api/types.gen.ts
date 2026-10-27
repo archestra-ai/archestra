@@ -51390,7 +51390,6 @@ export type UpdateGithubAppConfigResponse = UpdateGithubAppConfigResponses[keyof
 
 export type StartCopilotGithubAppData = {
     body: {
-        githubUrl?: string;
         organization: string;
     };
     path?: never;
@@ -51860,12 +51859,100 @@ export type InstallCopilotGithubAppResponses = {
 
 export type InstallCopilotGithubAppResponse = InstallCopilotGithubAppResponses[keyof InstallCopilotGithubAppResponses];
 
+export type CheckCopilotGithubOrganizationData = {
+    body: {
+        organization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/github-copilot-app/organization/check';
+};
+
+export type CheckCopilotGithubOrganizationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CheckCopilotGithubOrganizationError = CheckCopilotGithubOrganizationErrors[keyof CheckCopilotGithubOrganizationErrors];
+
+export type CheckCopilotGithubOrganizationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        organization: string;
+    };
+};
+
+export type CheckCopilotGithubOrganizationResponse = CheckCopilotGithubOrganizationResponses[keyof CheckCopilotGithubOrganizationResponses];
+
 export type ValidateExistingCopilotGithubAppData = {
     body: {
-        githubUrl?: string;
         appId: string;
-        organization: string;
+        organization?: string;
         privateKey: string;
+        replaceKeyId?: string;
     };
     path?: never;
     query?: never;
@@ -51955,10 +52042,10 @@ export type ValidateExistingCopilotGithubAppResponse = ValidateExistingCopilotGi
 
 export type ConnectExistingCopilotGithubAppData = {
     body: {
-        githubUrl?: string;
         appId: string;
-        organization: string;
+        organization?: string;
         privateKey: string;
+        replaceKeyId?: string;
         grants?: Array<{
             subject: {
                 type: 'user';
@@ -51978,7 +52065,6 @@ export type ConnectExistingCopilotGithubAppData = {
             };
             actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
-        replaceKeyId?: string;
     };
     path?: never;
     query?: never;

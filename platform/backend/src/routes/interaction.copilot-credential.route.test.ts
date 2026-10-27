@@ -44,12 +44,12 @@ describe("GitHub Copilot credential source in the logs", () => {
       installationId: "2",
       privateKey,
       githubUrl: "https://github.com",
-      organization: "acme",
+      organization: "my-org",
     });
     const appKey = await LlmProviderApiKeyModel.create(
       {
         organizationId,
-        name: "GitHub Copilot (acme)",
+        name: "GitHub Copilot (my-org)",
         provider: "github-copilot",
         secretId: (await makeSecret({ secret: { apiKey: appValue } })).id,
         scope: "org",
@@ -93,7 +93,7 @@ describe("GitHub Copilot credential source in the logs", () => {
     });
     expect(orgDetail.json().copilotCredentialSource).toEqual({
       kind: "organization",
-      organization: "acme",
+      organization: "my-org",
     });
     const personalDetail = await app.inject({
       method: "GET",
@@ -116,7 +116,7 @@ describe("GitHub Copilot credential source in the logs", () => {
       ).map((row) => [row.sessionId, row.copilotCredentialSources]),
     );
     expect(bySession["org-session"]).toEqual([
-      { kind: "organization", organization: "acme" },
+      { kind: "organization", organization: "my-org" },
     ]);
     expect(bySession["personal-session"]).toEqual([{ kind: "personal" }]);
   });

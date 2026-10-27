@@ -28,7 +28,7 @@ function uniqueCredential(
     installationId: String(installationCounter),
     privateKey,
     githubUrl: "https://github.com",
-    organization: "acme",
+    organization: "my-org",
     ...overrides,
   };
 }
@@ -108,12 +108,12 @@ describe("githubAppOrganization", () => {
   test("looks up a preview key's organization from its installation", async () => {
     const credential = uniqueCredential({ organization: undefined });
     const fetchMock = vi.fn(async (_input: unknown) =>
-      Response.json({ account: { login: "archestra-ai" } }),
+      Response.json({ account: { login: "my-org" } }),
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    expect(await githubAppOrganization(credential)).toBe("archestra-ai");
-    expect(await githubAppOrganization(credential)).toBe("archestra-ai");
+    expect(await githubAppOrganization(credential)).toBe("my-org");
+    expect(await githubAppOrganization(credential)).toBe("my-org");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
       `https://api.github.com/app/installations/${credential.installationId}`,
@@ -192,7 +192,7 @@ describe("createGithubCopilotFetch with a GitHub App credential", () => {
 
     expect(response.status).toBe(401);
     expect(body.error.message).toContain(
-      "acme doesn't allow Copilot requests from GitHub Apps",
+      "my-org doesn't allow Copilot requests from GitHub Apps",
     );
     expect(body.error.message).toContain(
       'GitHub said: "Copilot requests from GitHub App installations are not enabled for this organization"',

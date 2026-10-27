@@ -4,12 +4,14 @@ import { z } from "zod";
 import { copilotGithubAppSetup } from "@/services/github-copilot-app-setup";
 import { constructResponseSchema, DeleteObjectResponseSchema } from "@/types";
 import {
+  CheckCopilotGithubOrganizationSchema,
   CompleteCopilotGithubAppSchema,
   ConnectExistingCopilotGithubAppSchema,
   CopilotGithubAppConnectedSchema,
   CopilotGithubAppInstallResultSchema,
   CopilotGithubAppKeySummarySchema,
   CopilotGithubAppManifestSchema,
+  CopilotGithubOrganizationSchema,
   ExistingCopilotGithubAppValidationSchema,
   InstallCopilotGithubAppSchema,
   PendingCopilotGithubAppSchema,
@@ -135,6 +137,26 @@ const githubCopilotAppRoutes: FastifyPluginAsyncZod = async (app) => {
     },
   );
   app.post(
+    "/api/github-copilot-app/organization/check",
+    {
+      schema: {
+        operationId: RouteId.CheckCopilotGithubOrganization,
+        description:
+          "Check that a name or GitHub address names a GitHub organization, before connecting an existing App",
+        tags: ["LLM Provider API Keys"],
+        body: CheckCopilotGithubOrganizationSchema,
+        response: constructResponseSchema(CopilotGithubOrganizationSchema),
+      },
+    },
+    async (request, reply) => {
+      // Reads GitHub only; nothing is stored.
+      request.auditSkip = true;
+      return reply.send(
+        await copilotGithubAppSetup.checkOrganization(request.body),
+      );
+    },
+  );
+  app.post(
     "/api/github-copilot-app/existing/validate",
     {
       schema: {
@@ -151,7 +173,11 @@ const githubCopilotAppRoutes: FastifyPluginAsyncZod = async (app) => {
     async (request, reply) => {
       request.auditSkip = true;
       const { fingerprint, installationId, organization } =
-        await copilotGithubAppSetup.validateExisting(request.body);
+        await copilotGithubAppSetup.validateExisting({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          ...request.body,
+        });
       return reply.send({ fingerprint, installationId, organization });
     },
   );

@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
+  useCheckCopilotGithubOrganization,
   useCompleteCopilotGithubApp,
   useConnectExistingCopilotGithubApp,
   useDiscardCopilotGithubApp,
@@ -47,12 +48,11 @@ export function CopilotOrganizationConnectDialog({
 }) {
   const [step, setStep] = useState<Step>(replace ? "existing" : "start");
   const [organization, setOrganization] = useState(replace?.organization ?? "");
-  const [githubUrl, setGithubUrl] = useState("https://github.com");
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [waiting, setWaiting] = useState<"create" | "install" | null>(null);
   const [result, setResult] = useState<ConnectedResult | null>(null);
 
   const pending = usePendingCopilotGithubApp(open && !replace);
+  const checkOrganization = useCheckCopilotGithubOrganization();
   const start = useStartCopilotGithubApp();
   const complete = useCompleteCopilotGithubApp();
   const install = useInstallCopilotGithubApp();
@@ -98,7 +98,7 @@ export function CopilotOrganizationConnectDialog({
     const tab = window.open("about:blank", GITHUB_WINDOW);
     setWaiting("create");
     start.mutate(
-      { githubUrl, organization: login },
+      { organization: login },
       {
         onSuccess: (manifest) => {
           if (manifest) postManifest(manifest);
@@ -148,15 +148,23 @@ export function CopilotOrganizationConnectDialog({
         step === "start" ? (
           <StartStep
             organization={organization}
-            onOrganizationChange={setOrganization}
-            githubUrl={githubUrl}
-            onGithubUrlChange={setGithubUrl}
-            showAdvanced={showAdvanced}
-            onShowAdvanced={() => setShowAdvanced(true)}
-            error={start.error?.message ?? null}
+            onOrganizationChange={(value) => {
+              start.reset();
+              checkOrganization.reset();
+              setOrganization(value);
+            }}
+            error={(start.error ?? checkOrganization.error)?.message ?? null}
             creating={waiting === "create"}
             onCreate={createApp}
-            onUseExisting={() => setStep("existing")}
+            checking={checkOrganization.isPending}
+            onUseExisting={() =>
+              // The existing App uses this organization, so check it first
+              // just as Create the App on GitHub does.
+              checkOrganization.mutate(
+                { organization },
+                { onSuccess: () => setStep("existing") },
+              )
+            }
           />
         ) : step === "install" ? (
           <InstallStep
@@ -175,8 +183,7 @@ export function CopilotOrganizationConnectDialog({
           />
         ) : step === "existing" ? (
           <ExistingAppStep
-            defaultOrganization={organization}
-            githubUrl={githubUrl}
+            organization={replace ? undefined : organization}
             replaceKeyId={replace?.id}
             onBack={replace ? undefined : () => setStep("start")}
             onConnected={(connected) => {
@@ -200,50 +207,24 @@ export function hasClaudeOrGemini(modelIds: string[]): boolean {
 function StartStep(props: {
   organization: string;
   onOrganizationChange: (value: string) => void;
-  githubUrl: string;
-  onGithubUrlChange: (value: string) => void;
-  showAdvanced: boolean;
-  onShowAdvanced: () => void;
   error: string | null;
   creating: boolean;
   onCreate: () => void;
+  checking: boolean;
   onUseExisting: () => void;
 }) {
-  const organizationLabel = props.organization.trim() || "the organization";
+  const organizationLabel =
+    displayOrganization(props.organization) || "the organization";
+  const fieldError =
+    props.error && isOrganizationError(props.error) ? props.error : null;
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="copilot-org-login">GitHub organization</Label>
-        <Input
-          id="copilot-org-login"
-          placeholder="your-org"
-          value={props.organization}
-          onChange={(event) => props.onOrganizationChange(event.target.value)}
-          autoComplete="off"
-        />
-        {props.showAdvanced ? (
-          <div className="space-y-2 pt-2">
-            <Label htmlFor="copilot-github-url">
-              GitHub Enterprise address
-            </Label>
-            <Input
-              id="copilot-github-url"
-              value={props.githubUrl}
-              onChange={(event) => props.onGithubUrlChange(event.target.value)}
-              placeholder="https://github.example.com"
-            />
-          </div>
-        ) : (
-          <Button
-            variant="link"
-            size="xs"
-            className="h-auto px-0"
-            onClick={props.onShowAdvanced}
-          >
-            <span>Advanced: GitHub Enterprise address</span>
-          </Button>
-        )}
-      </div>
+      <OrganizationField
+        id="copilot-org-login"
+        value={props.organization}
+        onChange={props.onOrganizationChange}
+        error={fieldError}
+      />
       <div className="space-y-2">
         <p className="text-sm font-medium">What this allows</p>
         <ul className="space-y-1.5 text-sm">
@@ -257,7 +238,7 @@ function StartStep(props: {
           </li>
         </ul>
       </div>
-      {props.error && <ErrorNotice message={props.error} />}
+      {props.error && !fieldError && <ErrorNotice message={props.error} />}
       <div className="flex flex-wrap items-center gap-2">
         <GitHubConnectButton
           label="Create the App on GitHub"
@@ -265,7 +246,12 @@ function StartStep(props: {
           disabled={!props.organization.trim()}
           onClick={props.onCreate}
         />
-        <Button variant="link" size="sm" onClick={props.onUseExisting}>
+        <Button
+          variant="link"
+          size="sm"
+          disabled={props.checking}
+          onClick={props.onUseExisting}
+        >
           <span>Use an existing App</span>
         </Button>
       </div>
@@ -313,27 +299,28 @@ function InstallStep(props: {
 }
 
 function ExistingAppStep(props: {
-  defaultOrganization: string;
-  githubUrl: string;
+  /** What was entered on the first step; absent when reconnecting a key. */
+  organization?: string;
   replaceKeyId?: string;
   onBack?: () => void;
   onConnected: (result: ConnectedResult) => void;
 }) {
   const [appId, setAppId] = useState("");
-  const [organization, setOrganization] = useState(props.defaultOrganization);
   const [privateKey, setPrivateKey] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const validate = useValidateExistingCopilotGithubApp();
   const connect = useConnectExistingCopilotGithubApp();
+  // Reconnecting a key, the backend uses the organization stored on it.
   const fields =
-    appId.trim() && organization.trim() && privateKey
+    appId.trim() && privateKey
       ? {
-          githubUrl: props.githubUrl,
           appId: appId.trim(),
-          organization: organization.trim(),
           privateKey,
+          ...(props.replaceKeyId
+            ? { replaceKeyId: props.replaceKeyId }
+            : { organization: props.organization?.trim() }),
         }
       : null;
 
@@ -347,7 +334,7 @@ function ExistingAppStep(props: {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="copilot-existing-app-id">App ID</Label>
           <Input
@@ -360,18 +347,12 @@ function ExistingAppStep(props: {
             }}
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="copilot-existing-org">GitHub organization</Label>
-          <Input
-            id="copilot-existing-org"
-            value={organization}
-            onChange={(event) => {
-              validate.reset();
-              setOrganization(event.target.value);
-            }}
-          />
-        </div>
       </div>
+      {props.organization && (
+        <p className="text-sm text-muted-foreground">
+          {`Organization: ${displayOrganization(props.organization)}`}
+        </p>
+      )}
       <div className="space-y-2">
         <Label htmlFor="copilot-existing-key">Private key</Label>
         <UnstyledButton
@@ -428,13 +409,10 @@ function ExistingAppStep(props: {
             disabled={!fields || connect.isPending}
             onClick={() =>
               fields &&
-              connect.mutate(
-                { ...fields, replaceKeyId: props.replaceKeyId },
-                {
-                  onSuccess: (connected) =>
-                    connected && props.onConnected(connected),
-                },
-              )
+              connect.mutate(fields, {
+                onSuccess: (connected) =>
+                  connected && props.onConnected(connected),
+              })
             }
           >
             <span>
@@ -526,3 +504,64 @@ function postManifest(params: { url: string; manifest: string }) {
 }
 
 const GITHUB_WINDOW = "github-copilot-app";
+
+/**
+ * The one organization input: a name on github.com, or the organization's
+ * address on any GitHub host. The backend parses it and says what is wrong.
+ */
+function OrganizationField({
+  id,
+  value,
+  onChange,
+  error,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  error: string | null;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>GitHub organization</Label>
+      <Input
+        id={id}
+        placeholder="my-org or https://github.com/my-org"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        autoComplete="off"
+        aria-invalid={error ? true : undefined}
+        aria-describedby={`${id}-help`}
+      />
+      <p id={`${id}-help`} className="text-xs text-muted-foreground">
+        Organization's GitHub handle or URL
+      </p>
+      {error && (
+        <p className="text-xs text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Messages about the organization input itself, shown under the field. */
+function isOrganizationError(message: string): boolean {
+  return (
+    message.startsWith("Enter an organization name") ||
+    message.startsWith("GitHub Copilot needs an organization") ||
+    message.startsWith("GitHub has no account named") ||
+    message.startsWith("The App isn't installed on")
+  );
+}
+
+/** The organization's name for copy, from a name or an address. */
+function displayOrganization(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed.includes("/")) return trimmed;
+  return (
+    trimmed
+      .replace(/^[a-z][a-z0-9+.-]*:\/\//i, "")
+      .split("/")
+      .filter(Boolean)[1] ?? ""
+  );
+}

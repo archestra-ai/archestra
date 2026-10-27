@@ -413,6 +413,9 @@ jobs:
         uses: $/.github/actions/github-upload-artifact
         with:
           name: platform-slim-docker-image
+          # Keep the name stable for consumer-only reruns; replace it when
+          # rerunning the producer so immutable artifact names do not collide.
+          overwrite: "true"
           path: /tmp/platform-image.tar.gz
           if-no-files-found: error
           retention-days: 1
@@ -863,8 +866,9 @@ jobs:
       # The -slim variant: this environment runs with the code runtime
       # disabled (see e2e-lite-platform.env), so the Dagger engine tar
       # is dead weight here. Untrusted PRs use their existing full-image
-      # artifact; trusted jobs share the slim artifact published once per run. The build dependency guarantees
-      # publication before allocating this runner; retry only transient errors.
+      # artifact; trusted jobs share the slim artifact published once per run.
+      # The build dependency guarantees publication before allocating this
+      # runner; retry only transient errors.
       - name: Load platform image
         id: load-platform-image
         uses: $/.github/actions/load-platform-image

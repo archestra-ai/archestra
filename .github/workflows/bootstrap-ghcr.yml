@@ -50,6 +50,25 @@ jobs:
           docker build --tag "$IMAGE:$BOOTSTRAP_TAG" "$RUNNER_TEMP/ghcr-bootstrap"
           docker push "$IMAGE:$BOOTSTRAP_TAG"
 
+      - name: Verify Helm OCI push and anonymous pull
+        if: ${{ matrix.image == 'helm-charts/archestra-platform' }}
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ github.actor }}
+          CHART_VERSION: 0.0.0-registry-check.${{ github.run_id }}.${{ github.run_attempt }}
+        run: |
+          # A separate prerelease tag proves the actual Helm media types and
+          # blob download path; it can never collide with a release version.
+          chart_dir="$RUNNER_TEMP/helm-registry-check"
+          mkdir -p "$chart_dir/source/templates" "$chart_dir/anonymous"
+          printf 'apiVersion: v2\nname: archestra-platform\nversion: %s\n' "$CHART_VERSION" > "$chart_dir/source/Chart.yaml"
+          printf 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: registry-check\n' > "$chart_dir/source/templates/marker.yaml"
+          printf '%s' "$GHCR_TOKEN" | helm registry login ghcr.io --username "$GHCR_USER" --password-stdin
+          helm package "$chart_dir/source" --destination "$chart_dir"
+          helm push "$chart_dir/archestra-platform-$CHART_VERSION.tgz" oci://ghcr.io/archestra-ai/helm-charts
+          HELM_REGISTRY_CONFIG="$chart_dir/anonymous/config.json" helm pull oci://ghcr.io/archestra-ai/helm-charts/archestra-platform --version "$CHART_VERSION" --destination "$chart_dir/anonymous"
+          cmp "$chart_dir/archestra-platform-$CHART_VERSION.tgz" "$chart_dir/anonymous/archestra-platform-$CHART_VERSION.tgz"
+
       - name: Verify anonymous registry access
         env:
           IMAGE: ghcr.io/archestra-ai/${{ matrix.image }}

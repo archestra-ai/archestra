@@ -244,7 +244,7 @@ export function SizeScatter({ sessions }: { sessions: Session[] }) {
 
 // === Routing triangle ===
 
-const TRI = { size: 360, pad: 36 };
+const TRI = { size: 360, pad: 44 };
 const LABEL_OFFSET = 22;
 /** Below this share of the unit square a region is too thin to hold its label. */
 const MIN_LABEL_AREA = 0.02;
@@ -380,7 +380,7 @@ export function RoutingTriangle({ data }: { data: Ready }) {
         p_normal
       </text>
       <text
-        transform={`translate(10 ${size / 2}) rotate(-90)`}
+        transform={`translate(8 ${size / 2}) rotate(-90)`}
         textAnchor="middle"
         className={TICK}
       >

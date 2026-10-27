@@ -168,6 +168,7 @@ export const UpdateConversationSchema = createUpdateSchema(
     title: true,
     modelId: true,
     chatApiKeyId: true,
+    modelPoolId: true,
     agentId: true,
     artifact: true,
     projectId: true,

@@ -158,6 +158,8 @@ type ModelRouterOAuthClientAuth = {
   billingTeamId: string | null;
   /** In preference order; see `selectMappedProviderKey`. */
   providerApiKeys: ModelRouterMappedProviderKey[];
+  /** Pools the client was granted outright. */
+  modelPoolIds: string[];
   oauthClient: {
     id: string;
     name: string;
@@ -1140,6 +1142,10 @@ function modelPoolCaller(auth: ModelRouterAuth): ModelPoolCaller {
     virtualKeyId:
       auth.authMethod === "virtual_key" ? auth.virtualKeyId : undefined,
     providerApiKeyIds: getMappedApiKeyIds(auth),
+    modelPoolIds:
+      auth.authMethod === "oauth_client_credentials"
+        ? auth.modelPoolIds
+        : undefined,
   };
 }
 
@@ -1306,6 +1312,7 @@ async function getModelRouterOAuthClientAuth(
     serviceAccountId: oauthClient.serviceAccountId ?? undefined,
     organizationId: oauthClient.organizationId,
     billingTeamId: oauthClient.billingTeamId,
+    modelPoolIds: oauthClient.modelPoolIds,
     oauthClient: {
       id: oauthClient.id,
       name: oauthClient.name,

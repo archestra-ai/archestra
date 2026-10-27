@@ -23,6 +23,7 @@ import {
   InteractionSourceSchema,
   isCodexOriginator,
   isProviderApiKeyOptional,
+  MODEL_POOL_ID_HEADER,
   OPENCODE_AGENT_HEADER,
   openCodeFamilySource,
   PROVIDER_BASE_URL_HEADER,
@@ -784,8 +785,8 @@ export async function handleLLMProxy<
   let perKeyChatApiKeyIdFromInternalHeader = false;
   let wasJwksAuthenticated = false;
   let wasVirtualKeyResolved = false;
-  /** The pool a virtual key with no key of this provider was let in for. */
-  let virtualKeyOnlyPoolId: string | undefined;
+  /** A pool the virtual key or OAuth client was granted for the requested model. */
+  let grantedPoolId: string | undefined;
   let wasOAuthAuthenticated = false;
   let authMethod = authOverride?.authMethod;
   let authenticatedApp = authOverride?.authenticatedApp;
@@ -860,6 +861,7 @@ export async function handleLLMProxy<
       expectedProvider: providerName,
       agent: resolvedAgent,
       requestedModel: requestAdapter.getModel(),
+      allowModelPool: true,
     });
     if (oauthResult) {
       apiKey = oauthResult.apiKey;
@@ -870,6 +872,7 @@ export async function handleLLMProxy<
       authenticatedApp = oauthResult.authenticatedApp;
       billingTeamId ??= oauthResult.billingTeamId;
       serviceAccountId = oauthResult.serviceAccountId;
+      grantedPoolId = oauthResult.modelPoolId;
       if (oauthResult.userId) {
         oauthUserId = oauthResult.userId;
         userId = oauthResult.userId;
@@ -963,7 +966,7 @@ export async function handleLLMProxy<
       virtualKeyId = virtualResult.virtualKeyId;
       serviceAccountId = virtualResult.serviceAccountId;
       billingTeamId ??= virtualResult.billingTeamId;
-      virtualKeyOnlyPoolId = virtualResult.modelPoolId;
+      grantedPoolId = virtualResult.modelPoolId;
       // A personal standard virtual key identifies its owner; include it in the
       // cross-credential consistency check.
       if (virtualResult.virtualKeyIsPersonal) {
@@ -1361,25 +1364,36 @@ export async function handleLLMProxy<
     const poolWire = openAiCodexPassthrough
       ? null
       : inboundPoolWire(provider.interactionType);
-    const modelPoolPlan = poolWire
-      ? await planModelPool({
-          organizationId: resolvedAgent.organizationId,
-          name: actualModel,
-          inbound: poolWire,
-          caller: {
-            virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
-            providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
-          },
-          grantedPoolId: authOverride?.modelPoolId ?? virtualKeyOnlyPoolId,
-          sessionId,
-        })
-      : null;
-    // A virtual key let in only for its pool has no key for this provider, so
+    // A chat or agent set to a pool names it, and sends one of its members'
+    // models. Any other platform call runs on the key and model it names.
+    const chatModelPoolHeader = internalCall
+      ? headersForExtraction[MODEL_POOL_ID_HEADER.toLowerCase()]
+      : undefined;
+    const chatModelPoolId =
+      typeof chatModelPoolHeader === "string" && chatModelPoolHeader
+        ? chatModelPoolHeader
+        : undefined;
+    const modelPoolPlan =
+      poolWire && (!internalCall || chatModelPoolId)
+        ? await planModelPool({
+            organizationId: resolvedAgent.organizationId,
+            name: actualModel,
+            poolId: chatModelPoolId,
+            inbound: poolWire,
+            caller: {
+              virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
+              providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
+            },
+            grantedPoolId: authOverride?.modelPoolId ?? grantedPoolId,
+            sessionId,
+          })
+        : null;
+    // A credential let in only for a pool has no key for this provider, so
     // the request can't go anywhere but the pool.
-    if (virtualKeyOnlyPoolId && !modelPoolPlan) {
+    if (grantedPoolId && !perKeyChatApiKeyId && !modelPoolPlan) {
       throw new ApiError(
         400,
-        `Virtual API key is not mapped to provider "${providerName}".`,
+        `${wasOAuthAuthenticated ? "LLM OAuth client" : "Virtual API key"} is not mapped to provider "${providerName}".`,
       );
     }
 

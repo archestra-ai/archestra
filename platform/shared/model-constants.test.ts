@@ -8,6 +8,7 @@ import {
   getAgentRuntimeModelCompatibility,
   getAgentRuntimeProviderCompatibility,
   getProvidersWithOptionalApiKey,
+  isClaudeOnBedrock,
   isProviderApiKeyOptional,
   isSelfHostedProvider,
   isSmallModel,
@@ -599,5 +600,20 @@ describe("getAgentRuntimeAllowedProtocols", () => {
         message: expect.stringContaining("requires the Anthropic API"),
       });
     }
+  });
+});
+
+describe("isClaudeOnBedrock", () => {
+  test("reads Claude from plain ids, cross-region profiles and their ARNs", () => {
+    expect(isClaudeOnBedrock("anthropic.claude-haiku-4-5-20251001-v1:0")).toBe(
+      true,
+    );
+    expect(isClaudeOnBedrock("global.anthropic.claude-opus-4-8")).toBe(true);
+    expect(
+      isClaudeOnBedrock(
+        "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      ),
+    ).toBe(true);
+    expect(isClaudeOnBedrock("us.zai.glm-5")).toBe(false);
   });
 });

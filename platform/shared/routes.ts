@@ -510,6 +510,7 @@ export const RouteId = {
   DeleteChatAttachment: "deleteChatAttachment",
   GetLlmModels: "getLlmModels",
   GetModelPools: "getModelPools",
+  GetAvailableModelPools: "getAvailableModelPools",
   CreateModelPool: "createModelPool",
   UpdateModelPool: "updateModelPool",
   DeleteModelPool: "deleteModelPool",

@@ -1,5 +1,7 @@
+import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { ModelPoolModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { grantEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
@@ -34,6 +36,66 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("sets the key's model pools, and keeps them when an edit omits them", async ({
+    makeLlmProviderApiKey,
+  }) => {
+    grantEverywhere(["llmVirtualKey"]);
+    config.llmProxy.modelPoolsEnabled = true;
+    try {
+      const zai = await makeLlmProviderApiKey(organizationId, null, {
+        provider: "zhipuai",
+      });
+      const openai = await makeLlmProviderApiKey(organizationId, null, {
+        provider: "openai",
+      });
+      const pool = await ModelPoolModel.create({
+        organizationId,
+        input: {
+          name: "glm-5",
+          members: [
+            {
+              providerApiKeyId: zai.id,
+              modelId: "glm-5",
+              priority: 1,
+              weight: 1,
+              enabled: true,
+            },
+          ],
+        },
+      });
+      const providerApiKeys = [
+        { provider: "openai", providerApiKeyId: openai.id },
+      ];
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/llm-virtual-keys",
+        payload: { name: "pool key", providerApiKeys, modelPoolIds: [pool.id] },
+      });
+      expect(created.statusCode, created.body).toBe(200);
+      const id = created.json().id;
+      const grantedKeys = async () =>
+        (await ModelPoolModel.findById({ organizationId, id: pool.id }))
+          ?.virtualApiKeyIds;
+      expect(await grantedKeys()).toEqual([id]);
+
+      const update = (payload: Record<string, unknown>) =>
+        app.inject({
+          method: "PATCH",
+          url: `/api/llm-virtual-keys/${id}`,
+          payload: { name: "pool key", providerApiKeys, ...payload },
+        });
+      expect((await update({})).statusCode).toBe(200);
+      expect(await grantedKeys()).toEqual([id]);
+      expect(
+        (await update({ modelPoolIds: [crypto.randomUUID()] })).statusCode,
+      ).toBe(400);
+      expect((await update({ modelPoolIds: [] })).statusCode).toBe(200);
+      expect(await grantedKeys()).toEqual([]);
+    } finally {
+      config.llmProxy.modelPoolsEnabled = false;
+    }
   });
 
   test("PATCH /api/llm-virtual-keys/:id updates the name and provider mappings without re-exposing the token", async ({

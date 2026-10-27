@@ -1023,6 +1023,8 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetLlmModels]: {},
   [RouteId.GetModelPools]: { llmModel: ["read"] },
+  // The same gate as the keys a user can pick in chat, which decide the pools.
+  [RouteId.GetAvailableModelPools]: { llmProviderApiKey: ["read"] },
   [RouteId.CreateModelPool]: { llmModel: ["update"] },
   [RouteId.UpdateModelPool]: { llmModel: ["update"] },
   [RouteId.DeleteModelPool]: { llmModel: ["update"] },

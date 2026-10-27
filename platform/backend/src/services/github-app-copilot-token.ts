@@ -3,18 +3,22 @@
  *
  * An organization can let a GitHub App (organization permission "Copilot
  * Requests") call Copilot on its behalf, billed to the organization. The key
- * stores the App ID, installation ID and private key as one marker-encoded
- * value. Archestra signs an App JWT, mints a short-lived installation token
- * (`ghs_…`, ~1 hour) and uses it against Copilot.
- *
- * The preview does not document how Copilot accepts an installation token, so
- * the first use of a credential tries each known wire mode against GET /models
- * and remembers the one that works (see COPILOT_APP_WIRE_MODES).
+ * stores the App ID, installation ID, private key, GitHub address and
+ * organization as one marker-encoded value. Installation tokens (`ghs_…`)
+ * come from the shared GitHub App helpers and are sent to Copilot as a Bearer
+ * with the Copilot runtime's integration id.
  */
-import { createHash, createPrivateKey, createSign } from "node:crypto";
-import { GITHUB_APP_CREDENTIAL_MARKER } from "@archestra/shared";
+import { createHash, createPrivateKey, createPublicKey } from "node:crypto";
+import {
+  GITHUB_APP_CREDENTIAL_MARKER,
+  getGithubApiBaseUrl,
+} from "@archestra/shared";
 import config from "@/config";
 import { LRUCacheManager } from "@/in-memory-lru-cache";
+import {
+  fetchAsGithubApp,
+  resolveInstallationCredential,
+} from "@/integrations/github/app-auth";
 import logger from "@/logging";
 import { ApiError } from "@/types/api";
 
@@ -22,53 +26,13 @@ export interface GithubAppCredential {
   appId: string;
   installationId: string;
   privateKey: string;
+  /** GitHub web address. Absent on preview keys: https://github.com. */
+  githubUrl?: string;
+  /** Login of the organization the App is installed on. */
+  organization?: string;
 }
 
-/**
- * How a minted installation token is presented to Copilot. Copilot requires
- * `copilot-integration-id` to identify the App that issued the token, so the
- * Bearer modes carry the integration id that worked.
- */
-export type CopilotAppWireMode =
-  /** Bearer token with only `copilot-integration-id: <integrationId>`. */
-  | { mode: "B"; integrationId: string }
-  /** Bearer token with the editor headers, integration id overridden. */
-  | { mode: "A"; integrationId: string }
-  /** Installation token exchanged at copilot_internal/v2/token first. */
-  | { mode: "C" };
-
-/** Public, non-secret identity of a GitHub App (GET /app). */
-interface GithubAppIdentity {
-  id: number | null;
-  slug: string | null;
-  clientId: string | null;
-}
-
-/**
- * Integration ids to try for an App, in order: the configured override, the
- * Copilot runtime's default, then the App's client id, slug and numeric id.
- * Falls back to the App ID from the credential when GET /app failed.
- */
-export function githubAppIntegrationIdCandidates(params: {
-  identity: GithubAppIdentity | null;
-  appId: string;
-  configured?: string;
-}): string[] {
-  const { identity, appId, configured } = params;
-  const candidates = [
-    configured?.trim(),
-    // The Copilot runtime's default Copilot-Integration-Id, as named in
-    // GitHub's Copilot SDK docs (docs/setup/multi-tenancy.md); GitHub says
-    // that runtime works with installation tokens.
-    COPILOT_RUNTIME_INTEGRATION_ID,
-    identity?.clientId,
-    identity?.slug,
-    identity?.id != null ? String(identity.id) : appId,
-  ].filter((value): value is string => typeof value === "string" && !!value);
-  return [...new Set(candidates)];
-}
-
-const COPILOT_RUNTIME_INTEGRATION_ID = "copilot-developer-cli";
+const DEFAULT_GITHUB_URL = "https://github.com";
 
 export function encodeGithubAppCredential(
   credential: GithubAppCredential,
@@ -98,6 +62,12 @@ export function decodeGithubAppCredential(
       appId: parsed.appId,
       installationId: parsed.installationId,
       privateKey: parsed.privateKey,
+      ...(typeof parsed.githubUrl === "string"
+        ? { githubUrl: parsed.githubUrl }
+        : {}),
+      ...(typeof parsed.organization === "string"
+        ? { organization: parsed.organization }
+        : {}),
     };
   } catch {
     return null;
@@ -105,275 +75,141 @@ export function decodeGithubAppCredential(
 }
 
 /**
- * Validate user input for a GitHub App credential. Throws a 400 naming the
- * bad field; never echoes the private key.
+ * Check a pasted App ID and private key. Throws a 400 naming the bad field;
+ * never echoes the private key.
  */
-export function validateGithubAppCredential(
-  credential: GithubAppCredential,
-): GithubAppCredential {
-  const appId = credential.appId.trim();
-  const installationId = credential.installationId.trim();
+export function validateGithubAppPrivateKey(params: {
+  appId: string;
+  privateKey: string;
+}): { appId: string; privateKey: string; fingerprint: string } {
+  const appId = params.appId.trim();
   if (!/^\d+$/.test(appId)) {
     throw new ApiError(400, "GitHub App ID must be a number.");
   }
-  if (!/^\d+$/.test(installationId)) {
-    throw new ApiError(400, "GitHub App installation ID must be a number.");
-  }
-  const privateKey = credential.privateKey.trim();
+  const privateKey = `${params.privateKey.trim()}\n`;
+  return {
+    appId,
+    privateKey,
+    fingerprint: githubAppKeyFingerprint(privateKey),
+  };
+}
+
+/**
+ * The private key's fingerprint as GitHub shows it on the App settings page:
+ * `SHA256:` + base64 of the SHA-256 of the public key (DER, SPKI).
+ *
+ * @public — exercised directly by unit tests (GitHub's fingerprint format)
+ */
+export function githubAppKeyFingerprint(privateKey: string): string {
+  let der: Buffer;
   try {
     const key = createPrivateKey(privateKey);
     if (key.asymmetricKeyType !== "rsa") throw new Error("not rsa");
+    der = createPublicKey(key).export({ type: "spki", format: "der" });
   } catch {
     throw new ApiError(
       400,
       "GitHub App private key must be the RSA PEM file downloaded from the App settings.",
     );
   }
-  return { appId, installationId, privateKey: `${privateKey}\n` };
+  return `SHA256:${createHash("sha256").update(der).digest("base64")}`;
+}
+
+/** The REST API base for a credential's GitHub. */
+function githubAppApiBase(credential: GithubAppCredential): string {
+  return getGithubApiBaseUrl(credential.githubUrl ?? DEFAULT_GITHUB_URL);
 }
 
 /**
- * RS256 GitHub App JWT: issued 60s in the past against clock drift, valid for
- * 9 minutes (GitHub's limit is 10).
- *
- * @public — exercised directly by unit tests (JWT shape and signature)
+ * A valid installation token. `forceRefresh` mints a new one even when a
+ * cached token is still valid (Copilot rejected it early).
  */
-export function createGithubAppJwt(params: {
-  appId: string;
-  privateKey: string;
-  nowSeconds?: number;
-}): string {
-  const now = params.nowSeconds ?? Math.floor(Date.now() / 1000);
-  const header = base64urlJson({ alg: "RS256", typ: "JWT" });
-  const payload = base64urlJson({
-    iat: now - 60,
-    exp: now + 9 * 60,
-    iss: params.appId,
+export async function getGithubAppInstallationToken(
+  credential: GithubAppCredential,
+  options?: { forceRefresh?: boolean },
+): Promise<string> {
+  const { token } = await resolveInstallationCredential({
+    githubUrl: githubAppApiBase(credential),
+    appId: credential.appId,
+    installationId: credential.installationId,
+    privateKey: credential.privateKey,
+    minimumValidityMs: options?.forceRefresh
+      ? Number.POSITIVE_INFINITY
+      : REFRESH_BUFFER_MS,
   });
-  const signingInput = `${header}.${payload}`;
-  const signature = createSign("RSA-SHA256")
-    .update(signingInput)
-    .sign(params.privateKey)
-    .toString("base64url");
-  return `${signingInput}.${signature}`;
+  return token;
 }
 
-// Not in the internal-helpers section: consts are not hoisted, and this one is
-// read by field initializers when the singleton is constructed at module eval.
-const MAX_CACHED_TOKENS = 200;
-
-class GithubAppCopilotTokenManager {
-  private tokenCache = new LRUCacheManager<InstallationToken>({
-    maxSize: MAX_CACHED_TOKENS,
-  });
-  private wireModes = new LRUCacheManager<CopilotAppWireMode>({
-    maxSize: MAX_CACHED_TOKENS,
-  });
-  private identities = new LRUCacheManager<GithubAppIdentity>({
-    maxSize: MAX_CACHED_TOKENS,
-  });
-  private inFlight = new Map<string, Promise<InstallationToken>>();
-
-  /**
-   * The App's public identity from GET /app, cached per credential. Returns
-   * null when GitHub refuses (logged); callers then fall back to the App ID.
-   */
-  async getAppIdentity(
-    credential: GithubAppCredential,
-  ): Promise<GithubAppIdentity | null> {
-    const cacheKey = credentialCacheKey(credential);
-    const cached = this.identities.get(cacheKey);
-    if (cached) return cached;
-    const response = await fetch(
-      `${config.llm["github-copilot"].appApiBaseUrl.replace(/\/$/, "")}/app`,
-      {
-        headers: {
-          accept: "application/vnd.github+json",
-          authorization: `Bearer ${createGithubAppJwt(credential)}`,
-          "x-github-api-version": "2022-11-28",
-        },
-      },
-    );
-    if (!response.ok) {
-      logger.info(
-        {
-          status: response.status,
-          message: await githubErrorMessage(response),
-          appId: credential.appId,
-        },
-        "[GithubAppCopilot] GET /app failed",
-      );
-      return null;
-    }
-    const payload = (await response.json()) as {
-      id?: unknown;
-      slug?: unknown;
-      client_id?: unknown;
-    };
-    const identity: GithubAppIdentity = {
-      id: typeof payload.id === "number" ? payload.id : null,
-      slug: typeof payload.slug === "string" ? payload.slug : null,
-      clientId:
-        typeof payload.client_id === "string" ? payload.client_id : null,
-    };
-    this.identities.set(cacheKey, identity);
-    logger.info(
-      { appId: credential.appId, ...identity },
-      "[GithubAppCopilot] App identity",
-    );
-    return identity;
-  }
-
-  /** A valid installation token for the credential, minting when needed. */
-  async getInstallationToken(
-    credential: GithubAppCredential,
-  ): Promise<InstallationToken> {
-    const cacheKey = credentialCacheKey(credential);
-    const cached = this.tokenCache.get(cacheKey);
-    if (cached && cached.expiresAtMs - REFRESH_BUFFER_MS > Date.now()) {
-      return cached;
-    }
-    const pending = this.inFlight.get(cacheKey);
-    if (pending) return pending;
-    const mint = this.mint(credential, cacheKey).finally(() => {
-      this.inFlight.delete(cacheKey);
-    });
-    this.inFlight.set(cacheKey, mint);
-    return mint;
-  }
-
-  /** Drop the cached installation token, unless it was already replaced. */
-  invalidate(credential: GithubAppCredential, staleToken?: string): void {
-    const cacheKey = credentialCacheKey(credential);
-    if (staleToken !== undefined) {
-      const cached = this.tokenCache.get(cacheKey);
-      if (cached && cached.token !== staleToken) return;
-    }
-    this.tokenCache.delete(cacheKey);
-  }
-
-  getWireMode(credential: GithubAppCredential): CopilotAppWireMode | null {
-    return this.wireModes.get(credentialCacheKey(credential)) ?? null;
-  }
-
-  setWireMode(credential: GithubAppCredential, mode: CopilotAppWireMode) {
-    this.wireModes.set(credentialCacheKey(credential), mode);
-  }
-
-  clearWireMode(credential: GithubAppCredential): void {
-    this.wireModes.delete(credentialCacheKey(credential));
-  }
-
-  private async mint(
-    credential: GithubAppCredential,
-    cacheKey: string,
-  ): Promise<InstallationToken> {
-    let jwt: string;
-    try {
-      jwt = createGithubAppJwt(credential);
-    } catch {
-      throw new ApiError(
-        400,
-        "GitHub App private key could not sign a token. Upload the PEM file again.",
-      );
-    }
-    const url = `${config.llm["github-copilot"].appApiBaseUrl.replace(/\/$/, "")}/app/installations/${encodeURIComponent(credential.installationId)}/access_tokens`;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        accept: "application/vnd.github+json",
-        authorization: `Bearer ${jwt}`,
-        "content-type": "application/json",
-        "x-github-api-version": "2022-11-28",
-      },
-      body: JSON.stringify({
-        permissions: { organization_copilot_requests: "read" },
-      }),
-    });
-    if (!response.ok) {
-      const message = await githubErrorMessage(response);
-      logger.info(
-        {
-          status: response.status,
-          appId: credential.appId,
-          installationId: credential.installationId,
-        },
-        "[GithubAppCopilot] installation token mint failed",
-      );
-      throw new ApiError(
-        response.status < 500 ? 401 : 502,
-        `GitHub rejected the App installation token request (${response.status}): ${message}`,
-      );
-    }
-    const payload = (await response.json()) as {
-      token?: string;
-      expires_at?: string;
-    };
-    const expiresAtMs = payload.expires_at
-      ? Date.parse(payload.expires_at)
-      : Number.NaN;
-    if (!payload.token || Number.isNaN(expiresAtMs)) {
-      throw new ApiError(
-        502,
-        "GitHub returned an unexpected installation token payload",
-      );
-    }
-    const token = { token: payload.token, expiresAtMs };
-    this.tokenCache.set(cacheKey, token, Math.max(expiresAtMs - Date.now(), 0));
-    logger.info(
-      { appId: credential.appId, installationId: credential.installationId },
-      "[GithubAppCopilot] minted installation token",
-    );
-    return token;
-  }
+/** The Copilot-Integration-Id sent with installation tokens. */
+export function copilotAppIntegrationId(): string {
+  return (
+    config.llm["github-copilot"].appIntegrationId?.trim() ||
+    // The Copilot runtime's default Copilot-Integration-Id, as named in
+    // GitHub's Copilot SDK docs (docs/setup/multi-tenancy.md); GitHub says
+    // that runtime works with installation tokens.
+    "copilot-developer-cli"
+  );
 }
 
-/** @public — exercised directly by unit tests */
-export const githubAppCopilotTokenManager = new GithubAppCopilotTokenManager();
-
-interface InstallationToken {
-  token: string;
-  expiresAtMs: number;
-}
-
-/** Read GitHub's `message` from an error response, bounded and without secrets. */
-export async function githubErrorMessage(response: Response): Promise<string> {
-  const text = await response.text().catch(() => "");
+/**
+ * The organization the App is installed on: from the credential, else looked
+ * up once from GitHub (keys made before the organization was stored).
+ */
+export async function githubAppOrganization(
+  credential: GithubAppCredential,
+): Promise<string | null> {
+  if (credential.organization) return credential.organization;
+  const cacheKey = `${credential.githubUrl ?? DEFAULT_GITHUB_URL}:${credential.appId}:${credential.installationId}`;
+  const cached = organizationCache.get(cacheKey);
+  if (cached !== undefined) return cached;
   try {
-    const parsed = JSON.parse(text) as {
-      message?: unknown;
-      error?: { message?: unknown };
-    };
-    const message =
-      typeof parsed.message === "string"
-        ? parsed.message
-        : typeof parsed.error?.message === "string"
-          ? parsed.error.message
-          : null;
-    if (message) return message.slice(0, 300);
-  } catch {
-    // Not JSON.
+    const installation = await fetchAsGithubApp<{
+      account: { login: string } | null;
+    }>({
+      githubUrl: githubAppApiBase(credential),
+      appId: credential.appId,
+      privateKey: credential.privateKey,
+      path: `/app/installations/${encodeURIComponent(credential.installationId)}`,
+    });
+    const login = installation.account?.login ?? null;
+    organizationCache.set(cacheKey, login);
+    return login;
+  } catch (error) {
+    logger.info(
+      { appId: credential.appId, error: (error as Error).message },
+      "[GithubAppCopilot] could not look up the App's organization",
+    );
+    return null;
   }
-  return text.slice(0, 300) || response.statusText || "no message";
+}
+
+/**
+ * Turn Copilot's rejection of an installation token into a message that says
+ * what to fix, quoting GitHub's own words.
+ */
+export function copilotAppErrorMessage(params: {
+  status: number;
+  githubMessage: string;
+  organization?: string | null;
+}): string {
+  const { status, githubMessage } = params;
+  const org = params.organization ?? "the organization";
+  const quoted = githubMessage ? ` GitHub said: "${githubMessage}"` : "";
+  if (/integration[- ]id/i.test(githubMessage))
+    return `GitHub Copilot rejected the integration id. Unset ARCHESTRA_GITHUB_COPILOT_APP_INTEGRATION_ID or set it to the value GitHub expects.${quoted}`;
+  if (status === 403 && /not enabled|policy|app/i.test(githubMessage))
+    return `${org} doesn't allow Copilot requests from GitHub Apps. An owner can turn this on in the organization's Copilot policies (needs Copilot Business or Enterprise).${quoted}`;
+  if (status === 403)
+    return `The App can't make Copilot requests. Check that it has the Copilot Requests permission and that ${org} approved it.${quoted}`;
+  return `GitHub Copilot answered ${status}.${quoted}`;
 }
 
 // ===== Internal helpers =====
 
-/** Refresh an installation token this long before its reported expiry. */
+/** Re-mint an installation token this long before its expiry. */
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
-function base64urlJson(value: unknown): string {
-  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
-}
-
-/**
- * In-memory cache key for a credential. Hashing the whole credential means a
- * rotated private key or a changed installation never reuses an old token.
- */
-function credentialCacheKey(credential: GithubAppCredential): string {
-  return createHash("sha256")
-    .update(
-      `${credential.appId}\0${credential.installationId}\0${credential.privateKey}`,
-    )
-    .digest("hex");
-}
+const organizationCache = new LRUCacheManager<string | null>({
+  maxSize: 200,
+  defaultTtl: 60 * 60 * 1000,
+});

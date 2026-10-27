@@ -17,12 +17,11 @@ import { LRUCacheManager } from "@/in-memory-lru-cache";
 import logger from "@/logging";
 import { ApiError } from "@/types/api";
 import {
-  type CopilotAppWireMode,
+  copilotAppErrorMessage,
+  copilotAppIntegrationId,
   decodeGithubAppCredential,
   type GithubAppCredential,
-  githubAppCopilotTokenManager,
-  githubAppIntegrationIdCandidates,
-  githubErrorMessage,
+  getGithubAppInstallationToken,
 } from "./github-app-copilot-token";
 
 // Copilot endpoints require a recognized VS Code and Copilot Chat identity.
@@ -262,89 +261,6 @@ export function createGithubCopilotFetch(params: {
   };
 }
 
-/**
- * Find how Copilot accepts this App's installation token by trying each wire
- * mode against GET /models, and remember the winner. Copilot checks that
- * `copilot-integration-id` names the App that issued the token, so each
- * candidate id (client id, slug, numeric id) is tried bare (B) and with the
- * editor headers (A); the copilot_internal exchange (C) comes last. A 400
- * "does not match" moves to the next candidate; a 403 saying App-token
- * requests are not enabled stops early. Throws an ApiError listing every
- * attempt (status and GitHub's message) on failure.
- */
-export async function detectGithubAppWireMode(params: {
-  credential: GithubAppCredential;
-  baseUrl?: string | null;
-  baseFetch?: FetchLike;
-}): Promise<CopilotAppWireMode> {
-  const { credential } = params;
-  const baseFetch = params.baseFetch ?? fetch;
-  const modelsUrl = `${(params.baseUrl || config.llm["github-copilot"].baseUrl).replace(/\/$/, "")}/models`;
-  const installation =
-    await githubAppCopilotTokenManager.getInstallationToken(credential);
-  const identity =
-    await githubAppCopilotTokenManager.getAppIdentity(credential);
-  const candidates = githubAppIntegrationIdCandidates({
-    identity,
-    appId: credential.appId,
-    configured: config.llm["github-copilot"].appIntegrationId,
-  });
-  const wireModes: CopilotAppWireMode[] = [
-    ...candidates.flatMap((integrationId): CopilotAppWireMode[] => [
-      { mode: "B", integrationId },
-      { mode: "A", integrationId },
-    ]),
-    { mode: "C" },
-  ];
-  const attempts: string[] = [];
-  for (const wireMode of wireModes) {
-    const label =
-      wireMode.mode === "C"
-        ? "C"
-        : `${wireMode.mode}(${wireMode.integrationId})`;
-    const candidate = wireMode.mode === "C" ? null : wireMode.integrationId;
-    let response: Response;
-    try {
-      response = await sendWithWireMode({
-        wireMode,
-        installationToken: installation.token,
-        input: modelsUrl,
-        init: undefined,
-        baseFetch,
-      });
-    } catch (error) {
-      const message =
-        error instanceof ApiError ? error.message : "request failed";
-      attempts.push(`${label}: ${message}`);
-      logger.info(
-        { mode: wireMode.mode, candidate, message },
-        "[GithubAppCopilot] wire mode probe failed",
-      );
-      continue;
-    }
-    if (response.ok) {
-      await response.body?.cancel();
-      logger.info(
-        { mode: wireMode.mode, candidate, status: response.status },
-        "[GithubAppCopilot] wire mode probe",
-      );
-      githubAppCopilotTokenManager.setWireMode(credential, wireMode);
-      return wireMode;
-    }
-    const message = await githubErrorMessage(response);
-    logger.info(
-      { mode: wireMode.mode, candidate, status: response.status, message },
-      "[GithubAppCopilot] wire mode probe",
-    );
-    attempts.push(`${label}: ${response.status} ${message}`);
-    if (response.status === 403 && /not enabled/i.test(message)) break;
-  }
-  throw new ApiError(
-    401,
-    `GitHub Copilot did not accept the GitHub App installation token. ${attempts.join("; ")}`,
-  );
-}
-
 // ===== Internal helpers =====
 
 type FetchLike = (
@@ -409,7 +325,12 @@ function resolveCopilotRequestUrl(
   return input instanceof Request ? new Request(base, input) : base;
 }
 
-/** Copilot request with an App credential: mint, pick the wire mode, retry a 401 once. */
+/**
+ * Copilot request with a GitHub App credential: an installation token as the
+ * Bearer, with the Copilot runtime's integration id and no editor identity.
+ * A 401 mints a fresh token and retries once; a rejection gets a message that
+ * says what to fix.
+ */
 async function githubAppCopilotFetch(params: {
   credential: GithubAppCredential;
   input: string | URL | Request;
@@ -417,76 +338,76 @@ async function githubAppCopilotFetch(params: {
   baseFetch: FetchLike;
 }): Promise<Response> {
   const { credential, input, init, baseFetch } = params;
+  const send = (token: string) => {
+    const headers = new Headers(
+      init?.headers ?? (input instanceof Request ? input.headers : undefined),
+    );
+    headers.set("copilot-integration-id", copilotAppIntegrationId());
+    headers.set("authorization", `Bearer ${token}`);
+    return baseFetch(input, { ...init, headers });
+  };
   try {
-    let wireMode = githubAppCopilotTokenManager.getWireMode(credential);
-    if (!wireMode) {
-      wireMode = await detectGithubAppWireMode({
-        credential,
-        baseUrl: new URL(input instanceof Request ? input.url : input).origin,
-        baseFetch,
-      });
-    }
-    const installation =
-      await githubAppCopilotTokenManager.getInstallationToken(credential);
-    const response = await sendWithWireMode({
-      wireMode,
-      installationToken: installation.token,
-      input,
-      init,
-      baseFetch,
-    });
+    let response = await send(await getGithubAppInstallationToken(credential));
     const bodyIsReplayable =
       init?.body === undefined || typeof init.body === "string";
-    if (response.status !== 401 || !bodyIsReplayable) return response;
-    await response.body?.cancel();
-    githubAppCopilotTokenManager.invalidate(credential, installation.token);
-    if (wireMode.mode === "C") {
-      githubCopilotTokenManager.invalidate(installation.token);
+    if (response.status === 401 && bodyIsReplayable) {
+      await response.body?.cancel();
+      response = await send(
+        await getGithubAppInstallationToken(credential, { forceRefresh: true }),
+      );
     }
-    const fresh =
-      await githubAppCopilotTokenManager.getInstallationToken(credential);
-    return await sendWithWireMode({
-      wireMode,
-      installationToken: fresh.token,
-      input,
-      init,
-      baseFetch,
-    });
+    if (response.status !== 400 && response.status !== 403) return response;
+    const text = await response.text();
+    const githubMessage = githubMessageOf(text);
+    // Only an App-auth rejection is rewritten; request validation errors
+    // (e.g. the invocability probes' payload complaints) pass through as is.
+    if (
+      response.status === 400 &&
+      !/integration[- ]id|installation access token/i.test(githubMessage)
+    ) {
+      return new Response(text, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
+    }
+    logger.info(
+      { status: response.status, message: githubMessage.slice(0, 300) },
+      "[GithubAppCopilot] Copilot rejected the installation token",
+    );
+    return Response.json(
+      {
+        error: {
+          message: copilotAppErrorMessage({
+            status: response.status,
+            githubMessage,
+            organization: credential.organization,
+          }),
+          type: "authentication_error",
+        },
+      },
+      { status: 401 },
+    );
   } catch (error) {
     return exchangeErrorResponse(error);
   }
 }
 
-/** Send one Copilot request the way the given wire mode presents the token. */
-async function sendWithWireMode(params: {
-  wireMode: CopilotAppWireMode;
-  installationToken: string;
-  input: string | URL | Request;
-  init?: RequestInit;
-  baseFetch: FetchLike;
-}): Promise<Response> {
-  const { wireMode, installationToken, input, init, baseFetch } = params;
-  const headers = new Headers(
-    init?.headers ?? (input instanceof Request ? input.headers : undefined),
-  );
-  if (wireMode.mode === "C") {
-    const credentials =
-      await githubCopilotTokenManager.getCredentials(installationToken);
-    for (const [name, value] of Object.entries(GITHUB_COPILOT_HEADERS)) {
-      headers.set(name, value);
-    }
-    headers.set("authorization", `Bearer ${credentials.bearer}`);
-    return baseFetch(resolveCopilotRequestUrl(input, credentials.apiEndpoint), {
-      ...init,
-      headers,
-    });
+function githubMessageOf(text: string): string {
+  try {
+    const parsed = JSON.parse(text) as {
+      message?: unknown;
+      error?: { message?: unknown };
+    };
+    const message =
+      typeof parsed.message === "string"
+        ? parsed.message
+        : typeof parsed.error?.message === "string"
+          ? parsed.error.message
+          : null;
+    if (message) return message.trim().slice(0, 300);
+  } catch {
+    // Not JSON.
   }
-  if (wireMode.mode === "A") {
-    for (const [name, value] of Object.entries(GITHUB_COPILOT_HEADERS)) {
-      headers.set(name, value);
-    }
-  }
-  headers.set("copilot-integration-id", wireMode.integrationId);
-  headers.set("authorization", `Bearer ${installationToken}`);
-  return baseFetch(input, { ...init, headers });
+  return text.trim().slice(0, 300);
 }

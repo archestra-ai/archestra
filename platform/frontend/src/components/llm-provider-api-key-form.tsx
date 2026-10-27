@@ -51,7 +51,6 @@ import {
 } from "./ui/select";
 import { Switch } from "./ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
-import { Textarea } from "./ui/textarea";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -99,14 +98,6 @@ export type LlmProviderApiKeyFormValues = {
    *   no credential-level subscription.
    */
   authMethod: "api-key" | "subscription";
-  /**
-   * GitHub Copilot credential type: the user's own sign-in, or an
-   * organization's GitHub App (shareable, billed to the organization).
-   */
-  copilotAuthMethod?: "personal" | "github-app";
-  githubAppId?: string | null;
-  githubAppInstallationId?: string | null;
-  githubAppPrivateKey?: string | null;
 };
 
 /** Convert the form's array shape to the API's Record shape, dropping empty-name rows. */
@@ -555,14 +546,6 @@ export function LlmProviderApiKeyForm({
   const isCredentialSubscriptionMode =
     isCredentialLevelSubscriptionProvider(provider) &&
     authMethod === "subscription";
-  // GitHub App (organization) mode on GitHub Copilot: a separate, shared way
-  // to connect. Offered only in the API-key flow; the personal connect flow
-  // offers only the GitHub sign-in.
-  const isCopilotAppMode =
-    provider === "github-copilot" &&
-    !isEditMode &&
-    !isSubscriptionFlow &&
-    !allowPersonalSubscriptions;
 
   const extraHeadersFieldArray = useFieldArray({
     control: form.control,
@@ -637,9 +620,7 @@ export function LlmProviderApiKeyForm({
         ).filter(
           (candidate) =>
             allowPersonalSubscriptions ||
-            !providerRequiresPerUserCredential(candidate) ||
-            // A GitHub App key is an organization credential, not a sign-in.
-            candidate === "github-copilot",
+            !providerRequiresPerUserCredential(candidate),
         ),
       ),
     [allowedProviders, allowPersonalSubscriptions],
@@ -704,8 +685,7 @@ export function LlmProviderApiKeyForm({
             (allowPersonalSubscriptions ||
               !providerRequiresPerUserCredential(
                 key as CreateLlmProviderApiKeyBody["provider"],
-              ) ||
-              key === "github-copilot") &&
+              )) &&
             (!isOllamaProvider(key) || key === ollamaListedTransport),
         )
         // Focused creation flows only offer providers their runtime can use.
@@ -836,8 +816,7 @@ export function LlmProviderApiKeyForm({
   // Per-user-credential providers (GitHub Copilot) hold an individual's token,
   // so a key is never shared — each user connects their own account. The
   // OpenAI "ChatGPT subscription" auth mode is the same shape.
-  const isPerUserProvider =
-    providerRequiresPerUserCredential(provider) && !isCopilotAppMode;
+  const isPerUserProvider = providerRequiresPerUserCredential(provider);
   const isPerUserCredential = isPerUserProvider || isCredentialSubscriptionMode;
   const hasAdvancedSettings = !isSubscriptionFlow && !isPerUserCredential;
   // The subscription this form is currently connecting, if any: implied by the
@@ -1462,55 +1441,7 @@ export function LlmProviderApiKeyForm({
                   </Tabs>
                 )}
 
-              {isCopilotAppMode && (
-                <div className="space-y-3">
-                  <p className="text-xs text-muted-foreground">
-                    Use a GitHub App installed on your organization with the
-                    Copilot Requests permission. Usage is billed to that
-                    organization, so this key can be shared.
-                  </p>
-                  <div className="space-y-2">
-                    <Label htmlFor="llm-provider-github-app-id">App ID</Label>
-                    <Input
-                      id="llm-provider-github-app-id"
-                      inputMode="numeric"
-                      placeholder="123456"
-                      disabled={isPending}
-                      {...form.register("githubAppId")}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="llm-provider-github-app-installation-id">
-                      Installation ID
-                    </Label>
-                    <Input
-                      id="llm-provider-github-app-installation-id"
-                      inputMode="numeric"
-                      placeholder="12345678"
-                      disabled={isPending}
-                      {...form.register("githubAppInstallationId")}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="llm-provider-github-app-private-key">
-                      Private key (PEM)
-                    </Label>
-                    <Textarea
-                      id="llm-provider-github-app-private-key"
-                      placeholder="-----BEGIN RSA PRIVATE KEY-----"
-                      rows={5}
-                      className="font-mono text-xs"
-                      autoComplete="off"
-                      spellCheck={false}
-                      disabled={isPending}
-                      {...form.register("githubAppPrivateKey")}
-                    />
-                  </div>
-                </div>
-              )}
-
               {!isBedrockSigV4 &&
-                !isCopilotAppMode &&
                 bedrockAuthMethod !== "iam" &&
                 (activeSubscriptionKind && connectCopy ? (
                   <>

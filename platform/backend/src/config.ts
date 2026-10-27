@@ -2870,13 +2870,6 @@ const config = {
         process.env.ARCHESTRA_GITHUB_COPILOT_CLIENT_ID ||
         "Iv1.b507a08c87ecfe98",
       /**
-       * GitHub REST API base used to mint GitHub App installation tokens for
-       * organization Copilot keys. Overridable for GitHub Enterprise.
-       */
-      appApiBaseUrl:
-        process.env.ARCHESTRA_GITHUB_COPILOT_APP_API_BASE_URL ||
-        "https://api.github.com",
-      /**
        * Copilot-Integration-Id to send with GitHub App installation tokens,
        * tried before the built-in candidates. Unset: auto-detect.
        */

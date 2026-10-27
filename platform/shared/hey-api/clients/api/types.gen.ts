@@ -37282,6 +37282,7 @@ export type GetNewChatBootstrapResponses = {
             isAgentKey?: boolean;
             subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
             isGithubAppKey?: boolean;
+            githubOrganization?: string | null;
             labels?: Array<{
                 key: string;
                 value: string;
@@ -37324,6 +37325,7 @@ export type GetNewChatBootstrapResponses = {
             isAgentKey?: boolean;
             subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
             isGithubAppKey?: boolean;
+            githubOrganization?: string | null;
             labels?: Array<{
                 key: string;
                 value: string;
@@ -37835,6 +37837,7 @@ export type GetConversationBootstrapResponses = {
                 isAgentKey?: boolean;
                 subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
                 isGithubAppKey?: boolean;
+                githubOrganization?: string | null;
                 labels?: Array<{
                     key: string;
                     value: string;
@@ -37877,6 +37880,7 @@ export type GetConversationBootstrapResponses = {
                 isAgentKey?: boolean;
                 subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
                 isGithubAppKey?: boolean;
+                githubOrganization?: string | null;
                 labels?: Array<{
                     key: string;
                     value: string;
@@ -51383,6 +51387,685 @@ export type UpdateGithubAppConfigResponses = {
 };
 
 export type UpdateGithubAppConfigResponse = UpdateGithubAppConfigResponses[keyof UpdateGithubAppConfigResponses];
+
+export type StartCopilotGithubAppData = {
+    body: {
+        githubUrl?: string;
+        organization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/github-copilot-app/manifest';
+};
+
+export type StartCopilotGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StartCopilotGithubAppError = StartCopilotGithubAppErrors[keyof StartCopilotGithubAppErrors];
+
+export type StartCopilotGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        url: string;
+        manifest: string;
+    };
+};
+
+export type StartCopilotGithubAppResponse = StartCopilotGithubAppResponses[keyof StartCopilotGithubAppResponses];
+
+export type CompleteCopilotGithubAppData = {
+    body: {
+        code: string;
+        state: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/github-copilot-app/manifest/complete';
+};
+
+export type CompleteCopilotGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CompleteCopilotGithubAppError = CompleteCopilotGithubAppErrors[keyof CompleteCopilotGithubAppErrors];
+
+export type CompleteCopilotGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        slug: string;
+        organization: string;
+        appId: string;
+        installUrl: string;
+        settingsUrl: string;
+    };
+};
+
+export type CompleteCopilotGithubAppResponse = CompleteCopilotGithubAppResponses[keyof CompleteCopilotGithubAppResponses];
+
+export type DiscardCopilotGithubAppData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/github-copilot-app/pending';
+};
+
+export type DiscardCopilotGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DiscardCopilotGithubAppError = DiscardCopilotGithubAppErrors[keyof DiscardCopilotGithubAppErrors];
+
+export type DiscardCopilotGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DiscardCopilotGithubAppResponse = DiscardCopilotGithubAppResponses[keyof DiscardCopilotGithubAppResponses];
+
+export type GetPendingCopilotGithubAppData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/github-copilot-app/pending';
+};
+
+export type GetPendingCopilotGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetPendingCopilotGithubAppError = GetPendingCopilotGithubAppErrors[keyof GetPendingCopilotGithubAppErrors];
+
+export type GetPendingCopilotGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        slug: string;
+        organization: string;
+        appId: string;
+        installUrl: string;
+        settingsUrl: string;
+    } | null;
+};
+
+export type GetPendingCopilotGithubAppResponse = GetPendingCopilotGithubAppResponses[keyof GetPendingCopilotGithubAppResponses];
+
+export type InstallCopilotGithubAppData = {
+    body: {
+        grants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        }>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/github-copilot-app/install';
+};
+
+export type InstallCopilotGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type InstallCopilotGithubAppError = InstallCopilotGithubAppErrors[keyof InstallCopilotGithubAppErrors];
+
+export type InstallCopilotGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'waiting';
+    } | {
+        status: 'installed';
+        id: string;
+        organization: string;
+        modelIds: Array<string>;
+    };
+};
+
+export type InstallCopilotGithubAppResponse = InstallCopilotGithubAppResponses[keyof InstallCopilotGithubAppResponses];
+
+export type ValidateExistingCopilotGithubAppData = {
+    body: {
+        githubUrl?: string;
+        appId: string;
+        organization: string;
+        privateKey: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/github-copilot-app/existing/validate';
+};
+
+export type ValidateExistingCopilotGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ValidateExistingCopilotGithubAppError = ValidateExistingCopilotGithubAppErrors[keyof ValidateExistingCopilotGithubAppErrors];
+
+export type ValidateExistingCopilotGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        fingerprint: string;
+        installationId: string;
+        organization: string;
+    };
+};
+
+export type ValidateExistingCopilotGithubAppResponse = ValidateExistingCopilotGithubAppResponses[keyof ValidateExistingCopilotGithubAppResponses];
+
+export type ConnectExistingCopilotGithubAppData = {
+    body: {
+        githubUrl?: string;
+        appId: string;
+        organization: string;
+        privateKey: string;
+        grants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        }>;
+        replaceKeyId?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/github-copilot-app/existing';
+};
+
+export type ConnectExistingCopilotGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ConnectExistingCopilotGithubAppError = ConnectExistingCopilotGithubAppErrors[keyof ConnectExistingCopilotGithubAppErrors];
+
+export type ConnectExistingCopilotGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'installed';
+        id: string;
+        organization: string;
+        modelIds: Array<string>;
+    };
+};
+
+export type ConnectExistingCopilotGithubAppResponse = ConnectExistingCopilotGithubAppResponses[keyof ConnectExistingCopilotGithubAppResponses];
 
 export type GithubCopilotDeviceAuthStartData = {
     body?: never;
@@ -86488,6 +87171,7 @@ export type GetLlmProviderApiKeysResponses = {
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
+        githubOrganization?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -86519,9 +87203,6 @@ export type CreateLlmProviderApiKeyData = {
         awsAccessKeyId?: string;
         awsSecretAccessKey?: string;
         awsSessionToken?: string;
-        githubAppId?: string;
-        githubAppInstallationId?: string;
-        githubAppPrivateKey?: string;
         /**
          * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
          */
@@ -86663,6 +87344,7 @@ export type CreateLlmProviderApiKeyResponses = {
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
+        githubOrganization?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -86791,6 +87473,7 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
+        githubOrganization?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -87006,6 +87689,7 @@ export type GetLlmProviderApiKeyResponses = {
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
+        githubOrganization?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -87156,6 +87840,7 @@ export type UpdateLlmProviderApiKeyResponses = {
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
+        githubOrganization?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -87285,6 +87970,7 @@ export type ReconnectLlmProviderApiKeyResponses = {
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isGithubAppKey?: boolean;
+        githubOrganization?: string | null;
         labels?: Array<{
             key: string;
             value: string;

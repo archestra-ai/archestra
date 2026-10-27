@@ -831,6 +831,36 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   },
   // Creating and installing the App only touch GitHub and a short-lived setup
   // record; the stored credential is audited when installation completes.
+  // Copilot organization subscription: only the stored key is audited; the
+  // manifest steps touch GitHub and a short-lived setup record.
+  "/api/github-copilot-app/install": {
+    resourceType: "llmProviderApiKey",
+    action: "llmProviderApiKey.created",
+    fetchById: (id, orgId) =>
+      LlmProviderApiKeyModel.findByIdForAudit(id, orgId),
+  },
+  "/api/github-copilot-app/existing": {
+    resourceType: "llmProviderApiKey",
+    action: "llmProviderApiKey.created",
+    fetchById: (id, orgId) =>
+      LlmProviderApiKeyModel.findByIdForAudit(id, orgId),
+  },
+  "/api/github-copilot-app/manifest": {
+    resourceType: "llmProviderApiKey",
+    action: "llmProviderApiKey.created",
+  },
+  "/api/github-copilot-app/manifest/complete": {
+    resourceType: "llmProviderApiKey",
+    action: "llmProviderApiKey.created",
+  },
+  "/api/github-copilot-app/pending": {
+    resourceType: "llmProviderApiKey",
+    action: "llmProviderApiKey.deleted",
+  },
+  "/api/github-copilot-app/existing/validate": {
+    resourceType: "llmProviderApiKey",
+    action: "llmProviderApiKey.created",
+  },
   "/api/openappa/github-app/manifest": {
     resourceType: "credential",
     action: "credential.created",

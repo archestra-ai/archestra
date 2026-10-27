@@ -1,46 +1,47 @@
-import { createVerify, generateKeyPairSync } from "node:crypto";
+import { createHash, createPublicKey, generateKeyPairSync } from "node:crypto";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
-  createGithubAppJwt,
   decodeGithubAppCredential,
   encodeGithubAppCredential,
   type GithubAppCredential,
-  githubAppCopilotTokenManager,
-  githubAppIntegrationIdCandidates,
-  validateGithubAppCredential,
+  githubAppKeyFingerprint,
+  githubAppOrganization,
+  validateGithubAppPrivateKey,
 } from "@/services/github-app-copilot-token";
-import {
-  createGithubCopilotFetch,
-  detectGithubAppWireMode,
-} from "@/services/github-copilot-token";
+import { createGithubCopilotFetch } from "@/services/github-copilot-token";
 import type { ApiError } from "@/types/api";
 
-const { privateKey, publicKey } = generateKeyPairSync("rsa", {
+const { privateKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
   privateKeyEncoding: { type: "pkcs1", format: "pem" },
   publicKeyEncoding: { type: "spki", format: "pem" },
 });
 
-/** The manager caches by credential, so each test uses its own installation. */
+/** Installation tokens are cached per installation, so each test uses its own. */
 let installationCounter = 1000;
-function uniqueCredential(): GithubAppCredential {
+function uniqueCredential(
+  overrides?: Partial<GithubAppCredential>,
+): GithubAppCredential {
   installationCounter += 1;
   return {
     appId: "4242",
     installationId: String(installationCounter),
     privateKey,
+    githubUrl: "https://github.com",
+    organization: "acme",
+    ...overrides,
   };
 }
 
-function mintResponse(token = "ghs_installation", expiresInMs = 3600_000) {
+function mintResponse(token = "ghs_installation") {
   return Response.json(
-    { token, expires_at: new Date(Date.now() + expiresInMs).toISOString() },
+    { token, expires_at: new Date(Date.now() + 3600_000).toISOString() },
     { status: 201 },
   );
 }
 
 function isMintCall(input: unknown): boolean {
-  return String(input).includes("/app/installations/");
+  return String(input).includes("/access_tokens");
 }
 
 afterEach(() => {
@@ -48,7 +49,7 @@ afterEach(() => {
 });
 
 describe("GitHub App credential marker", () => {
-  test("round-trips through encode and decode", () => {
+  test("round-trips with the GitHub address and organization", () => {
     const credential = uniqueCredential();
     const encoded = encodeGithubAppCredential(credential);
 
@@ -57,49 +58,44 @@ describe("GitHub App credential marker", () => {
     expect(decodeGithubAppCredential(encoded)).toEqual(credential);
   });
 
+  test("still decodes a preview key without address or organization", () => {
+    const legacy = `github-app:${Buffer.from(
+      JSON.stringify({ appId: "1", installationId: "2", privateKey }),
+    ).toString("base64url")}`;
+
+    expect(decodeGithubAppCredential(legacy)).toEqual({
+      appId: "1",
+      installationId: "2",
+      privateKey,
+    });
+  });
+
   test("decodes nothing from other credentials or a corrupted payload", () => {
     expect(decodeGithubAppCredential("gho_personal")).toBeNull();
     expect(decodeGithubAppCredential("github-app:not-json")).toBeNull();
-    expect(
-      decodeGithubAppCredential(
-        `github-app:${Buffer.from('{"appId":"1"}').toString("base64url")}`,
-      ),
-    ).toBeNull();
   });
 });
 
-describe("validateGithubAppCredential", () => {
-  test("accepts numeric ids and an RSA PEM", () => {
+describe("githubAppKeyFingerprint", () => {
+  test("matches GitHub's SHA256 format of the public key", () => {
+    const der = createPublicKey(privateKey).export({
+      type: "spki",
+      format: "der",
+    });
+    const expected = `SHA256:${createHash("sha256").update(der).digest("base64")}`;
+
+    expect(githubAppKeyFingerprint(privateKey)).toBe(expected);
     expect(
-      validateGithubAppCredential({
-        appId: " 4242 ",
-        installationId: "99",
-        privateKey,
-      }),
-    ).toMatchObject({ appId: "4242", installationId: "99" });
+      validateGithubAppPrivateKey({ appId: " 42 ", privateKey }),
+    ).toMatchObject({ appId: "42", fingerprint: expected });
   });
 
-  test("refuses non-numeric ids and a bad key without echoing it", () => {
+  test("refuses a bad key or App ID without echoing the key", () => {
     expect(() =>
-      validateGithubAppCredential({
-        appId: "abc",
-        installationId: "1",
-        privateKey,
-      }),
+      validateGithubAppPrivateKey({ appId: "abc", privateKey }),
     ).toThrow("GitHub App ID must be a number.");
-    expect(() =>
-      validateGithubAppCredential({
-        appId: "1",
-        installationId: "x",
-        privateKey,
-      }),
-    ).toThrow("installation ID must be a number");
     try {
-      validateGithubAppCredential({
-        appId: "1",
-        installationId: "2",
-        privateKey: "secret-not-a-pem",
-      });
+      githubAppKeyFingerprint("secret-not-a-pem");
       expect.unreachable();
     } catch (error) {
       expect((error as ApiError).statusCode).toBe(400);
@@ -108,330 +104,123 @@ describe("validateGithubAppCredential", () => {
   });
 });
 
-describe("createGithubAppJwt", () => {
-  test("signs an RS256 JWT with the App ID as issuer and a 9-minute window", () => {
-    const jwt = createGithubAppJwt({
-      appId: "4242",
-      privateKey,
-      nowSeconds: 1_000_000,
-    });
-    const [header, payload, signature] = jwt.split(".");
-
-    expect(JSON.parse(Buffer.from(header, "base64url").toString())).toEqual({
-      alg: "RS256",
-      typ: "JWT",
-    });
-    expect(JSON.parse(Buffer.from(payload, "base64url").toString())).toEqual({
-      iat: 1_000_000 - 60,
-      exp: 1_000_000 + 540,
-      iss: "4242",
-    });
-    expect(
-      createVerify("RSA-SHA256")
-        .update(`${header}.${payload}`)
-        .verify(publicKey, Buffer.from(signature, "base64url")),
-    ).toBe(true);
-  });
-});
-
-describe("githubAppCopilotTokenManager", () => {
-  test("mints with the App JWT and Copilot permission, then caches", async () => {
-    const credential = uniqueCredential();
-    const fetchMock = vi.fn().mockResolvedValue(mintResponse());
+describe("githubAppOrganization", () => {
+  test("looks up a preview key's organization from its installation", async () => {
+    const credential = uniqueCredential({ organization: undefined });
+    const fetchMock = vi.fn(async (_input: unknown) =>
+      Response.json({ account: { login: "archestra-ai" } }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
-    const first =
-      await githubAppCopilotTokenManager.getInstallationToken(credential);
-    const second =
-      await githubAppCopilotTokenManager.getInstallationToken(credential);
-
-    expect(first.token).toBe("ghs_installation");
-    expect(second).toBe(first);
+    expect(await githubAppOrganization(credential)).toBe("archestra-ai");
+    expect(await githubAppOrganization(credential)).toBe("archestra-ai");
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe(
-      `https://api.github.com/app/installations/${credential.installationId}/access_tokens`,
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      `https://api.github.com/app/installations/${credential.installationId}`,
     );
-    expect(init.method).toBe("POST");
-    expect(init.headers.authorization).toMatch(
-      /^Bearer [\w-]+\.[\w-]+\.[\w-]+$/,
-    );
-    expect(JSON.parse(init.body)).toEqual({
-      permissions: { organization_copilot_requests: "read" },
-    });
-  });
-
-  test("re-mints a token within five minutes of expiry", async () => {
-    const credential = uniqueCredential();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(mintResponse("ghs_old", 4 * 60_000))
-      .mockResolvedValueOnce(mintResponse("ghs_new"));
-    vi.stubGlobal("fetch", fetchMock);
-
-    await githubAppCopilotTokenManager.getInstallationToken(credential);
-    const refreshed =
-      await githubAppCopilotTokenManager.getInstallationToken(credential);
-
-    expect(refreshed.token).toBe("ghs_new");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  test("single-flights concurrent mints", async () => {
-    const credential = uniqueCredential();
-    let resolveMint: (response: Response) => void = () => {};
-    const fetchMock = vi.fn().mockReturnValue(
-      new Promise<Response>((resolve) => {
-        resolveMint = resolve;
-      }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const pending = Promise.all([
-      githubAppCopilotTokenManager.getInstallationToken(credential),
-      githubAppCopilotTokenManager.getInstallationToken(credential),
-    ]);
-    resolveMint(mintResponse());
-    const [a, b] = await pending;
-
-    expect(a.token).toBe(b.token);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  test("surfaces GitHub's rejection message", async () => {
-    const credential = uniqueCredential();
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          Response.json(
-            { message: "A JSON web token could not be decoded" },
-            { status: 401 },
-          ),
-        ),
-    );
-
-    await expect(
-      githubAppCopilotTokenManager.getInstallationToken(credential),
-    ).rejects.toThrow(
-      "GitHub rejected the App installation token request (401): A JSON web token could not be decoded",
-    );
-  });
-});
-
-/** GET /app answer for the App the credential belongs to. */
-function appResponse() {
-  return Response.json({
-    id: 4242,
-    slug: "acme-copilot",
-    client_id: "Iv23abc",
-  });
-}
-
-function isAppCall(input: unknown): boolean {
-  return String(input).endsWith("/app");
-}
-
-const mismatch = () =>
-  Response.json(
-    {
-      message:
-        "bad request: the Copilot-Integration-Id header does not match the GitHub App that issued this installation access token",
-    },
-    { status: 400 },
-  );
-
-describe("githubAppIntegrationIdCandidates", () => {
-  test("orders client id, slug, numeric id and falls back to the App ID", () => {
-    expect(
-      githubAppIntegrationIdCandidates({
-        identity: { id: 4242, slug: "acme-copilot", clientId: "Iv23abc" },
-        appId: "4242",
-      }),
-    ).toEqual(["copilot-developer-cli", "Iv23abc", "acme-copilot", "4242"]);
-    expect(
-      githubAppIntegrationIdCandidates({ identity: null, appId: "7" }),
-    ).toEqual(["copilot-developer-cli", "7"]);
-  });
-
-  test("puts a configured integration id first", () => {
-    expect(
-      githubAppIntegrationIdCandidates({
-        identity: { id: 4242, slug: "acme-copilot", clientId: "Iv23abc" },
-        appId: "4242",
-        configured: " my-integration ",
-      }),
-    ).toEqual([
-      "my-integration",
-      "copilot-developer-cli",
-      "Iv23abc",
-      "acme-copilot",
-      "4242",
-    ]);
-  });
-});
-
-describe("detectGithubAppWireMode", () => {
-  test("tries the Copilot runtime id first, then the client id bare (B)", async () => {
-    const credential = uniqueCredential();
-    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
-      if (isMintCall(input)) return mintResponse();
-      if (isAppCall(input)) return appResponse();
-      const headers = new Headers(init?.headers);
-      return headers.get("copilot-integration-id") === "Iv23abc"
-        ? Response.json({ data: [] })
-        : mismatch();
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    const mode = await detectGithubAppWireMode({ credential });
-
-    expect(mode).toEqual({ mode: "B", integrationId: "Iv23abc" });
-    const probe = fetchMock.mock.calls.find(([input]) =>
-      String(input).endsWith("/models"),
-    ) as unknown as [string, RequestInit];
-    const headers = new Headers(probe[1].headers);
-    expect(headers.get("authorization")).toBe("Bearer ghs_installation");
-    expect(headers.has("editor-version")).toBe(false);
-  });
-
-  test("moves past a 'does not match' 400 to the next candidate, with editor headers (A)", async () => {
-    const credential = uniqueCredential();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: unknown, init?: RequestInit) => {
-        if (isMintCall(input)) return mintResponse();
-        if (isAppCall(input)) return appResponse();
-        const headers = new Headers(init?.headers);
-        return headers.get("copilot-integration-id") === "acme-copilot" &&
-          headers.has("editor-version")
-          ? Response.json({ data: [] })
-          : mismatch();
-      }),
-    );
-
-    expect(await detectGithubAppWireMode({ credential })).toEqual({
-      mode: "A",
-      integrationId: "acme-copilot",
-    });
-  });
-
-  test("falls back to the App ID when GET /app fails", async () => {
-    const credential = uniqueCredential();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: unknown, init?: RequestInit) => {
-        if (isMintCall(input)) return mintResponse();
-        if (isAppCall(input))
-          return Response.json({ message: "Not Found" }, { status: 404 });
-        return new Headers(init?.headers).get("copilot-integration-id") ===
-          credential.appId
-          ? Response.json({ data: [] })
-          : mismatch();
-      }),
-    );
-
-    expect(await detectGithubAppWireMode({ credential })).toEqual({
-      mode: "B",
-      integrationId: credential.appId,
-    });
-  });
-
-  test("ends with the token exchange (C) and lists every attempt", async () => {
-    const credential = uniqueCredential();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: unknown) => {
-        const url = String(input);
-        if (isMintCall(url)) return mintResponse("ghs_all_fail");
-        if (isAppCall(url)) return appResponse();
-        if (url.includes("copilot_internal"))
-          return Response.json({ message: "Not Found" }, { status: 404 });
-        return mismatch();
-      }),
-    );
-
-    await expect(detectGithubAppWireMode({ credential })).rejects.toThrow(
-      /B\(copilot-developer-cli\): 400 .*; A\(copilot-developer-cli\): 400 .*; B\(Iv23abc\): 400 .*does not match.*; A\(Iv23abc\): 400 .*; B\(acme-copilot\): 400 .*; A\(acme-copilot\): 400 .*; B\(4242\): 400 .*; A\(4242\): 400 .*; C: .*404/,
-    );
-  });
-
-  test("stops at a 403 saying App-token requests are not enabled", async () => {
-    const credential = uniqueCredential();
-    const fetchMock = vi.fn(async (input: unknown) => {
-      if (isMintCall(input)) return mintResponse();
-      if (isAppCall(input)) return appResponse();
-      return Response.json(
-        {
-          message:
-            "Copilot requests from GitHub App installations are not enabled for this organization",
-        },
-        { status: 403 },
-      );
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    await expect(detectGithubAppWireMode({ credential })).rejects.toThrow(
-      /B\(copilot-developer-cli\): 403 Copilot requests from GitHub App installations are not enabled/,
-    );
-    // Mint, GET /app and one probe: no further candidates were tried.
-    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });
 
 describe("createGithubCopilotFetch with a GitHub App credential", () => {
-  test("sends the remembered integration id and retries a 401 once with a new token", async () => {
+  test("sends the installation token with only the Copilot runtime integration id", async () => {
     const credential = uniqueCredential();
-    githubAppCopilotTokenManager.setWireMode(credential, {
-      mode: "B",
-      integrationId: "Iv23abc",
-    });
-    const mints = ["ghs_first", "ghs_second"];
-    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
-      if (isMintCall(input)) return mintResponse(mints.shift());
-      const headers = new Headers(init?.headers);
-      expect(headers.get("copilot-integration-id")).toBe("Iv23abc");
-      return headers.get("authorization") === "Bearer ghs_second"
-        ? Response.json({ ok: true })
-        : Response.json({ message: "expired" }, { status: 401 });
-    });
+    const fetchMock = vi.fn(async (input: unknown, _init?: RequestInit) =>
+      isMintCall(input) ? mintResponse() : Response.json({ data: [] }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     const copilotFetch = createGithubCopilotFetch({
       githubToken: encodeGithubAppCredential(credential),
     });
-    const response = await copilotFetch(
-      "https://api.githubcopilot.com/chat/completions",
-      { method: "POST", body: "{}" },
+    const response = await copilotFetch("https://api.githubcopilot.com/models");
+
+    expect(response.status).toBe(200);
+    const [mintUrl] = fetchMock.mock.calls[0] as [string];
+    expect(mintUrl).toBe(
+      `https://api.github.com/app/installations/${credential.installationId}/access_tokens`,
     );
+    const headers = new Headers(fetchMock.mock.calls[1]?.[1]?.headers);
+    expect(headers.get("authorization")).toBe("Bearer ghs_installation");
+    expect(headers.get("copilot-integration-id")).toBe("copilot-developer-cli");
+    expect(headers.has("editor-version")).toBe(false);
+  });
+
+  test("mints a fresh token and retries once on 401", async () => {
+    const credential = uniqueCredential();
+    const mints = ["ghs_first", "ghs_second"];
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      if (isMintCall(input)) return mintResponse(mints.shift());
+      return new Headers(init?.headers).get("authorization") ===
+        "Bearer ghs_second"
+        ? Response.json({ ok: true })
+        : Response.json({ message: "expired" }, { status: 401 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await createGithubCopilotFetch({
+      githubToken: encodeGithubAppCredential(credential),
+    })("https://api.githubcopilot.com/chat/completions", {
+      method: "POST",
+      body: "{}",
+    });
 
     expect(response.status).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
-});
 
-describe("detectGithubAppWireMode with the Copilot runtime id", () => {
-  test("wins with copilot-developer-cli before any App identifier", async () => {
+  test("turns 'App requests not enabled' into a fix that quotes GitHub", async () => {
     const credential = uniqueCredential();
-    const sent: string[] = [];
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: unknown, init?: RequestInit) => {
-        if (isMintCall(input)) return mintResponse();
-        if (isAppCall(input)) return appResponse();
-        const id = new Headers(init?.headers).get("copilot-integration-id");
-        sent.push(String(id));
-        return id === "copilot-developer-cli"
-          ? Response.json({ data: [] })
-          : mismatch();
-      }),
+      vi.fn(async (input: unknown) =>
+        isMintCall(input)
+          ? mintResponse()
+          : Response.json(
+              {
+                message:
+                  "Copilot requests from GitHub App installations are not enabled for this organization",
+              },
+              { status: 403 },
+            ),
+      ),
     );
 
-    expect(await detectGithubAppWireMode({ credential })).toEqual({
-      mode: "B",
-      integrationId: "copilot-developer-cli",
+    const response = await createGithubCopilotFetch({
+      githubToken: encodeGithubAppCredential(credential),
+    })("https://api.githubcopilot.com/models");
+    const body = (await response.json()) as { error: { message: string } };
+
+    expect(response.status).toBe(401);
+    expect(body.error.message).toContain(
+      "acme doesn't allow Copilot requests from GitHub Apps",
+    );
+    expect(body.error.message).toContain(
+      'GitHub said: "Copilot requests from GitHub App installations are not enabled for this organization"',
+    );
+  });
+
+  test("passes request validation errors through unchanged", async () => {
+    const credential = uniqueCredential();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown) =>
+        isMintCall(input)
+          ? mintResponse()
+          : Response.json(
+              { error: { message: "messages must be non-empty" } },
+              { status: 400 },
+            ),
+      ),
+    );
+
+    const response = await createGithubCopilotFetch({
+      githubToken: encodeGithubAppCredential(credential),
+    })("https://api.githubcopilot.com/chat/completions", {
+      method: "POST",
+      body: "{}",
     });
-    expect(sent).toEqual(["copilot-developer-cli"]);
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("messages must be non-empty");
   });
 });

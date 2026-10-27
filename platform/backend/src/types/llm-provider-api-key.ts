@@ -135,6 +135,8 @@ export const LlmProviderApiKeyWithScopeInfoSchema =
      * the recorded credential kind; no secret is read or returned.
      */
     isGithubAppKey: z.boolean().optional(),
+    /** The GitHub organization a GitHub App key is installed on, and billed to. */
+    githubOrganization: z.string().nullable().optional(),
     labels: z.array(LabelWithDetailsSchema).optional(),
   });
 

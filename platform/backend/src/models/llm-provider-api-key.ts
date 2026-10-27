@@ -35,6 +35,10 @@ import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
+import {
+  decodeGithubAppCredential,
+  githubAppOrganization,
+} from "@/services/github-app-copilot-token";
 import type {
   InsertLlmProviderApiKey,
   LlmProviderApiKey,
@@ -268,6 +272,7 @@ class LlmProviderApiKeyModel {
     | (LlmProviderApiKey & {
         subscriptionKind: SubscriptionCredentialKind | null;
         isGithubAppKey: boolean;
+        githubOrganization: string | null;
       })
     | null
   > {
@@ -308,6 +313,11 @@ class LlmProviderApiKeyModel {
         kinds.get(apiKey.id),
       ),
       isGithubAppKey: kinds.get(apiKey.id) === "github_app",
+      githubOrganization: await githubOrganizationOf({
+        ...row,
+        secretId: apiKey.secretId,
+        credentialKind: kinds.get(apiKey.id) ?? null,
+      }),
     };
   }
 
@@ -489,6 +499,10 @@ class LlmProviderApiKeyModel {
               ? subscriptionKindOf(key.provider, credentialKinds.get(key.id))
               : null,
           ),
+          githubOrganization: await githubOrganizationOf({
+            ...key,
+            credentialKind: credentialKinds.get(key.id) ?? key.credentialKind,
+          }),
           labels: labelsByKey.get(key.id) ?? [],
         })),
       ),
@@ -661,6 +675,10 @@ class LlmProviderApiKeyModel {
               ? subscriptionKindOf(key.provider, credentialKinds.get(key.id))
               : null,
           ),
+          githubOrganization: await githubOrganizationOf({
+            ...key,
+            credentialKind: credentialKinds.get(key.id) ?? key.credentialKind,
+          }),
           labels: labelsByKey.get(key.id) ?? [],
         })),
       ),
@@ -1951,3 +1969,28 @@ function getConfiguredProvidersWithOptionalApiKey(): SupportedProvider[] {
 }
 
 export default LlmProviderApiKeyModel;
+
+/**
+ * The GitHub organization a GitHub App key is installed on, read from its
+ * credential (or looked up once for keys stored before it was recorded). Null
+ * for every other key; the credential itself never leaves this function.
+ */
+async function githubOrganizationOf(key: {
+  secretId: string | null;
+  secret: SecretValue | null;
+  secretIsVault: boolean | null;
+  secretIsByosVault: boolean | null;
+  credentialKind: LlmProviderCredentialKind | null;
+}): Promise<string | null> {
+  if (key.credentialKind !== "github_app" || !key.secretId) return null;
+  try {
+    const value =
+      key.secretIsVault || key.secretIsByosVault
+        ? await getSecretValueForLlmProviderApiKey(key.secretId)
+        : readApiKeyValue(key.secret);
+    const credential = decodeGithubAppCredential(value as string | null);
+    return credential ? await githubAppOrganization(credential) : null;
+  } catch {
+    return null;
+  }
+}

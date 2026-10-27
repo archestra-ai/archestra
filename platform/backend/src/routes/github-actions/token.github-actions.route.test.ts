@@ -383,6 +383,46 @@ describe("POST /api/github-actions/token", () => {
     );
   });
 
+  test("accepts any repository of an owner that the gateway lists as owner/*", async ({
+    makeAgent,
+  }) => {
+    const ownerWide = await makeGitHubActionsGateway(makeAgent);
+    await AgentModel.update(ownerWide.id, {
+      githubActionsAccess: {
+        ...githubActionsAccess(),
+        repositories: ["Acme/*"],
+      },
+    });
+
+    const response = await exchange({
+      token: await oidcToken(),
+      resource: gatewayUrl(ownerWide.id),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().github_login).toBe(AUTHOR.login);
+  });
+
+  test("refuses a repository of another owner under owner/*", async ({
+    makeAgent,
+  }) => {
+    const ownerWide = await makeGitHubActionsGateway(makeAgent);
+    await AgentModel.update(ownerWide.id, {
+      githubActionsAccess: {
+        ...githubActionsAccess(),
+        repositories: ["other/*"],
+      },
+    });
+
+    const response = await exchange({
+      token: await oidcToken(),
+      resource: gatewayUrl(ownerWide.id),
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual(UNTRUSTED);
+  });
+
   test("refuses a pull request from a fork as not trusted", async () => {
     pullRequest = {
       user: AUTHOR,

@@ -1,6 +1,7 @@
 import {
   archestraApiClient,
   type archestraApiTypes,
+  GITHUB_REPOSITORY_FULL_NAME_MESSAGE,
   type GitHubActionsAccess,
   GitHubActionsAccessSchema,
 } from "@archestra/shared";
@@ -104,7 +105,7 @@ describe("GitHubActionsAccessSection", () => {
     const workflows = screen.getByLabelText("Trusted workflows");
 
     await user.type(repositories, "widgets{Enter}");
-    expect(screen.getByText("Enter a repository as owner/name")).toBeVisible();
+    expect(screen.getByText(GITHUB_REPOSITORY_FULL_NAME_MESSAGE)).toBeVisible();
     await user.clear(repositories);
     await user.type(repositories, "acme/widgets{Enter}");
     await user.type(repositories, "ACME/Widgets{Enter}");

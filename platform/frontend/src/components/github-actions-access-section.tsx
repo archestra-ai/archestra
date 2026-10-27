@@ -173,8 +173,8 @@ export function GitHubActionsAccessSection({
 
           <ListEditor
             label="Repositories"
-            description="Pull requests in these repositories may ask. Pull requests from forks never can."
-            placeholder="owner/name"
+            description="Pull requests in these repositories may ask; owner/* covers all of an owner's repositories. Pull requests from forks never can."
+            placeholder="owner/name or owner/*"
             values={value.repositories}
             pattern={GITHUB_REPOSITORY_FULL_NAME_REGEX}
             invalidMessage={GITHUB_REPOSITORY_FULL_NAME_MESSAGE}

@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import {
   type GitHubActionsAccess,
   type GitHubActionsTokenErrorCode,
+  gitHubRepositoryMatches,
   isGitHubActionsAppCredential,
 } from "@archestra/shared";
 import { z } from "zod";
@@ -100,8 +101,8 @@ export async function exchangeGitHubActionsToken(params: {
   if (!Number.isSafeInteger(pullNumber))
     return untrusted("ref is not a pull request merge ref", run);
   if (
-    !access.repositories.some(
-      (allowed) => allowed.toLowerCase() === repository.toLowerCase(),
+    !access.repositories.some((allowed) =>
+      gitHubRepositoryMatches(allowed, repository),
     )
   )
     return untrusted("repository is not listed", run);

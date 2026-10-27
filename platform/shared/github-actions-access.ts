@@ -9,9 +9,12 @@ import { GITHUB_COM_API_URL } from "./github";
  */
 export const GITHUB_ACTIONS_ACCESS_MAX_ENTRIES = 50;
 
-/** `owner/name`, as GitHub spells a repository's full name. */
+/**
+ * `owner/name`, as GitHub spells a repository's full name, or `owner/*` for
+ * every repository of that owner, including ones created later.
+ */
 export const GITHUB_REPOSITORY_FULL_NAME_REGEX =
-  /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/;
+  /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/(?:[A-Za-z0-9._-]{1,100}|\*)$/;
 
 /**
  * A `job_workflow_ref` claim: `owner/repo/.github/workflows/<file>@<ref>`.
@@ -22,7 +25,7 @@ export const GITHUB_JOB_WORKFLOW_REF_REGEX =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}\/\.github\/workflows\/[A-Za-z0-9._/-]+\.ya?ml@(?:refs\/heads\/[^\s@]+|refs\/tags\/[^\s@]+|[0-9a-f]{40})$/;
 
 export const GITHUB_REPOSITORY_FULL_NAME_MESSAGE =
-  "Enter a repository as owner/name";
+  "Enter a repository as owner/name, or owner/* for all of an owner's repositories";
 export const GITHUB_JOB_WORKFLOW_REF_MESSAGE =
   "Enter a workflow as owner/repo/.github/workflows/<file>.yml@<ref>, where <ref> is refs/heads/<branch>, refs/tags/<tag>, or a full commit SHA";
 
@@ -58,6 +61,21 @@ export const GitHubActionsAccessSchema = z.object({
     }),
 });
 export type GitHubActionsAccess = z.infer<typeof GitHubActionsAccessSchema>;
+
+/**
+ * Whether a listed entry admits a repository: the same `owner/name`, or
+ * `owner/*` for any repository of that owner. Case-insensitive, as GitHub is.
+ */
+export function gitHubRepositoryMatches(
+  allowed: string,
+  repository: string,
+): boolean {
+  const entry = allowed.toLowerCase();
+  const name = repository.toLowerCase();
+  if (!entry.endsWith("/*")) return entry === name;
+  const owner = entry.slice(0, -1);
+  return name.startsWith(owner) && !name.slice(owner.length).includes("/");
+}
 
 /**
  * Whether a credential can be the App a GitHub Actions setting names: an

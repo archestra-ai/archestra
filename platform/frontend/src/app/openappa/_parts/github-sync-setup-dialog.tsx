@@ -2,9 +2,10 @@
 
 import {
   DocsPage,
+  GITHUB_ACCOUNT_INPUT_INVALID,
   type GitProvider,
-  getGithubApiBaseUrl,
   gitChangeRequestNoun,
+  parseGithubAccountInput,
 } from "@archestra/shared";
 import {
   AlertTriangle,
@@ -23,11 +24,17 @@ import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { GitAccessStep } from "@/components/git/git-access-step";
 import { GitProviderStep } from "@/components/git/git-provider-step";
+import { ChoiceTile, SetupStepper } from "@/components/git/git-setup-chrome";
+import { AccountChip } from "@/components/github-app-setup/account-chip";
+import { GithubAppChoice } from "@/components/github-app-setup/github-app-choice";
+import { GithubAppPicker } from "@/components/github-app-setup/github-app-picker";
 import {
-  ChoiceTile,
-  GitProviderLogo,
-  SetupStepper,
-} from "@/components/git/git-setup-chrome";
+  onGithubAppSetup,
+  openGithubWindow,
+  postManifest,
+} from "@/components/github-app-setup/github-app-window";
+import { GithubOrganizationField } from "@/components/github-app-setup/github-organization-field";
+import { ManifestRow } from "@/components/github-app-setup/manifest-row";
 import { GitHubConnectButton } from "@/components/github-connect-button";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { StandardDialog } from "@/components/standard-dialog";
@@ -80,7 +87,6 @@ import {
 } from "@/lib/openappa-github-sync.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
-import { onGithubAppSetup } from "./github-app-channel";
 import { OpenAppaSetupPullRequestDialog } from "./setup-pull-request-dialog";
 
 /**
@@ -115,15 +121,16 @@ export function GithubSyncSetupDialog({
     editing?.provider ?? null,
   );
   const gitlab = provider === "gitlab";
-  const [githubUrl, setGithubUrl] = useState(
-    editing?.provider === "github" ? editing.webUrl : DOT_COM_WEB,
-  );
-  const github = parseGithubUrl(githubUrl);
+  // One field names the account and its GitHub: a login (github.com) or the
+  // account's address on any GitHub host. A personal account works too.
   const [ownerInput, setOwnerInput] = useState(
-    editing?.repo.split("/")[0] ?? "",
+    editing?.provider === "github"
+      ? accountInput(editing.webUrl, editing.repo.split("/")[0])
+      : "",
   );
-  const owner = ownerFromInput(ownerInput);
-  const ready = !!github && OWNER_PATTERN.test(owner);
+  const github = parseGithubAccountInput(ownerInput);
+  const owner = github?.login ?? "";
+  const ready = !!github;
   // An App lives on one GitHub; only those on the same one can serve it.
   const apps =
     credentials.data?.filter(
@@ -295,9 +302,7 @@ export function GithubSyncSetupDialog({
   // Resume a setup whose App exists on an account.
   useEffect(() => {
     if (!createdApp) return;
-    const url = new URL(createdApp.accountUrl);
-    setGithubUrl(url.origin);
-    setOwnerInput(createdApp.account);
+    setOwnerInput(createdApp.accountUrl);
   }, [createdApp]);
 
   // The callback tab reports back once GitHub finishes each step.
@@ -557,7 +562,11 @@ export function GithubSyncSetupDialog({
             // the old repository means nothing there.
             const sameHost = editing?.provider === picked;
             setRepo(sameHost ? editing.repo : "");
-            setOwnerInput(sameHost ? editing.repo.split("/")[0] : "");
+            setOwnerInput(
+              sameHost
+                ? accountInput(editing.webUrl, editing.repo.split("/")[0])
+                : "",
+            );
             setRef(sameHost ? (editing.ref ?? "") : "");
             setOrigin(sameHost ? "existing" : null);
             setProjectMode(sameHost ? "existing" : "create");
@@ -583,40 +592,16 @@ export function GithubSyncSetupDialog({
       ) : null}
 
       {step === "start" && !origin ? (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="github-sync-host">GitHub URL</Label>
-            <FieldDescription>
-              Using GitHub Enterprise Server? Put its address here.
-            </FieldDescription>
-            <Input
-              id="github-sync-host"
-              value={githubUrl}
-              placeholder={DOT_COM_WEB}
-              autoComplete="off"
-              data-1p-ignore
-              spellCheck={false}
-              aria-invalid={!github}
-              onChange={(event) => setGithubUrl(event.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="github-sync-owner">Organization</Label>
-            <FieldDescription>
-              The GitHub organization for the policy repository.
-            </FieldDescription>
-            <Input
-              id="github-sync-owner"
-              value={ownerInput}
-              placeholder="my-org"
-              autoComplete="off"
-              data-1p-ignore
-              spellCheck={false}
-              aria-invalid={!!ownerInput.trim() && !OWNER_PATTERN.test(owner)}
-              onChange={(event) => setOwnerInput(event.target.value)}
-            />
-          </div>
-        </div>
+        <GithubOrganizationField
+          id="github-sync-owner"
+          label="GitHub organization or user"
+          help="The account for the policy repository: its GitHub handle or URL"
+          value={ownerInput}
+          onChange={setOwnerInput}
+          error={
+            ownerInput.trim() && !github ? GITHUB_ACCOUNT_INPUT_INVALID : null
+          }
+        />
       ) : null}
 
       {step === "start" && !origin ? (
@@ -704,75 +689,36 @@ export function GithubSyncSetupDialog({
       ) : null}
 
       {step === "app" && !gitlab && !loadingApps && mode === "fork" ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <ChoiceTile
-            onClick={() => {
-              setMode("pick");
-              // With one App there is nothing to choose: use it.
-              if (apps.length === 1) {
-                setPickedId(apps[0].id);
-                setStep("repo");
-              }
-            }}
-            visual={<AppIconStack icons={apps.map((app) => app.icon)} />}
-            title="Use an App I already have"
-            body={`${apps.length} connected to ${appName}.`}
-          />
-          <ChoiceTile
-            onClick={() => setMode("create")}
-            disabled={!canCreateCredentials}
-            visual={
-              <span className="flex size-9 items-center justify-center rounded-lg border border-dashed">
-                <Plus className="size-4 text-muted-foreground" />
-              </span>
+        <GithubAppChoice
+          icons={apps.map((app) => app.icon)}
+          appName={appName}
+          canCreate={!!canCreateCredentials}
+          onUseExisting={() => {
+            setMode("pick");
+            // With one App there is nothing to choose: use it.
+            if (apps.length === 1) {
+              setPickedId(apps[0].id);
+              setStep("repo");
             }
-            title="Create a new GitHub App"
-            body={
-              canCreateCredentials
-                ? "A few clicks on GitHub. No keys to copy."
-                : "Requires permission to create credentials."
-            }
-          />
-        </div>
+          }}
+          onCreate={() => setMode("create")}
+        />
       ) : null}
 
       {step === "app" && !gitlab && !loadingApps && mode === "pick" ? (
-        <RadioGroup
+        <GithubAppPicker
+          idPrefix="github-sync-app"
           value={pickedId}
-          onValueChange={setPickedId}
-          className="gap-2"
-          aria-label="GitHub App"
-        >
-          {apps.map((app) => {
-            const account = accounts.data?.find(
-              (entry) => entry.id === app.id,
-            )?.account;
-            return (
-              <Label
-                key={app.id}
-                htmlFor={`github-sync-app-${app.id}`}
-                className={cn(
-                  radioCardClass(),
-                  "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 font-normal",
-                )}
-              >
-                <RadioGroupItem
-                  value={app.id}
-                  id={`github-sync-app-${app.id}`}
-                />
-                <RuntimeCredentialIcon
-                  icon={app.icon ?? "logo:github"}
-                  className="size-4"
-                  size={16}
-                />
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                  {app.name}
-                </span>
-                {account ? <AccountChip account={account} /> : null}
-              </Label>
-            );
-          })}
-        </RadioGroup>
+          onChange={setPickedId}
+          apps={apps.map((app) => ({
+            id: app.id,
+            name: app.name,
+            icon: app.icon,
+            account:
+              accounts.data?.find((entry) => entry.id === app.id)?.account ??
+              null,
+          }))}
+        />
       ) : null}
 
       {step === "app" && !gitlab && !loadingApps && mode === "create" ? (
@@ -1579,127 +1525,6 @@ function RepositoryOption({
   );
 }
 
-function AppIconStack({ icons }: { icons: (string | null)[] }) {
-  return (
-    <span className="flex -space-x-2">
-      {icons.slice(0, 3).map((icon, index) => (
-        <span
-          // Icons repeat and never reorder.
-          // biome-ignore lint/suspicious/noArrayIndexKey: static decorative stack
-          key={index}
-          className="flex size-9 items-center justify-center rounded-lg border bg-background"
-        >
-          <RuntimeCredentialIcon
-            icon={icon ?? "logo:github"}
-            className="size-4"
-            size={16}
-          />
-        </span>
-      ))}
-    </span>
-  );
-}
-
-function ManifestRow({
-  index,
-  title,
-  hint,
-  waiting,
-  locked = false,
-  onCheckAgain,
-  result,
-  action,
-  inlineAction = false,
-  error,
-}: {
-  index: number;
-  title: string;
-  hint: string;
-  /**
-   * Replaces the hint while this step's last attempt failed. A step with an
-   * inline action (install) also offers to check GitHub again beside it.
-   */
-  error?: string;
-  waiting: boolean;
-  locked?: boolean;
-  onCheckAgain: () => void;
-  result: React.ReactNode;
-  action: React.ReactNode;
-  /** Short actions sit beside the text; wide ones (a form) go underneath. */
-  inlineAction?: boolean;
-}) {
-  const done = !!result;
-  const showAction = !(done || waiting || locked);
-  return (
-    <li
-      className={cn(
-        "flex items-start gap-3 border-b p-4 last:border-b-0 transition-opacity",
-        locked && "opacity-60",
-      )}
-    >
-      <span
-        className={cn(
-          "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border text-xs tabular-nums transition-colors",
-          done &&
-            "border-emerald-600/30 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-950/50 dark:text-emerald-400",
-        )}
-      >
-        {done ? <Check className="size-3.5" /> : <span>{index}</span>}
-      </span>
-      <div className="min-w-0 flex-1 space-y-1">
-        <p className="text-sm font-medium">{title}</p>
-        {done ? (
-          <div className="flex flex-wrap items-center gap-2 animate-in fade-in duration-300">
-            {result}
-          </div>
-        ) : waiting ? (
-          <p
-            className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
-            aria-live="polite"
-          >
-            <LoaderCircle className="size-3.5 animate-spin" />
-            <span>Finish in the GitHub tab that opened.</span>
-            <Button
-              type="button"
-              variant="link"
-              size="xs"
-              className="h-auto px-0"
-              onClick={onCheckAgain}
-            >
-              <span>Done? Check again</span>
-            </Button>
-          </p>
-        ) : error ? (
-          <p className="flex items-start gap-1.5 text-xs text-destructive">
-            <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
-            <span>{error}</span>
-          </p>
-        ) : (
-          <p className="text-xs text-muted-foreground">{hint}</p>
-        )}
-        {showAction && !inlineAction ? (
-          <div className="pt-2">{action}</div>
-        ) : null}
-      </div>
-      {showAction && inlineAction ? (
-        <div className="flex shrink-0 items-center gap-2 self-center">
-          {error ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onCheckAgain}
-            >
-              <span>Check again</span>
-            </Button>
-          ) : null}
-          {action}
-        </div>
-      ) : null}
-    </li>
-  );
-}
-
 // GitHub's manifest cannot set a logo, so the admin uploads it on the App's page.
 function AppLogoTip({ settingsUrl }: { settingsUrl: string }) {
   return (
@@ -1751,21 +1576,6 @@ function AccessSummary({ workflows }: { workflows: boolean }) {
         </div>
       </div>
     </div>
-  );
-}
-
-function AccountChip({
-  account,
-  provider = "github",
-}: {
-  account: string;
-  provider?: GitProvider;
-}) {
-  return (
-    <Badge variant="outline" className="bg-background font-mono font-normal">
-      <GitProviderLogo provider={provider} size={12} />
-      <span>{account}</span>
-    </Badge>
   );
 }
 
@@ -1849,29 +1659,6 @@ function headerFor(params: {
   };
 }
 
-function openGithubWindow(url: string) {
-  // A named tab, so the manifest post and the install land in the same one.
-  return window.open(url, GITHUB_WINDOW);
-}
-
-/** GitHub only accepts a manifest as a form post, so post one into the window. */
-function postManifest(params: { url: string; manifest: string }) {
-  const form = document.createElement("form");
-  form.method = "post";
-  form.action = params.url;
-  form.target = GITHUB_WINDOW;
-  const input = document.createElement("input");
-  input.type = "hidden";
-  input.name = "manifest";
-  input.value = params.manifest;
-  form.appendChild(input);
-  document.body.appendChild(form);
-  form.submit();
-  form.remove();
-}
-
-const GITHUB_WINDOW = "openappa-github-app";
-
 const GITHUB_STEPS: { id: Step; label: string }[] = [
   { id: "provider", label: "Host" },
   { id: "start", label: "Start" },
@@ -1888,9 +1675,7 @@ const PERSONAL = "__personal__";
 const PROJECT_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,99}$/;
 
 const TEMPLATE = { owner: "archestra-ai", name: "openappa-config" };
-const OWNER_PATTERN = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;
 const DOT_COM_API = "https://api.github.com";
-const DOT_COM_WEB = "https://github.com";
 const FRESH_NAME = "openappa-policy";
 const USABLE = new Set<RepositoryStatus>([
   "template",
@@ -1899,39 +1684,6 @@ const USABLE = new Set<RepositoryStatus>([
   "current",
 ]);
 
-/** A GitHub address becomes its web and API bases; any path is ignored. */
-function parseGithubUrl(value: string) {
-  let url: URL;
-  try {
-    url = new URL(value.trim());
-  } catch {
-    return null;
-  }
-  if (
-    !["https:", "http:"].includes(url.protocol) ||
-    !url.hostname.includes(".")
-  )
-    return null;
-  return {
-    dotCom: url.hostname === "github.com",
-    web: url.origin,
-    api: getGithubApiBaseUrl(url.origin),
-  };
-}
-
-/** A pasted profile or repository URL names its owner: github.com/acme/repo is acme. */
-function ownerFromInput(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed.includes("/")) return trimmed;
-  try {
-    const url = new URL(
-      trimmed.includes("://") ? trimmed : `https://${trimmed}`,
-    );
-    return url.pathname.split("/").filter(Boolean)[0] ?? "";
-  } catch {
-    return trimmed;
-  }
-}
 const DEFAULT_VALIDATIONS = "traces";
 type SyncInterval = "15m" | "1h" | "1d";
 const DEFAULT_INTERVAL: SyncInterval = "1h";
@@ -1959,3 +1711,10 @@ const DIRECTORY_PATH = /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/;
 const POLICY_PATH = /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*\.toml$/;
 
 const APP_LOGO_PATH = "/openappa/github-app-logo.png";
+
+/** The one-field form of an account on a GitHub: a login on github.com, else its address. */
+function accountInput(webUrl: string, login: string) {
+  return webUrl.replace(/\/+$/, "") === "https://github.com"
+    ? login
+    : `${webUrl.replace(/\/+$/, "")}/${login}`;
+}

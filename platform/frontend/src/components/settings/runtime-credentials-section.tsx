@@ -493,9 +493,11 @@ function DeleteCredentialDialog({
                           ? "/mcp/registry"
                           : agent.kind === "knowledge"
                             ? "/knowledge/knowledge-bases"
-                            : agent.kind === "skill"
-                              ? "/skills"
-                              : "/plugins"
+                            : agent.kind === "copilot"
+                              ? "/llm/model-providers"
+                              : agent.kind === "skill"
+                                ? "/skills"
+                                : "/plugins"
                         : `/agents/${agent.id}`
                     }
                     className="block truncate rounded px-2 py-1 text-sm text-foreground hover:bg-muted"

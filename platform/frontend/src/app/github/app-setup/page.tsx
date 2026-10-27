@@ -3,9 +3,8 @@
 import { Check, CircleAlert, Github } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { notifyCopilotAppSetup } from "@/app/llm/model-providers/_parts/copilot-organization-channel";
-import { notifyGithubAppSetup } from "@/app/openappa/_parts/github-app-channel";
 import { AuthCallbackLayout } from "@/components/auth-callback-layout";
+import { notifyGithubAppSetup } from "@/components/github-app-setup/github-app-window";
 import { LoadingState } from "@/components/loading";
 import { OpenAppaSolidIcon } from "@/components/openappa-icon";
 import { Button } from "@/components/ui/button";
@@ -142,7 +141,6 @@ export default function OpenAppaGithubAppSetupReturn() {
 function finish(step: "created" | "installed") {
   // Every setup that registers a GitHub App listens; only the open one acts.
   notifyGithubAppSetup(step);
-  notifyCopilotAppSetup(step);
   // Only a tab the setup dialog opened can close itself; otherwise it stays.
   window.close();
 }

@@ -278,7 +278,7 @@ test("links an existing repository whose policy lives elsewhere through Advanced
     await screen.findByRole("button", { name: "Set up Git sync" }),
   );
   fireEvent.click(screen.getByRole("button", { name: /^GitHub/ }));
-  fireEvent.change(screen.getByLabelText("Organization"), {
+  fireEvent.change(screen.getByLabelText("GitHub organization or user"), {
     target: { value: "example" },
   });
   fireEvent.click(screen.getByText("Use an existing repository"));
@@ -346,7 +346,7 @@ test("starts fresh from the template, connects it through a chosen App and finis
     await screen.findByRole("button", { name: "Set up Git sync" }),
   );
   fireEvent.click(screen.getByRole("button", { name: /^GitHub/ }));
-  fireEvent.change(screen.getByLabelText("Organization"), {
+  fireEvent.change(screen.getByLabelText("GitHub organization or user"), {
     target: { value: "example" },
   });
   fireEvent.click(screen.getByText("Start fresh"));

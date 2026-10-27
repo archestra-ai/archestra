@@ -158,3 +158,21 @@ export function useCheckCopilotGithubOrganization() {
     },
   });
 }
+
+/** Use a GitHub App the organization already connected; may answer `needs_permission`. */
+export function useConnectCopilotGithubAppCredential() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      body: archestraApiTypes.ConnectCopilotGithubAppCredentialData["body"],
+    ) => {
+      const { data, error } =
+        await archestraApiSdk.connectCopilotGithubAppCredential({ body });
+      if (error) throw toApiError(error);
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data?.status === "installed") invalidateKeys(client);
+    },
+  });
+}

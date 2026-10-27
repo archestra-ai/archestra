@@ -18,6 +18,20 @@ describe("gitHubRepositoryMatches", () => {
     expect(gitHubRepositoryMatches("acme/*", "acme/")).toBe(false);
     expect(gitHubRepositoryMatches("acme/*", "acme/widgets/extra")).toBe(false);
   });
+
+  test("never matches a malformed listed entry, which a lenient read can return", () => {
+    for (const allowed of [
+      "",
+      "acme",
+      "acme/",
+      "/*",
+      "*",
+      "acme/*/extra",
+      "acme/widgets/extra",
+    ]) {
+      expect(gitHubRepositoryMatches(allowed, "acme/widgets")).toBe(false);
+    }
+  });
 });
 
 describe("GitHubActionsAccessSchema", () => {

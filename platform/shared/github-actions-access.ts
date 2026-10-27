@@ -97,17 +97,12 @@ export function gitHubRepositoryMatches(
   allowed: string,
   repository: string,
 ): boolean {
-  const [allowedOwner, allowedName] = allowed.toLowerCase().split("/");
-  const parts = repository.toLowerCase().split("/");
-  if (parts.length !== 2 || !parts[0] || !parts[1]) return false;
-  return (
-    parts[0] === allowedOwner &&
-    (allowedName === "*" || parts[1] === allowedName)
-  );
-}
-
-function repositoryOwner(repository: string): string {
-  return repository.slice(0, repository.indexOf("/")).toLowerCase();
+  // An entry that is not exactly owner/name or owner/* (a stored row can hold
+  // one) matches nothing, rather than a shorter, broader rule.
+  const entry = repositoryParts(allowed);
+  const name = repositoryParts(repository);
+  if (!entry || !name) return false;
+  return entry[0] === name[0] && (entry[1] === "*" || entry[1] === name[1]);
 }
 
 /**
@@ -174,3 +169,15 @@ export const GitHubActionsTokenErrorCodeSchema = z.enum([
 export type GitHubActionsTokenErrorCode = z.infer<
   typeof GitHubActionsTokenErrorCodeSchema
 >;
+
+function repositoryOwner(repository: string): string {
+  return repository.slice(0, repository.indexOf("/")).toLowerCase();
+}
+
+/** `[owner, name]` in lower case, or null unless both are non-empty. */
+function repositoryParts(repository: string): [string, string] | null {
+  const parts = repository.toLowerCase().split("/");
+  return parts.length === 2 && parts[0] && parts[1]
+    ? [parts[0], parts[1]]
+    : null;
+}

@@ -9,6 +9,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
+import config from "@/config";
 import {
   AppAccessModel,
   SkillTeamModel,
@@ -20,6 +21,7 @@ import {
   AgentStatisticsSchema,
   APP_STATISTICS_SORT_BY,
   APP_USAGE_DIMENSIONS,
+  ApiError,
   AppStatisticsSchema,
   AppUsageResponseSchema,
   ChatCostBaselineSchema,
@@ -98,7 +100,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetProxyCostStatistics,
         description:
-          "LLM Proxy usage by authentication method and credential, including legacy proxy profiles. Each request is counted once. Billed spend excludes subscription-covered list-price estimates. Credential details are paginated; totals and time series cover the entire filtered result. Null credential IDs mean unavailable or not applicable; provider secrets are never returned.",
+          "LLM Proxy usage by authentication method and credential, including legacy proxy profiles. Each request is counted once. Billed spend excludes subscription-covered list-price estimates. Credential details are paginated; totals and time series cover the entire filtered result. Null credential IDs mean unavailable or not applicable; provider secrets are never returned. With labelKey, also return separately paginated label groups. Labels are captured at request admission: authenticated virtual-key or OAuth-client labels override labels on its billing team. Caller metadata cannot override these labels. Label edits and deletions do not rewrite history; requests without a snapshot value form the null/unassigned group. All totals, trends and groupings apply the same label filters. With includeProviderKeys or includeModelPools, also return usage grouped by the provider key that served each call or the model pool it went through; null groups are calls with no recorded key or no pool. A request a model pool failed over writes one row per attempt: failed attempts count as requests at zero cost and tokens, and failedOverAttempts counts them.",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema.merge(ProxyCostQuerySchema).merge(
           PaginationQuerySchema,
@@ -106,8 +108,19 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(ProxyCostStatisticsSchema),
       },
     },
-    async ({ query, organizationId }) =>
-      StatisticsModel.getProxyCostStatistics({ ...query, organizationId }),
+    async ({ query, organizationId }) => {
+      if ((query.labelValue || query.labelUnassigned) && !query.labelKey)
+        throw new ApiError(400, "A label key is required for a label filter");
+      if (query.labelValue && query.labelUnassigned)
+        throw new ApiError(400, "Choose a label value or unassigned, not both");
+      return StatisticsModel.getProxyCostStatistics({
+        ...query,
+        // Pools are a beta feature; while it is off there is nothing to group.
+        includeModelPools:
+          query.includeModelPools && config.llmProxy.modelPoolsEnabled,
+        organizationId,
+      });
+    },
   );
 
   fastify.get(

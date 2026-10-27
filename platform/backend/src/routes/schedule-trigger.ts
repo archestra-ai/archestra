@@ -31,6 +31,7 @@ import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  ScheduleTriggerRunKindSchema,
   ScheduleTriggerRunStatusSchema,
   SelectConversationSchema,
   SelectScheduleTriggerRunSchema,
@@ -369,6 +370,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({ id: UuidIdSchema }),
         querystring: PaginationQuerySchema.extend({
           status: ScheduleTriggerRunStatusSchema.optional(),
+          runKind: ScheduleTriggerRunKindSchema.optional(),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectScheduleTriggerRunSchema),
@@ -378,7 +380,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (
       {
         params: { id },
-        query: { limit, offset, status },
+        query: { limit, offset, status, runKind },
         user,
         organizationId,
       },
@@ -398,11 +400,13 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           limit,
           offset,
           status,
+          runKind,
         }),
         ScheduleTriggerRunModel.countByTrigger({
           organizationId,
           triggerId: trigger.id,
           status,
+          runKind,
         }),
       ]);
 

@@ -106,8 +106,17 @@ test("settles once across replay, keeps historical rates, and replay after reset
     lastCleanup: new Date(),
   });
   const data = await record({ agent, userId: user.id });
+  data.attributionLabels = { cost_center: "C100" };
   await InteractionModel.create(data);
   await InteractionModel.create(data);
+  await InteractionModel.create({
+    ...data,
+    attributionLabels: { cost_center: "C200" },
+  });
+  expect(
+    (await InteractionBillingModel.findMany([data.id as string]))[0]
+      .attributionLabels,
+  ).toEqual({ cost_center: "C100" });
   expect(
     await InteractionBillingModel.findMany([data.id as string]),
   ).toHaveLength(1);

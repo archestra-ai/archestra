@@ -544,6 +544,7 @@ export function AppSettingsForm({
         </div>
         {activeSection === "general" && canEdit && (
           <AdvancedLabelsSection
+            collapsible
             ref={labelsRef}
             labels={labels}
             onLabelsChange={setLabels}

@@ -6,7 +6,7 @@ import type { ModelMessage } from "ai";
 //
 // Anthropic-direct: 1h TTL is broadly available across the 4.5+ generation.
 const CLAUDE_45_AND_NEWER_ONE_HOUR_CACHE_MODEL =
-  /claude-(?:sonnet|haiku|opus)-4-[5-9](?!\d)/;
+  /claude-(?:sonnet|haiku|opus|fable)-(?:4-[5-9]|[5-9])(?!\d)/;
 // Bedrock: per AWS docs only the 4.5 generation supports the 1h TTL; 4.6
 // supports 5m only and *rejects* the whole request when sent ttl:"1h". Pinned
 // to 4.5 so newer/unknown ids degrade safely to 5m. Widen this when AWS

@@ -1,0 +1,12 @@
+diff --git a/dist/src/action/semanticAction.js b/dist/src/action/semanticAction.js
+index 02523ccc35e8083e1f491d7c84b8dcd670c611c9..325674392f6e994716216a08989ad09f05494431 100644
+--- a/dist/src/action/semanticAction.js
++++ b/dist/src/action/semanticAction.js
+@@ -14,6 +14,6 @@ const semanticActionStateTypes_1 = require("./semanticActionStateTypes");
+ exports.semanticActionZodSchema = zod_1.z.object({
+     id: zod_1.z.string().min(1),
+     state: zod_1.z.union([semanticActionStateTypes_1.semanticActionStateTypesZodSchema, zod_1.z.string().min(1)]),
+-    entities: zod_1.z.record(entity_1.entityZodSchema)
++    entities: zod_1.z.record(zod_1.z.string(), entity_1.entityZodSchema)
+ });
+ //# sourceMappingURL=semanticAction.js.map

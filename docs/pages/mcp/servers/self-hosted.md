@@ -19,8 +19,8 @@ Run any MCP server for your whole team, even one built to run on a laptop. Many 
 With the quickstart or the Helm chart, there is nothing to set up. Go straight to [adding a self-hosted server](/docs/mcp/servers/adding#self-hosted-servers).
 
 - **[Quickstart](/docs/get-started#run-archestra):** Archestra runs its own small Kubernetes cluster inside Docker. That is why the command mounts the Docker socket.
-- **[Helm chart](/docs/admin/deployment#helm-deployment):** Archestra runs servers in the cluster it is installed in. The chart creates the service account and permissions it needs.
-- **Anything else:** mount a kubeconfig for the target cluster, and set [`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_KUBECONFIG) to its path.
+- **[Helm chart](/docs/admin/deployment#install-with-helm):** Archestra runs servers in the cluster it is installed in. The chart creates the service account and permissions it needs.
+- **Anything else:** mount a kubeconfig for the target cluster, and set [`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_KUBECONFIG) to its path.
 
 ## Change How It Runs
 
@@ -54,7 +54,7 @@ Find the symptom, then open the server in MCP Registry to fix it. Its **Logs**, 
 
 Servers nobody uses sleep, so they free their share of the cluster. The next tool call wakes them. It is an [Enterprise feature](/docs/get-started/pricing-model). Turn it on in **Settings → MCP**.
 
-A server sleeps after 30 minutes with no calls. To change that, set [`ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS).
+A server sleeps after 30 minutes with no calls. To change that, set [`ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS).
 
 - **The waking call waits** for the pod to start. When the cluster is full, it waits longer. Add an autoscaler or spare capacity.
 - To keep a server awake, set **Idle hibernation** to **Never hibernate this server**.

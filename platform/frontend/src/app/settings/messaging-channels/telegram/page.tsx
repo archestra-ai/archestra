@@ -17,12 +17,12 @@ import {
 } from "@/lib/chatops/chatops-config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { CredentialField } from "../_components/credential-field";
-import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
-import { ProviderChannels } from "../_components/provider-channels";
-import { SetupSection } from "../_components/setup-section";
-import { SetupStep } from "../_components/setup-step";
-import { useTriggerStatuses } from "../_components/use-trigger-statuses";
+import { CredentialField } from "../_parts/credential-field";
+import { LlmKeySetupStep } from "../_parts/llm-key-setup-step";
+import { ProviderChannels } from "../_parts/provider-channels";
+import { SetupSection } from "../_parts/setup-section";
+import { SetupStep } from "../_parts/setup-step";
+import { useTriggerStatuses } from "../_parts/use-trigger-statuses";
 
 /**
  * The one interactive step that makes Telegram usable: tie this Telegram

@@ -30,6 +30,11 @@ import {
 } from "@microsoft/agents-hosting";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { msTeamsDirectory } from "@/agents/chatops/ms-teams-directory";
+import {
+  type MsTeamsOAuthClient,
+  type MsTeamsSignInOutcome,
+  msTeamsUserSignIn,
+} from "@/agents/chatops/ms-teams-user-sign-in";
 
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
@@ -1435,8 +1440,12 @@ class MSTeamsProvider implements ChatOpsProvider {
    * that only Graph returns. Reading the message uses the app's RSC message
    * permission; reading the file needs the app's Graph `Sites.Selected`
    * permission plus a read grant on the team's site, and without one the
-   * file comes back as skipped. Group-chat files sit in each sender's
-   * OneDrive, which a site grant does not cover.
+   * file comes back as skipped.
+   *
+   * Group-chat files sit in each sender's OneDrive, which a site grant does
+   * not cover. When group-chat sign-in is on, those are read with the
+   * sender's own delegated token, and come back as `sign_in_required` until
+   * the sender has signed in.
    */
   async downloadMessageFiles(
     message: IncomingChatMessage,
@@ -1449,24 +1458,59 @@ class MSTeamsProvider implements ChatOpsProvider {
     ) {
       return [];
     }
+    const graphMessageId = sourceMessageId(message);
+    // A replayed card submit carries the card activity's id, which Graph does
+    // not know; real Teams message ids are numeric.
+    if (!TEAMS_MESSAGE_ID.test(graphMessageId)) return [];
     try {
       const graphMessage =
         conversationType === "channel"
           ? await this.getChannelMessage(message)
           : await this.graphClient.chats
               .byChatId(message.channelId)
-              .messages.byChatMessageId(message.messageId)
+              .messages.byChatMessageId(graphMessageId)
               .get();
-      const files: ChatThreadMessageFile[] = (graphMessage?.attachments ?? [])
+      const files: TeamsFileAttachment[] = (graphMessage?.attachments ?? [])
         .filter(
           (a) => a.contentType === GRAPH_REFERENCE_ATTACHMENT && a.contentUrl,
         )
         .map((a) => ({
-          url: a.contentUrl as string,
-          mimetype: GRAPH_REFERENCE_ATTACHMENT,
+          contentType: GRAPH_REFERENCE_ATTACHMENT,
+          contentUrl: a.contentUrl as string,
           name: a.name ?? undefined,
         }));
-      return files.length > 0 ? this.downloadFiles(files) : [];
+      if (files.length === 0) return [];
+
+      const userClient =
+        conversationType === "groupChat"
+          ? this.userSignInClient(message)
+          : null;
+      if (!userClient || !files.some((f) => isOneDriveUrl(f.contentUrl))) {
+        return this.downloadTeamsFiles(files);
+      }
+      const userAccessToken = await msTeamsUserSignIn.getAccessToken({
+        tenantId: userClient.tenantId,
+        aadObjectId: message.senderId,
+        client: userClient,
+      });
+      if (!userAccessToken) {
+        // Files outside any OneDrive are still tried with the app's grant.
+        const outcomes = await this.downloadTeamsFiles(
+          files.filter((f) => !isOneDriveUrl(f.contentUrl)),
+        );
+        return [
+          ...outcomes,
+          ...files
+            .filter((f) => isOneDriveUrl(f.contentUrl))
+            .map(
+              (f): ThreadFileOutcome => ({
+                status: "skipped",
+                skipped: { name: f.name, reason: "sign_in_required" },
+              }),
+            ),
+        ];
+      }
+      return this.downloadTeamsFiles(files, undefined, { userAccessToken });
     } catch (error) {
       logger.warn(
         {
@@ -1480,8 +1524,135 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
   }
 
+  /**
+   * Ask the sender of a group-chat message to sign in so the bot can read the
+   * files they shared, and hold the message until they have. The card goes to
+   * the chat itself (Teams has no private message in a group chat), but its
+   * link only completes for the sender's own account.
+   * @returns Whether the card was posted and the message is now held
+   */
+  async requestFileSignIn(params: {
+    message: IncomingChatMessage;
+    fileNames: string[];
+  }): Promise<boolean> {
+    const { message, fileNames } = params;
+    const client = this.userSignInClient(message);
+    if (!client) return false;
+    try {
+      const signInUrl = await msTeamsUserSignIn.createPendingSignIn({
+        tenantId: client.tenantId,
+        message,
+      });
+      await this.sendActivityToConversation(
+        message,
+        Activity.fromObject({
+          type: ActivityTypes.Message,
+          attachments: [
+            buildFileSignInCard({
+              senderName: message.senderName,
+              fileNames,
+              signInUrl,
+            }),
+          ],
+        }),
+      );
+      return true;
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[MSTeamsProvider] Could not post the file sign-in card",
+      );
+      return false;
+    }
+  }
+
+  /** Microsoft's sign-in URL for a sign-in card's link, or null once expired. */
+  async beginUserSignIn(key: string): Promise<string | null> {
+    const client = this.oauthClient();
+    if (!client) return null;
+    return msTeamsUserSignIn.beginSignIn({ key, client });
+  }
+
+  /** Finish a sign-in started from a sign-in card. */
+  async completeUserSignIn(params: {
+    code: string;
+    state: string;
+  }): Promise<MsTeamsSignInOutcome> {
+    const client = this.oauthClient();
+    if (!client) return { status: "failed" };
+    return msTeamsUserSignIn.completeSignIn({ ...params, client });
+  }
+
+  /** Forget the sender's sign-in. Returns whether they had one. */
+  async signOutUser(message: IncomingChatMessage): Promise<boolean> {
+    const tenantId = message.metadata?.tenantId;
+    if (typeof tenantId !== "string" || !tenantId) return false;
+    return msTeamsUserSignIn.signOut({
+      tenantId,
+      aadObjectId: message.senderId,
+    });
+  }
+
   // ===========================================================================
   // Private Methods
+
+  /**
+   * The bot's Graph app as an OAuth client, when its credentials are set.
+   */
+  private oauthClient(): MsTeamsOAuthClient | null {
+    const { graphTenantId, graphClientId, graphClientSecret } = this.config;
+    if (!graphTenantId || !graphClientId || !graphClientSecret) return null;
+    return {
+      tenantId: graphTenantId,
+      clientId: graphClientId,
+      clientSecret: graphClientSecret,
+    };
+  }
+
+  /**
+   * The OAuth client to sign this message's sender in with, or null when
+   * group-chat sign-in is off or the sender is from another tenant than the
+   * bot's app (which cannot sign them in).
+   */
+  private userSignInClient(
+    message: IncomingChatMessage,
+  ): MsTeamsOAuthClient | null {
+    if (!this.config.groupChatFileSignIn) return null;
+    const client = this.oauthClient();
+    const tenantId = message.metadata?.tenantId;
+    if (!client || typeof tenantId !== "string") return null;
+    return tenantId.toLowerCase() === client.tenantId.toLowerCase()
+      ? { ...client, tenantId }
+      : null;
+  }
+
+  /**
+   * Send to the message's conversation: through its live turn when the
+   * webhook is still open, else proactively.
+   */
+  private async sendActivityToConversation(
+    message: IncomingChatMessage,
+    activity: Activity,
+  ): Promise<void> {
+    const turnContext = message.metadata?.turnContext;
+    if (turnContext instanceof TurnContext) {
+      await turnContext.sendActivity(activity);
+      return;
+    }
+    const ref = message.metadata?.conversationReference as
+      | ConversationReference
+      | undefined;
+    if (!this.adapter || !ref) {
+      throw new Error("No conversation to send to");
+    }
+    await this.adapter.continueConversation(
+      this.config.appId,
+      ref,
+      async (context) => {
+        await context.sendActivity(activity);
+      },
+    );
+  }
 
   private async getChannelMessage(
     message: IncomingChatMessage,
@@ -1500,12 +1671,13 @@ class MSTeamsProvider implements ChatOpsProvider {
       .byTeamId(teamId)
       .channels.byChannelId(message.channelId).messages;
     const rootId = message.threadId;
-    return rootId && rootId !== message.messageId
+    const messageId = sourceMessageId(message);
+    return rootId && rootId !== messageId
       ? messages
           .byChatMessageId(rootId)
-          .replies.byChatMessageId1(message.messageId)
+          .replies.byChatMessageId1(messageId)
           .get()
-      : messages.byChatMessageId(message.messageId).get();
+      : messages.byChatMessageId(messageId).get();
   }
 
   /**
@@ -1532,6 +1704,58 @@ class MSTeamsProvider implements ChatOpsProvider {
     // the Authorization header on that cross-origin hop.
     return fetch(
       `${GRAPH_V1}/drives/${encodeURIComponent(location.driveId)}/root:/${encodeGraphPath(location.itemPath)}:/content`,
+      { headers },
+    );
+  }
+
+  /**
+   * Fetch a file from the signed-in sender's own OneDrive with their delegated
+   * token. `Files.Read` reaches only `/me/drive`, so the file's page URL is
+   * matched against that drive's URL; a file in anyone else's OneDrive is
+   * not found.
+   */
+  private async fetchOneDriveFileAsUser(params: {
+    fileUrl: string;
+    accessToken: string;
+  }): Promise<Response> {
+    const headers = { Authorization: `Bearer ${params.accessToken}` };
+    const driveResponse = await fetch(
+      `${GRAPH_V1}/me/drive?$select=id,webUrl`,
+      {
+        headers,
+      },
+    );
+    if (!driveResponse.ok) {
+      return new Response(null, { status: driveResponse.status });
+    }
+    const drive = (await driveResponse.json()) as {
+      id?: string;
+      webUrl?: string;
+    };
+    if (!drive.id || !drive.webUrl) return new Response(null, { status: 404 });
+    const file = new URL(params.fileUrl);
+    const driveUrl = new URL(drive.webUrl);
+    const fileSegments = pathSegments(file.pathname);
+    const driveSegments = pathSegments(driveUrl.pathname);
+    const inDrive =
+      file.hostname.toLowerCase() === driveUrl.hostname.toLowerCase() &&
+      fileSegments.length > driveSegments.length &&
+      driveSegments.every(
+        (segment, i) =>
+          fileSegments[i]?.toLowerCase() === segment.toLowerCase(),
+      );
+    if (!inDrive) {
+      logger.info(
+        { host: file.hostname },
+        "[MSTeamsProvider] A group-chat file is not in its sender's OneDrive",
+      );
+      return new Response(null, { status: 404 });
+    }
+    const itemPath = fileSegments.slice(driveSegments.length);
+    // Graph redirects to a pre-signed download URL; fetch drops the
+    // Authorization header on that cross-origin hop.
+    return fetch(
+      `${GRAPH_V1}/drives/${encodeURIComponent(drive.id)}/root:/${encodeGraphPath(itemPath)}:/content`,
       { headers },
     );
   }
@@ -1646,6 +1870,10 @@ class MSTeamsProvider implements ChatOpsProvider {
   private async downloadTeamsFiles(
     files: TeamsFileAttachment[],
     serviceUrl?: string,
+    options?: {
+      /** The sender's delegated token, for files in their own OneDrive. */
+      userAccessToken?: string;
+    },
   ): Promise<ThreadFileOutcome[]> {
     if (files.length === 0) return [];
 
@@ -1725,7 +1953,12 @@ class MSTeamsProvider implements ChatOpsProvider {
         }
 
         const response = isSharePointReference
-          ? await this.fetchSharePointFile(attachment.contentUrl)
+          ? options?.userAccessToken && isOneDriveUrl(attachment.contentUrl)
+            ? await this.fetchOneDriveFileAsUser({
+                fileUrl: attachment.contentUrl,
+                accessToken: options.userAccessToken,
+              })
+            : await this.fetchSharePointFile(attachment.contentUrl)
           : await fetch(
               attachment.contentUrl,
               Object.keys(headers).length > 0 ? { headers } : undefined,
@@ -2377,6 +2610,82 @@ const GRAPH_V1 = "https://graph.microsoft.com/v1.0";
 
 /** How Graph lists a file shared in a Teams message: a link to SharePoint. */
 const GRAPH_REFERENCE_ATTACHMENT = "reference";
+
+/** The shape of a Teams message id: its epoch-millisecond timestamp. */
+const TEAMS_MESSAGE_ID = /^\d+$/;
+
+/**
+ * A personal OneDrive (`<tenant>-my.sharepoint.com/personal/<user>/...`),
+ * where Teams keeps the files sent in group chats.
+ */
+function isOneDriveUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.protocol === "https:" &&
+      parsed.hostname.toLowerCase().endsWith("-my.sharepoint.com") &&
+      pathSegments(parsed.pathname)[0]?.toLowerCase() === "personal"
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The Teams id of the message as Graph knows it. A message answered again
+ * after its sender signed in carries a replay id of its own.
+ */
+function sourceMessageId(message: IncomingChatMessage): string {
+  const source = message.metadata?.sourceMessageId;
+  return typeof source === "string" && source ? source : message.messageId;
+}
+
+/**
+ * The card that asks a group-chat sender to sign in. Its button opens
+ * Archestra's sign-in link in the browser.
+ */
+function buildFileSignInCard(params: {
+  senderName: string;
+  fileNames: string[];
+  signInUrl: string;
+}): { contentType: string; content: Record<string, unknown> } {
+  const names = params.fileNames.filter(Boolean);
+  const files =
+    names.length === 0
+      ? "the file you shared"
+      : names.length === 1
+        ? `**${names[0]}**`
+        : `the ${names.length} files you shared`;
+  return {
+    contentType: "application/vnd.microsoft.card.adaptive",
+    content: {
+      type: "AdaptiveCard",
+      $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+      version: "1.4",
+      body: [
+        {
+          type: "TextBlock",
+          text: `${params.senderName}, sign in so I can read ${files}`,
+          weight: "Bolder",
+          wrap: true,
+        },
+        {
+          type: "TextBlock",
+          text: "Files in group chats are stored in your OneDrive, so I can only open them with your permission. Sign in once with your Microsoft account and I'll answer this message right after. I can read only your own files, and only the ones you share with me.",
+          wrap: true,
+          spacing: "Small",
+        },
+      ],
+      actions: [
+        {
+          type: "Action.OpenUrl",
+          title: "Sign in with Microsoft",
+          url: params.signInUrl,
+        },
+      ],
+    },
+  };
+}
 
 /** Channels and group chats keep files in SharePoint, reachable via Graph. */
 function isGraphFileConversation(conversationType?: string): boolean {

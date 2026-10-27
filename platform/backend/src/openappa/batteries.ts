@@ -5,6 +5,7 @@ import type {
   PolicyEditInput,
 } from "@archestra/openappa-rs";
 import { matchBatteries, parseFullToolName } from "@archestra/shared";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -41,6 +42,8 @@ import type {
   BatterySummary,
   CompositionView,
   CreateBatteryInstall,
+  CredentialBinding,
+  CredentialBindingView,
   EffectivePolicy,
   EffectivePolicyView,
   PolicyBatteryView,
@@ -122,6 +125,42 @@ class OpenAppaBatteriesService {
         installs: installsByBattery.get(battery.name) ?? [],
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
+   * One stored install row, as the last composition left it. A read never
+   * recomposes, so its status can lag a change the next composition picks up.
+   */
+  async getInstall(params: {
+    organizationId: string;
+    id: string;
+  }): Promise<BatteryInstall> {
+    const install = await OpenAppaBatteryInstallModel.find(params);
+    if (!install) throw new ApiError(404, "Battery install not found");
+    return install;
+  }
+
+  /** The organization's stored credential bindings, without any credential value. */
+  async listCredentialBindings(
+    organizationId: string,
+  ): Promise<CredentialBindingView[]> {
+    const [bindings, bindable] = await Promise.all([
+      OpenAppaCredentialBindingModel.list(organizationId),
+      this.bindableKeys(organizationId),
+    ]);
+    return bindings.map((binding) => credentialBindingView(binding, bindable));
+  }
+
+  async getCredentialBinding(params: {
+    organizationId: string;
+    variable: string;
+  }): Promise<CredentialBindingView> {
+    const [binding, bindable] = await Promise.all([
+      OpenAppaCredentialBindingModel.find(params),
+      this.bindableKeys(params.organizationId),
+    ]);
+    if (!binding) throw new ApiError(404, "Credential binding not found");
+    return credentialBindingView(binding, bindable);
   }
 
   /** What each battery this organization can include asks of the person setting it up. */
@@ -696,7 +735,8 @@ class OpenAppaBatteriesService {
         organizationId,
         variable,
         credentialKey: key,
-        updatedBy: userId,
+        // `updated_by` references users; a service account has no users row.
+        updatedBy: isServiceAccountUserId(userId) ? null : userId,
       });
     }
     await this.recompose(organizationId);
@@ -2345,6 +2385,20 @@ const RECOMPILE_CONCURRENCY = 4;
 const EDIT_ATTEMPTS = 3;
 /** Base wait after a lost store, doubled per attempt and jittered on top. */
 const RECOMPILE_BACKOFF_MS = 25;
+
+function credentialBindingView(
+  binding: CredentialBinding,
+  bindable: ReadonlySet<string>,
+): CredentialBindingView {
+  return {
+    variable: binding.variable,
+    credentialKey: binding.credentialKey,
+    hasValue: bindable.has(binding.credentialKey),
+    updatedBy: binding.updatedBy,
+    createdAt: binding.createdAt,
+    updatedAt: binding.updatedAt,
+  };
+}
 
 function recomposeBackoffMs(attempt: number): number {
   const delay = RECOMPILE_BACKOFF_MS * 2 ** attempt;

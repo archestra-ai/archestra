@@ -80,7 +80,7 @@ test("refuses an incompatible Gemini runtime before creating a detached task", a
       A2ATaskModel.listForActor({
         actorKind: "user",
         actorId: user.id,
-        agentId: agent.id,
+        agentIds: [agent.id],
         pageSize: 10,
       }),
     ).resolves.toMatchObject({ totalSize: 0 });

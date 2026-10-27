@@ -348,7 +348,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
 
 vi.mock("@/lib/organization.query");
 
-vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
+vi.mock("@/lib/chat/use-chat-placeholder", () => ({
   useChatPlaceholder: (...args: unknown[]) => mockUseChatPlaceholder(...args),
 }));
 
@@ -1193,9 +1193,7 @@ describe("ArchestraPromptInput", () => {
         screen.getByRole("link", { name: /Learn how to enable it/ }),
       ).toHaveAttribute(
         "href",
-        expect.stringContaining(
-          "/docs/admin/security/content-encryption#key-escrow",
-        ),
+        expect.stringContaining("/docs/admin/content-encryption#key-escrow"),
       );
       expect(onEncryptedChatChange).not.toHaveBeenCalled();
     });
@@ -1891,6 +1889,60 @@ describe("ArchestraPromptInput", () => {
 
       expect(onSubmit).toHaveBeenCalledTimes(1);
       expect(localStorage.getItem(draftKey)).toBeNull();
+    });
+  });
+
+  describe("interrupt queued messages", () => {
+    it("interrupts without removing or reordering queued messages", () => {
+      const conversationId = "interrupt-queue";
+      chatMessageQueue.clear(conversationId);
+      chatMessageQueue.enqueue(conversationId, { text: "first correction" });
+      chatMessageQueue.enqueue(conversationId, { text: "second correction" });
+      const onInterruptQueue = vi.fn();
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId={conversationId}
+          status="streaming"
+          onInterruptQueue={onInterruptQueue}
+        />,
+      );
+      const button = screen.getByRole("button", { name: "Interrupt & send" });
+      button.focus();
+      expect(button).toHaveFocus();
+      fireEvent.click(button);
+      expect(onInterruptQueue).toHaveBeenCalledTimes(1);
+      expect(
+        chatMessageQueue.get(conversationId).map(({ text }) => text),
+      ).toEqual(["first correction", "second correction"]);
+    });
+    it("disables interruption while stopping or waiting on a tool", () => {
+      const conversationId = "interrupt-blocked";
+      chatMessageQueue.enqueue(conversationId, { text: "wait safely" });
+      const onInterruptQueue = vi.fn();
+      const { rerender } = render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId={conversationId}
+          status="streaming"
+          onInterruptQueue={onInterruptQueue}
+          interruptQueueDisabledReason="Resolve the pending tool approval first."
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Interrupt & send" }));
+      expect(onInterruptQueue).not.toHaveBeenCalled();
+      rerender(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId={conversationId}
+          status="streaming"
+          onInterruptQueue={onInterruptQueue}
+          isInterruptingQueue
+        />,
+      );
+      expect(
+        screen.getByRole("button", { name: "Interrupting…" }),
+      ).toBeDisabled();
     });
   });
 

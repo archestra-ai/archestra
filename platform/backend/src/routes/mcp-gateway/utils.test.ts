@@ -6,23 +6,23 @@ import {
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
   OAUTH_TOKEN_ID_PREFIX,
   TOOL_ASK_USER_FULL_NAME,
-  TOOL_CANCEL_RUN_FULL_NAME,
+  TOOL_CANCEL_AGENT_RUN_FULL_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_CREATE_SKILL_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_GET_AGENT_RUN_FULL_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
-  TOOL_GET_RUN_FULL_NAME,
-  TOOL_LIST_RUNS_FULL_NAME,
+  TOOL_LIST_AGENT_RUNS_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
-  TOOL_POST_RUN_MESSAGE_FULL_NAME,
+  TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
-  TOOL_STEER_RUN_FULL_NAME,
+  TOOL_STEER_AGENT_RUN_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_UPDATE_SKILL_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
@@ -2184,12 +2184,21 @@ describe("createAgentServer tools/list", () => {
     const response = await list({ method: "tools/list", params: {} });
     const names = response.tools.map((tool) => tool.name);
     const controlNames = (
-      ["get_run", "list_runs", "steer_run", "cancel_run"] as const
+      [
+        "get_agent_run",
+        "list_agent_runs",
+        "steer_agent_run",
+        "cancel_agent_run",
+      ] as const
     ).map((name) => archestraMcpBranding.getToolName(name));
     for (const name of controlNames) expect(names).not.toContain(name);
     const found = await executeArchestraTool(
       archestraMcpBranding.getToolName("search_tools"),
-      { query: "(get_run|list_runs|steer_run|cancel_run)$", mode: "regex" },
+      {
+        query:
+          "(get_agent_run|list_agent_runs|steer_agent_run|cancel_agent_run)$",
+        mode: "regex",
+      },
       {
         agent: { id: agent.id, name: agent.name },
         agentId: agent.id,
@@ -2203,7 +2212,9 @@ describe("createAgentServer tools/list", () => {
         .map((tool) => tool.toolName)
         .sort(),
     ).toEqual(controlNames.sort());
-    expect(names).not.toContain(archestraMcpBranding.getToolName("start_run"));
+    expect(names).not.toContain(
+      archestraMcpBranding.getToolName("start_agent_run"),
+    );
     const discovery = response.tools.find(
       (tool) => tool.name === archestraMcpBranding.getToolName("search_tools"),
     );
@@ -2338,11 +2349,11 @@ describe("createAgentServer tools/list", () => {
         TOOL_RUN_COMMAND_FULL_NAME,
         TOOL_DOWNLOAD_FILE_FULL_NAME,
         TOOL_UPLOAD_FILE_FULL_NAME,
-        TOOL_GET_RUN_FULL_NAME,
-        TOOL_LIST_RUNS_FULL_NAME,
-        TOOL_STEER_RUN_FULL_NAME,
-        TOOL_CANCEL_RUN_FULL_NAME,
-        TOOL_POST_RUN_MESSAGE_FULL_NAME,
+        TOOL_GET_AGENT_RUN_FULL_NAME,
+        TOOL_LIST_AGENT_RUNS_FULL_NAME,
+        TOOL_STEER_AGENT_RUN_FULL_NAME,
+        TOOL_CANCEL_AGENT_RUN_FULL_NAME,
+        TOOL_POST_AGENT_RUN_MESSAGE_FULL_NAME,
       ]) {
         expect(names.has(runtimeTool)).toBe(agentType === "agent");
       }

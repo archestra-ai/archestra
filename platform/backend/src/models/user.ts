@@ -4,9 +4,10 @@ import {
   type Permissions,
   type PredefinedRoleName,
 } from "@archestra/shared";
-import { count, eq, getTableColumns, inArray } from "drizzle-orm";
+import { and, count, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
 import logger from "@/logging";
 import type { UpdateUser } from "@/types";
 import AgentModel from "./agent";
@@ -96,25 +97,23 @@ class UserModel {
    */
   static async getById(id: string) {
     logger.trace("UserModel.getById: fetching user");
-    const [row] = await db
-      .select({
-        ...getTableColumns(schema.usersTable),
-        organizationId: schema.membersTable.organizationId,
-        membership: getTableColumns(schema.membersTable),
-      })
-      .from(schema.usersTable)
-      .innerJoin(
-        schema.membersTable,
-        eq(schema.usersTable.id, schema.membersTable.userId),
-      )
-      .where(eq(schema.usersTable.id, id))
-      .orderBy(schema.membersTable.createdAt, schema.membersTable.id)
-      .limit(1);
+    const [row] = await UserModel.byId.get().execute({ id });
     logger.trace({ found: !!row }, "UserModel.getById: completed");
     if (!row) return row;
     const { membership, ...user } = row;
     // The user's first membership is also their first in its organization,
     // the row MemberModel.getByUserId reads there; a read request keeps it.
+    MemberModel.remember(membership);
+    return user;
+  }
+
+  /** The proxy's acting user and membership, read together for this request. */
+  static async getProxyIdentity(userId: string, organizationId: string) {
+    const [row] = await UserModel.proxyIdentity
+      .get()
+      .execute({ userId, organizationId });
+    if (!row) return null;
+    const { membership, ...user } = row;
     MemberModel.remember(membership);
     return user;
   }
@@ -308,6 +307,50 @@ class UserModel {
     logger.debug({ deleted }, "UserModel.delete: completed");
     return deleted;
   }
+  private static readonly byId = new PreparedQuery((database) =>
+    database
+      .select({
+        ...getTableColumns(schema.usersTable),
+        organizationId: schema.membersTable.organizationId,
+        membership: getTableColumns(schema.membersTable),
+      })
+      .from(schema.usersTable)
+      .innerJoin(
+        schema.membersTable,
+        eq(schema.usersTable.id, schema.membersTable.userId),
+      )
+      .where(eq(schema.usersTable.id, sql.placeholder("id")))
+      .orderBy(schema.membersTable.createdAt, schema.membersTable.id)
+      .limit(1)
+      .prepare("archestra_user_by_id_with_membership"),
+  );
+
+  private static readonly proxyIdentity = new PreparedQuery((database) =>
+    database
+      .select({
+        id: schema.usersTable.id,
+        email: schema.usersTable.email,
+        name: schema.usersTable.name,
+        membership: getTableColumns(schema.membersTable),
+      })
+      .from(schema.usersTable)
+      .innerJoin(
+        schema.membersTable,
+        eq(schema.usersTable.id, schema.membersTable.userId),
+      )
+      .where(
+        and(
+          eq(schema.usersTable.id, sql.placeholder("userId")),
+          eq(
+            schema.membersTable.organizationId,
+            sql.placeholder("organizationId"),
+          ),
+        ),
+      )
+      .orderBy(schema.membersTable.createdAt, schema.membersTable.id)
+      .limit(1)
+      .prepare("archestra_proxy_user_identity"),
+  );
 }
 
 export default UserModel;

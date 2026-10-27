@@ -87,6 +87,9 @@ export const AppUsageRowSchema = z.object({
   llmRequests: z.number().describe("LLM requests the app made."),
   inputTokens: z.number(),
   outputTokens: z.number(),
+  cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
+  totalTokens: z.number(),
   billedCost: z.number(),
   subscriptionCost: z.number(),
 });

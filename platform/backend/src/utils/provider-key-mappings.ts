@@ -9,6 +9,12 @@ import { ApiError } from "@/types";
 // Public API
 // ===================================================================
 
+/** Resource APIs have no model with which to disambiguate provider accounts. */
+export type ProviderKeySelection = {
+  requireUnique?: boolean;
+  providerApiKeyId?: string;
+};
+
 /**
  * Validate the provider API keys a credential (virtual key, LLM OAuth client)
  * routes to.
@@ -64,11 +70,30 @@ export async function selectMappedProviderKey<
   mappings: T[];
   provider: SupportedProvider;
   modelId?: string | null;
+  selection?: ProviderKeySelection;
 }): Promise<T | undefined> {
   const candidates = params.mappings.filter(
     (mapping) => mapping.provider === params.provider,
   );
   const [first] = candidates;
+  if (params.selection?.providerApiKeyId) {
+    const selected = candidates.find(
+      (candidate) =>
+        candidate.providerApiKeyId === params.selection?.providerApiKeyId,
+    );
+    if (!selected)
+      throw new ApiError(
+        403,
+        "The credential cannot use the selected provider account.",
+      );
+    return selected;
+  }
+  if (params.selection?.requireUnique && candidates.length > 1) {
+    throw new ApiError(
+      400,
+      "Resource requests require an unambiguous provider account. Select an allowed provider-api-key-id.",
+    );
+  }
   if (
     candidates.length <= 1 ||
     !params.modelId ||

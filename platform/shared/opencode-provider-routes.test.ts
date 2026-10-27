@@ -21,6 +21,7 @@ describe("OpenCode passthrough provider routes", () => {
       mistral: "https://example.com/v1/mistral",
       groq: "https://example.com/v1/groq",
       openrouter: "https://example.com/v1/openrouter",
+      xai: "https://example.com/v1/xai",
       deepseek: "https://example.com/v1/deepseek",
       zhipuai: "https://example.com/v1/zhipuai",
       minimax: "https://example.com/v1/minimax",

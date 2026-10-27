@@ -13,6 +13,7 @@ import {
 import { MakerDisc } from "@/app/llm/logs/_parts/maker-disc";
 import { CopyButton } from "@/components/copy-button";
 import { formatCost } from "@/components/cost";
+import { RequestAttributionLabels } from "@/components/request-attribution-labels";
 import { SourceIcon } from "@/components/source-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -34,6 +35,7 @@ import {
   OverviewSection,
   paneHeight,
 } from "./overview-parts";
+import { PoolAttempt } from "./pool-attempt";
 import { RequestContent } from "./request-content";
 import { KindChip } from "./request-waterfall";
 import {
@@ -238,7 +240,7 @@ function RequestOverview({
   const segments = [
     {
       key: "fresh",
-      label: "Fresh input",
+      label: row.inputTokensEstimated ? "Fresh input (est.)" : "Fresh input",
       value: fresh,
       tone: TOKEN_TONES.fresh,
     },
@@ -335,6 +337,14 @@ function RequestOverview({
           </dl>
         </OverviewSection>
 
+        <OverviewSection title="Attribution labels">
+          <p className="mb-2 text-xs text-muted-foreground">
+            Captured at request start. Credential labels override billing-team
+            labels.
+          </p>
+          <RequestAttributionLabels labels={row.attributionLabels} />
+        </OverviewSection>
+
         <OverviewSection
           title="Timing"
           aside={<BigFigure value={formatLatency(row.durationMs)} />}
@@ -411,7 +421,15 @@ function RequestOverview({
               {Math.round(cacheShare * 100)}% of input from the prompt cache
             </p>
           ) : null}
+          {row.inputTokensEstimated ? (
+            <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+              Input is estimated from the request: the provider reported no
+              usage.
+            </p>
+          ) : null}
         </OverviewSection>
+
+        <PoolAttempt row={row} />
 
         <OverviewSection
           title="Cost"

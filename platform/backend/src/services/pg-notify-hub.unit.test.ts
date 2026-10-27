@@ -296,6 +296,35 @@ describe("delivery verification", () => {
     await waiting;
   });
 
+  test("reports a delivery generation only while a session is verified", async () => {
+    const clients: FakePgClient[] = [];
+    const hub = new PostgresNotifyHub("postgres://test", () => {
+      const client = new FakePgClient();
+      clients.push(client);
+      return client;
+    });
+    expect(hub.deliveryGeneration()).toBeNull();
+
+    await hub.channel("a2a_task_events").wait({ key: "k", timeoutMs: 1 });
+    await vi.waitFor(() => expect(hub.deliveryGeneration()).not.toBeNull());
+    const first = hub.deliveryGeneration();
+
+    clients[0].emit("error", new Error("connection reset"));
+    expect(hub.deliveryGeneration()).toBeNull();
+
+    await hub.channel("a2a_task_events").wait({ key: "k", timeoutMs: 1 });
+    await vi.waitFor(() => expect(hub.deliveryGeneration()).not.toBeNull());
+    expect(hub.deliveryGeneration()).not.toBe(first);
+  });
+
+  test("never reports delivery behind an endpoint that drops notifications", async () => {
+    const { hub, client } = hubWithFakeClient();
+    client.deliversNotifications = false;
+    await hub.channel("a2a_task_events").wait({ key: "k", timeoutMs: 2_500 });
+
+    expect(hub.deliveryGeneration()).toBeNull();
+  });
+
   test("the probe never delivers a key to real waiters", async () => {
     const { hub, client } = hubWithFakeClient();
     const channel = hub.channel("archestra_notify_probe");

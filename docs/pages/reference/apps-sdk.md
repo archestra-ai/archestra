@@ -73,7 +73,7 @@ Do not use `localStorage`, `sessionStorage`, or IndexedDB. Without a sandbox dom
 Use files for documents the app produces or the viewer keeps, such as a generated report. Use storage for structured state.
 
 - A filename is a plain name of up to 256 characters, with no `/`, `\`, or leading dot.
-- A file can be up to [`ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT`](/docs/reference/configuration#ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT) bytes.
+- A file can be up to [`ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT`](/docs/admin/deployment/configuration#ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT) bytes.
 
 ### Tools
 
@@ -155,7 +155,7 @@ Scripts, styles, fonts, and images can load from these CDNs, so apps can use cli
 
 Declare `camera`, `microphone`, `geolocation`, or `clipboardWrite` with the `uiPermissions` argument of [`scaffold_app`](/docs/reference/archestra-mcp-server#scaffold_app). The browser still asks the viewer for consent on first use.
 
-These permissions work only when the sandbox has its own origin: with [`ARCHESTRA_MCP_SANDBOX_DOMAIN`](/docs/reference/configuration#ARCHESTRA_MCP_SANDBOX_DOMAIN) set, or on `localhost` in local development. Without one, the browser blocks them.
+These permissions work only when the sandbox has its own origin: with [`ARCHESTRA_MCP_SANDBOX_DOMAIN`](/docs/admin/deployment/configuration#ARCHESTRA_MCP_SANDBOX_DOMAIN) set, or on `localhost` in local development. Without one, the browser blocks them.
 
 ### Shared Apps
 

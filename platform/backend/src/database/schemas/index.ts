@@ -102,6 +102,7 @@ export {
   chatActiveRunsTable,
 } from "./chat-active-run";
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
+export { default as chatopsMsTeamsUserConnectionsTable } from "./chatops-ms-teams-user-connection";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as chatopsThreadContextsTable } from "./chatops-thread-context";
 export { default as chatopsUserAdmissionsTable } from "./chatops-user-admission";
@@ -201,7 +202,11 @@ export { default as mcpToolCallsTable } from "./mcp-tool-call";
 export { default as membersTable } from "./member";
 export { default as messagesTable } from "./message";
 export { default as modelsTable } from "./model";
+export { default as modelCostBackfillsTable } from "./model-cost-backfill";
 export { default as modelLabelsTable } from "./model-label";
+export { default as modelPoolsTable } from "./model-pool";
+export { default as modelPoolMembersTable } from "./model-pool-member";
+export { default as modelPoolVirtualApiKeysTable } from "./model-pool-virtual-api-key";
 export { default as modelTeamsTable } from "./model-team";
 export { default as modelUsersTable } from "./model-user";
 export { default as oauthAccessTokensTable } from "./oauth-access-token";
@@ -236,6 +241,7 @@ export {
 export { default as projectAppsTable } from "./project-app";
 export { default as projectLabelsTable } from "./project-label";
 export { default as projectPinsTable } from "./project-pin";
+export { default as proxyProviderFilesTable } from "./proxy-provider-file";
 export { default as resourcePermissionPoliciesTable } from "./resource-permission-policy";
 export { default as runtimeCredentialConnectionsTable } from "./runtime-credential-connection";
 export { default as runtimeCredentialDefinitionsTable } from "./runtime-credential-definition";
@@ -281,6 +287,7 @@ export { default as toolObservationsTable } from "./tool-observation";
 export { default as twoFactorsTable } from "./two-factor";
 export { default as usersTable } from "./user";
 export { default as userCredentialsTable } from "./user-credential";
+export { default as userLimitUsageResetsTable } from "./user-limit-usage-reset";
 export { default as userOnboardingSeenItemsTable } from "./user-onboarding-seen-item";
 export { default as userTokensTable } from "./user-token";
 export { default as verificationsTable } from "./verification";

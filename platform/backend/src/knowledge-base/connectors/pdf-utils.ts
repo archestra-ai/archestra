@@ -118,6 +118,17 @@ export function describePdfExtractionWarning(
 }
 
 /**
+ * pdf.js v1.10 builds sub-streams from `bytes.buffer` at absolute offsets,
+ * ignoring `byteOffset`, and its fake worker clones a Buffer with
+ * `new Buffer(view)`, which lands in Node's shared allocation pool for
+ * documents under `Buffer.poolSize / 2`. Handing it a plain Uint8Array that
+ * owns its whole ArrayBuffer keeps offsets valid.
+ */
+export function toPdfJsBytes(buffer: Uint8Array): Uint8Array {
+  return new Uint8Array(buffer);
+}
+
+/**
  * Extract text from a PDF while preserving page-level outcomes.
  *
  * pdf-parse's wrapper catches each `getPage`/page-render rejection and replaces
@@ -143,7 +154,10 @@ export async function parsePdfBuffer(
     // pdf.js defaults to recovery mode and can silently resolve partial page
     // output after font/XObject/content-stream errors. Strict mode makes those
     // failures observable so incomplete content is never reported as `ok`.
-    loadingTask = pdfJs.getDocument({ data: buffer, stopAtErrors: true });
+    loadingTask = pdfJs.getDocument({
+      data: toPdfJsBytes(buffer),
+      stopAtErrors: true,
+    });
     document = await loadingTask.promise;
     const pageCount = document.numPages;
     if (pageCount === 0) {

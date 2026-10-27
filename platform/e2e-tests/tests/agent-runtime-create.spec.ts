@@ -144,10 +144,18 @@ test("configures popular agent templates and preserves the creation wizard", asy
   const original = await organizationResponse.json();
   const settingsUrl = `${UI_BASE_URL}/api/organization/integration-settings`;
   const settings = page.getByRole("list", {
-    name: "Coding agents",
+    name: "Agent Runtimes",
     exact: true,
   });
-  const names = ["Claude Code", "Codex", "OpenCode", "Hermes", "OpenClaw"];
+  const names = [
+    "Claude Code",
+    "Codex",
+    "OpenCode",
+    "Hermes",
+    "OpenClaw",
+    "Grok Build",
+    "Kimi Code",
+  ];
   const save = async () => {
     const response = page.waitForResponse(
       (r) =>
@@ -172,8 +180,14 @@ test("configures popular agent templates and preserves the creation wizard", asy
     await goToPage(page, "/settings/agents");
     await expect(
       settings.getByRole("button", { name: /^Remove / }),
-    ).toHaveCount(5);
-    for (const name of ["OpenCode", "Hermes", "OpenClaw"]) {
+    ).toHaveCount(7);
+    for (const name of [
+      "OpenCode",
+      "Hermes",
+      "OpenClaw",
+      "Grok Build",
+      "Kimi Code",
+    ]) {
       await settings
         .getByRole("button", { name: `Remove ${name}`, exact: true })
         .click();
@@ -185,7 +199,13 @@ test("configures popular agent templates and preserves the creation wizard", asy
     ).toHaveCount(2);
 
     await goToPage(page, "/agents/new");
-    for (const name of ["OpenCode", "Hermes", "OpenClaw"]) {
+    for (const name of [
+      "OpenCode",
+      "Hermes",
+      "OpenClaw",
+      "Grok Build",
+      "Kimi Code",
+    ]) {
       await expect(
         page.getByRole("button", { name: new RegExp(name) }),
       ).toHaveCount(0);
@@ -219,7 +239,7 @@ test("configures popular agent templates and preserves the creation wizard", asy
       .click();
     await settings.getByRole("button", { name: /^Remove / }).click();
     await save();
-    // With every template hidden, a custom image is the coding agent left.
+    // With every template hidden, a custom image is the Agent Runtime left.
     await goToPage(page, "/agents/new");
     for (const name of names) {
       await expect(
@@ -238,7 +258,7 @@ test("configures popular agent templates and preserves the creation wizard", asy
 
     await goToPage(page, "/settings/agents");
     for (const name of names) {
-      await settings.getByRole("button", { name: "Add coding agent" }).click();
+      await settings.getByRole("button", { name: "Add Agent Runtime" }).click();
       await page.getByRole("button", { name, exact: true }).click();
     }
     await save();

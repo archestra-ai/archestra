@@ -55,8 +55,8 @@ import {
 import { useAgentOptionsPage } from "@/lib/agent-options.query";
 import { useMyAgentRuns } from "@/lib/agent-runtime.query";
 import { useApps } from "@/lib/app.query";
-import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useIsAuthenticated } from "@/lib/auth/use-is-authenticated";
 import {
   useConversations,
   useDeleteConversation,
@@ -979,7 +979,9 @@ export function ConversationSearchPalette({
           </span>
         )}
       </output>
-      <CommandList className="max-h-[min(640px,70vh)]">
+      {/* A fixed height, not a cap: typing and late-loading results would
+          otherwise resize the dialog under the pointer. */}
+      <CommandList className="h-[min(640px,70vh)] max-h-none">
         {isSearching ? (
           <>
             {matchingNavigationItems.length > 0 && (

@@ -49,6 +49,7 @@ export type SessionSource =
   | "meta_header"
   | "openwebui_chat"
   | "codex_session"
+  | "pi_session"
   | OpenCodeFamilySessionSource
   | typeof CLAUDE_CODE_HEADER_SESSION_SOURCE
   | "openai_user"
@@ -76,11 +77,12 @@ export interface SessionInfo {
  *    `session-id` header its Responses requests carry (source:
  *    'opencode_session'). A delegated child keeps its own native session id;
  *    its parent signal classifies the row instead of renaming it.
- * 6. Claude Code `x-claude-code-session-id` (source: 'claude_code_header').
+ * 6. Pi `x-pi-session-id`, only for the Pi client (source: 'pi_session').
+ * 7. Claude Code `x-claude-code-session-id` (source: 'claude_code_header').
  *    `/branch` or `--fork-session` creates a new ID here, ensuring forks
  *    record as separate sessions in logs.
- * 7. Claude/Anthropic metadata.user_id (source: 'claude_metadata')
- * 8. OpenAI user field (source: 'openai_user')
+ * 8. Claude/Anthropic metadata.user_id (source: 'claude_metadata')
+ * 9. OpenAI user field (source: 'openai_user')
  *
  * @param headers - The request headers object
  * @param body - The request body (may contain metadata.user_id, user, or
@@ -171,7 +173,16 @@ export function extractSessionInfo({
     }
   }
 
-  // Priority 6: Claude Code's own session header. `/branch` or
+  // The managed Pi extension keeps this identity across forks and compaction.
+  // Read it only for Pi so unrelated clients cannot acquire its provenance.
+  if (externalAgentId?.trim().toLowerCase() === "pi") {
+    const piSessionId = getHeaderValue(headers, "x-pi-session-id")?.trim();
+    if (piSessionId) {
+      return { sessionId: piSessionId, sessionSource: "pi_session" };
+    }
+  }
+
+  // Priority 7: Claude Code's own session header. `/branch` or
   // `--fork-session` mints a new value here while `metadata.user_id.session_id`
   // stays on the parent conversation.
   const claudeCodeSessionId = getHeaderValue(
@@ -185,7 +196,7 @@ export function extractSessionInfo({
     };
   }
 
-  // Priority 7: Claude/Anthropic metadata.user_id (any known format)
+  // Priority 8: Claude/Anthropic metadata.user_id (any known format)
   const claudeSessionId = parseClaudeMetadataSessionId(body?.metadata?.user_id);
   if (claudeSessionId) {
     return {
@@ -194,7 +205,7 @@ export function extractSessionInfo({
     };
   }
 
-  // Priority 8: OpenAI user field (some clients use this for session tracking)
+  // Priority 9: OpenAI user field (some clients use this for session tracking)
   const user = body?.user;
   if (user && typeof user === "string" && user.trim().length > 0) {
     return { sessionId: user.trim(), sessionSource: "openai_user" };

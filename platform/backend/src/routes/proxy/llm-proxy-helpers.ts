@@ -1,9 +1,12 @@
 import { priceBillingUsage } from "@/services/billable-usage";
+import { ThroughputError } from "@/services/llm-throughput";
+import { asRecord } from "@/utils/as-record";
 import type {
   BillingAttribution,
   PricedBillingUsage,
 } from "@/utils/billable-usage";
 import { componentCacheCosts } from "@/utils/billable-usage";
+import { withMediaUsageAvailability } from "@/utils/media-usage";
 import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-error";
 /**
  * LLM Proxy Helpers
@@ -355,12 +358,21 @@ export async function calculateUsageCost(params: {
   usage: UsageView;
   provider: SupportedProvider;
   usageAccountingMode?: PricedBillingUsage["mode"];
+  providerApiKeyId?: string;
 }): Promise<number | undefined> {
   const { model, usage, provider } = params;
+  if (usage.usageUnavailable || usage.costUnavailable) return undefined;
   if (params.usageAccountingMode === "enforce")
     return Number(
-      (await priceBillingUsage({ model, usage, provider, mode: "enforce" }))
-        .cost,
+      (
+        await priceBillingUsage({
+          model,
+          usage,
+          provider,
+          mode: "enforce",
+          providerApiKeyId: params.providerApiKeyId,
+        })
+      ).cost,
     );
   if (usage.providerReportedCost !== undefined) {
     return usage.providerReportedCost;
@@ -371,6 +383,7 @@ export async function calculateUsageCost(params: {
     usage.outputTokens,
     provider,
     {
+      providerApiKeyId: params.providerApiKeyId,
       readTokens: usage.cacheReadTokens ?? 0,
       writeTokens: usage.cacheWriteTokens ?? 0,
       write1hTokens: usage.cacheWrite1hTokens ?? 0,
@@ -386,6 +399,7 @@ export async function calculateInteractionCosts(params: {
   usage: UsageView;
   providerName: SupportedProvider;
   usageAccountingMode?: PricedBillingUsage["mode"];
+  providerApiKeyId?: string;
 }): Promise<{
   billingUsage?: PricedBillingUsage;
   actualCost: number | undefined;
@@ -393,6 +407,14 @@ export async function calculateInteractionCosts(params: {
   cacheSavings: number | undefined;
   cacheReadSavings: number | undefined;
 }> {
+  if (params.usage.usageUnavailable || params.usage.costUnavailable) {
+    return {
+      actualCost: undefined,
+      cacheCost: undefined,
+      cacheSavings: undefined,
+      cacheReadSavings: undefined,
+    };
+  }
   const billingUsage =
     params.usageAccountingMode && params.usageAccountingMode !== "off"
       ? await priceBillingUsage({
@@ -400,6 +422,7 @@ export async function calculateInteractionCosts(params: {
           usage: params.usage,
           provider: params.providerName,
           mode: params.usageAccountingMode,
+          providerApiKeyId: params.providerApiKeyId,
         })
       : undefined;
   const actualCost =
@@ -409,6 +432,7 @@ export async function calculateInteractionCosts(params: {
           model: params.actualModel,
           usage: params.usage,
           provider: params.providerName,
+          providerApiKeyId: params.providerApiKeyId,
         });
   const cacheBreakdown =
     billingUsage?.mode === "enforce"
@@ -419,6 +443,7 @@ export async function calculateInteractionCosts(params: {
           params.usage.cacheReadTokens ?? 0,
           params.usage.cacheWriteTokens ?? 0,
           params.usage.cacheWrite1hTokens ?? 0,
+          params.providerApiKeyId,
         );
   const componentsCache =
     billingUsage?.mode === "enforce"
@@ -472,6 +497,7 @@ export function applyInputTokenFallback(params: {
   model: string;
 }): UsageView {
   const { usage } = params;
+  if (usage.usageUnavailable || usage.costUnavailable) return usage;
   const hasCacheTokens =
     (usage.cacheReadTokens ?? 0) !== 0 ||
     (usage.cacheWriteTokens ?? 0) !== 0 ||
@@ -524,6 +550,44 @@ export function applyInputTokenFallback(params: {
         }
       : {}),
   };
+}
+
+/**
+ * The input a pool member we stopped waiting on is likely billed for, priced
+ * as that member. Marked estimated on the row; undefined when the prompt can't
+ * be counted, so recording the attempt never fails on it.
+ */
+export async function estimateCutOffAttemptUsage(params: {
+  /** The request's own wire, whose message shape the tokenizer reads. */
+  provider: SupportedProvider;
+  providerMessages: unknown;
+  tools: CommonMcpToolDefinition[];
+  member: {
+    provider?: SupportedProvider;
+    modelId?: string;
+    providerApiKeyId?: string;
+  };
+}): Promise<{ inputTokens: number; cost: string | null } | undefined> {
+  const { member } = params;
+  if (!member.provider || !member.modelId) return undefined;
+  let inputTokens: number;
+  try {
+    inputTokens = estimateRequestInputTokens(params);
+  } catch (error) {
+    logger.warn(
+      { err: error, provider: params.provider, model: member.modelId },
+      "Failed to estimate the input of a cut-off model pool attempt",
+    );
+    return undefined;
+  }
+  if (inputTokens <= 0) return undefined;
+  const cost = await calculateUsageCost({
+    model: member.modelId,
+    usage: { inputTokens, outputTokens: 0 },
+    provider: member.provider,
+    providerApiKeyId: member.providerApiKeyId,
+  });
+  return { inputTokens, cost: cost?.toFixed(10) ?? null };
 }
 
 /**
@@ -589,7 +653,10 @@ export function buildInteractionRecord(params: {
     type: params.providerType,
     request: params.request as InteractionRequest,
     processedRequest: params.processedRequest as InteractionRequest,
-    response: params.response as InteractionResponse,
+    response: withMediaUsageAvailability(
+      params.response,
+      params.usage,
+    ) as InteractionResponse,
     toolCallBlock: params.toolCallBlock,
     model: params.actualModel,
     // `baseline_model` / `baseline_cost` predate the removal of optimization
@@ -600,9 +667,13 @@ export function buildInteractionRecord(params: {
     // optimization saving instead of a negative one, and so historical rows
     // written while rules existed keep their meaning.
     baselineModel: params.actualModel,
-    inputTokens: params.usage.inputTokens,
+    inputTokens: params.usage.usageUnavailable
+      ? null
+      : params.usage.inputTokens,
     inputTokensEstimated: params.usage.inputTokensEstimated ?? false,
-    outputTokens: params.usage.outputTokens,
+    outputTokens: params.usage.usageUnavailable
+      ? null
+      : params.usage.outputTokens,
     cacheReadTokens: params.usage.cacheReadTokens ?? null,
     cacheWriteTokens: params.usage.cacheWriteTokens ?? null,
     cacheWrite1hTokens: params.usage.cacheWrite1hTokens ?? null,
@@ -751,6 +822,51 @@ export function upstreamErrorMessage(
 }
 
 /**
+ * Why a model pool should move this request to its next member, or undefined
+ * when the failure would recur on any member (a bad request, a content
+ * filter) or nobody waits for the answer. Rate limits, overload, server
+ * errors, timeouts and unreachable upstreams are member-local, and so are a
+ * member's rejected credential (401/403) and a model it does not serve (404).
+ */
+export function poolFailoverReason(
+  error: unknown,
+): { reason: string; status: number; retryAfterMs?: number } | undefined {
+  if (error instanceof ObservedProviderUsageError) return undefined;
+  if (error instanceof ApiError || isClientAbortError(error)) return undefined;
+  const status =
+    explicitHttpStatus(error) ?? classifyTransientUpstreamError(error);
+  if (status === undefined) return undefined;
+  const failsOver =
+    status === 401 ||
+    status === 403 ||
+    status === 404 ||
+    status === 408 ||
+    status === 429 ||
+    status >= 500;
+  if (!failsOver) return undefined;
+  const retryAfter = extractRetryAfterHeader(error);
+  const retryAfterMs =
+    retryAfter === undefined
+      ? undefined
+      : /^\d+$/.test(retryAfter)
+        ? Number(retryAfter) * 1000
+        : Math.max(0, Date.parse(retryAfter) - Date.now());
+  const reason =
+    status === 429
+      ? "rate_limited"
+      : status === 401 || status === 403
+        ? "auth_failed"
+        : status === 404
+          ? "model_not_found"
+          : status === 408 || status === 504
+            ? "timeout"
+            : explicitHttpStatus(error) === undefined
+              ? "unreachable"
+              : "server_error";
+  return { reason: `${reason} (${status})`, status, retryAfterMs };
+}
+
+/**
  * Identifies connection failures eligible for retry. Errors with an HTTP
  * status, provider error payload, client abort, or timeout are excluded.
  * The caller limits retries to failures before the first response chunk.
@@ -789,6 +905,18 @@ export function handleError(
    */
   translatesWireFormat?: boolean,
 ): FastifyReply | never {
+  if (error instanceof ThroughputError && !reply.raw.headersSent) {
+    if (error.quota?.retryAfter != null && !error.quota.oversized)
+      reply.header("Retry-After", error.quota.retryAfter);
+    return reply.code(error.status).send({
+      error: {
+        message: error.message,
+        type: "archestra_throughput_error",
+        code: error.code,
+        quota: error.quota,
+      },
+    });
+  }
   logger.error(error);
 
   // Extract status code from error, checking multiple common property names
@@ -904,11 +1032,15 @@ export function handleError(
     const errorEvent = {
       type: "error",
       error: {
-        // Keep the provider's own error type (and details) so native
-        // streaming clients classify the failure correctly. This uses
-        // upstreamBody, not upstreamPassthroughBody: the status (200) is
+        // Keep the provider's own error object (its code, details, policy
+        // review data) so native streaming clients classify and recover from
+        // the failure as they would talking to the provider directly. This
+        // uses upstreamBody, not upstreamPassthroughBody: the status (200) is
         // already sent, so the status checks of the passthrough do not apply,
-        // and the type and details are all the client has to go on.
+        // and the error object is all the client has to go on.
+        ...(upstreamBody !== undefined
+          ? providerErrorFields(upstreamBody)
+          : {}),
         // A transport failure has no provider body: frame it as a server
         // error with its own code, so a client that classifies by type
         // (the AI SDK's Responses parser, OpenCode, Kilo Code) treats it as
@@ -921,9 +1053,6 @@ export function handleError(
           "api_error",
         ...(transportFailure ? { code: transportFailure.code } : {}),
         message: errorMessage,
-        ...(upstreamBody !== undefined
-          ? providerErrorDetails(upstreamBody)
-          : {}),
         // Surface the normalized code (e.g. provider_insufficient_balance)
         // mid-stream too, so a failure after headers commit stays classifiable.
         ...(internalCode ? { internal_code: internalCode } : {}),
@@ -1236,10 +1365,9 @@ function extractTrustedProviderErrorBody(error: unknown): object | undefined {
     : undefined;
 }
 
-/** The provider's `details` member of its error object, for mid-stream frames. */
-function providerErrorDetails(body: object): { details?: unknown } {
-  const details = (body as { error?: { details?: unknown } }).error?.details;
-  return details && typeof details === "object" ? { details } : {};
+/** The provider's own error object, for mid-stream frames. */
+function providerErrorFields(body: object): Record<string, unknown> {
+  return asRecord((body as { error?: unknown }).error) ?? {};
 }
 
 /**

@@ -27,7 +27,7 @@ export function GuardrailsDisabledWarning() {
       >
         <Link href="/openappa">
           <OpenAppaAlertIcon className="size-4 shrink-0" />
-          <span className="min-w-0 flex-1 truncate">Guardrails disabled</span>
+          <span className="min-w-0 flex-1 truncate">Enable AI Guardrails</span>
         </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>

@@ -1,4 +1,4 @@
-// Accepts both "Run <id> started" (the start_run tool's own narration) and the
+// Accepts both "Run <id> started" (how a model narrates start_agent_run) and the
 // legacy "Task <id> started" phrasing a model may still produce.
 const RUN_ID_PATTERN =
   /\b(?:Run|Task)\s+`?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})`?\s+(?:has\s+)?started\b/i;

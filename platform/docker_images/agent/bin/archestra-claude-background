@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""Bridge native background launches and result delivery across Claude turns."""
+
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import sys
+
+
+def notification_ids(text):
+    for notification in re.findall(r"<task-notification>(.*?)</task-notification>", text, re.S):
+        yield from re.findall(r"<task-id>([^<]+)</task-id>", notification)
+
+
+def acknowledge(jobs, text, eligible=None):
+    for task_id in notification_ids(text):
+        if task_id in jobs and (eligible is None or task_id in eligible):
+            jobs[task_id]["pending"] = False
+
+
+def cancel(jobs, task_id):
+    # TaskStop's acknowledgement settles cancellation; stopped shells may not
+    # send a separate result notification.
+    canceled = {task_id}
+    while True:
+        descendants = {key for key, job in jobs.items() if job["owner"] in canceled}
+        if descendants <= canceled:
+            break
+        canceled.update(descendants)
+    for key in canceled:
+        if key in jobs:
+            jobs[key].update(pending=False, canceled=True)
+
+
+def main():
+    runtime = Path(os.environ.get("ARCHESTRA_AGENT_RUNTIME_DIR", "/var/run/archestra"))
+    state = runtime / "claude-background.json"
+    unavailable = runtime / "claude-background.unavailable"
+    try:
+        payload = json.load(sys.stdin)
+        if not isinstance(payload, dict):
+            raise ValueError("Invalid native hook payload")
+        with (runtime / "claude-background.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            saved = json.loads(state.read_text()) if state.exists() else {"jobs": {}, "notifications": []}
+            jobs = saved["jobs"]
+            if not isinstance(saved["notifications"], list) or not all(isinstance(key, str) for key in saved["notifications"]):
+                raise ValueError("Invalid notification state")
+            seen = set(saved["notifications"])
+            if not isinstance(jobs, dict) or not all(
+                isinstance(job, dict) and isinstance(job["pending"], bool)
+                and isinstance(job["canceled"], bool) and isinstance(job["launch"], str)
+                and (job["owner"] is None or isinstance(job["owner"], str))
+                for job in jobs.values()
+            ):
+                raise ValueError("Invalid native background state")
+            event = payload.get("hook_event_name")
+            if event == "PostToolUse":
+                response = payload.get("tool_response", {})
+                tool = payload.get("tool_name")
+                if isinstance(response, dict):
+                    task_id = response.get("backgroundTaskId") if tool == "Bash" else None
+                    if tool == "Agent" and response.get("isAsync"):
+                        task_id = response.get("agentId")
+                    if tool == "SendMessage" and response.get("success") is True:
+                        task_id = response.get("resumedAgentId")
+                    if isinstance(task_id, str) and task_id:
+                        owner = jobs.get(task_id, {}).get("owner", payload.get("agent_id") or None)
+                        canceled = tool != "SendMessage" and jobs.get(owner, {}).get("canceled", False)
+                        jobs[task_id] = {"owner": owner, "launch": payload["tool_use_id"], "pending": not canceled, "canceled": canceled}
+                    if tool == "TaskStop" and isinstance(response.get("task_id"), str):
+                        cancel(jobs, response["task_id"])
+            elif event == "UserPromptSubmit":
+                prompt = payload.get("prompt", "")
+                if isinstance(prompt, str):
+                    acknowledge(jobs, prompt)
+            elif event == "SubagentStop":
+                agent_id = payload.get("agent_id")
+                if agent_id not in jobs and not any(job["owner"] == agent_id for job in jobs.values()):
+                    # Internal agents such as prompt suggestions have no
+                    # delegated work or report for this assignment to await.
+                    return
+                # Child results bypass UserPromptSubmit. Only newly delivered
+                # native notifications count; old reports can share task IDs.
+                transcript = Path(payload["agent_transcript_path"])
+                launches = {job["launch"]: key for key, job in jobs.items() if job["owner"] == agent_id}
+                eligible = set()
+                for line in transcript.read_text().splitlines():
+                    entry = json.loads(line)
+                    content = entry.get("message", {}).get("content", "")
+                    if entry.get("type") == "assistant" and isinstance(content, list):
+                        # Retained transcripts can contain a previous report for
+                        # the same agent ID. Accept only this launch's results.
+                        eligible.update(launches[block["id"]] for block in content
+                                        if block.get("type") == "tool_use" and block.get("id") in launches)
+                    if entry.get("type") != "user":
+                        continue
+                    if isinstance(content, list):
+                        content = "\n".join(block.get("text", "") for block in content if block.get("type") == "text")
+                    if not isinstance(content, str) or "<task-notification>" not in content:
+                        continue
+                    key = hashlib.sha256(line.encode()).hexdigest()
+                    if key not in seen:
+                        acknowledge(jobs, content, eligible)
+                        seen.add(key)
+                agent = jobs.get(payload.get("agent_id"))
+                if agent and not agent["canceled"]:
+                    # An earlier report may have been interim. Keep the parent
+                    # waiting until this new report reaches its own model turn.
+                    agent["pending"] = True
+            elif event == "Stop":
+                tasks = payload.get("background_tasks")
+                crons = payload.get("session_crons")
+                if unavailable.exists() or not isinstance(tasks, list) or not isinstance(crons, list):
+                    print("null")
+                else:
+                    print(json.dumps(bool(tasks or crons or any(job["pending"] for job in jobs.values()))))
+                return
+            temporary = state.with_suffix(".tmp")
+            temporary.write_text(json.dumps({"jobs": jobs, "notifications": sorted(seen)}))
+            temporary.replace(state)
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        # A failed launch hook must not silently lose work from a later Stop.
+        unavailable.touch()
+        print("null")
+
+
+if __name__ == "__main__":
+    main()

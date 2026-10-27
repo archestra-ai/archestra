@@ -89,6 +89,8 @@ export async function startActiveLlmSpan<T>(params: {
   source?: InteractionSource;
   serverAddress?: string;
   promptMessages?: unknown;
+  /** Materialize provider messages only when this span records content. */
+  getPromptMessages?: () => unknown;
   /**
    * Suppress prompt/completion content capture for this span even when
    * ARCHESTRA_OTEL_CAPTURE_CONTENT is on (encrypted chat sessions). Metadata
@@ -124,60 +126,69 @@ export async function startActiveLlmSpan<T>(params: {
   };
 
   const spanCallback = async (span: Span) => {
-    if (params.agent) {
-      logger.debug(
-        {
-          agentId: params.agent.id,
-          agentName: params.agent.name,
-          labelCount: params.agent.labels?.length || 0,
-        },
-        "[tracing] startActiveLlmSpan: setting agent attributes",
-      );
-      setAgentAttributes(span, params.agent);
-    }
+    if (span.isRecording()) {
+      if (params.agent) {
+        logger.debug(
+          {
+            agentId: params.agent.id,
+            agentName: params.agent.name,
+            labelCount: params.agent.labels?.length || 0,
+          },
+          "[tracing] startActiveLlmSpan: setting agent attributes",
+        );
+        setAgentAttributes(span, params.agent);
+      }
 
-    setTeamAttributes(span, params.teams, "agent");
-    setTeamAttributes(span, params.userTeams, "user");
-    setSessionId(span, params.sessionId);
+      setTeamAttributes(span, params.teams, "agent");
+      setTeamAttributes(span, params.userTeams, "user");
+      setSessionId(span, params.sessionId);
 
-    if (params.runId) {
-      span.setAttribute(ATTR_ARCHESTRA_RUN_ID, params.runId);
-    }
-    if (params.externalAgentId) {
-      span.setAttribute(
-        ATTR_ARCHESTRA_EXTERNAL_AGENT_ID,
-        params.externalAgentId,
-      );
-    }
-    if (params.authMethod) {
-      span.setAttribute(ATTR_ARCHESTRA_AUTH_METHOD, params.authMethod);
-    }
-    if (params.virtualKeyId) {
-      span.setAttribute(ATTR_ARCHESTRA_VIRTUAL_KEY_ID, params.virtualKeyId);
-    }
-    if (params.passthroughVirtualKeyId) {
-      span.setAttribute(
-        ATTR_ARCHESTRA_PASSTHROUGH_VIRTUAL_KEY_ID,
-        params.passthroughVirtualKeyId,
-      );
-    }
-    if (params.authenticatedApp) {
-      span.setAttribute(ATTR_ARCHESTRA_APP_ID, params.authenticatedApp.id);
-      span.setAttribute(ATTR_ARCHESTRA_APP_NAME, params.authenticatedApp.name);
-    }
-    if (params.source) {
-      span.setAttribute(ATTR_ARCHESTRA_TRIGGER_SOURCE, params.source);
-    }
-    if (params.serverAddress) {
-      span.setAttribute(ATTR_SERVER_ADDRESS, params.serverAddress);
-    }
+      if (params.runId) {
+        span.setAttribute(ATTR_ARCHESTRA_RUN_ID, params.runId);
+      }
+      if (params.externalAgentId) {
+        span.setAttribute(
+          ATTR_ARCHESTRA_EXTERNAL_AGENT_ID,
+          params.externalAgentId,
+        );
+      }
+      if (params.authMethod) {
+        span.setAttribute(ATTR_ARCHESTRA_AUTH_METHOD, params.authMethod);
+      }
+      if (params.virtualKeyId) {
+        span.setAttribute(ATTR_ARCHESTRA_VIRTUAL_KEY_ID, params.virtualKeyId);
+      }
+      if (params.passthroughVirtualKeyId) {
+        span.setAttribute(
+          ATTR_ARCHESTRA_PASSTHROUGH_VIRTUAL_KEY_ID,
+          params.passthroughVirtualKeyId,
+        );
+      }
+      if (params.authenticatedApp) {
+        span.setAttribute(ATTR_ARCHESTRA_APP_ID, params.authenticatedApp.id);
+        span.setAttribute(
+          ATTR_ARCHESTRA_APP_NAME,
+          params.authenticatedApp.name,
+        );
+      }
+      if (params.source) {
+        span.setAttribute(ATTR_ARCHESTRA_TRIGGER_SOURCE, params.source);
+      }
+      if (params.serverAddress) {
+        span.setAttribute(ATTR_SERVER_ADDRESS, params.serverAddress);
+      }
 
-    setUserAttributes(span, params.user);
+      setUserAttributes(span, params.user);
 
-    if (captureContent && !params.suppressContent && params.promptMessages) {
-      span.addEvent(EVENT_GENAI_CONTENT_PROMPT, {
-        [ATTR_GENAI_PROMPT]: truncateContent(params.promptMessages),
-      });
+      if (captureContent && !params.suppressContent) {
+        const messages = params.getPromptMessages
+          ? params.getPromptMessages()
+          : params.promptMessages;
+        if (messages)
+          span.addEvent(EVENT_GENAI_CONTENT_PROMPT, {
+            [ATTR_GENAI_PROMPT]: truncateContent(messages),
+          });
+      }
     }
 
     logger.debug(

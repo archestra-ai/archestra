@@ -24,6 +24,7 @@ import {
 } from "@/lib/favicon.server";
 import { ListReturnUrlTracker } from "@/lib/hooks/use-list-return-url";
 import { PageTitleProvider } from "@/lib/hooks/use-page-title";
+import { parseSidebarOpen, SIDEBAR_COOKIE_NAME } from "@/lib/sidebar-state";
 import { HIDE_DISMISSED_SITE_NOTIFICATIONS_SCRIPT } from "@/lib/site-notification-dismissal";
 import { getThemeFontPreload } from "@/lib/theme-font.server";
 import { RESTORE_REMEMBERED_THEME_SCRIPT } from "@/lib/theme-storage";
@@ -334,7 +335,11 @@ export default async function RootLayout({
                       <WebsocketInitializer />
                       <RumTracker />
                       <ListReturnUrlTracker />
-                      <AppShell>
+                      <AppShell
+                        initialSidebarOpen={parseSidebarOpen(
+                          cookieStore.get(SIDEBAR_COOKIE_NAME)?.value,
+                        )}
+                      >
                         <WithPagePermissions>{children}</WithPagePermissions>
                       </AppShell>
                     </WithAuthCheck>

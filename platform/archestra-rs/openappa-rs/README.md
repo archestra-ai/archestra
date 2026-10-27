@@ -113,11 +113,10 @@ The proxy scopes external session IDs to the authenticated credential. Another c
 
 `SessionStart` restores the existing trajectory. The proxy sends `Prompt` at the start of each user turn, and `TurnEnd` after a terminal model answer. Detached MCP tasks remain disabled while OpenAPPA is enabled.
 
-For Claude Code, Codex, and OpenCode, the proxy can prepend this two-line mark to a protected session's first reply and compaction summaries:
+For Claude Code, Codex, and OpenCode, the proxy can prepend this single-line mark to a protected session's first reply and compaction summaries:
 
 ```
-▄█▄▄▄█▄
-██▄█▄██  protected session XK7-Q2M9
+▄█▄▄▄█▄  protected session XK7-Q2M9
 ```
 
 Claude Code supplies its session header. Codex supplies thread metadata. OpenCode supplies session headers. The mark shows which protected session wrote the reply. The proxy removes the mark before forwarding requests to the provider and before writing logs. Most replies carry no mark. Signed tool-call IDs supply separate lineage evidence.
@@ -314,8 +313,11 @@ Saved organization policies and policy files are preserved.
 ## Agent feedback reporting
 
 Agent feedback reporting defaults to enabled when OpenAPPA and Guardrails v2
-are enabled. Set `ARCHESTRA_OPENAPPA_YELL_ENABLED=false` to disable reports
-to the shared OpenAPPA receiver.
+are enabled. Set `ARCHESTRA_OPENAPPA_YELL_ENABLED=false` to disable the reporting tool.
+Archestra stores reports locally. External forwarding requires
+`ARCHESTRA_OPENAPPA_YELL_FORWARDING_ENABLED=true`, independently of
+`ARCHESTRA_ANALYTICS`, and defaults off in every environment. Upgrades must
+explicitly opt in to continue forwarding. Encrypted-chat reports always stay local.
 The `archestra__yell` tool is available to protected sessions; its hook is
 checked as `yell` against the active policy. The receiver destination is set
 by the host, never by tool arguments. The report identifies Archestra and the configured frontend hostname. The host passes the authenticated actor
@@ -323,7 +325,7 @@ to OpenAPPA, which verifies the previously released call belongs to that actor.
 
 Reports use upstream classification, size limits, gzip, signing, and HTTPS
 transport. The receiver has create-only access to a private GCS bucket and
-notifies Slack. The public signature is not authentication; incoming reports
+notifies report maintainers. The public signature is not authentication; incoming reports
 remain untrusted. Raw prompts, tool arguments, outputs, and session identifiers
 are omitted from diagnostics. Policy names and the free-text message are sent;
 messages must not contain secrets or task content. The deployment reporting flag is

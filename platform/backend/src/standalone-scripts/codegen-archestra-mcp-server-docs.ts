@@ -124,7 +124,7 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
  * these tools are absent from their `tools/list`.
  */
 const CODE_RUNTIME_PREREQUISITE =
-  "served only when the code runtime is enabled — set [`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST), or [`ARCHESTRA_CODE_RUNTIME_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED) together with an orchestrator kubeconfig. Without it they do not appear in `tools/list`.";
+  "served only when the code runtime is enabled — set [`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`](/docs/admin/deployment/configuration#ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST), or [`ARCHESTRA_CODE_RUNTIME_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED) together with an orchestrator kubeconfig. Without it they do not appear in `tools/list`.";
 
 const groupAvailabilityNotes: Partial<Record<ArchestraToolGroupId, string>> = {
   skill_sandbox: `These tools are ${CODE_RUNTIME_PREREQUISITE} The [Code Sandbox](/docs/agents#code-sandbox) page covers what the runtime is and how an agent uses it.`,
@@ -451,7 +451,7 @@ function isArchestraToolShortName(
 // === Input schema rendering ===
 
 interface JsonSchema {
-  type?: string;
+  type?: string | string[];
   properties?: Record<string, JsonSchema>;
   items?: JsonSchema;
   required?: string[];
@@ -531,8 +531,9 @@ export function renderSchemaRows(
     );
   }
 
-  const arrayItemObjectSchema = getObjectSchema(schema.items);
-  if (schema.type === "array" && arrayItemObjectSchema?.properties) {
+  const arraySchema = getArraySchema(schema);
+  const arrayItemObjectSchema = getObjectSchema(arraySchema?.items);
+  if (arrayItemObjectSchema?.properties) {
     return renderProperties(
       arrayItemObjectSchema.properties,
       new Set(arrayItemObjectSchema.required ?? []),
@@ -587,16 +588,17 @@ function renderProperties(
     }
 
     // Recurse into array item properties
-    const itemObjectVariants = getObjectUnionVariants(prop.items);
-    const itemObjectSchema = getObjectSchema(prop.items);
-    if (prop.type === "array" && itemObjectVariants) {
+    const arraySchema = getArraySchema(prop);
+    const itemObjectVariants = getObjectUnionVariants(arraySchema?.items);
+    const itemObjectSchema = getObjectSchema(arraySchema?.items);
+    if (itemObjectVariants) {
       rows.push(
         ...renderUnionObjectProperties(
           itemObjectVariants,
           `${qualifiedName}[]`,
         ),
       );
-    } else if (prop.type === "array" && itemObjectSchema?.properties) {
+    } else if (itemObjectSchema?.properties) {
       const itemRequired = new Set(itemObjectSchema.required ?? []);
       rows.push(
         ...renderProperties(
@@ -717,7 +719,7 @@ export function formatType(schema: JsonSchema): string {
     return "array";
   }
 
-  return schema.type ?? "any";
+  return typeof schema.type === "string" ? schema.type : "any";
 }
 
 function getObjectUnionVariants(schema?: JsonSchema): JsonSchema[] | undefined {
@@ -742,9 +744,21 @@ function getObjectSchema(schema?: JsonSchema): JsonSchema | undefined {
   );
 }
 
+function getArraySchema(schema: JsonSchema): JsonSchema | undefined {
+  if (schema.type === "array") {
+    return schema;
+  }
+  return getUnionVariants(schema)?.find((variant) => variant.type === "array");
+}
+
 function getUnionVariants(schema: JsonSchema): JsonSchema[] | undefined {
   const variants = schema.anyOf ?? schema.oneOf;
-  return variants && variants.length > 0 ? variants : undefined;
+  if (variants && variants.length > 0) {
+    return variants;
+  }
+  return Array.isArray(schema.type)
+    ? schema.type.map((type) => ({ ...schema, type }))
+    : undefined;
 }
 
 // A function, not a constant: this script runs while the module loads.

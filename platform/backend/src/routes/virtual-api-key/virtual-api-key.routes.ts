@@ -251,7 +251,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetVirtualApiKeyValue,
         description:
-          "Get the raw value of a virtual API key. Only the key's author can reveal it.",
+          "Get the raw value of a virtual API key. Only the key's author can reveal it; a key created by a service account with no owner is revealed to that service account.",
         tags: ["Virtual API Keys"],
         params: z.object({
           id: z.string().uuid(),
@@ -269,8 +269,9 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Virtual API key not found");
       }
       // The raw value is a bearer credential — visibility (shared team/org
-      // keys) is not enough to reveal it; only the author holds the secret.
-      if (virtualKey.authorId !== user.id) {
+      // keys) is not enough to reveal it; only its creator principal (the
+      // author, or the service account that created an ownerless key) may.
+      if (CreatedByModel.id(virtualKey, virtualKey.authorId) !== user.id) {
         throw new ApiError(403, "Only the key's creator can reveal its value.");
       }
 

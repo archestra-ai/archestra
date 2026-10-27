@@ -123,6 +123,30 @@ describe("browserStorageSync", () => {
     expect(await BrowserStorageStateModel.get(user.id)).toBeNull();
   });
 
+  test("restores and saves logins when MCP advertises the renamed code tool", async ({
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    await BrowserStorageStateModel.upsert(user.id, SAVED_STATE);
+    const client = fakePlaywrightClient({
+      codeTool: "browser_run_code_unsafe",
+      storageState: SAVED_STATE,
+    });
+    const target = {
+      client: client.asClient,
+      sessionId: crypto.randomUUID(),
+      userId: user.id,
+    };
+    await browserStorageSync.ensureRestored(target);
+    expect(client.codes.some((code) => code.includes("addCookies"))).toBe(true);
+    browserStorageSync.scheduleSave(target);
+    await vi.runAllTimersAsync();
+    expect(client.codes.some((code) => code.includes("storageState()"))).toBe(
+      true,
+    );
+    expect(await BrowserStorageStateModel.get(user.id)).toBe(SAVED_STATE);
+  });
+
   test("saved state is encrypted at rest", async ({ makeUser }) => {
     const user = await makeUser();
     await BrowserStorageStateModel.upsert(user.id, SAVED_STATE);
@@ -142,10 +166,19 @@ describe("browserStorageSync", () => {
 function fakePlaywrightClient(options?: {
   storageState?: string;
   failRestore?: boolean;
+  codeTool?: string;
 }) {
   const codes: string[] = [];
   const callTool = vi.fn(
-    async ({ arguments: args }: { arguments: { code: string } }) => {
+    async ({
+      name,
+      arguments: args,
+    }: {
+      name: string;
+      arguments: { code: string };
+    }) => {
+      if (name !== (options?.codeTool ?? "browser_run_code"))
+        throw new Error(`Unknown tool: ${name}`);
       codes.push(args.code);
       if (args.code.includes("addCookies") && options?.failRestore) {
         return {
@@ -166,5 +199,8 @@ function fakePlaywrightClient(options?: {
       };
     },
   );
-  return { codes, asClient: { callTool } as unknown as Client };
+  const listTools = async () => ({
+    tools: [{ name: options?.codeTool ?? "browser_run_code" }],
+  });
+  return { codes, asClient: { callTool, listTools } as unknown as Client };
 }

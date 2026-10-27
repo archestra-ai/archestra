@@ -102,12 +102,6 @@ interface OrganizationInfo {
   defaultLlmApiKeyId?: string | null;
 }
 
-/** The current user's saved default (model, key) pair — the "member" level. */
-interface MemberDefaultInfo {
-  modelId?: string | null;
-  chatApiKeyId?: string | null;
-}
-
 interface ChatContext {
   modelsByProvider: Record<string, ModelInfo[]>;
   /**
@@ -117,7 +111,6 @@ interface ChatContext {
    */
   chatApiKeys: Array<{ id: string; provider: string }>;
   organization: OrganizationInfo | null;
-  memberDefault: MemberDefaultInfo | null;
 }
 
 interface ResolveInitialModelParams extends ChatContext {
@@ -131,7 +124,7 @@ interface ResolvedModel {
 
 /**
  * Resolve which model to use on initial chat load.
- * Priority: member default -> agent default -> organization default ->
+ * Priority: agent default -> organization default ->
  * best available model. Returns null when no model can be resolved.
  *
  * Delegates to the shared `resolveModelSelection` so the client and the
@@ -140,8 +133,7 @@ interface ResolvedModel {
 export function resolveInitialModel(
   params: ResolveInitialModelParams,
 ): ResolvedModel | null {
-  const { modelsByProvider, agent, chatApiKeys, organization, memberDefault } =
-    params;
+  const { modelsByProvider, agent, chatApiKeys, organization } = params;
 
   const findKeyForProvider = (provider: string): string | null =>
     chatApiKeys.find((k) => k.provider === provider)?.id ?? null;
@@ -205,9 +197,9 @@ export function resolveInitialModel(
     apiKeyId: isPerUserModel(modelId) ? PER_USER_PLACEHOLDER_KEY : apiKeyId,
   });
 
-  // The member and organization defaults store a key chosen by someone, at
-  // some point, that the viewer may not be allowed to use now (an admin's org
-  // default, a key whose grant was narrowed to read-only). Sending it is
+  // The organization default stores a key chosen by someone, at some point,
+  // that the viewer may not be allowed to use now (an admin's choice, a key
+  // whose grant was narrowed to read-only). Sending it is
   // refused, so keep the level's model and pair it with a key the viewer can
   // use for that provider instead, or skip the level when there is none. The
   // agent's own key needs no grant — it is used through the agent — so the
@@ -233,7 +225,6 @@ export function resolveInitialModel(
   };
 
   const levels: ModelSelection[] = [
-    toUsableLevel(memberDefault?.modelId, memberDefault?.chatApiKeyId),
     toLevel(agent?.modelId, agent?.llmApiKeyId),
     toUsableLevel(
       organization?.defaultModelId,

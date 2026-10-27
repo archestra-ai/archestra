@@ -21,10 +21,10 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type {
+  BudgetCleanupInterval,
   ConnectionBaseUrl,
   ConnectionClientFutureProviders,
   ConnectionClientProviderKeys,
-  LimitCleanupInterval,
   NetworkPolicy,
   OnboardingWizard,
   OrganizationChatLink,
@@ -60,6 +60,12 @@ const organizationsTable = pgTable("organization", {
   onlineMcpCatalogEnabled: boolean("online_mcp_catalog_enabled")
     .notNull()
     .default(true),
+  /** Initial tool mode for automatically provisioned personal agents and gateways. */
+  defaultPersonalAgentAccessAllTools: boolean(
+    "default_personal_agent_access_all_tools",
+  )
+    .notNull()
+    .default(true),
   onlineSkillCatalogEnabled: boolean("online_skill_catalog_enabled")
     .notNull()
     .default(true),
@@ -73,10 +79,14 @@ const organizationsTable = pgTable("organization", {
   skillMarketplaceAnonymousAccess: boolean("skill_marketplace_anonymous_access")
     .notNull()
     .default(false),
+  /** Controls only the managed built-in browser MCP runtime. */
+  playwrightMcpEnabled: boolean("playwright_mcp_enabled")
+    .notNull()
+    .default(true),
+
   /**
-   * Whether file uploads are allowed in chat.
-   * Defaults to true. Security policies currently only work on text-based content,
-   * so admins may want to disable this until file-based policy support is added.
+   * Whether users can attach files in chat. Enabled by default.
+   * Uploaded files or extracted content may be sent to the chat's AI provider.
    */
   allowChatFileUploads: boolean("allow_chat_file_uploads")
     .notNull()
@@ -183,6 +193,16 @@ const organizationsTable = pgTable("organization", {
    */
   defaultLlmApiKeyId: uuid("default_llm_api_key_id"),
 
+  /** Optional `fast` / `smart` tiers of the default trio, on `defaultLlmApiKeyId`. */
+  defaultFastModelId: uuid("default_fast_model_id").references(
+    () => modelsTable.id,
+    { onDelete: "set null" },
+  ),
+  defaultSmartModelId: uuid("default_smart_model_id").references(
+    () => modelsTable.id,
+    { onDelete: "set null" },
+  ),
+
   /** Default token-cost limit value applied to every organization member. */
   defaultUserLimitValue: integer("default_user_limit_value"),
 
@@ -194,7 +214,7 @@ const organizationsTable = pgTable("organization", {
   /** Cleanup interval used by default user limits. Null falls back to weekly. */
   defaultUserLimitCleanupInterval: varchar(
     "default_user_limit_cleanup_interval",
-  ).$type<LimitCleanupInterval>(),
+  ).$type<BudgetCleanupInterval>(),
 
   /**
    * Default role assigned to newly provisioned members who don't get an

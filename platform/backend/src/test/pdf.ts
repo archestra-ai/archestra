@@ -7,11 +7,6 @@
  * uncompressed content streams, base-14 Helvetica, a hand-computed xref.
  * `null` pages carry no content stream text and classify as textless, the
  * scanned-page shape.
- *
- * Output is padded above 4096 bytes with a comment: the pinned build misreads
- * any buffer at or below that size (its initial-chunk handling), reporting
- * `parse_failed` for byte-identical content that parses fine when larger —
- * the reason the committed scanned fixture is 4148 bytes.
  */
 export function makeTestPdf(pages: (string | null)[]): Buffer {
   const objects: string[] = [];
@@ -44,9 +39,6 @@ export function makeTestPdf(pages: (string | null)[]): Buffer {
   for (const [i, obj] of objects.entries()) {
     offsets.push(body.length);
     body += `${i + 1} 0 obj\n${obj}\nendobj\n`;
-  }
-  if (body.length <= 4200) {
-    body += `%${"p".repeat(4200 - body.length)}\n`;
   }
   const xrefStart = body.length;
   let xref = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;

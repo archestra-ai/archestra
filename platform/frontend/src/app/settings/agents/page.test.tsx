@@ -129,7 +129,7 @@ vi.mock("@/lib/llm-models.query", () => ({
       {
         id: "gemini-2.5-pro",
         dbId: "gemini-2.5-pro",
-        provider: "vertex_ai",
+        provider: "gemini",
         displayName: "Gemini 2.5 Pro",
       },
     ],
@@ -149,6 +149,7 @@ vi.mock("@/lib/organization.query");
 
 import {
   useAppearanceSettings,
+  useIsGlobalAdmin,
   useOrganization,
   useUpdateAgentSettings,
   useUpdateIntegrationSettings,
@@ -180,18 +181,23 @@ beforeEach(() => {
     defaultLlmApiKeyId: "key-1",
     defaultAgentId: null,
     allowChatFileUploads: true,
+    playwrightMcpEnabled: true,
     allowToolAutoAssignment: true,
   };
   mockApiKeys = [
     {
       id: "key-1",
       name: "gemini - org",
-      provider: "vertex_ai",
+      provider: "gemini",
       scope: "org",
     },
   ];
   mockRuntimeBackend = null;
 
+  vi.mocked(useIsGlobalAdmin).mockReturnValue({
+    isGlobalAdmin: true,
+    isLoading: false,
+  });
   vi.mocked(useOrganization).mockReturnValue({
     data: mockOrganization,
   } as unknown as ReturnType<typeof useOrganization>);
@@ -275,6 +281,29 @@ describe("AgentSettingsPage", () => {
       screen.getByText("Select provider key first..."),
     ).toBeInTheDocument();
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  });
+
+  it("offers fast and smart models only once the normal model is chosen", () => {
+    mockOrganization = { ...mockOrganization, defaultModelId: null };
+    vi.mocked(useOrganization).mockReturnValue({
+      data: mockOrganization,
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    renderPage();
+
+    expect(screen.queryByText("Fast model")).not.toBeInTheDocument();
+    expect(screen.queryByText("Smart model")).not.toBeInTheDocument();
+  });
+
+  it("keeps a saved fast model that is no longer on the key visible", () => {
+    mockOrganization = { ...mockOrganization, defaultFastModelId: "gone" };
+    vi.mocked(useOrganization).mockReturnValue({
+      data: mockOrganization,
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    renderPage();
+
+    expect(screen.getByText("Unavailable model")).toBeInTheDocument();
   });
 
   it("hides the free-model filter for non-OpenRouter API keys", () => {

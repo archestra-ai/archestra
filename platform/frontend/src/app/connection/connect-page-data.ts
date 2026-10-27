@@ -367,7 +367,8 @@ export function useConnectPageData({
         description: p.description,
         source: p.sourceRepo,
       }));
-  const pluginsFor = (client: ConnectClient) => offeredPlugins(client, windows);
+  const pluginsFor = (client: ConnectClient) =>
+    client.id === "pi" ? [] : offeredPlugins(client, windows);
 
   const keptPlugins = (
     client: ConnectClient,
@@ -560,6 +561,7 @@ export function useConnectPageData({
       // Keeping none of the plugins is leaving plugins out.
       const exclude = CONNECT_SETUP_PARTS.filter(
         (part) =>
+          (client.id === "pi" && part === "plugins") ||
           !choices[part] ||
           (part === "plugins" && offered.length > 0 && kept.length === 0),
       );

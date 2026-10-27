@@ -29,7 +29,6 @@ import {
   useDeleteConversation,
   useKeepViewedConversationRead,
   useMarkConversationRead,
-  useMemberDefaultModel,
   useRefreshConversationFilesAfterTurn,
   useResolveChatMcpElicitation,
   useStopChatStream,
@@ -41,7 +40,6 @@ vi.mock("@archestra/shared", () => ({
     getChatConversations: vi.fn(),
     getChatConversation: vi.fn(),
     getChatConversationFiles: vi.fn(),
-    getMemberDefaultModel: vi.fn(),
     getConversationEnabledTools: vi.fn(),
     markChatConversationRead: vi.fn(),
     deleteChatConversation: vi.fn(),
@@ -415,74 +413,6 @@ describe("useConversation caching", () => {
     } finally {
       vi.useRealTimers();
     }
-  });
-});
-
-describe("useMemberDefaultModel error handling", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("returns the null model/key fallback on an HTTP error", async () => {
-    vi.mocked(archestraApiSdk.getMemberDefaultModel).mockResolvedValue(
-      errorResult(500) as Awaited<
-        ReturnType<typeof archestraApiSdk.getMemberDefaultModel>
-      >,
-    );
-
-    const { result } = renderHook(() => useMemberDefaultModel(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() =>
-      expect(result.current.data).toEqual({
-        modelId: null,
-        chatApiKeyId: null,
-      }),
-    );
-    expect(mockedHandleApiError).toHaveBeenCalledTimes(1);
-  });
-
-  it("returns the fallback without throwing on a network error", async () => {
-    vi.mocked(archestraApiSdk.getMemberDefaultModel).mockResolvedValue(
-      errorResult(undefined) as Awaited<
-        ReturnType<typeof archestraApiSdk.getMemberDefaultModel>
-      >,
-    );
-
-    const { result } = renderHook(() => useMemberDefaultModel(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() =>
-      expect(result.current.data).toEqual({
-        modelId: null,
-        chatApiKeyId: null,
-      }),
-    );
-    expect(result.current.isError).toBe(false);
-  });
-});
-
-describe("useMemberDefaultModel caching", () => {
-  it("serves a remount within 30 s from the cache", async () => {
-    vi.clearAllMocks();
-    vi.mocked(archestraApiSdk.getMemberDefaultModel).mockResolvedValue({
-      data: { modelId: "model-1", chatApiKeyId: "key-1" },
-      error: undefined,
-    } as Awaited<ReturnType<typeof archestraApiSdk.getMemberDefaultModel>>);
-    const wrapper = createWrapper();
-
-    const first = renderHook(() => useMemberDefaultModel(), { wrapper });
-    await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
-    first.unmount();
-    const second = renderHook(() => useMemberDefaultModel(), { wrapper });
-
-    expect(second.result.current.data).toEqual({
-      modelId: "model-1",
-      chatApiKeyId: "key-1",
-    });
-    expect(archestraApiSdk.getMemberDefaultModel).toHaveBeenCalledTimes(1);
   });
 });
 

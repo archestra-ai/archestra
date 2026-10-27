@@ -533,6 +533,69 @@ describe("OpenAPPA on Model Router translated wires", () => {
     expect(forwarded()).not.toContain("finished subagent");
   });
 
+  test("closes a subagent that failed before its first request, and the parent goes on", async () => {
+    script.push(() => ({
+      call: {
+        id: "call_ses_child_failed",
+        name: "task",
+        args: { prompt: spawnPrompt },
+      },
+    }));
+    const parent = await responses({
+      session: "ses_root_failed",
+      input: [userInput("Delegate the investigation")],
+    });
+    expect(parent.statusCode, parent.body).toBe(200);
+    const spawn = releasedSpawn(parent.body);
+    // No child bound the prepared fork. The runtime closes it as failed and
+    // withholds the client's text.
+    const reason =
+      "the spawn did not take: no prepared fork to open this child";
+    const dispatch = native.dispatchHook.getMockImplementation();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (event.event !== "tool_result" || event.outcome !== "failure")
+        return dispatch?.(raw);
+      events.push(event);
+      return JSON.stringify({
+        decision: "block",
+        reason,
+        approved_output: `[appa] Tool output withheld: ${reason}`,
+        output_source: "runtime",
+      });
+    });
+
+    providerRequests.length = 0;
+    script.push(() => ({ text: "Parent goes on" }));
+    const next = await responses({
+      session: "ses_root_failed",
+      input: [
+        ...spawnHistory(spawn),
+        {
+          type: "function_call_output",
+          call_id: spawn.call_id,
+          // Kilo Code's task result when the child's first model request
+          // fails.
+          output:
+            'Invalid LLM OAuth client access token.\nThis subagent session can be resumed: call the task tool again with task_id="ses_child_failed" and a prompt describing how to continue or recover. Its prior context is preserved.',
+        },
+      ],
+    });
+
+    expect(next.statusCode, next.body).toBe(200);
+    expect(outputText(next.body)).toContain("Parent goes on");
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "tool_result",
+        session_id: `user:${userId}|ses_root_failed`,
+        outcome: "failure",
+      }),
+    );
+    expect(forwarded()).toContain(`[appa] Tool output withheld: ${reason}`);
+    expect(forwarded()).not.toContain("Invalid LLM OAuth client access token");
+    expect(forwarded()).not.toContain("OpenAPPA blocked this conversation");
+  });
+
   test("refuses a changed subagent result, and one with no crossing, without offering a report", async () => {
     const { spawn, child } = await runForegroundSubagent({
       root: "ses_root_d",

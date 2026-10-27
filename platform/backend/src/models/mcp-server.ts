@@ -25,7 +25,7 @@ import {
 import { alias } from "drizzle-orm/pg-core";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
-import db, { schema, type Transaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import { constructFrozenMcpDeploymentName } from "@/k8s/shared";
@@ -444,19 +444,6 @@ class McpServerModel {
   }
 
   /**
-   * When the first MCP server was connected; null when none exist. An
-   * activation signal for the feedback pop-up.
-   */
-  static async getFirstCreatedAt(): Promise<Date | null> {
-    const [row] = await db
-      .select({ createdAt: schema.mcpServersTable.createdAt })
-      .from(schema.mcpServersTable)
-      .orderBy(asc(schema.mcpServersTable.createdAt))
-      .limit(1);
-    return row?.createdAt ?? null;
-  }
-
-  /**
    * Installations that have recorded no per-installation tool descriptions
    * yet, in catalogs with more than one installation (only there can
    * installations disagree). A random sample, so installations that keep
@@ -850,7 +837,8 @@ class McpServerModel {
    */
   static credentialUsableCondition(userId: string): SQL {
     const server = schema.mcpServersTable;
-    return or(
+    // A nullable owner or team makes the bare OR NULL instead of false.
+    return sql`coalesce(${or(
       eq(server.ownerId, userId),
       exists(
         db
@@ -871,7 +859,7 @@ class McpServerModel {
         }),
       ),
       eq(server.scope, "org"),
-    ) as SQL;
+    )}, false)`;
   }
 
   /**
@@ -1484,6 +1472,32 @@ class McpServerModel {
     return null;
   }
 
+  static async hasSecretReference(secretId: string): Promise<boolean> {
+    const [reference] = await db
+      .select({ id: schema.mcpServersTable.id })
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.secretId, secretId))
+      .limit(1);
+    return reference !== undefined;
+  }
+
+  static async hasOtherSecretReference(params: {
+    secretId: string;
+    mcpServerId: string;
+  }): Promise<boolean> {
+    const [reference] = await db
+      .select({ id: schema.mcpServersTable.id })
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          eq(schema.mcpServersTable.secretId, params.secretId),
+          ne(schema.mcpServersTable.id, params.mcpServerId),
+        ),
+      )
+      .limit(1);
+    return reference !== undefined;
+  }
+
   static async findById(
     id: string,
     userId?: string,
@@ -1983,7 +1997,14 @@ class McpServerModel {
     return updatedServer || null;
   }
 
-  static async delete(id: string, opts?: { at?: Date }): Promise<boolean> {
+  static async delete(
+    id: string,
+    opts?: {
+      at?: Date;
+      strictCleanup?: boolean;
+      requirePlaywrightDisabled?: boolean;
+    },
+  ): Promise<boolean> {
     // Fetch the (active) server for teardown context. Idempotent: an
     // already-soft-deleted server is not found (findById filters notDeleted),
     // so a repeat delete is a no-op and returns false.
@@ -2002,6 +2023,7 @@ class McpServerModel {
         { err: error },
         `Failed to clean up MCP HTTP sessions for MCP server ${mcpServer.name}:`,
       );
+      if (opts?.strictCleanup) throw error;
       // Continue with deletion even if session cleanup fails
     }
 
@@ -2020,7 +2042,14 @@ class McpServerModel {
         "@/k8s/mcp-server-runtime"
       );
       try {
-        await McpServerRuntimeManager.removeMcpServer(id);
+        if (opts?.strictCleanup) {
+          await McpServerRuntimeManager.removeMcpServer(id, {
+            strictCleanup: true,
+            requirePlaywrightDisabled: opts.requirePlaywrightDisabled,
+          });
+        } else {
+          await McpServerRuntimeManager.removeMcpServer(id);
+        }
         logger.info(
           `Cleaned up K8s deployment for MCP server: ${mcpServer.name}`,
         );
@@ -2029,6 +2058,7 @@ class McpServerModel {
           { err: error },
           `Failed to clean up K8s deployment for MCP server ${mcpServer.name}:`,
         );
+        if (opts?.strictCleanup) throw error;
         // Continue with deletion even if pod cleanup fails
       }
     }
@@ -2039,12 +2069,29 @@ class McpServerModel {
     // secret. `opts.at` lets a catalog cascade stamp this install (with its
     // siblings and tools) with one shared timestamp — the restore correlation key.
     logger.info(`Soft-deleting MCP server: ${mcpServer.name} with id: ${id}`);
-    const count = await softDelete(
-      db,
-      schema.mcpServersTable,
-      eq(schema.mcpServersTable.id, id),
-      opts?.at,
-    );
+    const count = opts?.requirePlaywrightDisabled
+      ? await withDbTransaction(async (tx) => {
+          // Serialize final retirement with enable/provision transactions. A
+          // late cleanup cannot soft-delete a runtime that was just revived.
+          const [organization] = await tx
+            .select({ enabled: schema.organizationsTable.playwrightMcpEnabled })
+            .from(schema.organizationsTable)
+            .limit(1)
+            .for("update");
+          if (organization?.enabled !== false) return 0;
+          return softDelete(
+            tx,
+            schema.mcpServersTable,
+            eq(schema.mcpServersTable.id, id),
+            opts.at,
+          );
+        })
+      : await softDelete(
+          db,
+          schema.mcpServersTable,
+          eq(schema.mcpServersTable.id, id),
+          opts?.at,
+        );
     return count > 0;
   }
 
@@ -2818,12 +2865,15 @@ class McpServerModel {
       await McpServerModel.hardDelete(server.id);
       purgedIds.push(server.id);
 
-      if (server.secretId) {
+      if (
+        server.secretId &&
+        !(await McpServerModel.hasSecretReference(server.secretId))
+      ) {
         try {
           await secretManager().deleteSecret(server.secretId);
         } catch (error) {
-          // The install is already gone, so nothing points at this secret
-          // anymore. Log the id loudly — it needs a manual sweep.
+          // The install is already gone, so nothing points at this secret.
+          // Log the id loudly — it needs a manual sweep.
           logger.error(
             { err: error, userId, secretId: server.secretId },
             "McpServerModel.purgeInstallRows: failed to delete credential secret; it is now orphaned",

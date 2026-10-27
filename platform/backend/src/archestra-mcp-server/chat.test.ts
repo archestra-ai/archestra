@@ -384,6 +384,58 @@ describe("chat tool execution", () => {
     expect((result.content[0] as any).text).toContain("header");
   });
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  test.each([
+    { length: 2000, offer: "none", rejected: false },
+    { length: 2001, offer: "none", rejected: true },
+    { length: 2001, offer: "missing", rejected: true },
+    { length: 2001, offer: "foreign", rejected: true },
+  ])("ask_user enforces the ordinary question limit with $length characters and $offer offer", async ({
+    length,
+    offer,
+    rejected,
+  }) => {
+    const offerId = "offer-question-limit";
+    if (offer === "foreign") {
+      await stageHitlReview({
+        session: reviewSession({
+          sessionId: scopedSessionId(
+            `user:${mockContext.userId}`,
+            "another-session",
+          ),
+        }),
+        review: { offerId, text: "Another session's review." },
+      });
+    }
+    const elicit = vi.fn(acceptingElicitation.elicit);
+    mockContext = { ...mockContext, elicitation: { elicit } };
+
+    const result = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      {
+        question: "q".repeat(length),
+        options: [
+          { label: "Accept for this session" },
+          { label: "Do not accept" },
+        ],
+        ...(offer === "none"
+          ? {}
+          : { remedy_offer_ids: [offerId], trajectory: trajectory() }),
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(rejected);
+    expect(elicit).toHaveBeenCalledTimes(rejected ? 0 : 1);
+    if (rejected) {
+      expect((result.content[0] as any).text).toContain("question");
+      expect((result.content[0] as any).text).toContain("2000");
+    }
+  });
+  // SPDX-SnippetEnd
+
   test("ask_user accept repeats stamped remedy ids as the next step", async () => {
     mockContext = { ...mockContext, elicitation: acceptingElicitation };
 
@@ -476,6 +528,9 @@ describe("chat tool execution", () => {
     expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
   });
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   test.each([
     "Approve",
     "Deny",
@@ -486,6 +541,12 @@ describe("chat tool execution", () => {
     });
     const review = makeReturnLabelReview(offerId);
     await stageHitlReview({ session, review });
+    const rewritten = await getHitlAskUserArguments({
+      session,
+      offerIds: [offerId],
+    });
+    // Exercise the proxy's expanded call at the MCP validation boundary.
+    expect(rewritten?.question.length).toBeGreaterThan(2000);
     mockContext = {
       ...mockContext,
       elicitation: {
@@ -511,9 +572,7 @@ describe("chat tool execution", () => {
     const result = await executeArchestraTool(
       TOOL_ASK_USER_FULL_NAME,
       {
-        question: "Model-authored copy must not replace the review",
-        options: [{ label: "Yes" }, { label: "No" }],
-        remedy_offer_ids: [offerId],
+        ...rewritten,
         trajectory: trajectory(),
       },
       mockContext,
@@ -527,6 +586,7 @@ describe("chat tool execution", () => {
       choice === "Approve" ? "approve" : "deny",
     );
   });
+  // SPDX-SnippetEnd
 
   test("accepts the proxy's rewritten review call", async () => {
     const offerId = "offer-hitl-preview";

@@ -1,4 +1,7 @@
-import type { IncomingEmailSecurityMode } from "@archestra/shared";
+import type {
+  GitHubActionsAccess,
+  IncomingEmailSecurityMode,
+} from "@archestra/shared";
 import { type SQL, sql } from "drizzle-orm";
 import {
   boolean,
@@ -102,6 +105,13 @@ const agentsTable = softDeletablePgTable(
     modelId: uuid("model_id").references(() => modelsTable.id, {
       onDelete: "set null",
     }),
+    /** Optional `fast` / `smart` tiers of the agent's trio, on `llmApiKeyId`. */
+    fastModelId: uuid("fast_model_id").references(() => modelsTable.id, {
+      onDelete: "set null",
+    }),
+    smartModelId: uuid("smart_model_id").references(() => modelsTable.id, {
+      onDelete: "set null",
+    }),
 
     /** Optional Identity Provider for JWKS-based JWT validation on MCP Gateway requests */
     identityProviderId: text("identity_provider_id").references(
@@ -140,6 +150,15 @@ const agentsTable = softDeletablePgTable(
 
     /** Allowlist of HTTP header names to forward from gateway requests to downstream MCP servers */
     passthroughHeaders: text("passthrough_headers").array(),
+
+    /**
+     * MCP gateways only: which GitHub Actions pull-request jobs may trade
+     * their OIDC token for a token on this gateway that acts as the pull
+     * request's author. Null turns the exchange off.
+     */
+    githubActionsAccess: jsonb(
+      "github_actions_access",
+    ).$type<GitHubActionsAccess>(),
 
     /** Whether tools/list exposes the full tool menu or only meta-discovery tools */
     toolExposureMode: text("tool_exposure_mode")

@@ -354,7 +354,6 @@ function SessionsTable() {
 
       <DataTable
         columns={columns}
-        fixedWidthColumnIds={["agent", "models", "usage", "time"]}
         flexibleColumnIds={["session"]}
         data={sessions}
         hideSelectedCount

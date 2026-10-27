@@ -163,6 +163,7 @@ describe("OpenAPPA tool execution", () => {
       config.openappa = {
         enabled: true,
         yellEnabled: false,
+        yellForwardingEnabled: false,
         offerSigningSecret: TEST_SIGNING_SECRET,
         postgresMaxConnections: 10,
       };

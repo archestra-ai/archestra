@@ -358,7 +358,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
         ) : null}
       </header>
 
-      <section className="flex min-h-0 flex-1 flex-col gap-3 p-4 md:p-6">
+      <section className="flex min-h-0 flex-1 flex-col gap-3 px-4 pt-3 pb-4 md:px-6 md:pb-6">
         {run && live && <AgentRunLiveness run={run} />}
         {isOwner && !live && run?.workspace && (
           <InlineNotice

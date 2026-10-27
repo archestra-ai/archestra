@@ -3,7 +3,7 @@ title: M-Files
 description: Connect M-Files documents to Knowledge and configure source access
 order: 17
 lastUpdated: 2026-10-05
-beta: "Set [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) to turn it on."
+beta: "Set [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) to turn it on."
 ---
 
 Let agents answer from the documents in an M-Files vault, with each file's M-Files permissions. The connector syncs versioned files.

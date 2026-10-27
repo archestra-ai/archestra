@@ -1063,6 +1063,90 @@ $out | ConvertTo-Json -Compress
 });
 
 describe.skipIf(!powershellAvailable)(
+  "PowerShell managed runtime stdin encoding",
+  () => {
+    test.each([
+      0, 23,
+    ])("preserves Unicode and restores session state after Node exits %s", async (exitCode) => {
+      const root = await mkdtemp(
+        path.join(tmpdir(), "archestra-runtime-encoding-"),
+      );
+      const artifact = path.join(root, "artifact.txt");
+      const content = "routing → café";
+      const rendered = renderSetupScript({
+        clientId: "opencode",
+        platform: "windows",
+        appName: "Archestra",
+        mcp: {
+          serverName: "gateway",
+          toolPrefix: "archestra__",
+          url: "https://example.com/v1/mcp/gateway",
+        },
+        proxy: null,
+        skills: null,
+        managedRuntimeSource: {
+          url: "https://example.com/api/managed-runtime",
+          token: "test-runtime-token",
+          installation: "test-installation",
+        },
+      });
+      const boundary = rendered.match(
+        /\$archRuntimeInstall = @'\r?\n[\s\S]*?\r?\n'@([\s\S]*?if \(\$LASTEXITCODE -ne 0\) \{ throw 'Could not install managed launcher updates' \})/,
+      );
+      expect(boundary).not.toBeNull();
+      const probe = `require("node:fs").writeFileSync(process.env.ARCHESTRA_TEST_ARTIFACT, ${JSON.stringify(content)}); process.exit(${exitCode});`;
+      const driver = path.join(root, "driver.ps1");
+      try {
+        await writeFile(
+          driver,
+          `$ErrorActionPreference = 'Stop'
+$originalEncoding = [System.Text.Encoding]::ASCII
+$OutputEncoding = $originalEncoding
+$env:ARCHESTRA_OC_RUNTIME_API_MAJOR = 'before-test'
+$archOcMajor = 1
+$archRuntimeInstall = @'
+${probe}
+'@
+$failure = $null
+try {
+${boundary?.[1]}
+} catch { $failure = $_.Exception.Message }
+[pscustomobject]@{
+  encodingRestored = [object]::ReferenceEquals($OutputEncoding, $originalEncoding)
+  runtimeMajor = $env:ARCHESTRA_OC_RUNTIME_API_MAJOR
+  failure = $failure
+} | ConvertTo-Json -Compress
+`,
+        );
+        const { stdout } = await execFileAsync(
+          "pwsh",
+          ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", driver],
+          {
+            env: {
+              ...process.env,
+              PATH: `${path.dirname(process.execPath)}${path.delimiter}${process.env.PATH ?? ""}`,
+              ARCHESTRA_TEST_ARTIFACT: artifact,
+            },
+            timeout: 30_000,
+          },
+        );
+        expect(await readFile(artifact, "utf8")).toBe(content);
+        expect(JSON.parse(stdout.trim())).toEqual({
+          encodingRestored: true,
+          runtimeMajor: "before-test",
+          failure:
+            exitCode === 0
+              ? null
+              : "Could not install managed launcher updates",
+        });
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+  },
+);
+
+describe.skipIf(!powershellAvailable)(
   "Windows PowerShell 5.1 native argument passing",
   () => {
     test("OpenCode primary-providers setup and its guard disconnect run when quotes in native arguments are dropped", async () => {
@@ -1160,6 +1244,7 @@ describe.skipIf(!powershellAvailable)(
 & (Join-Path $env:ARCHESTRA_TEST_ROOT 'setup.ps1')
 if ($LASTEXITCODE) { exit $LASTEXITCODE }
 Copy-Item (Join-Path $env:USERPROFILE '.config/opencode/opencode.json') (Join-Path $env:ARCHESTRA_TEST_ROOT 'connected.json')
+Copy-Item (Join-Path $env:USERPROFILE '.config/opencode/plugins/archestra-llm-proxy.js') (Join-Path $env:ARCHESTRA_TEST_ROOT 'connected-plugin.js')
 $env:ARCHESTRA_GUARD_ACTION = 'disconnect'
 & (Join-Path $env:USERPROFILE '.archestra/opencode-startup-guard.ps1')
 exit $LASTEXITCODE
@@ -1184,9 +1269,16 @@ exit $LASTEXITCODE
         const connected = JSON.parse(
           await readFile(path.join(root, "connected.json"), "utf8"),
         );
+        // Connect adds no provider to the client's config; the plugin carries
+        // the served models and the key file carries the credential.
         expect(
-          connected.provider["archestra-anthropic"].models["claude-test"].limit,
-        ).toEqual({ context: 200000, output: 0 });
+          Object.keys(connected.provider ?? {}).some((id) =>
+            id.startsWith("archestra-"),
+          ),
+        ).toBe(false);
+        expect(
+          await readFile(path.join(root, "connected-plugin.js"), "utf8"),
+        ).toContain('"anthropic":["claude-test"]');
         expect(
           JSON.parse(await readFile(siblingPath, "utf8")).mcp.my_gateway
             .enabled,

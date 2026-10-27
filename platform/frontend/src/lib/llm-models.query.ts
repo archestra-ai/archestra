@@ -50,11 +50,20 @@ export function useLlmModels(params?: LlmModelsParams) {
   const client = useQueryClient();
   // The server lists the models of every key the viewer may use, or of one
   // of them. When that key is their only one, both answers are the same
-  // list: reuse the full one rather than ask again.
-  const allModels = () =>
-    apiKeyId && soleAvailableLlmProviderApiKeyId(client) === apiKeyId
-      ? client.getQueryState<LlmModel[]>(llmModelsQueryKey(null))
-      : undefined;
+  // list: reuse the full one rather than ask again. Not while that list is
+  // invalidated or refetching, though: right after the key is added it can
+  // still hold the answer from before the key's models were synced, and
+  // seeding from it would latch an empty list as fresh data.
+  const allModels = () => {
+    if (!apiKeyId || soleAvailableLlmProviderApiKeyId(client) !== apiKeyId) {
+      return undefined;
+    }
+    const state = client.getQueryState<LlmModel[]>(llmModelsQueryKey(null));
+    if (state?.isInvalidated || state?.fetchStatus === "fetching") {
+      return undefined;
+    }
+    return state;
+  };
   return useQuery({
     queryKey: llmModelsQueryKey(apiKeyId ?? null),
     initialData: () => allModels()?.data,

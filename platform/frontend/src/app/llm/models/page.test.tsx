@@ -498,6 +498,32 @@ describe("ModelsPage", () => {
     expect(screen.queryByText("$/M Output")).not.toBeInTheDocument();
   });
 
+  it("loads the selected instance's prices and keeps an unknown cache direction visible", async () => {
+    keyCreated = true;
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(`apiKey=${providerKey.id}`) as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-models`, ({ request }) => {
+        const selected = new URL(request.url).searchParams.get("apiKeyIds");
+        return HttpResponse.json([
+          {
+            ...model,
+            pricePerMillionInput: selected === providerKey.id ? "2" : null,
+            pricePerMillionOutput: selected === providerKey.id ? "8" : null,
+            pricePerMillionCacheRead: "0.5",
+            pricePerMillionCacheWrite: null,
+          },
+        ]);
+      }),
+    );
+    renderPage();
+    expect(await screen.findByText("$2.00 / $8.00")).toBeVisible();
+    expect(screen.getByText("$0.50 / -")).toBeVisible();
+  });
+
   it("hydrates filter state from the URL query params", async () => {
     keyCreated = true;
     // A chat model filtered to embedding-only should drop out entirely.
@@ -511,6 +537,40 @@ describe("ModelsPage", () => {
     expect(
       await screen.findByText("No models match your filters"),
     ).toBeVisible();
+    expect(screen.queryByText(model.modelId)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["gemini-2.5-flash-image", "Nano Banana", "nano banana"],
+    ["gemini-2.5-flash-image", "Nano Banana", "nanobanana"],
+    ["gemini-2.5-flash-image", "Nano Banana", "nano-banana"],
+    ["gemini-nano-banana-2.1", "Nano Banana 2.1", "banana 2.1"],
+    ["gemini-2.5-flash-image", "Nano Banana", "2.5-flash-image"],
+  ])("finds %s by its visible name or API id", async (modelId, description, search) => {
+    keyCreated = true;
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams({ search }) as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-models`, () =>
+        HttpResponse.json([
+          {
+            ...model,
+            id: "image-model",
+            provider: "gemini",
+            modelId,
+            description,
+          },
+          model,
+        ]),
+      ),
+    );
+    renderPage();
+
+    expect(await screen.findByText(modelId)).toBeVisible();
+    expect(screen.getByText(description)).toBeVisible();
     expect(screen.queryByText(model.modelId)).not.toBeInTheDocument();
   });
 

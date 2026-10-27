@@ -6,12 +6,9 @@ with only local tools. Anchor checks force review when the pinned CLI changes.
 """
 
 from pathlib import Path
-import json
-import subprocess
 import sys
 
-listing = json.loads(subprocess.check_output(["pnpm", "list", "--global", "--json", "openclaw"], text=True))
-package = Path(listing[0]["dependencies"]["openclaw"]["path"])
+package = Path("/opt/agent-openclaw/node_modules/openclaw")
 files = list((package / "dist").glob("agent-bundle-mcp-materialize-*.js"))
 if len(files) != 1:
     sys.exit("OpenClaw MCP materialization changed; review openclaw-mcp-required.py")

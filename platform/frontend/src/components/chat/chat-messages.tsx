@@ -100,18 +100,19 @@ import {
   type ToolAuthState,
 } from "@/lib/chat/mcp-error-ui";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/chat/parse-thinking";
-import { UPSTREAM_IDLE_THRESHOLD_SECONDS } from "@/lib/chat/stream-stall.hook";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
+import { UPSTREAM_IDLE_THRESHOLD_SECONDS } from "@/lib/chat/use-stream-stall";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useStableCallback } from "@/lib/hooks/use-stable-callback";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
-import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
 import { useMcpCatalogDirectory } from "@/lib/mcp/mcp-registry.query";
+import { useMcpInstallOrchestrator } from "@/lib/mcp/use-mcp-install-orchestrator";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 import { identifyAskUserGroups } from "./ask-user-groups";
 import { getAskUserOutcome } from "./ask-user-outcome";
 import {
+  AttachmentAudio,
   AttachmentImage,
   AttachmentLink,
   AttachmentVideo,
@@ -140,6 +141,11 @@ import {
   isOpenAppaPolicyChange,
   OpenAppaPolicyChange,
 } from "./openappa-policy-change";
+import {
+  RemedyChainCard,
+  RemedyGuardrailsSteps,
+} from "./openappa-remedy-chain-card";
+import type { RemedyChain } from "./openappa-remedy-chains";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -565,6 +571,32 @@ export function ChatMessages({
     () => new Set(subagentToolCalls.keys()),
     [subagentToolCalls],
   );
+  // Shared by the tool cards below, guarded or not.
+  const sendUserText = useCallback(
+    (text: string) => session?.sendOrQueueText(text),
+    [session],
+  );
+  const subagentCallsFor = useCallback(
+    (toolCallId: string | undefined) =>
+      toolCallId && subagentParentToolCallIds.has(toolCallId) ? (
+        <SubagentToolCalls
+          parentToolCallId={toolCallId}
+          subagentToolCalls={subagentToolCalls}
+          canExpandToolCalls={canExpandToolCalls}
+          connectedCatalogIds={orchestrator.connectedCatalogIds}
+          getToolShortName={getToolShortName}
+          toolIconMap={toolIconMap}
+        />
+      ) : null,
+    [
+      subagentParentToolCallIds,
+      subagentToolCalls,
+      canExpandToolCalls,
+      orchestrator.connectedCatalogIds,
+      getToolShortName,
+      toolIconMap,
+    ],
+  );
 
   const timelineItems = useMemo(
     () =>
@@ -696,7 +728,13 @@ export function ChatMessages({
                   className={cn(isDimmed && "opacity-40 transition-opacity")}
                 >
                   {(() => {
-                    const { groupMap, consumedIndices } =
+                    // Guarded calls in the turn still running read as
+                    // running until they settle.
+                    const turnActive =
+                      isResponseInProgress &&
+                      message.role === "assistant" &&
+                      idx === messages.length - 1;
+                    const { groupMap, consumedIndices, remedyChainCards } =
                       identifyCompactToolGroups(message.parts, {
                         nonCompactToolNames,
                         getToolShortName,
@@ -754,6 +792,7 @@ export function ChatMessages({
                                       part: entry.part,
                                       toolResultPart: entry.toolResultPart,
                                       errorText: entry.errorText,
+                                      remedyChain: entry.remedyChain,
                                     }
                                   : {
                                       kind: "tool" as const,
@@ -762,38 +801,80 @@ export function ChatMessages({
                                       part: entry.part,
                                       toolResultPart: entry.toolResultPart,
                                       errorText: entry.errorText,
-                                      nestedToolCalls:
-                                        subagentParentToolCallIds.has(
-                                          entry.part.toolCallId ?? "",
-                                        ) ? (
-                                          <SubagentToolCalls
-                                            parentToolCallId={
-                                              entry.part.toolCallId ?? ""
-                                            }
-                                            subagentToolCalls={
-                                              subagentToolCalls
-                                            }
-                                            canExpandToolCalls={
-                                              canExpandToolCalls
-                                            }
-                                            connectedCatalogIds={
-                                              orchestrator.connectedCatalogIds
-                                            }
-                                            getToolShortName={getToolShortName}
-                                            toolIconMap={toolIconMap}
-                                          />
-                                        ) : null,
+                                      remedyChain: entry.remedyChain,
+                                      nestedToolCalls: subagentCallsFor(
+                                        entryCallId(entry),
+                                      ),
                                     },
                             )}
                             toolIconMap={toolIconMap}
                             canExpandToolCalls={canExpandToolCalls}
                             onToolApprovalResponse={onToolApprovalResponse}
+                            turnActive={turnActive}
                             appContext={{
                               agentId,
                               earlyToolUiStarts,
-                              onSendMessage: (text) =>
-                                session?.sendOrQueueText(text),
+                              onSendMessage: sendUserText,
                             }}
+                          />
+                        );
+                      }
+
+                      // A guarded call that needs the full card (e.g. an
+                      // approval) still renders as one card of its target.
+                      const remedyChain = remedyChainCards.get(i);
+                      const releasedAttempt = remedyChain?.finalAttempt;
+                      if (remedyChain && releasedAttempt) {
+                        const releasedId = releasedAttempt.part.toolCallId;
+                        return (
+                          <MessageTool
+                            key={partKey}
+                            part={{ ...releasedAttempt.part }}
+                            toolResultPart={releasedAttempt.toolResultPart}
+                            toolName={releasedAttempt.toolName}
+                            agentId={agentId}
+                            canExpandToolCalls={canExpandToolCalls}
+                            onToolApprovalResponse={onToolApprovalResponse}
+                            onInstallMcp={
+                              orchestrator.triggerInstallByCatalogId
+                            }
+                            onReauthMcp={
+                              orchestrator.triggerReauthByCatalogIdAndServerId
+                            }
+                            connectedCatalogIds={
+                              orchestrator.connectedCatalogIds
+                            }
+                            getToolShortName={getToolShortName}
+                            toolIconMap={toolIconMap}
+                            earlyToolUiData={
+                              releasedId
+                                ? earlyToolUiStarts[releasedId]
+                                : undefined
+                            }
+                            onSendMessage={sendUserText}
+                            nestedToolCalls={
+                              <>
+                                <RemedyGuardrailsSteps
+                                  steps={remedyChain.steps}
+                                  onToolApprovalResponse={
+                                    onToolApprovalResponse
+                                  }
+                                />
+                                {subagentCallsFor(releasedId)}
+                              </>
+                            }
+                          />
+                        );
+                      }
+                      if (remedyChain) {
+                        return (
+                          <RemedyChainCard
+                            key={partKey}
+                            chain={remedyChain}
+                            collapsible
+                            turnActive={turnActive}
+                            canExpandToolCalls={canExpandToolCalls}
+                            onToolApprovalResponse={onToolApprovalResponse}
                           />
                         );
                       }
@@ -1221,6 +1302,8 @@ export function ChatMessages({
                           };
                           const isImage =
                             filePart.mediaType?.startsWith("image/");
+                          const isAudio =
+                            filePart.mediaType?.startsWith("audio/");
                           const isVideo =
                             filePart.mediaType?.startsWith("video/");
                           const isPdf =
@@ -1238,6 +1321,12 @@ export function ChatMessages({
                                     conversationId={conversationId}
                                     alt={filePart.filename || "Attached image"}
                                     className="max-w-full max-h-64 rounded-lg object-contain"
+                                  />
+                                )}
+                                {isAudio && (
+                                  <AttachmentAudio
+                                    url={filePart.url}
+                                    conversationId={conversationId}
                                   />
                                 )}
                                 {isVideo && (
@@ -1267,7 +1356,7 @@ export function ChatMessages({
                                     </span>
                                   </AttachmentLink>
                                 )}
-                                {!isImage && !isVideo && !isPdf && (
+                                {!isImage && !isVideo && !isPdf && !isAudio && (
                                   <AttachmentLink
                                     url={filePart.url}
                                     conversationId={conversationId}
@@ -1358,9 +1447,7 @@ export function ChatMessages({
                                   ? earlyToolUiStarts[part.toolCallId]
                                   : undefined
                               }
-                              onSendMessage={(text) =>
-                                session?.sendOrQueueText(text)
-                              }
+                              onSendMessage={sendUserText}
                             />
                           );
                         }
@@ -1475,9 +1562,7 @@ export function ChatMessages({
                                 }
                                 getToolShortName={getToolShortName}
                                 toolIconMap={toolIconMap}
-                                onSendMessage={(text) =>
-                                  session?.sendOrQueueText(text)
-                                }
+                                onSendMessage={sendUserText}
                                 earlyToolUiData={earlyToolUiStarts[tcId]}
                               />
                             );
@@ -1544,24 +1629,8 @@ export function ChatMessages({
                                 earlyToolUiData={
                                   tcId ? earlyToolUiStarts[tcId] : undefined
                                 }
-                                onSendMessage={(text) =>
-                                  session?.sendOrQueueText(text)
-                                }
-                                nestedToolCalls={
-                                  tcId &&
-                                  subagentParentToolCallIds.has(tcId) ? (
-                                    <SubagentToolCalls
-                                      parentToolCallId={tcId}
-                                      subagentToolCalls={subagentToolCalls}
-                                      canExpandToolCalls={canExpandToolCalls}
-                                      connectedCatalogIds={
-                                        orchestrator.connectedCatalogIds
-                                      }
-                                      getToolShortName={getToolShortName}
-                                      toolIconMap={toolIconMap}
-                                    />
-                                  ) : null
-                                }
+                                onSendMessage={sendUserText}
+                                nestedToolCalls={subagentCallsFor(tcId)}
                               />
                             );
                           }
@@ -1645,6 +1714,16 @@ export function ChatMessages({
         <McpInstallDialogs orchestrator={orchestrator} />
       </Conversation>
     </McpTaskProvider>
+  );
+}
+
+/** The call whose subagent tool calls nest under an entry: a guarded call's released attempt. */
+function entryCallId(entry: {
+  part: DynamicToolUIPart | ToolUIPart;
+  remedyChain?: RemedyChain;
+}): string | undefined {
+  return (
+    entry.remedyChain?.finalAttempt?.part.toolCallId ?? entry.part.toolCallId
   );
 }
 

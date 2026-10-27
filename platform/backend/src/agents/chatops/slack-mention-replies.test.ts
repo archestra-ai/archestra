@@ -8,7 +8,6 @@ import { describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import { ChatOpsManager } from "./chatops-manager";
-import { THREAD_MUTE_HINT } from "./constants";
 import SlackProvider from "./slack-provider";
 import { EventDedupMap } from "./utils";
 
@@ -141,9 +140,22 @@ describe("mention reply delivery", () => {
         }),
       );
       expect(posts).toHaveLength(1);
-      expect(posts[0].get("blocks")).toContain(
-        JSON.stringify(THREAD_MUTE_HINT),
+      const firstReplyBlocks = JSON.parse(posts[0].get("blocks") ?? "[]");
+      const hint = firstReplyBlocks
+        .filter((block: { type: string }) => block.type === "context")
+        .flatMap((block: { elements: { type: string; text: string }[] }) =>
+          block.elements.filter((element) => element.type === "plain_text"),
+        )
+        .find((element: { text: string }) =>
+          element.text.includes('Reply "mute"'),
+        );
+      expect(hint?.text).toMatch(
+        /Press Stop to cancel only the current answer/,
       );
+      expect(hint?.text).toContain(
+        'Reply "mute" or react 🔇 to any message in this thread to stop auto-replies',
+      );
+      expect(hint?.text).toContain("@mention me to resume");
       const controlPayload = {
         type: "event_callback",
         event_id: `Ev_${control}`,
@@ -214,8 +226,9 @@ describe("mention reply delivery", () => {
       expect(posts[afterFollowup].get("channel")).toBe("C_TEST");
       expect(posts[afterFollowup].get("thread_ts")).toBe("100.000001");
       expect(posts[afterFollowup].get("blocks")).not.toContain(
-        JSON.stringify(THREAD_MUTE_HINT),
+        "stop auto-replies",
       );
+      expect(posts[afterFollowup].get("blocks")).not.toContain("Press Stop");
 
       // A retry on another process bypasses the in-memory cache but still
       // must not post again: the database claim owns reply deduplication.

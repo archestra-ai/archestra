@@ -28,8 +28,8 @@ import {
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-  TOOL_START_RUN_SHORT_NAME,
-  TOOL_STEER_RUN_SHORT_NAME,
+  TOOL_START_AGENT_RUN_SHORT_NAME,
+  TOOL_STEER_AGENT_RUN_SHORT_NAME,
   YELL_TOOL_SHORT_NAMES,
 } from "@archestra/shared";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -49,6 +49,8 @@ import {
   ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
+import type { jsonSchemaValidator } from "@modelcontextprotocol/sdk/validation";
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv";
 import type { FastifyRequest } from "fastify";
 import { ZodError } from "zod";
 import {
@@ -119,6 +121,7 @@ import {
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
 import { filterToolsByCallerCatalogAccess } from "@/services/caller-catalog-access";
+import { readConfig } from "@/services/config-cache";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
@@ -167,6 +170,7 @@ import {
   withCompleteResultEnvelope,
   withPrivateCacheHint,
 } from "./protocol";
+import { recoverExpiredAuthWithUrlElicitation } from "./reauth-elicitation";
 import { serveSkillResource } from "./skills";
 import {
   clientDeclaredTasks,
@@ -448,7 +452,7 @@ export async function buildAgentMcpToolList(params: {
     mcpTools.some(
       (tool) =>
         archestraMcpBranding.getToolShortName(tool.name) ===
-        TOOL_START_RUN_SHORT_NAME,
+        TOOL_START_AGENT_RUN_SHORT_NAME,
     );
   // A session can arrive from another client even if this gateway cannot
   // start work. Advertise lifecycle controls for runtime handoffs and dynamic
@@ -764,20 +768,24 @@ export async function createAgentServer(params: {
       // `tools.listChanged: true`, backed by `subscriptions/listen`.
       capabilities: buildGatewayServerCapabilities(),
       instructions: buildGatewayInstructions(agent.description),
+      jsonSchemaValidator: lazyJsonSchemaValidator(),
     },
   );
   const { server } = mcpServer;
 
   // Fetch the agent's teams and the calling user's teams (with labels) for
   // trace span team attributes.
-  const teams = await AgentTeamModel.getTeamLabelInfoForAgent(agentId);
-  const userTeams =
-    tokenAuth?.userId && tokenAuth.organizationId
-      ? await TeamModel.getTeamLabelInfoForUser({
-          userId: tokenAuth.userId,
-          organizationId: tokenAuth.organizationId,
-        })
-      : [];
+  const { userId, organizationId } = tokenAuth ?? {};
+  const [teams, userTeams] = await Promise.all([
+    readConfig(`agent-team-labels\0${agentId}`, () =>
+      AgentTeamModel.getTeamLabelInfoForAgent(agentId),
+    ),
+    userId && organizationId
+      ? readConfig(`user-team-labels\0${organizationId}\0${userId}`, () =>
+          TeamModel.getTeamLabelInfoForUser({ userId, organizationId }),
+        )
+      : [],
+  ]);
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const startedAt = Date.now();
@@ -945,6 +953,26 @@ export async function createAgentServer(params: {
     const taskEligible =
       mrtrEnabled && clientDeclaredTasks({ params: request.params });
 
+    // A connection that needs signing in again is offered to the person as a
+    // link their client opens, then the call re-runs (see reauth-elicitation).
+    const reauthExtra = {
+      sendRequest: (...args: Parameters<typeof extra.sendRequest>) =>
+        extra.sendRequest(...args),
+      signal: extra?.signal,
+      // Straight onto this call's stream: the SDK checks the capability
+      // against an `initialize` this per-request Server never saw, while
+      // recoverExpiredAuthWithUrlElicitation has already checked it.
+      sendNotification: async (notification: {
+        method: "notifications/elicitation/complete";
+        params: { elicitationId: string };
+      }) => {
+        await mcpServer.server.transport?.send(
+          { jsonrpc: "2.0", ...notification },
+          { relatedRequestId: extra.requestId },
+        );
+      },
+    };
+
     const executeCallToolRequest = async (
       taskAbortSignal: AbortSignal,
     ): Promise<Record<string, unknown>> => {
@@ -958,14 +986,11 @@ export async function createAgentServer(params: {
         name?: string;
       } | null = null;
       if (tokenAuth?.userId) {
-        const userDetails = await UserModel.getById(tokenAuth.userId);
-        if (userDetails) {
-          mcpUser = {
-            id: userDetails.id,
-            email: userDetails.email,
-            name: userDetails.name,
-          };
-        }
+        const userId = tokenAuth.userId;
+        mcpUser = await readConfig(`span-user\0${userId}`, async () => {
+          const user = await UserModel.getById(userId);
+          return user && { id: user.id, email: user.email, name: user.name };
+        });
       }
 
       try {
@@ -1118,34 +1143,47 @@ export async function createAgentServer(params: {
             toolArgs: args,
             user: mcpUser,
             callback: async (span) => {
-              const result = await executeArchestraTool(name, args, {
-                openappaSession: params.openappaSession,
-                currentToolCallId: params.currentToolCallId,
-                agent: { id: agent.id, name: agent.name },
-                agentId: agent.id,
-                userId: tokenAuth?.serviceAccountId
-                  ? serviceAccountUserId(tokenAuth.serviceAccountId)
-                  : tokenAuth?.userId,
-                organizationId: tokenAuth?.organizationId,
-                tokenAuth,
-                mrtr: {
-                  enabled: mrtrEnabled,
-                  inputResponses: mrtr?.inputResponses,
-                  clientCapabilities: mrtr?.clientCapabilities,
-                  round: mrtr?.round,
-                },
-                elicitation: {
-                  elicit: createGatewayUserElicit({
-                    extra,
-                    mrtr,
-                    mrtrEnabled,
-                    agentId,
-                    toolName: name,
-                    requestMeta: request.params._meta as
-                      | Record<string, unknown>
-                      | undefined,
-                  }),
-                },
+              const runArchestraTool = () =>
+                executeArchestraTool(name, args, {
+                  openappaSession: params.openappaSession,
+                  currentToolCallId: params.currentToolCallId,
+                  agent: { id: agent.id, name: agent.name },
+                  agentId: agent.id,
+                  userId: tokenAuth?.serviceAccountId
+                    ? serviceAccountUserId(tokenAuth.serviceAccountId)
+                    : tokenAuth?.userId,
+                  organizationId: tokenAuth?.organizationId,
+                  tokenAuth,
+                  mrtr: {
+                    enabled: mrtrEnabled,
+                    inputResponses: mrtr?.inputResponses,
+                    clientCapabilities: mrtr?.clientCapabilities,
+                    round: mrtr?.round,
+                  },
+                  elicitation: {
+                    elicit: createGatewayUserElicit({
+                      extra,
+                      mrtr,
+                      mrtrEnabled,
+                      agentId,
+                      toolName: name,
+                      requestMeta: request.params._meta as
+                        | Record<string, unknown>
+                        | undefined,
+                    }),
+                  },
+                });
+              // run_tool reaches upstream servers, so its call can fail on an
+              // expired connection just like a direct one.
+              const result = await recoverExpiredAuthWithUrlElicitation({
+                result: await runArchestraTool(),
+                clientCapabilities: mrtr?.clientCapabilities,
+                mrtrEnabled,
+                inputResponses: mrtr?.inputResponses,
+                extra: reauthExtra,
+                rerun: runArchestraTool,
+                agentId,
+                toolName: name,
               });
               span.setAttribute(
                 ATTR_MCP_IS_ERROR_RESULT,
@@ -1259,65 +1297,76 @@ export async function createAgentServer(params: {
           toolArgs: args,
           user: mcpUser,
           callback: async (span) => {
-            const r = await mcpClient.executeToolCallForOwner(
-              toolCall,
-              agentOwner(agentId),
-              tokenAuth,
-              {
-                availableTool,
-                // Tasks: tasks/cancel on this replica aborts the gateway-side
-                // await; whether the upstream stops working is up to the
-                // upstream (stateless HTTP servers run on — see tasks.ts).
-                abortSignal: taskAbortSignal,
-                // A call that may detach is bounded by the task TTL, not the
-                // synchronous patience window (see mcp-client).
-                ...(taskEligible ? { upstreamTimeoutMs: TASK_TTL_MS } : {}),
-                elicitationHandler: async (request) => {
-                  // MRTR: a retry already carries the answer, so consume it
-                  // instead of asking again.
-                  const supplied =
-                    mrtr?.inputResponses?.[GATEWAY_INPUT_REQUEST_KEY];
-                  if (supplied !== undefined) {
-                    return ElicitResultSchema.parse(supplied);
-                  }
+            const runUpstream = () =>
+              mcpClient.executeToolCallForOwner(
+                toolCall,
+                agentOwner(agentId),
+                tokenAuth,
+                {
+                  availableTool,
+                  // Tasks: tasks/cancel on this replica aborts the gateway-side
+                  // await; whether the upstream stops working is up to the
+                  // upstream (stateless HTTP servers run on — see tasks.ts).
+                  abortSignal: taskAbortSignal,
+                  // A call that may detach is bounded by the task TTL, not the
+                  // synchronous patience window (see mcp-client).
+                  ...(taskEligible ? { upstreamTimeoutMs: TASK_TTL_MS } : {}),
+                  elicitationHandler: async (request) => {
+                    // MRTR: a retry already carries the answer, so consume it
+                    // instead of asking again.
+                    const supplied =
+                      mrtr?.inputResponses?.[GATEWAY_INPUT_REQUEST_KEY];
+                    if (supplied !== undefined) {
+                      return ElicitResultSchema.parse(supplied);
+                    }
 
-                  // Under 2026-07-28 a server may not open a request mid-call,
-                  // so unwind and let the handler answer with an
-                  // InputRequiredResult carrying this request.
-                  if (mrtrEnabled) {
-                    throw new InputRequiredSignal({
-                      key: GATEWAY_INPUT_REQUEST_KEY,
-                      request: {
-                        method: "elicitation/create",
-                        params: request.params as Record<string, unknown>,
-                      },
-                    });
-                  }
+                    // Under 2026-07-28 a server may not open a request mid-call,
+                    // so unwind and let the handler answer with an
+                    // InputRequiredResult carrying this request.
+                    if (mrtrEnabled) {
+                      throw new InputRequiredSignal({
+                        key: GATEWAY_INPUT_REQUEST_KEY,
+                        request: {
+                          method: "elicitation/create",
+                          params: request.params as Record<string, unknown>,
+                        },
+                      });
+                    }
 
-                  try {
-                    return await extra.sendRequest(
-                      request,
-                      ElicitResultSchema,
-                      { timeout: ELICITATION_ANSWER_TIMEOUT_MS },
-                    );
-                  } catch (error) {
-                    logger.warn(
-                      {
-                        agentId,
-                        toolName: name,
-                        mode: request.params.mode ?? "form",
-                        error:
-                          error instanceof Error
-                            ? error.message
-                            : String(error),
-                      },
-                      "MCP elicitation request was not completed by caller",
-                    );
-                    throw error;
-                  }
+                    try {
+                      return await extra.sendRequest(
+                        request,
+                        ElicitResultSchema,
+                        { timeout: ELICITATION_ANSWER_TIMEOUT_MS },
+                      );
+                    } catch (error) {
+                      logger.warn(
+                        {
+                          agentId,
+                          toolName: name,
+                          mode: request.params.mode ?? "form",
+                          error:
+                            error instanceof Error
+                              ? error.message
+                              : String(error),
+                        },
+                        "MCP elicitation request was not completed by caller",
+                      );
+                      throw error;
+                    }
+                  },
                 },
-              },
-            );
+              );
+            const r = await recoverExpiredAuthWithUrlElicitation({
+              result: await runUpstream(),
+              clientCapabilities: mrtr?.clientCapabilities,
+              mrtrEnabled,
+              inputResponses: mrtr?.inputResponses,
+              extra: reauthExtra,
+              rerun: runUpstream,
+              agentId,
+              toolName: name,
+            });
             span.setAttribute(ATTR_MCP_IS_ERROR_RESULT, r.isError ?? false);
             return r;
           },
@@ -2368,6 +2417,7 @@ async function authenticateExternalIdpToken(
       !(await AgentTeamModel.userHasAgentAccess({
         userId: user.id,
         agentId: profileId,
+        agentAccessContext: agent,
         isAgentAdmin: isAdmin,
         action: "use",
       }))
@@ -2859,9 +2909,10 @@ async function buildSearchToolsDescription(params: {
   });
   const runtimeInstruction = params.availableBuiltInToolNames.some(
     (name) =>
-      archestraMcpBranding.getToolShortName(name) === TOOL_STEER_RUN_SHORT_NAME,
+      archestraMcpBranding.getToolShortName(name) ===
+      TOOL_STEER_AGENT_RUN_SHORT_NAME,
   )
-    ? `For requests such as "hand this work over to ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}" or "spin this up in ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}", discover Agent Runtime tools here and load the Agent Runtime Handoff skill before transferring work. Discover an agent with list_agents; use start_run only when this work has no runtime session. Otherwise steer_run reuses its saved session. "Bring it back" or "resume locally" means retrieve changes and context, stop remote editing, and continue in the local client.`
+    ? `For requests such as "hand this work over to ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}" or "spin this up in ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}", discover Remote Agents tools here and load the Remote Agents Handoff skill before transferring work. Discover an agent with list_agents; use start_agent_run only when this work has no run yet. Otherwise steer_agent_run continues the existing run by its run_id. "Bring it back" or "resume locally" means retrieve changes and context, stop remote editing, and continue in the local client.`
     : null;
   // Mirror search_tools' actual search space: the catalogs backing the
   // assigned tools, widened by the dynamically discoverable ones when the
@@ -3017,7 +3068,7 @@ function summarizeDeferredBuiltIns(params: {
     ["read_file", "read file"],
     ["load_skill", "load skill"],
     ["run_command", "run command"],
-    ["list_runs", "list runs"],
+    ["list_agent_runs", "list agent runs"],
     ["get_guardrails_policy", "get guardrails policy"],
   ].flatMap(([shortName, query]) =>
     deferredShortNames.has(shortName) ? [`'${query}'`] : [],
@@ -3174,3 +3225,17 @@ import {
   OAUTH_CLIENT_REFERENCE_PREFIX,
 } from "@archestra/shared/oauth";
 import ManagedOauthClientModel from "@/models/managed-oauth-client";
+
+/**
+ * The SDK builds a schema validator for every server, and the gateway builds a
+ * server for every request. Only elicitation uses it, so build it on first use.
+ */
+function lazyJsonSchemaValidator(): jsonSchemaValidator {
+  let validator: AjvJsonSchemaValidator | undefined;
+  return {
+    getValidator: (schema) => {
+      validator ??= new AjvJsonSchemaValidator();
+      return validator.getValidator(schema);
+    },
+  };
+}

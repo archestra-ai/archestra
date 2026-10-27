@@ -154,6 +154,7 @@ export type CreateModel = z.infer<typeof CreateModelSchema>;
  *
  * - `custom`: admin-set override.
  * - `models_dev`: synced from the models.dev registry.
+ * - `provider`: published by the selected provider instance.
  * - `derived_multiplier`: cache price derived from the input price via a provider
  *   multiplier (used only for cache prices when the registry omits them).
  * - `default`: estimated flat fallback — a guess, surfaced as such in the UI.
@@ -161,6 +162,7 @@ export type CreateModel = z.infer<typeof CreateModelSchema>;
 export const PriceSourceSchema = z.enum([
   "custom",
   "models_dev",
+  "provider",
   "aws",
   "derived_multiplier",
   "default",

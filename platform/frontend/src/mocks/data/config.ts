@@ -82,6 +82,7 @@ export function makeConfig(
       // including its Application Account (OAuth) fields.
       kbMfilesConnectorEnabled: true,
       kbMfilesOauthEnabled: true,
+      llmModelPoolsEnabled: false,
       kbBm25DefaultK1: 1.2,
       kbBm25DefaultB: 0.75,
       kbContextualRetrievalDefaultMode: "disabled",
@@ -91,6 +92,7 @@ export function makeConfig(
           "http://localhost:3000/api/connectors/gdrive/oauth/callback",
       },
       mcpGatewaySkillsEnabled: false,
+      devFeedbackEnabled: false,
       ...overrides.features,
       maintenanceMode: overrides.features?.maintenanceMode ?? null,
     },

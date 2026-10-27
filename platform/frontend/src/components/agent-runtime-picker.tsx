@@ -198,7 +198,7 @@ export function AgentRuntimePicker({
       )}
       {isError && !isFetching && (
         <QueryLoadError
-          title="Could not load coding agents"
+          title="Could not load Agent Runtimes"
           onRetry={() => refetch()}
         />
       )}

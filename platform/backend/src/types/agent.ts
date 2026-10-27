@@ -3,6 +3,7 @@ import {
   BUILT_IN_AGENT_IDS,
   CreatedByNullableSchema,
   DOMAIN_VALIDATION_REGEX,
+  GitHubActionsAccessSchema,
   HEADER_NAME_REGEX,
   HEADER_NAME_VALIDATION_MESSAGE,
   IncomingEmailSecurityModeSchema,
@@ -189,6 +190,11 @@ const selectExtendedFields = {
   missingCredentialBehavior: MissingCredentialBehaviorSchema,
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable(),
   passthroughHeaders: z.array(z.string()).nullable(),
+  /**
+   * MCP gateways' GitHub Actions token exchange setting. Optional, like
+   * `lastUsedAt`, so agent objects built in code without it still fit.
+   */
+  githubActionsAccess: GitHubActionsAccessSchema.nullable().optional(),
   runtime: AgentRuntimeSchema.nullable(),
   activationSkillMode: AgentActivationSkillModeSchema,
   /**
@@ -208,6 +214,7 @@ const insertExtendedFields = {
   missingCredentialBehavior: MissingCredentialBehaviorSchema.optional(),
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable().optional(),
   passthroughHeaders: PassthroughHeadersSchema,
+  githubActionsAccess: GitHubActionsAccessSchema.nullable().optional(),
   runtime: AgentRuntimeSchema.nullable().optional(),
   activationSkillMode: AgentActivationSkillModeSchema.optional(),
 };
@@ -510,6 +517,9 @@ export const InsertAgentSchemaBase = createInsertSchema(
     latestVersion: true,
     // Stamped by AgentUsageModel when the agent is used; never client-settable.
     lastUsedAt: true,
+    // Set on an existing gateway by the update route, which checks the
+    // editor may use the GitHub App it names. A new agent starts without it.
+    githubActionsAccess: true,
   });
 
 // Full schema with validation refinement
@@ -594,7 +604,7 @@ export type Agent = z.infer<typeof SelectAgentSchema>;
 export type AgentListItem = z.infer<typeof AgentListItemSchema>;
 export type AgentAccessContext = Pick<
   Agent,
-  "id" | "organizationId" | "scope" | "authorId"
+  "id" | "organizationId" | "scope" | "authorId" | "agentType"
 >;
 export type InsertAgent = z.input<typeof InsertAgentSchema>;
 export type UpdateAgent = z.infer<typeof UpdateAgentSchema>;

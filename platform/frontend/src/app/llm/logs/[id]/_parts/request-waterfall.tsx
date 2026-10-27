@@ -1019,12 +1019,15 @@ function RequestRow({
   const modelName = row.model ? shortModelName(row.model) : "Unknown model";
   const onPlan = row.billingMode === "subscription";
   const latency = formatLatency(row.durationMs);
+  // A model pool writes one row per attempt; a failed one was retried on the
+  // next member, in the row after it.
+  const failedOver = row.attemptOutcome === "failed_over";
 
   return (
     <RowShell
       span={span}
       {...rowProps}
-      label={`${label}, ${modelName}, ${latency}${isConversation ? ", latest conversation" : ""}`}
+      label={`${label}, ${modelName}, ${latency}${failedOver ? ", failed over" : ""}${isConversation ? ", latest conversation" : ""}`}
       name={
         <>
           <span
@@ -1036,6 +1039,14 @@ function RequestRow({
             {label}
           </span>
           {kind !== "main" ? <KindChip kind={kind} /> : null}
+          {failedOver ? (
+            <span
+              className="shrink-0 rounded-sm bg-red-500/10 px-1 text-[10px] leading-4 font-medium text-red-700 dark:text-red-400"
+              title={row.failureReason ?? undefined}
+            >
+              Failed over
+            </span>
+          ) : null}
           {isConversation ? (
             <MessageSquareText
               className="size-3.5 shrink-0 text-primary"

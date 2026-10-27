@@ -7,6 +7,7 @@ import {
   type ActiveChatRunNotifier,
   createActiveChatRunNotifier,
 } from "@/services/active-chat-run-notifier";
+import { ApiError } from "@/types";
 import type { ChatActiveRunStatus } from "@/types/chat-active-run";
 
 const EVENT_FLUSH_INTERVAL_MS = 500;
@@ -163,8 +164,9 @@ export class ActiveChatRunService {
    * never will, so a run whose liveness touch is older than the stale window
    * is failed here instead of waiting for the reaper — the user asked to stop
    * it, and a live owner keeps its row fresh, so only an ownerless run
-   * qualifies. Bounded by `timeoutMs` so Stop always resolves; a run still
-   * `running` at the deadline is left to its owner or the reaper.
+   * qualifies. Bounded by `timeoutMs`; a run still `running` at the deadline
+   * rejects the hand-off so the client keeps waiting rather than sending an
+   * overlapping turn. Its owner or the reaper still owns terminalization.
    */
   async waitForTerminal(
     runId: string,
@@ -201,7 +203,10 @@ export class ActiveChatRunService {
           { runId, conversationId: run.conversationId },
           "Active chat run still running after stop wait deadline",
         );
-        return;
+        throw new ApiError(
+          409,
+          "The response is still stopping. Queued messages will wait until it finishes.",
+        );
       }
 
       // Terminal transitions publish on the event channel. The timeout is a
@@ -286,9 +291,9 @@ export class ActiveChatRunService {
         suppressPayloads: params.suppressEventPayloads ?? false,
         encryptedChatAudit: params.encryptedChatAudit ?? null,
         onFlush: () => this.notifyEvent(params.runId),
-        onAsyncFailure: () => {
+        onAsyncFailure: (error) => {
           if (!params.abortController?.signal.aborted) {
-            params.abortController?.abort();
+            params.abortController?.abort(persistenceAbortReason(error));
           }
           void reader.cancel().catch((cancelError) => {
             logger.warn(
@@ -334,7 +339,7 @@ export class ActiveChatRunService {
         });
       } catch (error) {
         if (!params.abortController?.signal.aborted) {
-          params.abortController?.abort();
+          params.abortController?.abort(persistenceAbortReason(error));
         }
         await reader.cancel().catch((cancelError) => {
           logger.warn(
@@ -728,6 +733,26 @@ class ActiveChatRunEventBatcher {
     this.lastRunTouchAt = now;
     return true;
   }
+}
+
+/**
+ * The reason a chat is aborted with when its events can no longer be
+ * persisted, so the response can report the failure instead of ending as if
+ * the user had pressed Stop.
+ */
+export class ActiveChatRunPersistenceError extends Error {
+  constructor(cause: unknown) {
+    super("The chat run could not be saved, so it was stopped.", { cause });
+    this.name = "ActiveChatRunPersistenceError";
+  }
+}
+
+function persistenceAbortReason(
+  error: unknown,
+): ActiveChatRunPersistenceError | undefined {
+  return error instanceof ActiveChatRunGoneError
+    ? undefined
+    : new ActiveChatRunPersistenceError(error);
 }
 
 // Signals that the run row was deleted out from under an in-flight drain, so

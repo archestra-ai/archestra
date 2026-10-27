@@ -13,6 +13,8 @@ import {
 import { alias } from "drizzle-orm/pg-core";
 import { requestScope } from "@/auth/request-scope";
 import db, { schema, withDbTransaction } from "@/database";
+import { PreparedQuery } from "@/database/prepared-query";
+import { qualified } from "@/database/utils/qualified-column";
 import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import logger from "@/logging";
 import type {
@@ -660,20 +662,7 @@ class TeamModel {
     userId: string;
     organizationId: string;
   }): Promise<Team[]> {
-    const { userId, organizationId } = params;
-    return db
-      .select(getTableColumns(schema.teamsTable))
-      .from(schema.teamsTable)
-      .innerJoin(
-        schema.teamMembersTable,
-        eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
-      )
-      .where(
-        and(
-          eq(schema.teamMembersTable.userId, userId),
-          eq(schema.teamsTable.organizationId, organizationId),
-        ),
-      );
+    return TeamModel.byUserAndOrganization.get().execute(params);
   }
 
   /**
@@ -685,20 +674,7 @@ class TeamModel {
     userId: string;
     organizationId: string;
   }): Promise<Array<{ id: string; name: string; labels: LabelWithDetails[] }>> {
-    const teams = await TeamModel.getUserTeamsForOrganization(params);
-    if (teams.length === 0) {
-      return [];
-    }
-
-    const labelsByTeam = await TeamLabelModel.getLabelsForTeams(
-      teams.map((team) => team.id),
-    );
-
-    return teams.map((team) => ({
-      id: team.id,
-      name: team.name,
-      labels: labelsByTeam.get(team.id) ?? [],
-    }));
+    return TeamModel.traceTeamsByUserAndOrganization.get().execute(params);
   }
 
   /**
@@ -1670,6 +1646,66 @@ class TeamModel {
     }
     return [...expanded];
   }
+  private static readonly byUserAndOrganization = new PreparedQuery(
+    (database) =>
+      database
+        .select(getTableColumns(schema.teamsTable))
+        .from(schema.teamsTable)
+        .innerJoin(
+          schema.teamMembersTable,
+          eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+        )
+        .where(
+          and(
+            eq(schema.teamMembersTable.userId, sql.placeholder("userId")),
+            eq(
+              schema.teamsTable.organizationId,
+              sql.placeholder("organizationId"),
+            ),
+          ),
+        )
+        .prepare("archestra_teams_by_user_and_organization"),
+  );
+
+  private static readonly traceTeamsByUserAndOrganization = new PreparedQuery(
+    (database) => {
+      const labels = schema.teamLabelsTable;
+      const keys = schema.labelKeysTable;
+      const values = schema.labelValuesTable;
+      return database
+        .select({
+          id: schema.teamsTable.id,
+          name: schema.teamsTable.name,
+          labels: sql<LabelWithDetails[]>`coalesce((
+            SELECT jsonb_agg(jsonb_build_object(
+              'keyId', ${qualified(labels.keyId)},
+              'valueId', ${qualified(labels.valueId)},
+              'key', coalesce(${qualified(keys.key)}, ''),
+              'value', coalesce(${qualified(values.value)}, '')
+            ) ORDER BY ${qualified(keys.key)})
+            FROM ${labels}
+            LEFT JOIN ${keys} ON ${qualified(labels.keyId)} = ${qualified(keys.id)}
+            LEFT JOIN ${values} ON ${qualified(labels.valueId)} = ${qualified(values.id)}
+            WHERE ${qualified(labels.teamId)} = ${qualified(schema.teamsTable.id)}
+          ), '[]'::jsonb)`,
+        })
+        .from(schema.teamsTable)
+        .innerJoin(
+          schema.teamMembersTable,
+          eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+        )
+        .where(
+          and(
+            eq(schema.teamMembersTable.userId, sql.placeholder("userId")),
+            eq(
+              schema.teamsTable.organizationId,
+              sql.placeholder("organizationId"),
+            ),
+          ),
+        )
+        .prepare("archestra_trace_teams_by_user_and_organization");
+    },
+  );
 }
 
 export default TeamModel;

@@ -2,6 +2,7 @@ import {
   CACHE_PRICE_MULTIPLIERS,
   type SupportedProvider,
 } from "@archestra/shared/model-constants";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import type { UsageView } from "@/types/llm-provider";
 import {
@@ -21,11 +22,13 @@ export async function priceBillingUsage(params: {
   provider: SupportedProvider;
   usage: UsageView;
   mode: PricedBillingUsage["mode"];
+  providerApiKeyId?: string;
 }): Promise<PricedBillingUsage> {
   const { provider, usage, model, mode } = params;
   if (
     usage.billingQuote?.model === model &&
     usage.billingQuote.provider === provider &&
+    usage.billingQuote.providerApiKeyId === params.providerApiKeyId &&
     usage.billingQuote.priced.mode === mode
   )
     return usage.billingQuote.priced;
@@ -33,11 +36,22 @@ export async function priceBillingUsage(params: {
   const models = await ModelModel.findByProviderAndModelIds(provider, [
     ...new Set(breakdown.components.map((item) => item.model)),
   ]);
+  const providerPrices =
+    await LlmProviderApiKeyModelLinkModel.findProviderPricing({
+      apiKeyId: params.providerApiKeyId,
+      modelIds: [...models.values()].map((row) => row.id),
+    });
   const issues = [...breakdown.issues];
   const components: PricedComponent[] = [];
   for (const component of breakdown.components) {
+    const row = models.get(component.model);
+    const projected = row
+      ? ModelModel.withProviderPricing(row, [
+          providerPrices.get(row.id) ?? null,
+        ])
+      : null;
     const pricing = ModelModel.getEffectivePricing(
-      models.get(component.model) ?? null,
+      projected,
       component.model,
       provider,
     );
@@ -75,6 +89,8 @@ export async function priceBillingUsage(params: {
     let cost = "0.0000000000";
     try {
       const missing =
+        (component.inputTokens > 0 && prices.input === null) ||
+        (component.outputTokens > 0 && prices.output === null) ||
         (component.cacheReadTokens > 0 && prices.cacheRead === null) ||
         (component.cacheWriteTokens > component.cacheWrite1hTokens &&
           prices.cacheWrite === null) ||
@@ -82,6 +98,8 @@ export async function priceBillingUsage(params: {
       if (missing && !authoritative) issues.push("unpriced_usage");
       cost = priceTokens(component, {
         ...prices,
+        input: prices.input ?? "0",
+        output: prices.output ?? "0",
         cacheRead: prices.cacheRead ?? "0",
         cacheWrite: prices.cacheWrite ?? "0",
         cacheWrite1h: prices.cacheWrite1h ?? "0",
@@ -134,6 +152,11 @@ export async function priceBillingUsage(params: {
     cost: sumMoney(components.map((item) => item.cost)),
   };
   // Request-scoped memoization keeps later metrics and settlement on this quote.
-  usage.billingQuote = { model, provider, priced };
+  usage.billingQuote = {
+    model,
+    provider,
+    priced,
+    providerApiKeyId: params.providerApiKeyId,
+  };
   return priced;
 }

@@ -1,4 +1,4 @@
-import type { SupportedProvider } from "@archestra/shared";
+import type { ModelInputModality, SupportedProvider } from "@archestra/shared";
 import type {
   ConnectionSetupClientId,
   ConnectionSetupPlatform,
@@ -38,6 +38,12 @@ export interface SetupScriptProxySection {
       name: string;
       context: number | null;
       output: number | null;
+      /**
+       * What the model reads, from the synced model row; null when unknown.
+       * The client drops attachments a model does not read, so a missing
+       * value turns every image into an error.
+       */
+      inputModalities?: ModelInputModality[] | null;
     }>;
   }>;
   /**

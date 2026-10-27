@@ -56,7 +56,10 @@ export function isObservedRead(params: {
   action: string;
   args: Record<string, unknown>;
 }): boolean {
-  if (params.action === "get_run" || params.action === "read_workspace_file")
+  if (
+    params.action === "get_agent_run" ||
+    params.action === "read_workspace_file"
+  )
     return true;
   return (
     params.action === "transfer_workspace_file" &&

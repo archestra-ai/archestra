@@ -11,27 +11,40 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import { Azure, constructResponseSchema, OpenAi, UuidIdSchema } from "@/types";
+import { azureAdapterFactory, azureResponsesAdapterFactory } from "../adapters";
+import { azureEmbeddingsAdapterFactory } from "../adapters/azure";
+import { azureImagesAdapterFactory } from "../adapters/azure-images";
+import { azureRealtimeAdapterFactory } from "../adapters/azure-realtime";
 import {
-  azureAdapterFactory,
-  azureResponsesAdapterFactory,
-  makeOpenAiCompatibleEmbeddingsAdapterFactory,
-} from "../adapters";
+  EmbeddingWireResponseSchema,
+  withEmbeddingEncoding,
+} from "../adapters/embeddings-wire";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
+import {
+  handleAzureImageEdit,
+  ImageEditMultipartBodySchema,
+  parseAzureImageEditRequest,
+} from "../image-edit-handler";
 import { createPassthroughAuthenticator } from "../llm-proxy-auth";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import { rejectUnsupportedProxyFileReferences } from "../provider-file-handler";
+import { registerMediaMultipartParser } from "../utils/media-multipart";
+import { registerAudioRoutes } from "./audio";
+import azureFilesRoutes from "./azure-files";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
-const azureEmbeddingsAdapterFactory =
-  makeOpenAiCompatibleEmbeddingsAdapterFactory(
-    "azure",
-    () => config.llm.azure.baseUrl || undefined,
-  );
-
 const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  await registerMediaMultipartParser(fastify);
+  await fastify.register(azureFilesRoutes);
+  fastify.addHook("preValidation", async (request) => {
+    rejectUnsupportedProxyFileReferences(request.body);
+  });
   const API_PREFIX = `${PROXY_API_PREFIX}/azure`;
+  await registerAudioRoutes(fastify, "azure");
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
   const RESPONSES_SUFFIX = "/responses";
   const EMBEDDINGS_SUFFIX = "/embeddings";
+  const IMAGES_SUFFIX = "/images/generations";
 
   logger.debug("[UnifiedProxy] Registering unified Azure AI Foundry routes");
 
@@ -46,12 +59,104 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           CHAT_COMPLETIONS_SUFFIX,
           RESPONSES_SUFFIX,
           EMBEDDINGS_SUFFIX,
+          IMAGES_SUFFIX,
+          "/images/edits",
+          "/files",
+          "/realtime/turns",
+          "/audio/speech",
+          "/audio/transcriptions",
+          "/audio/translations",
         ],
         upstream: config.llm.azure.baseUrl,
         providerName: "Azure AI Foundry",
         authenticate: createPassthroughAuthenticator("azure"),
+        rejectUnhandledPaths: true,
       }),
     });
+  }
+
+  for (const withAgent of [false, true]) {
+    fastify.post(
+      `${API_PREFIX}${withAgent ? "/:agentId" : ""}/images/edits`,
+      {
+        bodyLimit: PROXY_BODY_LIMIT,
+        schema: {
+          operationId: withAgent
+            ? RouteId.AzureImageEditsWithAgent
+            : RouteId.AzureImageEditsWithDefaultAgent,
+          description:
+            "Edit Azure images using bounded multipart image inputs and an optional PNG mask. Returns a complete image response; streaming is unsupported.",
+          consumes: ["multipart/form-data"],
+          body: ImageEditMultipartBodySchema,
+          tags: ["LLM Proxy"],
+          ...(withAgent ? { params: z.object({ agentId: UuidIdSchema }) } : {}),
+          headers: Azure.API.ChatCompletionsHeadersSchema,
+          response: constructResponseSchema(
+            Azure.API.ImageGenerationResponseSchema,
+          ),
+        },
+      },
+      async (request, reply) =>
+        handleAzureImageEdit(
+          await parseAzureImageEditRequest(request),
+          request,
+          reply,
+        ),
+    );
+  }
+
+  for (const withAgent of [false, true]) {
+    fastify.post(
+      `${API_PREFIX}${withAgent ? "/:agentId" : ""}/realtime/turns`,
+      {
+        bodyLimit: PROXY_BODY_LIMIT,
+        schema: {
+          operationId: withAgent
+            ? RouteId.AzureRealtimeTurnWithAgent
+            : RouteId.AzureRealtimeTurnWithDefaultAgent,
+          description:
+            "Create a bounded realtime audio or translation turn through Azure native Realtime WebSockets. Returns Chat-format text and WAV audio; full-duplex sessions are not offered by this endpoint.",
+          tags: ["LLM Proxy"],
+          ...(withAgent ? { params: z.object({ agentId: UuidIdSchema }) } : {}),
+          body: Azure.API.RealtimeTurnRequestSchema,
+          headers: Azure.API.ChatCompletionsHeadersSchema,
+          response: constructResponseSchema(
+            Azure.API.ChatCompletionResponseSchema,
+          ),
+        },
+      },
+      async (request, reply) =>
+        handleLLMProxy(
+          request.body,
+          request,
+          reply,
+          azureRealtimeAdapterFactory,
+        ),
+    );
+  }
+
+  for (const withAgent of [false, true]) {
+    fastify.post(
+      `${API_PREFIX}${withAgent ? "/:agentId" : ""}${IMAGES_SUFFIX}`,
+      {
+        bodyLimit: PROXY_BODY_LIMIT,
+        schema: {
+          operationId: withAgent
+            ? RouteId.AzureImagesWithAgent
+            : RouteId.AzureImagesWithDefaultAgent,
+          description: "Generate images with Azure AI Foundry",
+          tags: ["LLM Proxy"],
+          ...(withAgent ? { params: z.object({ agentId: UuidIdSchema }) } : {}),
+          body: Azure.API.ImageGenerationRequestSchema,
+          headers: Azure.API.ChatCompletionsHeadersSchema,
+          response: constructResponseSchema(
+            Azure.API.ImageGenerationResponseSchema,
+          ),
+        },
+      },
+      async (request, reply) =>
+        handleLLMProxy(request.body, request, reply, azureImagesAdapterFactory),
+    );
   }
 
   fastify.post(
@@ -64,8 +169,8 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Create embeddings with Azure AI Foundry (uses default agent)",
         tags: ["LLM Proxy"],
         body: OpenAi.API.EmbeddingRequestSchema,
-        headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+        headers: Azure.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(EmbeddingWireResponseSchema),
       },
     },
     async (request, reply) => {
@@ -77,7 +182,10 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.body as OpenAi.Types.EmbeddingRequest,
         request,
         reply,
-        azureEmbeddingsAdapterFactory,
+        withEmbeddingEncoding(
+          azureEmbeddingsAdapterFactory,
+          request.body.encoding_format,
+        ),
       );
     },
   );
@@ -95,8 +203,8 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: UuidIdSchema,
         }),
         body: OpenAi.API.EmbeddingRequestSchema,
-        headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+        headers: Azure.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(EmbeddingWireResponseSchema),
       },
     },
     async (request, reply) => {
@@ -108,7 +216,10 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.body as OpenAi.Types.EmbeddingRequest,
         request,
         reply,
-        azureEmbeddingsAdapterFactory,
+        withEmbeddingEncoding(
+          azureEmbeddingsAdapterFactory,
+          request.body.encoding_format,
+        ),
       );
     },
   );

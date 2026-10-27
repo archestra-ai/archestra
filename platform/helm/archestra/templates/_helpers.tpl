@@ -614,11 +614,11 @@ rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 - apiGroups: ["apps"]
   resources: ["deployments", "statefulsets"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
-# Agent Sandbox owns the runtime Pod and persistent workspace lifecycle.
-# Transcript recovery verifies the retained claim belongs to its Sandbox.
+# Agent Sandbox owns persistent workspaces; transcript recovery reads them.
+# Dagger owns rebuildable engine caches and lists/deletes orphaned cache claims.
 - apiGroups: [""]
   resources: ["persistentvolumeclaims"]
-  verbs: ["get"]
+  verbs: ["get", "list", "delete"]
 - apiGroups: ["agents.x-k8s.io"]
   resources: ["sandboxes"]
   verbs: ["get", "list", "create", "patch", "delete"]
@@ -1129,3 +1129,23 @@ Examples:
 {{- printf "%s:%s" $image $imageTag -}}
 {{- end -}}
 {{- end }}
+
+{{/*
+Resolve each scheduling field independently. A missing/null tier value inherits
+archestra.*, while an explicit empty map/list clears it. Do not use `default`:
+it treats empty collections as unset and would restore global constraints.
+*/}}
+{{- define "archestra-platform.scheduling" -}}
+{{- $tier := .tier | default dict -}}
+{{- range $field := list "nodeSelector" "tolerations" "affinity" -}}
+  {{- $value := index $.global $field -}}
+  {{- $override := index $tier $field -}}
+  {{- if ne $override nil -}}
+    {{- $value = $override -}}
+  {{- end -}}
+  {{- with $value }}
+{{ $field }}:
+  {{- toYaml . | nindent 2 }}
+  {{- end -}}
+{{- end -}}
+{{- end -}}

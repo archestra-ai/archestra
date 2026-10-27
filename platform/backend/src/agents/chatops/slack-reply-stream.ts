@@ -4,6 +4,7 @@ import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
 import logger from "@/logging";
 import type { ChatOpsReplyStream, ChatReplyOptions } from "@/types";
 import { CHATOPS_NO_REPLY_SENTINEL } from "./constants";
+import { slackTaskText, toolArgumentsDetail } from "./slack-task-details";
 import { errorMessage, stripDuplicateAgentFooter } from "./utils";
 
 type FinalReply = Pick<ChatReplyOptions, "text" | "footer" | "hint">;
@@ -38,6 +39,8 @@ export class SlackReplyStream implements ChatOpsReplyStream {
   private sending: Promise<void> = Promise.resolve();
   /** Tool calls shown as task cards, by toolCallId, until they settle. */
   private readonly openTasks = new Map<string, string>();
+  /** Slack appends details for an id rather than replacing them on updates. */
+  private readonly tasksWithDetails = new Set<string>();
   /** Open tool calls paused on a human approval. */
   private readonly awaitingApproval = new Set<string>();
 
@@ -54,29 +57,57 @@ export class SlackReplyStream implements ChatOpsReplyStream {
         this.rawText += chunk.delta;
         this.scheduleFlush();
         return;
+      case "tool-input-start": {
+        const title = slackTaskText(chunk.toolName);
+        this.openTasks.set(chunk.toolCallId, title);
+        this.enqueueTask({ id: chunk.toolCallId, title, status: "pending" });
+        return;
+      }
       case "tool-input-available": {
         // `run_tool` is a dispatch wrapper — name the tool it actually runs.
-        const { toolName } = resolveRunToolTarget({
+        const { toolName, toolInput } = resolveRunToolTarget({
           toolName: chunk.toolName,
           args: chunk.input,
         });
-        const title = truncate(toolName, TASK_TEXT_LIMIT);
+        const details = this.tasksWithDetails.has(chunk.toolCallId)
+          ? undefined
+          : toolArgumentsDetail(toolInput);
+        if (details) this.tasksWithDetails.add(chunk.toolCallId);
+        const title = slackTaskText(toolName);
         this.openTasks.set(chunk.toolCallId, title);
         this.enqueueTask({
           id: chunk.toolCallId,
           title,
+          ...(details && { details }),
           status: "in_progress",
         });
         return;
       }
       case "tool-output-available":
         if (chunk.preliminary) return;
-        this.settleTask(chunk.toolCallId, { status: "complete" });
+        // MCP failures arrive as results too. Only expose the failure state:
+        // result bodies can carry private output or guardrail-withheld data.
+        this.settleTask(
+          chunk.toolCallId,
+          typeof chunk.output === "object" &&
+            chunk.output !== null &&
+            "isError" in chunk.output &&
+            chunk.output.isError === true
+            ? { status: "error", output: "Tool reported an error" }
+            : { status: "complete" },
+        );
+        return;
+      case "tool-input-error":
+        this.openTasks.set(chunk.toolCallId, slackTaskText(chunk.toolName));
+        this.settleTask(chunk.toolCallId, {
+          status: "error",
+          output: slackTaskText(chunk.errorText),
+        });
         return;
       case "tool-output-error":
         this.settleTask(chunk.toolCallId, {
           status: "error",
-          output: truncate(chunk.errorText, TASK_TEXT_LIMIT),
+          output: slackTaskText(chunk.errorText),
         });
         return;
       case "tool-output-denied":
@@ -85,11 +116,18 @@ export class SlackReplyStream implements ChatOpsReplyStream {
           output: "Denied",
         });
         return;
-      case "tool-approval-request":
-        if (this.openTasks.has(chunk.toolCallId)) {
+      case "tool-approval-request": {
+        const title = this.openTasks.get(chunk.toolCallId);
+        if (title !== undefined) {
           this.awaitingApproval.add(chunk.toolCallId);
+          this.enqueueTask({
+            id: chunk.toolCallId,
+            title,
+            status: "pending",
+          });
         }
         return;
+      }
       default:
         return;
     }
@@ -110,7 +148,7 @@ export class SlackReplyStream implements ChatOpsReplyStream {
     }
     const ts = this.ts;
 
-    // Tasks still open when the run settled never ran (an approval pause).
+    // Approval pauses stay pending; other unfinished calls close with a reason.
     const pausedTaskIds = [...this.awaitingApproval];
     const leftoverTasks = this.closeOpenTasks({ status: "pending" });
     const tail = this.textDiverged
@@ -210,6 +248,7 @@ export class SlackReplyStream implements ChatOpsReplyStream {
     const title = this.openTasks.get(toolCallId);
     if (title === undefined) return;
     this.openTasks.delete(toolCallId);
+    this.awaitingApproval.delete(toolCallId);
     this.enqueueTask({ id: toolCallId, title, ...result });
   }
 
@@ -221,6 +260,9 @@ export class SlackReplyStream implements ChatOpsReplyStream {
       id,
       title,
       ...result,
+      ...(result.status === "pending" && !this.awaitingApproval.has(id)
+        ? { status: "error" as const, output: "Tool did not finish" }
+        : {}),
     }));
     this.openTasks.clear();
     return updates;
@@ -438,6 +480,7 @@ interface TaskUpdate {
   title: string;
   status: "pending" | "in_progress" | "complete" | "error";
   output?: string;
+  details?: string;
 }
 
 /**
@@ -449,9 +492,6 @@ const SLACK_REPLIES_PAGE_LIMIT = 1000;
 
 /** appendStream is Tier 4 (100+/min); one call per interval stays well under. */
 const FLUSH_INTERVAL_MS = 750;
-
-/** Slack caps task_update titles and outputs at 256 characters. */
-const TASK_TEXT_LIMIT = 256;
 
 const THINKING_BLOCK = /<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi;
 const THINKING_OPEN = /<think(?:ing)?>/i;
@@ -558,8 +598,4 @@ function pausedPlanTitle(
     return "Waiting for approval";
   }
   return outcome === "declined" ? "Declined" : "Approved";
-}
-
-function truncate(text: string, limit: number): string {
-  return text.length <= limit ? text : `${text.slice(0, limit - 1)}…`;
 }

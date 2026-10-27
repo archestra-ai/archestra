@@ -17,6 +17,7 @@ import { unwrapCompactionCarriersFromRequest } from "@/openappa/compaction-carri
 import {
   type AppaDelegationMarker,
   collectDelegationMarkers,
+  collectReleasedSpawnCalls,
   stripDelegationMarkers,
 } from "@/openappa/delegation";
 import {
@@ -92,6 +93,9 @@ export function scrubOpenappaIngress(params: {
       ? { delegationMarkers: scrubbed.delegationMarkers }
       : {}),
     ...(scrubbed?.childReturns ? { childReturns: scrubbed.childReturns } : {}),
+    ...(scrubbed && scrubbed.releasedSpawnCalls.length > 0
+      ? { releasedSpawnCalls: scrubbed.releasedSpawnCalls }
+      : {}),
     ...(scrubbed && scrubbed.childTrajectoryReceipts.length > 0
       ? { childTrajectoryReceipts: scrubbed.childTrajectoryReceipts }
       : {}),
@@ -210,6 +214,7 @@ function scrubFamilyWire(params: {
   const delegationMarkers =
     collectedDelegationMarkers(request) ??
     collectDelegationMarkers({ family, body });
+  const releasedSpawnCalls = collectReleasedSpawnCalls({ family, body });
   stripDelegationMarkers({ family, body });
   const nativeClient = APPA_CLIENT_ADAPTERS.find((adapter) =>
     adapter.matches({ headers, requestBody: body }),
@@ -235,6 +240,7 @@ function scrubFamilyWire(params: {
     strippedReceiptCodes,
     childTrajectoryReceipts,
     delegationMarkers,
+    releasedSpawnCalls,
     childReturns,
     ...(childReturnRefusal ? { childReturnRefusal } : {}),
   };
@@ -255,6 +261,8 @@ export type OpenappaIngress = {
   trajectoryStamps: TrajectoryStamp[];
   childReturnRefusal?: ApiError;
   delegationMarkers?: AppaDelegationMarker[];
+  /** The spawn calls APPA released, as the markers in the history name them. */
+  releasedSpawnCalls?: string[];
   childReturns?: CollectedChildReturns;
   childTrajectoryReceipts?: AppaChildTrajectoryReceipt[];
   /**
@@ -268,6 +276,7 @@ type ScrubbedClientWire = {
   strippedReceiptCodes: string[];
   childTrajectoryReceipts: AppaChildTrajectoryReceipt[];
   delegationMarkers: AppaDelegationMarker[];
+  releasedSpawnCalls: string[];
   childReturns: CollectedChildReturns;
   childReturnRefusal?: ApiError;
 };

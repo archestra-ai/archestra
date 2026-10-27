@@ -236,7 +236,7 @@ import {
   useDefaultEnvironment,
 } from "@/lib/organization.query";
 import { useAssignableTeams, useMyTeams } from "@/lib/teams/team.query";
-import { InternalMCPCatalog } from "./InternalMCPCatalog";
+import { InternalMCPCatalog } from "./internal-mcp-catalog";
 import {
   type InstalledServer,
   McpServerCard,

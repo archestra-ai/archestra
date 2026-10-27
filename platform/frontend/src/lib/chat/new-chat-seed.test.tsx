@@ -25,7 +25,6 @@ type NewChatBootstrap = archestraApiTypes.GetNewChatBootstrapResponses["200"];
 
 const AGENT_ID = "11111111-1111-4111-8111-111111111111";
 const KEY_ID = "22222222-2222-4222-8222-222222222222";
-const MEMBER_KEY_ID = "33333333-3333-4333-8333-333333333333";
 
 // Distinct values per part, so a key that reads the wrong part fails too.
 const bootstrap = {
@@ -43,10 +42,6 @@ const bootstrap = {
     ],
     defaultSuggestedPrompts: [{ summaryTitle: "Hi", prompt: "Say hi" }],
     keyModels: [{ id: "key-models" }],
-  },
-  memberDefaultKeyModels: {
-    apiKeyId: MEMBER_KEY_ID,
-    models: [{ id: "member-key-models" }],
   },
 } as unknown as NewChatBootstrap;
 
@@ -87,7 +82,6 @@ describe("newChatSeedQueries", () => {
           enabled: true,
         }).data,
         keyModels: useLlmModels({ apiKeyId: KEY_ID }).data,
-        memberKeyModels: useLlmModels({ apiKeyId: MEMBER_KEY_ID }).data,
       }),
       { wrapper },
     ).result.current;
@@ -103,7 +97,6 @@ describe("newChatSeedQueries", () => {
       hasBrowserTools: true,
       defaultSuggestedPrompts: bootstrap.agent?.defaultSuggestedPrompts,
       keyModels: bootstrap.agent?.keyModels,
-      memberKeyModels: bootstrap.memberDefaultKeyModels?.models,
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -113,7 +106,6 @@ describe("newChatSeedQueries", () => {
       ...bootstrap,
       availableApiKeys: null,
       agent: null,
-      memberDefaultKeyModels: null,
     }).map(({ queryKey }) => queryKey[0]);
 
     expect(keys).toEqual(["agents", "llm-provider-api-keys", "llm-models"]);

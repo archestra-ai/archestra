@@ -16,7 +16,6 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { agentCatalogToolsQueryKey } from "@/lib/agent-query-keys";
-import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { appInteractive } from "@/lib/app-interactive";
 import { awaitBootstrapSeed } from "@/lib/auth/auth.query";
 import { callApi } from "@/lib/chat/api-call";
@@ -36,6 +35,7 @@ import {
   storeEncryptedChatKey,
 } from "@/lib/chat/encrypted-chat";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
+import { invalidateToolAssignmentQueries } from "@/lib/use-invalidate-tool-assignment-queries";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 import websocketService from "@/lib/websocket/websocket";
 
@@ -61,9 +61,7 @@ const {
   bulkAssignTools,
   cancelChatMcpTask,
   stopChatStream,
-  getMemberDefaultModel,
   resolveChatMcpElicitation,
-  updateMemberDefaultModel,
   deleteChatAttachment,
   deleteSkillSandboxArtifact,
 } = archestraApiSdk;
@@ -686,50 +684,6 @@ export function useUpdateConversation() {
         queryClient.invalidateQueries({
           queryKey: ["conversation", variables.id, "enabled-tools"],
         });
-      }
-    },
-  });
-}
-
-/**
- * The current user's default (model, key) pair — the "member" level of the
- * model-resolution chain. Used to preselect the model when opening a new chat.
- */
-export function useMemberDefaultModel() {
-  return useQuery({
-    queryKey: ["member-default-model"],
-    queryFn: async ({ client }) => {
-      const seed = await awaitBootstrapSeed(client);
-      if (seed?.memberDefaultModel) return seed.memberDefaultModel;
-      return callApi(() => getMemberDefaultModel(), {
-        modelId: null,
-        chatApiKeyId: null,
-      });
-    },
-    // Changing the model in chat writes the new default into this query, so
-    // it stays fresh as long as the bootstrap parts seeded with it, and is
-    // restored on refresh like them (two ids, no credential).
-    staleTime: 5 * 60 * 1000,
-    meta: PERSISTED_QUERY_META,
-  });
-}
-
-/**
- * Persist the current user's default (model, key) pair. Fired whenever the
- * user changes the model in chat so the next new chat reuses their choice
- * (the "member" level of the model-resolution chain).
- */
-export function useUpdateMemberDefaultModel() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (body: {
-      modelId: string | null;
-      chatApiKeyId: string | null;
-    }) => callApi(() => updateMemberDefaultModel({ body }), null),
-    onSuccess: (data) => {
-      if (data) {
-        queryClient.setQueryData(["member-default-model"], data);
       }
     },
   });

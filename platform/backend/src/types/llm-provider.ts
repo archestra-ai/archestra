@@ -68,6 +68,8 @@ export type HostedToolCall = {
  * Options for creating an LLM provider client
  */
 export interface CreateClientOptions {
+  /** Request-local native Azure SDK deployment and original query. */
+  azureRequest?: Readonly<{ deployment?: string; rawQuery: string }>;
   /** Base URL override for the provider API */
   baseUrl?: string;
   /**
@@ -403,6 +405,13 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
   /** Current accumulated state */
   readonly state: StreamAccumulatorState;
 
+  /**
+   * The id and model of the response the client sees, when they differ from
+   * `state`: a wrapper that serves another wire format keeps the inner
+   * provider's values there.
+   */
+  readonly clientResponse?: { id: string; model: string };
+
   // ---------------------------------------------------------------------------
   // Chunk Processing
   // ---------------------------------------------------------------------------
@@ -532,6 +541,19 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
 // ADAPTER FACTORY INTERFACE
 // =============================================================================
 
+/** What the handler knows about a stream when it ends it with an error. */
+export interface StreamErrorFrameContext {
+  /** The id of the response the client has open, when known. */
+  responseId?: string;
+  /** The model that answered, when known. */
+  model?: string;
+  /**
+   * True when the client already received a terminal event for the
+   * response, so the error frame must not end it a second time.
+   */
+  terminalSent?: boolean;
+}
+
 /**
  * Factory for creating adapters for a specific provider
  *
@@ -547,6 +569,13 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
 export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   /** Provider name */
   readonly provider: SupportedProvider;
+
+  /** This operation cannot provide authoritative usage/pricing for enforced accounting. */
+  readonly unavailableUsageAccounting?: boolean;
+  /** Propagate downstream disconnection to upstream work. */
+  readonly cancelOnDisconnect?: boolean;
+  /** End failed binary streams by closing the transport, never injecting SSE bytes. */
+  readonly binaryStream?: boolean;
 
   /** Interaction type for database storage */
   readonly interactionType: SupportedProviderDiscriminator;
@@ -572,7 +601,17 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
    * error at the client, which reports the framing problem instead of the real
    * upstream cause.
    */
-  readonly formatStreamErrorFrame?: (event: unknown) => string;
+  readonly formatStreamErrorFrame?: (
+    event: unknown,
+    context?: StreamErrorFrameContext,
+  ) => string;
+
+  /**
+   * Whether a write to the client carries a terminal event of this stream.
+   * Set when `formatStreamErrorFrame` ends the response itself, so the
+   * handler can tell it that the client already has a terminal.
+   */
+  readonly carriesStreamTerminal?: (data: string | Uint8Array) => boolean;
 
   /**
    * Set by adapters that serve a client wire format different from the
@@ -674,10 +713,15 @@ export interface UsageView {
   billingUsage?: BillingUsage;
   /** Internal quote attached to this normalized request snapshot, never forwarded. */
   billingQuote?: {
+    providerApiKeyId?: string;
     model: string;
     provider: SupportedProvider;
     priced: PricedBillingUsage;
   };
+  /** Missing provider counts; persist null instead of inventing zero usage. */
+  usageUnavailable?: boolean;
+  /** Token counts exist but this operation cannot be priced by token tariffs. */
+  costUnavailable?: boolean;
   /** Uncached input tokens only (normalized across providers). */
   inputTokens: number;
   outputTokens: number;
@@ -691,6 +735,8 @@ export interface UsageView {
   reasoningTokens?: number;
   /** True when inputTokens is a locally-computed estimate, not a provider-reported count (see applyInputTokenFallback). Absent/false = provider-measured. */
   inputTokensEstimated?: boolean;
+  /** True for locally synthesized output metrics; excluded from token quotas. */
+  outputTokensEstimated?: boolean;
   /** USD the provider reports it billed for this response (OpenRouter's `usage.cost`). When present it is the recorded cost instead of a token-price estimate. */
   providerReportedCost?: number;
 }

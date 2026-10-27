@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  DEFAULT_MODELS,
   DocsPage,
   OPENCODE_PRIMARY_PROVIDERS,
   PROVIDERS_REQUIRING_BASE_URL,
@@ -12,6 +11,7 @@ import {
 import {
   CONNECTION_SETUP_MAX_SKILLS,
   type ConnectSetupPart,
+  defaultConnectionModel,
   INSTALLER_CLIENT_KEY_PROVIDERS,
   isInstallerClientId,
   isOpenCodeFamilyClient,
@@ -277,7 +277,8 @@ export function ConnectCommandPanel({
 
   const { data: canAdminPlugins, isPending: pluginsPermissionPending } =
     useHasPermissions({ plugin: ["read", "update"] }, "*");
-  const pluginsQueryEnabled = pluginsEnabled && canAdminPlugins === true;
+  const pluginsQueryEnabled =
+    client.id !== "pi" && pluginsEnabled && canAdminPlugins === true;
   const { data: allPlugins, isPending: pluginsPending } =
     usePlugins(pluginsQueryEnabled);
   const plugins = useMemo(
@@ -316,13 +317,13 @@ export function ConnectCommandPanel({
   // clients get a virtual key when an admin mapped keys for them, and
   // otherwise keep the user's own provider key or subscription.
   const proxyAuth: ConnectProxyAuth =
-    client.id === "cursor" || openCodeFamily
+    client.id === "cursor" || client.id === "pi" || openCodeFamily
       ? "primary-providers"
       : adminMappedProviders.size > 0 && canAttribute === true
         ? "virtual-key"
         : "provider-key";
   const allPrimaryProviders =
-    (openCodeFamily || client.id === "cursor") &&
+    (openCodeFamily || client.id === "cursor" || client.id === "pi") &&
     proxyAuth === "primary-providers";
   // Target OS for the generated command. Auto-detected from the browser after
   // mount (kept off the initial render to avoid an SSR/hydration mismatch); the
@@ -513,17 +514,41 @@ export function ConnectCommandPanel({
   // leaks onto another. Options come from the org's synced model list; with
   // none synced for the provider, a free-text field takes any model id.
   const supportsModelChoice =
-    client.id === "copilot-cli" || client.id === "claude-desktop";
+    client.id === "copilot-cli" ||
+    client.id === "claude-desktop" ||
+    client.id === "pi";
   const [modelChoice, setModelChoice] = useState<string | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: provider is the reset trigger
   useEffect(() => setModelChoice(null), [provider]);
-  const { modelsByProvider } = useLlmModelsByProvider();
+  const piModelKeyId =
+    client.id === "pi" && provider
+      ? (organization?.connectionClientProviderKeys?.pi?.find(
+          (key) => key.provider === provider,
+        )?.providerApiKeyId ??
+        usableOpenCodeKeys.find(
+          (key) => key.provider === provider && key.isPrimary,
+        )?.id)
+      : undefined;
+  const modelCatalog = useLlmModelsByProvider({
+    apiKeyId: piModelKeyId,
+    enabled: client.id !== "pi" || !!piModelKeyId,
+  });
+  // Never seed Pi from another key's models, including previous-key placeholder data.
+  const modelsByProvider: Partial<typeof modelCatalog.modelsByProvider> =
+    client.id === "pi" && (!piModelKeyId || modelCatalog.isPlaceholderData)
+      ? {}
+      : modelCatalog.modelsByProvider;
   const effectiveModel =
     supportsModelChoice && provider
       ? (modelChoice ??
         (client.id === "claude-desktop"
           ? "claude-haiku-4-5-20251001"
-          : DEFAULT_MODELS[provider]))
+          : defaultConnectionModel({
+              provider,
+              modelIds: (modelsByProvider[provider] ?? []).map(
+                (model) => model.id,
+              ),
+            })))
       : null;
   const modelOptions = useMemo(() => {
     if (!supportsModelChoice || !provider) return [];
@@ -612,6 +637,19 @@ export function ConnectCommandPanel({
   const optionsPlace = connectRequest ? " in Setup options" : "";
   const selectionProblem =
     [
+      supportsModelChoice &&
+      proxyActive &&
+      (!effectiveModel ||
+        (client.id === "pi" &&
+          (!provider ||
+            !(modelsByProvider[provider] ?? []).some(
+              (item) => item.id === effectiveModel,
+            ))))
+        ? "Choose a model served by your provider, or sync its model catalog before connecting."
+        : null,
+      client.id === "pi" && (!gateway || !proxyActive)
+        ? "Pi requires both an MCP gateway and an LLM proxy. Keep tools and model routing enabled."
+        : null,
       pluginsEnabled && selectedPlugins.length > PLUGIN_DELIVERY_MAX_COUNT
         ? `${formatCount(selectedPlugins.length)} plugins are selected, but one setup can install at most ${formatCount(PLUGIN_DELIVERY_MAX_COUNT)}. Choose ${formatCount(PLUGIN_DELIVERY_MAX_COUNT)} or fewer${optionsPlace}, or turn plugins off.`
         : null,
@@ -667,7 +705,8 @@ export function ConnectCommandPanel({
     canAttribute === true &&
     (((client.id === "claude-code" || client.id === "claude-desktop") &&
       (provider === "anthropic" || provider === "bedrock")) ||
-      (client.id === "codex" && provider === "openai") ||
+      ((client.id === "codex" || client.id === "pi") &&
+        provider === "openai") ||
       openCodeFamily);
 
   // The backend's reason for refusing the latest setup request, read once the
@@ -783,6 +822,8 @@ export function ConnectCommandPanel({
     async (key: string) => {
       const body = connectionSetupBody(key);
       if (!body) return;
+      setResult(null);
+      setFailure(null);
       refusalRef.current = null;
       const created = await createSetup(body);
       if (latestKeyRef.current !== key) return; // stale response
@@ -1050,7 +1091,9 @@ export function ConnectCommandPanel({
           <span>
             {client.id === "claude-desktop"
               ? "Selected by default in Claude Desktop after setup"
-              : "Applied as COPILOT_MODEL by the setup script"}
+              : client.id === "pi"
+                ? "Selected by the printed Pi launch command"
+                : "Applied as COPILOT_MODEL by the setup script"}
             {` — pick a model your ${providerCatalog.label(provider)} access serves.`}
           </span>
         </p>
@@ -1333,7 +1376,7 @@ export function ConnectCommandPanel({
               >
                 Run <span>{client.label}</span> with{" "}
                 <span className="font-medium text-foreground">
-                  {effectiveModel}
+                  {effectiveModel ?? "a model you choose"}
                 </span>
               </SetupSummaryRow>
             )}
@@ -1855,6 +1898,17 @@ function DesktopDownload({
   /** Why no installer can be made here; null when one can. */
   gate: string | null;
 }) {
+  const downloadLinkRef = useRef<HTMLAnchorElement>(null);
+  const downloadOnReadyRef = useRef(false);
+  useEffect(() => {
+    if (failed) downloadOnReadyRef.current = false;
+    if (!installerUrl || !downloadOnReadyRef.current) return;
+    // Only the explicit download (or retry) click starts a download. Later
+    // setup changes may prepare a new ticket without downloading it again.
+    downloadOnReadyRef.current = false;
+    downloadLinkRef.current?.click();
+  }, [installerUrl, failed]);
+
   if (gate)
     return <p className="mt-2 px-1 text-sm text-muted-foreground">{gate}</p>;
   // Same shape as the Connect page's prompt row, so picking Claude Desktop
@@ -1885,16 +1939,23 @@ function DesktopDownload({
               ? "Preparing your installer"
               : requested
                 ? "Your installer, ready for 15 minutes"
-                : "Prepare an installer for this setup"}
+                : "Download an installer for this setup"}
           </span>
         )}
         {failed ? (
-          <Button variant="outline" size="lg" onClick={onRetry}>
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={() => {
+              downloadOnReadyRef.current = true;
+              onRetry();
+            }}
+          >
             <span>Try again</span>
           </Button>
         ) : installerUrl ? (
           <Button asChild size="lg" className="h-12 rounded-xl px-6">
-            <a href={installerUrl} download>
+            <a ref={downloadLinkRef} href={installerUrl} download>
               <Download />
               <span>Download installer</span>
             </a>
@@ -1903,11 +1964,16 @@ function DesktopDownload({
           <Button
             size="lg"
             disabled={requested}
-            onClick={onPrepare}
+            onClick={() => {
+              downloadOnReadyRef.current = true;
+              onPrepare();
+            }}
             className="h-12 rounded-xl px-6"
           >
             <Download />
-            <span>{pending ? "Preparing installer" : "Prepare installer"}</span>
+            <span>
+              {pending ? "Preparing installer" : "Download installer"}
+            </span>
           </Button>
         )}
       </div>

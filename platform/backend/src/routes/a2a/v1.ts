@@ -13,6 +13,7 @@ import {
   validateMCPGatewayToken,
 } from "@/routes/mcp-gateway/utils";
 import { ApiError, UuidIdSchema } from "@/types";
+import { clientErrorMessage } from "@/utils/db";
 
 /**
  * A2A (Agent-to-Agent) Protocol routes
@@ -371,7 +372,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id,
           error: {
             code: -32603,
-            message: error instanceof Error ? error.message : "Internal error",
+            message: clientErrorMessage(error, "Internal error"),
             data: chatError,
           },
         });

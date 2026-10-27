@@ -114,7 +114,8 @@ function mapXaiModel(
       "created" in model && typeof model.created === "number"
         ? new Date(model.created * 1000).toISOString()
         : undefined,
-    capabilities: { supportedEndpoints: ["/chat/completions"] },
+    // The proxy serves both surfaces; Responses rides on chat completions.
+    capabilities: { supportedEndpoints: ["/chat/completions", "/responses"] },
   };
 }
 

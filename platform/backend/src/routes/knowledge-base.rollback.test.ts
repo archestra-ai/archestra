@@ -1397,6 +1397,63 @@ describe("knowledge base routes", () => {
   });
 
   describe("POST /api/connectors", () => {
+    test("requires Salesforce OAuth configuration and stores its secret outside the config", async () => {
+      const oauthConfig = {
+        type: "salesforce",
+        authMethod: "oauth_client_credentials",
+        loginUrl: "https://example.my.salesforce.com",
+        clientId: "consumer-key",
+      };
+      for (const invalidConfig of [
+        { type: "salesforce" },
+        { type: "salesforce", authMethod: "soap_legacy" },
+        { ...oauthConfig, clientId: "" },
+        { ...oauthConfig, loginUrl: "https://test.salesforce.com" },
+      ]) {
+        const result = await app.inject({
+          method: "POST",
+          url: "/api/connectors",
+          payload: {
+            name: "Salesforce",
+            connectorType: "salesforce",
+            config: invalidConfig,
+            credentials: { apiToken: "consumer-secret" },
+          },
+        });
+        expect(result.statusCode).toBe(400);
+      }
+      const missingSecret = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Salesforce",
+          connectorType: "salesforce",
+          config: oauthConfig,
+          credentials: { apiToken: " " },
+        },
+      });
+      expect(missingSecret.statusCode).toBe(400);
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Salesforce",
+          connectorType: "salesforce",
+          config: oauthConfig,
+          credentials: { apiToken: "consumer-secret" },
+        },
+      });
+      expect(created.statusCode).toBe(200);
+      expect(created.json().config).toMatchObject(oauthConfig);
+      expect(JSON.stringify(created.json())).not.toContain("consumer-secret");
+      const stored = await KnowledgeBaseConnectorModel.findById(
+        created.json().id,
+      );
+      expect(
+        (await secretManager().getSecret(stored?.secretId ?? ""))?.secret,
+      ).toMatchObject({ apiToken: "consumer-secret" });
+    });
+
     test("refuses the retired visibility and teamIds fields on create", async () => {
       // Who can reach a new connector is its initial grants alone; the old
       // sharing fields are refused rather than silently dropped.
@@ -2174,6 +2231,135 @@ describe("knowledge base routes", () => {
   });
 
   describe("PUT /api/connectors/:id", () => {
+    test("requires an explicit Salesforce OAuth migration and never reuses a stored password", async () => {
+      const secret = await secretManager().createSecret(
+        { email: "legacy@example.com", apiToken: "old-password" },
+        "salesforce-legacy",
+      );
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Salesforce legacy",
+        connectorType: "salesforce",
+        config: {
+          type: "salesforce",
+          loginUrl: "https://login.salesforce.com",
+          objects: ["Account"],
+        },
+        secretId: secret.id,
+      });
+      const legacyEdit = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          config: { ...connector.config, authMethod: "soap_legacy" },
+          credentials: { apiToken: "rotated-password" },
+        },
+      });
+      expect(legacyEdit.statusCode).toBe(200);
+      expect(
+        (await secretManager().getSecret(secret.id))?.secret,
+      ).toMatchObject({
+        email: "legacy@example.com",
+        apiToken: "rotated-password",
+      });
+      const oauthConfig = {
+        type: "salesforce",
+        authMethod: "oauth_client_credentials",
+        loginUrl: "https://example.my.salesforce.com",
+        clientId: "consumer-key",
+        objects: ["Account"],
+      };
+      const missingSecret = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: { config: oauthConfig },
+      });
+      expect(missingSecret.statusCode).toBe(400);
+      expect(missingSecret.json().error.message).toContain(
+        "new consumer secret",
+      );
+      expect(
+        (await secretManager().getSecret(secret.id))?.secret,
+      ).toMatchObject({ apiToken: "rotated-password" });
+      expect(
+        (await KnowledgeBaseConnectorModel.findById(connector.id))?.config,
+      ).toHaveProperty("authMethod", "soap_legacy");
+
+      const migrated = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          config: oauthConfig,
+          credentials: { apiToken: "consumer-secret" },
+        },
+      });
+      expect(migrated.statusCode).toBe(200);
+      expect(migrated.json().config).toMatchObject(oauthConfig);
+      expect(JSON.stringify(migrated.json())).not.toContain("consumer-secret");
+      expect(
+        (await secretManager().getSecret(secret.id))?.secret,
+      ).toMatchObject({ apiToken: "consumer-secret" });
+
+      const edit = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: { name: "Renamed Salesforce", config: oauthConfig },
+      });
+      expect(edit.statusCode).toBe(200);
+      expect(
+        (await secretManager().getSecret(secret.id))?.secret,
+      ).toMatchObject({ apiToken: "consumer-secret" });
+
+      for (const authMethod of [undefined, "soap_legacy"]) {
+        const downgrade = await app.inject({
+          method: "PUT",
+          url: `/api/connectors/${connector.id}`,
+          payload: {
+            config: { ...oauthConfig, authMethod },
+            credentials: { apiToken: "must-not-be-stored" },
+          },
+        });
+        expect(downgrade.statusCode).toBe(400);
+        expect(downgrade.json().error.message).toContain("cannot switch back");
+      }
+      const invalid = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          config: { ...oauthConfig, loginUrl: "https://login.salesforce.com" },
+          credentials: { apiToken: "must-not-be-stored" },
+        },
+      });
+      expect(invalid.statusCode).toBe(400);
+      expect(
+        (await secretManager().getSecret(secret.id))?.secret,
+      ).toMatchObject({ apiToken: "consumer-secret" });
+    });
+
+    test("keeps legacy Salesforce connectors readable and disableable before migration", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Legacy Salesforce",
+        connectorType: "salesforce",
+        config: {
+          type: "salesforce",
+          loginUrl: "https://login.salesforce.com",
+        },
+      });
+      const read = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}`,
+      });
+      expect(read.statusCode).toBe(200);
+      const disabled = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: { enabled: false },
+      });
+      expect(disabled.statusCode).toBe(200);
+      expect(disabled.json().enabled).toBe(false);
+    });
+
     test("preserves the stored username when rotating only the token", async () => {
       const connector = await KnowledgeBaseConnectorModel.create({
         organizationId,
@@ -4794,6 +4980,33 @@ describe("knowledge base permission configuration", () => {
         visibility: "auto-sync-permissions",
         syncPermissionsFromSource: true,
       });
+    });
+
+    test("DELETE /api/connectors/:id rejects read-only connector access", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create(
+        {
+          organizationId,
+          name: "Read-only connector",
+          connectorType: "jira",
+          config: {
+            type: "jira",
+            jiraBaseUrl: "https://jira.example.com",
+            isCloud: true,
+            projectKey: "TEST",
+          },
+        },
+        accessGrants({ users: [user.id], preset: "view" }),
+      );
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/api/connectors/${connector.id}`,
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(
+        await KnowledgeBaseConnectorModel.findById(connector.id),
+      ).not.toBeNull();
     });
 
     test("connector visibility inherits from a parent team without crossing sibling branches", async ({

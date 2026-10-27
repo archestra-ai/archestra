@@ -4,6 +4,7 @@ import {
   isBrowserMcpTool,
   LOOPBACK_HOST,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
+  type ModelSelection,
   SOURCE_HEADER,
   TimeInMs,
 } from "@archestra/shared";
@@ -259,8 +260,16 @@ function getToolCacheKey(params: {
   isolationKey?: string;
   delegationChain?: string;
   sessionId?: string;
+  parentLlm?: ModelSelection;
 }): `${typeof CacheKey.ChatMcpTools}-${string}` {
-  const { agentId, userId, isolationKey, delegationChain, sessionId } = params;
+  const {
+    agentId,
+    userId,
+    isolationKey,
+    delegationChain,
+    sessionId,
+    parentLlm,
+  } = params;
   const baseKey = getCacheKey(agentId, userId);
   const parts = [baseKey];
   if (isolationKey) parts.push(isolationKey);
@@ -268,6 +277,8 @@ function getToolCacheKey(params: {
   // under one isolation key. Each depth needs its own entry: the tools close
   // over the chain, which the executor reads to detect delegation cycles.
   if (delegationChain) parts.push(delegationChain);
+  // The fork's advertised tiers depend on the model and key the run is on.
+  if (parentLlm) parts.push(`${parentLlm.modelId}/${parentLlm.apiKeyId ?? ""}`);
   // The tools close over the session id too, and record it on every call they
   // persist, so a run filed under another session must not reuse them. UI
   // chat keys both by the conversation id, which leaves its key unchanged.
@@ -832,6 +843,7 @@ export async function getChatMcpTools({
   encryptedChatAudit,
   modelAcceptsImageToolResults,
   appaSubagent,
+  parentLlm,
   openappaReviewPause,
 }: {
   agentName: string;
@@ -919,6 +931,8 @@ export async function getChatMcpTools({
    * one spawn's.
    */
   appaSubagent?: SubagentBinding;
+  /** The model and key this run is on, which a fork starts from. */
+  parentLlm?: ModelSelection;
   /**
    * Someone answers OpenAPPA reviews for this run (a Slack reviewer or the
    * A2A caller): a reviewed `execute_remedy_plan` call pauses the run for
@@ -933,6 +947,7 @@ export async function getChatMcpTools({
     isolationKey: scopeKey,
     delegationChain,
     sessionId,
+    parentLlm,
   });
   const shouldUseToolCache =
     !abortSignal && !appaSubagent && !openappaReviewPause;
@@ -953,6 +968,7 @@ export async function getChatMcpTools({
     cached.context.repeatTracker = repeatTracker ?? new ToolCallRepeatTracker();
     cached.context.modelAcceptsImageToolResults =
       modelAcceptsImageToolResults ?? true;
+    cached.context.parentLlm = parentLlm;
     logger.info(
       {
         agentId,
@@ -1100,6 +1116,7 @@ export async function getChatMcpTools({
       // repeat counts never carry across runs.
       repeatTracker: repeatTracker ?? new ToolCallRepeatTracker(),
       appaSubagent,
+      parentLlm,
     };
     const aiTools: Record<string, Tool> = {};
 
@@ -1134,6 +1151,8 @@ export async function getChatMcpTools({
             organizationId,
             userId,
             skipAccessCheck: userId === "system",
+            parentLlm,
+            delegationChain,
           }),
           getSkillDelegationTools({ agentId, organizationId, userId }),
         ]);

@@ -14,7 +14,10 @@ import {
   chatCompletionToResponses,
   type OpenaiResponsesContext,
 } from "./openai-responses-translator";
-import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
+import {
+  carriesResponsesTerminal,
+  formatResponsesStreamErrorFrame,
+} from "./responses-stream-error-frame";
 import { formatResponsesFunctionCallFrames } from "./responses-tool-call-rewrite";
 import { toResponsesUsage } from "./responses-usage";
 
@@ -167,6 +170,10 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
 
   get state() {
     return this.inner.state;
+  }
+
+  get clientResponse() {
+    return { id: this.ctx.responseId, model: this.ctx.requestedModel };
   }
 
   setTextSuffix(getSuffix: (completedText: string) => string): void {
@@ -561,6 +568,7 @@ export function makeResponsesFromChatAdapterFactory<
     // shaped too, or the client parses it as an unknown chunk and the failure
     // reaches the user as a blank turn.
     formatStreamErrorFrame: formatResponsesStreamErrorFrame,
+    carriesStreamTerminal: carriesResponsesTerminal,
     createResponseAdapter(response) {
       return new ResponsesFromChatAdapter(
         provider.createResponseAdapter(response),

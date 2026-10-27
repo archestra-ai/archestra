@@ -26,6 +26,11 @@ import {
  * Referenced entities are captured as id + human-readable name so history
  * stays legible after the referent is renamed or deleted.
  */
+const ModelIdentitySchema = z.object({
+  id: z.string(),
+  externalId: z.string(),
+});
+
 export const AgentConfigSnapshotSchema = z.object({
   agentType: z.string(),
   name: z.string(),
@@ -54,7 +59,13 @@ export const AgentConfigSnapshotSchema = z.object({
   incomingEmailAllowedDomain: z.string().nullable(),
   builtInAgentConfig: z.unknown(),
   /** Resolved model identity (modelId FK + human-readable externalId). */
-  model: z.object({ id: z.string(), externalId: z.string() }).nullable(),
+  model: ModelIdentitySchema.nullable(),
+  /**
+   * Optional `fast` / `smart` trio tiers on `llmApiKey`. Snapshots taken
+   * before tiers existed carry neither, and that agent had no tiers set.
+   */
+  fastModel: ModelIdentitySchema.nullable().default(null),
+  smartModel: ModelIdentitySchema.nullable().default(null),
   /** Redacted key identity — never key material (secret ids are excluded). */
   llmApiKey: z
     .object({ id: z.string(), name: z.string(), provider: z.string() })

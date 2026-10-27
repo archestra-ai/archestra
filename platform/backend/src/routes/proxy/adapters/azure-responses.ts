@@ -17,6 +17,7 @@ import {
 } from "@/clients/azure-openai-credentials";
 import {
   buildAzureResponsesBaseUrl,
+  createAzureFetchWithRequestQuery,
   normalizeAzureApiKey,
   shouldUseAzureOpenAiApiVersion,
 } from "@/clients/azure-url";
@@ -44,7 +45,10 @@ import {
 } from "@/types";
 import { isApprovedAsSent } from "../utils/approved-as-sent";
 import { withOpenAiResponsesToolCallIds } from "../utils/tool-call-ids";
-import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
+import {
+  carriesResponsesTerminal,
+  formatResponsesStreamErrorFrame,
+} from "./responses-stream-error-frame";
 import {
   formatResponsesFunctionCallFrames,
   namespaceOf,
@@ -82,6 +86,7 @@ export const azureResponsesAdapterFactory: LLMProvider<
   // The Responses parser drops a chat-completions-shaped error frame as an
   // unknown chunk, turning an upstream failure into a blank turn.
   formatStreamErrorFrame: formatResponsesStreamErrorFrame,
+  carriesStreamTerminal: carriesResponsesTerminal,
 
   createRequestAdapter(
     request: AzureResponsesRequest,
@@ -126,9 +131,14 @@ export const azureResponsesAdapterFactory: LLMProvider<
       );
     }
 
-    const customFetch = options.agent
+    const observableFetch = options.agent
       ? metrics.llm.getObservableFetch("azure", options.agent, options.source)
       : undefined;
+    const customFetch = createAzureFetchWithRequestQuery({
+      fetch: observableFetch,
+      rawQuery: options.azureRequest?.rawQuery,
+      abortSignal: options.abortSignal,
+    });
 
     if (!apiKey && isAzureOpenAiEntraIdEnabled()) {
       return new OpenAIProvider({

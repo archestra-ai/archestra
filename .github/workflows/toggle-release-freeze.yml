@@ -31,7 +31,7 @@ jobs:
 
       - name: Generate a token
         id: generate-token
-        uses: ./.github/actions/github-app-token
+        uses: archestra-ai/.github/actions/github-app-token@840a8b2c85a9deb01869cc956c9c77fbf50ccd68 # v1.1.0
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}
@@ -58,7 +58,7 @@ jobs:
 
       - name: Block open release-please PRs
         if: inputs.release_freeze == 'true'
-        uses: ./.github/actions/release-freeze-review
+        uses: $/.github/actions/release-freeze-review
         with:
           action: freeze
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
@@ -66,7 +66,7 @@ jobs:
 
       - name: Unblock open release-please PRs
         if: inputs.release_freeze == 'false'
-        uses: ./.github/actions/release-freeze-review
+        uses: $/.github/actions/release-freeze-review
         with:
           action: unfreeze
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}

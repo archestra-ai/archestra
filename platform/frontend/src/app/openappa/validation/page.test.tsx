@@ -1069,6 +1069,7 @@ test("the summary counts every file while search narrows only the table", async 
     ),
   );
   showPage();
+  await screen.findByPlaceholderText(/Search validations/);
   expect(
     await screen.findByRole("button", { name: "6 passing" }),
   ).toBeVisible();

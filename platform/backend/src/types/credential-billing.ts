@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LimitCleanupIntervalSchema } from "./limit";
+import { BudgetCleanupIntervalSchema } from "./limit";
 
 /**
  * Spend cap a caller asks for on a virtual key or LLM OAuth client. Stored as
@@ -8,7 +8,7 @@ import { LimitCleanupIntervalSchema } from "./limit";
 export const CredentialSpendCapInputSchema = z.object({
   /** Dollars per window. */
   limitValue: z.number().int().positive(),
-  cleanupInterval: LimitCleanupIntervalSchema,
+  cleanupInterval: BudgetCleanupIntervalSchema,
 });
 
 export const CredentialSpendCapSchema = CredentialSpendCapInputSchema.extend({

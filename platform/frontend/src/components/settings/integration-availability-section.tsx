@@ -140,10 +140,10 @@ export function IntegrationAvailabilitySection({
                   shownItemIds={allowed}
                   onShownItemIdsChange={setAllowed}
                   onOrderChange={setAllowed}
-                  label="Coding agents"
-                  emptyMessage="No coding agents added."
+                  label="Agent Runtimes"
+                  emptyMessage="No Agent Runtimes added."
                   inlineAdd
-                  inlineAddLabel="Add coding agent"
+                  inlineAddLabel="Add Agent Runtime"
                   disabled={
                     disabled ||
                     !organization ||

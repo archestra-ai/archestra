@@ -16,14 +16,14 @@ const publishPart = (overrides: Record<string, unknown> = {}) => ({
 });
 
 const startRunPart = (overrides: Record<string, unknown> = {}) => ({
-  type: "tool-archestra__start_run",
+  type: "tool-archestra__start_agent_run",
   state: "output-available",
-  output: { session_id: "run-1" },
+  output: { run: { run_id: "run-1" } },
   ...overrides,
 });
 
 describe("collectArchestraToolInvalidations", () => {
-  it("refreshes run sessions after a successful start_run in chat", () => {
+  it("refreshes run sessions after a successful start_agent_run in chat", () => {
     expect(
       collectArchestraToolInvalidations({
         parts: [startRunPart()],
@@ -47,13 +47,13 @@ describe("collectArchestraToolInvalidations", () => {
     ).toEqual([["guardrails-deployment"]]);
   });
 
-  it("refreshes run sessions when start_run is dispatched through run_tool", () => {
+  it("refreshes run sessions when start_agent_run is dispatched through run_tool", () => {
     expect(
       collectArchestraToolInvalidations({
         parts: [
           startRunPart({
             type: "tool-archestra__run_tool",
-            input: { tool_name: "archestra__start_run", tool_args: {} },
+            input: { tool_name: "archestra__start_agent_run", tool_args: {} },
           }),
         ],
         getToolShortName,
@@ -61,7 +61,7 @@ describe("collectArchestraToolInvalidations", () => {
     ).toEqual([["agent-runs"]]);
   });
 
-  it("does not refresh run sessions for a refused start_run", () => {
+  it("does not refresh run sessions for a refused start_agent_run", () => {
     expect(
       collectArchestraToolInvalidations({
         parts: [

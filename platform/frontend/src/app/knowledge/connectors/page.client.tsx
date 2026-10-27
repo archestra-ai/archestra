@@ -7,6 +7,7 @@ import {
 } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import {
+  AlertTriangle,
   ArchiveRestore,
   Database,
   FileText,
@@ -59,6 +60,7 @@ import { TableRowActions } from "@/components/table-row-actions";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
@@ -84,6 +86,7 @@ import {
   useConnector,
   useConnectorsPaginated,
   useDeleteConnector,
+  useHasLegacySalesforceConnector,
   usePermanentlyDeleteConnector,
   useRestoreConnector,
 } from "@/lib/knowledge/connector.query";
@@ -100,6 +103,7 @@ const CONNECTOR_TYPE_OPTIONS = [
   "github",
   "gitlab",
   "servicenow",
+  "salesforce",
   "perforce",
   "mfiles",
   "web_crawler",
@@ -457,6 +461,7 @@ function ConnectorsList() {
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !connectors}
     >
+      <SalesforceAuthMigrationNotice />
       <TableCardView storageKey="archestra-connectors-view">
         <div>
           <CollectionFilters>
@@ -793,5 +798,25 @@ function DocumentCount({ total }: { total: number }) {
       </span>
       <span>{total === 1 ? "document" : "documents"}</span>
     </span>
+  );
+}
+
+function SalesforceAuthMigrationNotice() {
+  const { data: hasLegacyConnector } = useHasLegacySalesforceConnector();
+  if (!hasLegacyConnector) return null;
+  return (
+    <InlineNotice variant="warning" className="mb-4 sm:mb-6">
+      <AlertTriangle />
+      <InlineNoticeText>
+        Salesforce password login retires in Summer ’27. Migrate existing
+        connectors to OAuth.
+      </InlineNoticeText>
+      <Link
+        href="/knowledge/connectors?connectorType=salesforce"
+        className="underline underline-offset-4"
+      >
+        Review Salesforce connectors
+      </Link>
+    </InlineNotice>
   );
 }

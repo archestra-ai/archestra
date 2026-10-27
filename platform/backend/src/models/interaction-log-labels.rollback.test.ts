@@ -3,6 +3,99 @@ import type { InsertInteraction } from "@/types";
 import InteractionModel from "./interaction";
 
 describe("InteractionModel log labels", () => {
+  test("selects the displayed request and its labels within the organization's session scope", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const otherOrganization = await makeOrganization();
+    const agent = await makeAgent({ organizationId: organization.id });
+    const otherAgent = await makeAgent({
+      organizationId: otherOrganization.id,
+    });
+    const user = await makeUser();
+    const sessionId = `shared-session-${crypto.randomUUID()}`;
+    const own = await InteractionModel.create({
+      ...chatTurn({
+        profileId: agent.id,
+        sessionId,
+        prompt: "This organization's captured request",
+      }),
+      createdAt: new Date("2026-01-01T12:00:00Z"),
+      attributionLabels: { cost_center: "OWN" },
+    });
+    await InteractionModel.create({
+      ...chatTurn({
+        profileId: otherAgent.id,
+        sessionId,
+        prompt: "Another organization's newer request",
+      }),
+      createdAt: new Date("2026-01-01T12:01:00Z"),
+      attributionLabels: { cost_center: "OTHER" },
+    });
+    const sessions = await InteractionModel.getSessions(
+      { limit: 10, offset: 0 },
+      user.id,
+      true,
+      { sessionId, organizationId: organization.id },
+    );
+    expect(sessions.data).toHaveLength(1);
+    expect(sessions.data[0]).toMatchObject({
+      lastInteractionId: own.id,
+      attributionLabels: { cost_center: "OWN" },
+    });
+  });
+
+  test("returns each request's captured labels and only the displayed request's labels on a session row", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const agent = await makeAgent({ organizationId: organization.id });
+    const user = await makeUser();
+    const sessionId = `attribution-${crypto.randomUUID()}`;
+    const first = await InteractionModel.create({
+      ...chatTurn({
+        profileId: agent.id,
+        sessionId,
+        prompt: "First request in a billing session",
+      }),
+      createdAt: new Date("2026-01-01T12:00:00Z"),
+      attributionLabels: { cost_center: "C100", application: "search" },
+    });
+    const last = await InteractionModel.create({
+      ...chatTurn({
+        profileId: agent.id,
+        sessionId,
+        prompt: "Later request after the cost center changed",
+      }),
+      createdAt: new Date("2026-01-01T12:01:00Z"),
+      attributionLabels: { cost_center: "C200" },
+    });
+    const requests = await InteractionModel.findSummariesPaginated({
+      pagination: { limit: 10, offset: 0 },
+      filters: { sessionId, organizationId: organization.id },
+    });
+    expect(
+      requests.data.find((row) => row.id === first.id)?.attributionLabels,
+    ).toEqual({ cost_center: "C100", application: "search" });
+    expect(
+      requests.data.find((row) => row.id === last.id)?.attributionLabels,
+    ).toEqual({ cost_center: "C200" });
+    const sessions = await InteractionModel.getSessions(
+      { limit: 10, offset: 0 },
+      user.id,
+      true,
+      { sessionId, organizationId: organization.id },
+    );
+    expect(sessions.data[0]).toMatchObject({
+      lastInteractionId: last.id,
+      attributionLabels: { cost_center: "C200" },
+    });
+  });
+
   test("names each request in a session by the prompt it served", async ({
     makeAgent,
   }) => {

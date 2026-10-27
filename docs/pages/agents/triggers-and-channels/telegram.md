@@ -16,7 +16,7 @@ Message a Telegram bot, and an Archestra agent answers. It works in direct messa
 
 ![The Telegram setup dialog with the bot token field](/docs/automated_screenshots/agents-triggers-and-channels-telegram_setup.webp)
 
-Archestra checks the token and starts at once. To use environment variables instead, see the [Configuration reference](/docs/reference/configuration#telegram).
+Archestra checks the token and starts at once. To use environment variables instead, see the [Configuration reference](/docs/admin/deployment/configuration#telegram).
 
 <span id="linking-telegram-accounts"></span>
 

@@ -19,6 +19,7 @@
 import { CONTEXT_COMPACTION_AUTO_THRESHOLD } from "@archestra/shared";
 import type { ModelMessage } from "ai";
 import type { LLMModel } from "@/clients/llm-client";
+import { orderToolResultsByCall } from "@/clients/tool-result-order";
 import logger from "@/logging";
 import { trimMessagesToTokenLimit } from "@/routes/chat/context-trimming";
 import { applyStepPromptCacheBreakpoint } from "@/routes/chat/normalization/apply-prompt-cache";
@@ -84,7 +85,7 @@ export function createStepContextGuard(params: {
   });
 
   return async ({ messages }) => {
-    const capped = capOversizedToolResults(messages);
+    const capped = capOversizedToolResults(orderToolResultsByCall(messages));
     if (!contextLength) return withStepBreakpoint(capped);
 
     const budgetTokens = Math.floor(

@@ -112,6 +112,23 @@ describe("SystemPromptEditor", () => {
     expect(onChange).toHaveBeenLastCalledWith("Use {{user.*}} literally.!");
   });
 
+  it.each([
+    ["Now is {{currentTime}}.", true],
+    ["Now is {{~ currentTime ~}}.", true],
+    ["Today is {{currentDate}}.", false],
+    ["Keep \\{{currentTime}} literal.", false],
+  ])("warns about per-turn helpers in %s: %s", (value, warns) => {
+    render(<SystemPromptEditor value={value} onChange={vi.fn()} />);
+    const warning = screen.queryByRole("status", {
+      name: "Per-turn template helper",
+    });
+    if (warns) {
+      expect(warning).toBeInTheDocument();
+    } else {
+      expect(warning).not.toBeInTheDocument();
+    }
+  });
+
   it("grows the box to fit the text, between its floor and its ceiling", () => {
     // The mock editor reports 20px a line plus 16px of padding, so the floor
     // holds for a short prompt and the text drives the height past it.

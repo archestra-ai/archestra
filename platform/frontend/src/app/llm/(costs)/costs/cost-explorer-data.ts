@@ -7,9 +7,12 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   type StatisticsTimeFrame,
+  type SupportedProvider,
 } from "@archestra/shared";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
+import { useProxyLabelCosts } from "@/lib/proxy-label-costs.query";
 import {
   useProfileStatistics,
   useProxyCostStatistics,
@@ -55,6 +58,9 @@ export const DIM_IDS = [
   "tool",
   "method",
   "key",
+  "providerKey",
+  "pool",
+  "label",
 ] as const;
 export type DimId = (typeof DIM_IDS)[number];
 export type SplitId = DimId | "none";
@@ -65,6 +71,7 @@ export type PivotQuery = {
   group: DimId;
   split: SplitId;
   chart: ChartKind;
+  labelKey?: string;
 };
 
 export const METRICS: Record<
@@ -90,7 +97,7 @@ export const METRICS: Record<
   tokens: {
     label: "Tokens",
     money: false,
-    note: "Input, output and cached tokens. Includes cached tokens.",
+    note: "Counts newly processed input and output. Reused cached input is shown separately and is not included. Requests in flight may not appear yet.",
   },
   toolCalls: {
     label: "Tool calls",
@@ -120,6 +127,9 @@ export const DIMS: Record<DimId, { label: string; plural: string }> = {
   tool: { label: "Tool", plural: "tools" },
   method: { label: "Access method", plural: "access methods" },
   key: { label: "Key", plural: "keys" },
+  providerKey: { label: "Provider key", plural: "provider keys" },
+  pool: { label: "Model pool", plural: "model pools" },
+  label: { label: "Label", plural: "label values" },
 };
 
 const LLM_METRICS: MetricId[] = [
@@ -140,6 +150,9 @@ const SUPPORT: Record<DimId, MetricId[]> = {
   tool: ["toolCalls"],
   method: LLM_METRICS,
   key: LLM_METRICS,
+  providerKey: LLM_METRICS,
+  pool: LLM_METRICS,
+  label: LLM_METRICS,
 };
 
 export const supports = (group: DimId, metric: MetricId) =>
@@ -189,6 +202,17 @@ export const SAVED_VIEWS: { id: string; label: string; q: PivotQuery }[] = [
     q: { metric: "billed", group: "model", split: "none", chart: "bars" },
   },
   {
+    id: "spend-label",
+    label: "Spend by label",
+    q: {
+      metric: "billed",
+      group: "label",
+      split: "none",
+      chart: "bars",
+      labelKey: "cost_center",
+    },
+  },
+  {
     id: "who",
     label: "Who is using it",
     q: { metric: "tokens", group: "person", split: "none", chart: "lines" },
@@ -207,6 +231,16 @@ export const SAVED_VIEWS: { id: string; label: string; q: PivotQuery }[] = [
     id: "keys",
     label: "Keys by spend",
     q: { metric: "billed", group: "key", split: "none", chart: "table" },
+  },
+  {
+    id: "provider-keys",
+    label: "Provider keys by spend",
+    q: {
+      metric: "billed",
+      group: "providerKey",
+      split: "none",
+      chart: "table",
+    },
   },
   {
     id: "skills",
@@ -302,6 +336,7 @@ export type CubeChild = {
 };
 
 export type CubeRow = {
+  limitTarget?: { entityType: "virtual_key"; entityId: string };
   key: string;
   label: string;
   sub?: string;
@@ -395,14 +430,37 @@ export function usePivotCube(
   const proxyQ = useProxyCostStatistics({
     timeframe,
     limit: 50,
-    enabled: on("proxy"),
+    ...(q.group === "providerKey" ? { includeProviderKeys: "true" } : {}),
+    ...(q.group === "pool" ? { includeModelPools: "true" } : {}),
+    enabled: on("proxy") && q.group !== "label",
+  });
+  const providerCatalog = useModelProviderCatalog();
+  const labelQ = useProxyLabelCosts({
+    timeframe,
+    labelKey: q.labelKey ?? "cost_center",
+    enabled: on("proxy") && q.group === "label",
   });
 
   const proxyBy = src.kind === "proxy" ? src.by : null;
-  const proxyItems = useMemo(
-    () => (proxyBy && proxyQ.data ? proxyItemsFor(proxyBy, proxyQ.data) : []),
-    [proxyBy, proxyQ.data],
-  );
+  const proxyItems = useMemo(() => {
+    if (proxyBy === "label")
+      return (labelQ.data?.groups ?? []).map(({ value, ...totals }) => ({
+        key: value === null ? "missing" : `value:${value}`,
+        label: value ?? "Unassigned (label missing)",
+        sub: undefined as string | undefined,
+        tag: value === null ? "Label missing" : undefined,
+        totals,
+        filter: {
+          labelKey: q.labelKey ?? "cost_center",
+          ...(value === null
+            ? { labelUnassigned: "true" }
+            : { labelValue: value }),
+        } as ProxyFilter,
+      }));
+    return proxyBy && proxyQ.data
+      ? proxyItemsFor(proxyBy, proxyQ.data, providerCatalog.label)
+      : [];
+  }, [proxyBy, proxyQ.data, labelQ.data, q.labelKey, providerCatalog]);
   const itemQs = useQueries({
     queries: proxyItems.map((item) => ({
       queryKey: ["cost-explorer", "proxy-item", timeframe, item.filter],
@@ -440,7 +498,9 @@ export function usePivotCube(
                   ? modelQ
                   : src.kind === "user"
                     ? userQ
-                    : proxyQ;
+                    : q.group === "label"
+                      ? labelQ
+                      : proxyQ;
     const failed = [
       primary,
       ...(src.kind === "proxy" ? itemQs : []),
@@ -551,7 +611,7 @@ export function usePivotCube(
             : metric === "requests"
               ? r.llmRequests
               : metric === "tokens"
-                ? r.inputTokens + r.outputTokens
+                ? r.totalTokens
                 : metric === "toolCalls"
                   ? r.toolCalls
                   : r.runs;
@@ -748,13 +808,16 @@ export function usePivotCube(
         const facts: Fact[] = [];
         const totals = new Map<string, number>();
         const meta = new Map<string, Omit<Fact, "b" | "v">>();
+        const failedOver = new Map<string, number>();
         proxyItems.forEach((item, i) => {
           totals.set(item.key, pointValue(metric, item.totals));
+          failedOver.set(item.key, item.totals.failedOverAttempts);
           meta.set(item.key, {
             g: item.key,
             gLabel: item.label,
             gSub: item.sub,
             gTag: item.tag,
+            limitTarget: "limitTarget" in item ? item.limitTarget : undefined,
           });
           const series = itemQs[i]?.data?.timeSeries ?? [];
           for (const p of series) {
@@ -763,15 +826,31 @@ export function usePivotCube(
               gLabel: item.label,
               gSub: item.sub,
               gTag: item.tag,
+              limitTarget: "limitTarget" in item ? item.limitTarget : undefined,
               b: p.timestamp,
               v: pointValue(metric, p),
             });
           }
         });
+        const cube = assemble(facts, { totals, meta });
+        // A pool that failed over wrote one request per attempt; show how
+        // many of the requests were attempts the client never saw.
+        const showFailedOver =
+          metric === "requests" &&
+          proxyItems.some((item) => item.totals.failedOverAttempts > 0);
+        if (showFailedOver) {
+          for (const row of cube.rows) {
+            row.extras.failedOver = failedOver.get(row.key) ?? 0;
+          }
+        }
         return {
-          ...assemble(facts, { totals, meta }),
+          ...cube,
           ...base,
-          isLoading: proxyQ.isLoading,
+          extraCols: showFailedOver
+            ? [{ id: "failedOver", label: "Failed over", format: formatInt }]
+            : [],
+          isLoading:
+            primary.isLoading || itemQs.some((query) => query.isLoading),
         };
       }
     }
@@ -779,6 +858,10 @@ export function usePivotCube(
     q.metric,
     q.group,
     q.split,
+    q.labelKey,
+    labelQ.data,
+    labelQ.error,
+    labelQ.isLoading,
     tf,
     src.kind,
     toolQ.error,
@@ -828,7 +911,7 @@ type Source =
   | { kind: "agent" }
   | { kind: "model" }
   | { kind: "user"; models: boolean }
-  | { kind: "proxy"; by: "method" | "key" };
+  | { kind: "proxy"; by: ProxyGroup };
 
 function resolveSource(q: PivotQuery): Source {
   const split = q.split === "none" ? null : q.split;
@@ -864,7 +947,13 @@ function resolveSource(q: PivotQuery): Source {
   if (q.group === "team") return { kind: "team" };
   if (q.group === "agent") return { kind: "agent" };
   if (q.group === "model") return { kind: "model" };
-  if (q.group === "method" || q.group === "key")
+  if (
+    q.group === "method" ||
+    q.group === "key" ||
+    q.group === "providerKey" ||
+    q.group === "pool" ||
+    q.group === "label"
+  )
     return { kind: "proxy", by: q.group };
   return { kind: "user", models: split === "model" };
 }
@@ -886,11 +975,18 @@ function apiFor(src: Source, tf: string, q: PivotQuery) {
     case "user":
       return `GET /api/statistics/users?includeTimeSeries=true${src.models ? "&includeModels=true&includeModelTimeSeries=true" : ""}&timeframe=${tf}`;
     case "proxy":
+      if (q.group === "label")
+        return `GET /api/statistics/llm-proxy?timeframe=${tf}&labelKey=${encodeURIComponent(q.labelKey ?? "cost_center")}`;
+      if (q.group === "providerKey")
+        return `GET /api/statistics/llm-proxy?timeframe=${tf}&includeProviderKeys=true`;
+      if (q.group === "pool")
+        return `GET /api/statistics/llm-proxy?timeframe=${tf}&includeModelPools=true`;
       return `GET /api/statistics/llm-proxy?timeframe=${tf}${q.group === "key" ? "&credentialId={id}" : "&authMethod={method}"}`;
   }
 }
 
 type Fact = {
+  limitTarget?: CubeRow["limitTarget"];
   g: string;
   gLabel: string;
   gSub?: string;
@@ -903,6 +999,7 @@ type Fact = {
 };
 
 type SeriesPointLike = {
+  totalTokens?: number;
   value?: number;
   requests?: number;
   inputTokens?: number;
@@ -921,9 +1018,7 @@ function pointValue(metric: MetricId, p: SeriesPointLike) {
     case "requests":
       return p.requests ?? 0;
     case "tokens":
-      return (
-        (p.inputTokens ?? 0) + (p.outputTokens ?? 0) + (p.cacheReadTokens ?? 0)
-      );
+      return p.totalTokens ?? 0;
     default:
       return 0;
   }
@@ -981,6 +1076,7 @@ function assemble(
         label: m.gLabel,
         sub: m.gSub,
         tag: m.gTag,
+        limitTarget: m.limitTarget,
         total: 0,
         series: buckets.map(() => 0),
         hasSeries: false,
@@ -1044,17 +1140,57 @@ function assemble(
 }
 
 type ProxyData = archestraApiTypes.GetProxyCostStatisticsResponses["200"];
+type ProxyGroup = "method" | "key" | "providerKey" | "pool" | "label";
 type ProxyFilter =
   | { credentialId: string }
-  | { authMethod: ProxyData["methods"][number]["authMethod"] };
+  | { providerApiKeyId: string }
+  | { modelPoolId: string }
+  | { authMethod: ProxyData["methods"][number]["authMethod"] }
+  | { labelKey: string; labelValue: string }
+  | { labelKey: string; labelUnassigned: "true" };
 
-function proxyItemsFor(by: "method" | "key", data: ProxyData) {
+function proxyItemsFor(
+  by: Exclude<ProxyGroup, "label">,
+  data: ProxyData,
+  providerLabel: (provider: SupportedProvider) => string,
+) {
+  if (by === "providerKey") {
+    return (data.providerKeys ?? []).map((k) => ({
+      key: k.providerApiKeyId ?? "none",
+      label:
+        k.providerApiKeyName ??
+        (k.providerApiKeyId ? "Deleted provider key" : "No provider key"),
+      sub: k.providerApiKeyId
+        ? `ID ${k.providerApiKeyId}`
+        : "The caller's own key, or a call from before keys were recorded",
+      tag: k.provider
+        ? providerLabel(k.provider as SupportedProvider)
+        : undefined,
+      totals: k,
+      filter: k.providerApiKeyId
+        ? ({ providerApiKeyId: k.providerApiKeyId } as ProxyFilter)
+        : null,
+    }));
+  }
+  if (by === "pool") {
+    return (data.modelPools ?? []).map((p) => ({
+      key: p.modelPoolId ?? "none",
+      label: p.modelPoolName ?? (p.modelPoolId ? "Deleted pool" : "Not pooled"),
+      sub: p.modelPoolId ? `ID ${p.modelPoolId}` : undefined,
+      tag: undefined as string | undefined,
+      totals: p,
+      filter: p.modelPoolId
+        ? ({ modelPoolId: p.modelPoolId } as ProxyFilter)
+        : null,
+    }));
+  }
   if (by === "method") {
     return data.methods.map((m) => ({
       key: m.authMethod,
       label: METHOD_NAMES[m.authMethod] ?? m.authMethod,
       sub: undefined as string | undefined,
       tag: undefined as string | undefined,
+      limitTarget: undefined as CubeRow["limitTarget"],
       totals: m,
       filter: { authMethod: m.authMethod } as ProxyFilter | null,
     }));
@@ -1073,6 +1209,12 @@ function proxyItemsFor(by: "method" | "key", data: ProxyData) {
         : null;
     return {
       key: c.credentialId ?? `${c.authMethod}#${i}`,
+      limitTarget:
+        c.credentialId &&
+        (c.authMethod === "virtual_key" ||
+          c.authMethod === "passthrough_virtual_key")
+          ? { entityType: "virtual_key" as const, entityId: c.credentialId }
+          : undefined,
       label: c.credentialName ?? method,
       sub: c.credentialId
         ? `ID ${c.credentialId}`

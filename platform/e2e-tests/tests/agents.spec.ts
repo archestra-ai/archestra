@@ -2,9 +2,9 @@ import { E2eTestId } from "@archestra/shared";
 import { mergeTests, type Page } from "@playwright/test";
 import { expect, test as uiTest } from "../fixtures";
 import {
+  clickAgentRowMenuItem,
   clickButton,
   ensureWireMockAnthropicChatProvider,
-  openAgentRowMenu,
   waitForAgentsTable,
   waitForElementWithReload,
 } from "../utils";
@@ -245,10 +245,10 @@ test("can create and delete an agent", {
     intervals: [2000, 3000, 5000],
     checkEnabled: false,
   });
-  await openAgentRowMenu(page, AGENT_NAME);
-  await page
-    .getByTestId(`${E2eTestId.DeleteAgentButton}-${AGENT_NAME}`)
-    .click();
+  await clickAgentRowMenuItem(page, {
+    agentName: AGENT_NAME,
+    itemTestId: `${E2eTestId.DeleteAgentButton}-${AGENT_NAME}`,
+  });
   await clickButton({ page, options: { name: "Delete Agent" } });
 
   // Wait for deletion to complete

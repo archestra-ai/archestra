@@ -5,6 +5,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { authPlugin } from "@/auth/fastify-plugin/plugin";
 import { LimitModel, ModelModel, VirtualApiKeyModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -36,6 +37,7 @@ describe("LLM proxy query budget", () => {
     vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
       () => createOpenAiTestClient({}) as never,
     );
+    await app.register(authPlugin);
     await app.register(openAiProxyRoutes);
     await ModelModel.upsert({
       externalId: "openai/gpt-4o",
@@ -52,6 +54,47 @@ describe("LLM proxy query budget", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await app.close();
+  });
+
+  test("warm authenticated organization proxy avoids redundant bookkeeping", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      authorId: user.id,
+      name: "proxy budget",
+      keyType: "passthrough",
+    });
+    const call = () =>
+      app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/chat/completions`,
+        headers: {
+          authorization: "Bearer sk-provider",
+          "x-archestra-virtual-key": value,
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "hello" }],
+          stream: false,
+        },
+      });
+    const warm = await call();
+    expect(warm.statusCode, warm.body).toBe(200);
+    const { result, statements } = await recordQueries(call);
+    expect(result.statusCode, result.body).toBe(200);
+    expect(statements.length).toBeLessThanOrEqual(24);
   });
 
   test("virtual-key chat completion with token limits", async ({
@@ -125,8 +168,9 @@ describe("LLM proxy query budget", () => {
     const { result: response, statements } = await recordQueries(call);
     expect(response.statusCode, response.body).toBe(200);
     // Was 54 before the per-request lookups, set-based usage recording and
-    // single-read rate-limit check.
-    expect(statements.length).toBeLessThanOrEqual(45);
+    // single-read rate-limit check; sharing caller lookups across the proxy
+    // call saves 4 more.
+    expect(statements.length).toBeLessThanOrEqual(37);
   });
 
   test("rejected virtual key under the rate limiter", async ({

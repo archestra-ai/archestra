@@ -6,6 +6,7 @@ import {
   type LocalConfigSchema,
   MCP_ORCHESTRATOR_DEFAULTS,
   type McpDeploymentState,
+  PLAYWRIGHT_MCP_CATALOG_ID,
   TimeInMs,
 } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
@@ -14,6 +15,7 @@ import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import type z from "zod";
 import config from "@/config";
 import { clusterDnsResolver } from "@/k8s/cluster-dns";
+import { clusterIpFamilyResolver } from "@/k8s/cluster-ip-families";
 import {
   constructLegacyMcpDeploymentName,
   constructLegacyMultitenantMcpDeploymentName,
@@ -31,6 +33,7 @@ import {
   OrganizationModel,
   RuntimeCredentialDefinitionModel,
 } from "@/models";
+import PlaywrightRuntimeModel from "@/models/playwright-runtime";
 import type {
   EffectiveNetworkPolicy,
   InternalMcpCatalog,
@@ -909,6 +912,11 @@ export default class K8sDeployment {
     const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(
       this.k8sApi,
     );
+    const clusterIpFamilies = await clusterIpFamilyResolver.getIpFamilies({
+      coreApi: this.k8sApi,
+      namespace: this.namespace,
+      clusterDnsIps,
+    });
 
     if (isAwsApplicationNetworkPolicyProvider(this.networkPolicyCapabilities)) {
       if (clusterDnsIps.length === 0) {
@@ -933,6 +941,7 @@ export default class K8sDeployment {
           labels,
           clusterDnsIps,
           allowedCidrs,
+          clusterIpFamilies,
         }),
       });
       await Promise.all([
@@ -955,6 +964,7 @@ export default class K8sDeployment {
         labels,
         clusterDnsIps,
         allowedCidrs,
+        clusterIpFamilies,
       }),
     );
     await Promise.all([
@@ -2992,6 +3002,7 @@ export default class K8sDeployment {
       // and would otherwise select a multitenant pod's per-install id and leave it
       // under the deny-all baseline. getCatalogItem caches, so later calls reuse it.
       await this.getCatalogItem();
+      await this.assertBrowserEnabled();
 
       /**
        * MIGRATION STEP:
@@ -3542,6 +3553,7 @@ export default class K8sDeployment {
    * waitForDeploymentReady, then calls {@link completeWake}.
    */
   async beginWake(options?: LifecycleMutationOptions): Promise<void> {
+    await this.assertBrowserEnabled();
     const generation = ++this.stateGeneration;
 
     let replicas = 1;
@@ -3946,6 +3958,17 @@ export default class K8sDeployment {
       "Abandoning an MCP lifecycle write: lost the compare-and-swap repeatedly",
     );
     return { status: "lost-race" };
+  }
+
+  private async assertBrowserEnabled(): Promise<void> {
+    if (
+      (this.mcpServer.catalogId === PLAYWRIGHT_MCP_CATALOG_ID ||
+        (this.catalogItem &&
+          PlaywrightRuntimeModel.isManagedCatalogConfig(this.catalogItem))) &&
+      !(await PlaywrightRuntimeModel.isEnabled())
+    ) {
+      throw new Error("The built-in browser MCP is disabled");
+    }
   }
 
   /**

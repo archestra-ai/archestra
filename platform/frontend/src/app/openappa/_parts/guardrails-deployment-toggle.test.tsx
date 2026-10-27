@@ -81,7 +81,9 @@ function show() {
 
 test("the sidebar warns while enforcement is off and links to the Guardrails page", async () => {
   show();
-  const link = await screen.findByRole("link", { name: /Guardrails disabled/ });
+  const link = await screen.findByRole("link", {
+    name: /Enable AI Guardrails/,
+  });
   expect(link).toHaveAttribute("href", "/openappa");
   expect(screen.queryByRole("switch")).not.toBeInTheDocument();
 });

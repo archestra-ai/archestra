@@ -162,6 +162,45 @@ export function useAllMatchingConnectors(
   });
 }
 
+/** Independent of the list filters/page; stops as soon as an affected connector is found. */
+export function useHasLegacySalesforceConnector() {
+  return useQuery({
+    queryKey: ["connectors", "legacy-salesforce-auth"],
+    queryFn: async () => {
+      const limit = 100;
+      for (let offset = 0; ; offset += limit) {
+        const { data, error } = await getConnectors({
+          query: {
+            connectorType: "salesforce",
+            limit,
+            offset,
+            includeAssignedAgents: false,
+          },
+        });
+        throwOnApiError(error, { toastOnError: false });
+        const connectors = data?.data ?? [];
+        if (
+          connectors.some(
+            (connector) =>
+              connector.config.type === "salesforce" &&
+              connector.config.authMethod !== "oauth_client_credentials",
+          )
+        )
+          return true;
+        // The API can omit malformed persisted rows after pagination. A short
+        // response is not necessarily the last database page.
+        const total = data?.pagination.total;
+        if (
+          total !== undefined
+            ? offset + limit >= total
+            : connectors.length < limit
+        )
+          return false;
+      }
+    },
+  });
+}
+
 /** Deletes a selection of connectors in one request. */
 export function useBulkDeleteConnectors() {
   const queryClient = useQueryClient();

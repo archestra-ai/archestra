@@ -21,6 +21,57 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 class HermesStartupTest(unittest.TestCase):
+    def test_installed_release_matches_install_stamp(self):
+        stamp = json.loads(Path("/opt/hermes/install-stamp.json").read_text())
+        result = subprocess.run(
+            [
+                "/opt/hermes/.venv/bin/python",
+                "-c",
+                "import importlib.metadata; print(importlib.metadata.version('hermes-agent'))",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.stdout.strip(), stamp["baseVersion"])
+
+    def test_discovery_thread_does_not_import_the_mcp_sdk(self):
+        # A first SDK import on the discovery thread races the main thread's
+        # imports and can leave the process without the SDK's HTTP transport.
+        # Discovery stops where the real one starts, at the SDK import, so the
+        # test never waits on a connection.
+        script = (
+            "import logging, threading\n"
+            "from hermes_cli import mcp_startup\n"
+            "from tools import mcp_tool, mcp_tool_discovery\n"
+            "callers, ensure = [], mcp_tool._ensure_mcp_sdk\n"
+            "def recording_ensure():\n"
+            "    callers.append(threading.current_thread().name)\n"
+            "    return ensure()\n"
+            "def discover_without_connecting(**kwargs):\n"
+            "    mcp_tool._ensure_mcp_sdk()\n"
+            "    return []\n"
+            "mcp_tool._ensure_mcp_sdk = recording_ensure\n"
+            "mcp_tool_discovery.discover_mcp_tools = discover_without_connecting\n"
+            "mcp_startup.start_background_mcp_discovery(logger=logging.getLogger('test'), thread_name='test-discovery')\n"
+            "assert mcp_startup.join_mcp_discovery(timeout=30), 'discovery did not finish'\n"
+            "assert callers[:1] == ['MainThread'], f'first MCP SDK import ran on {callers}'\n"
+            "assert mcp_tool._MCP_HTTP_AVAILABLE, 'the MCP SDK has no HTTP transport'\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "config.yaml").write_text(json.dumps({"mcp_servers": {"archestra": {"url": "http://127.0.0.1:9/mcp"}}}))
+            try:
+                result = subprocess.run(
+                    ["/opt/hermes/.venv/bin/python", "-c", script],
+                    env={**os.environ, "HERMES_HOME": directory},
+                    capture_output=True,
+                    text=True,
+                    timeout=90,
+                )
+            except subprocess.TimeoutExpired as error:
+                self.fail(f"SDK import check timed out: {error.stdout}{error.stderr}")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_task_completes_without_package_downloads(self):
         for mode in ("one_shot", "interactive"):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
@@ -71,7 +122,8 @@ class HermesStartupTest(unittest.TestCase):
         followup_sent = False
         try:
             transcript = runtime / "readable-transcript.json"
-            while time.monotonic() - started < 25:
+            # Generous for a contended builder; a healthy run takes under 10s.
+            while time.monotonic() - started < 60:
                 if server.package_requests:
                     break
                 if select.select([master], [], [], 0.1)[0]:
@@ -98,7 +150,11 @@ class HermesStartupTest(unittest.TestCase):
                 server.package_requests,
                 "Startup attempted an optional package download",
             )
-            self.assertGreater(server.tool_calls, 0, "The real MCP tool was not executed")
+            self.assertGreater(server.tool_calls, 0, "The real MCP tool was not executed" + hermes_errors(runtime))
+            self.assertEqual(
+                server.onboarding_notes, 0,
+                "Hermes asked the model for a first-contact introduction",
+            )
             self.assertTrue(transcript.exists(), output.decode(errors="replace")[-4000:])
             entries = json.loads(transcript.read_text())["entries"]
             self.assertGreater(count_answers(entries), 0, entries)
@@ -124,6 +180,9 @@ class HermesStartupTest(unittest.TestCase):
             except ProcessLookupError:
                 pass
             process.wait(timeout=5)
+            # Hermes runs hooks in their own sessions, so they can outlive the
+            # group kill and still write under the temporary directory.
+            stop_runtime_processes(runtime)
             os.close(master)
             server.release_packages.set()
             server.shutdown()
@@ -135,6 +194,7 @@ class RuntimeAPIs(ThreadingHTTPServer):
         super().__init__(("127.0.0.1", 0), RequestHandler)
         self.package_requests = []
         self.tool_calls = 0
+        self.onboarding_notes = 0
         self.release_packages = threading.Event()
         self.input_ready = threading.Event()
 
@@ -191,6 +251,11 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.respond({"jsonrpc": "2.0", "id": request["id"], "result": result})
             return
         tools = request.get("tools", [])
+        if any(
+            ONBOARDING_NOTE in json.dumps(m.get("content"))
+            for m in request.get("messages", [])
+        ):
+            self.server.onboarding_notes += 1
         echo = next(
             (t["function"]["name"] for t in tools
              if t["function"]["name"].endswith("echo")),
@@ -240,6 +305,44 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+
+# Hermes's first-contact note; its introduction would end up in the answer.
+ONBOARDING_NOTE = "This is the user's very first message ever."
+
+
+def stop_runtime_processes(runtime, timeout=10):
+    """Kill every live process started for this runtime, found by its environment."""
+    marker = f"ARCHESTRA_AGENT_RUNTIME_DIR={runtime}".encode()
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        live = []
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdigit() or int(entry.name) == os.getpid():
+                continue
+            try:
+                # The field after "(comm)" is the state; zombies hold no files.
+                if (entry / "stat").read_text().rsplit(")", 1)[1].split()[0] == "Z":
+                    continue
+                if marker in (entry / "environ").read_bytes().split(b"\0"):
+                    live.append(int(entry.name))
+            except (OSError, ValueError, IndexError):
+                continue
+        if not live:
+            return
+        for pid in live:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        time.sleep(0.1)
+    raise AssertionError(f"Processes for {runtime} outlived SIGKILL")
+
+
+def hermes_errors(runtime):
+    # Hermes logs MCP discovery and SDK import failures here, not on screen.
+    log = runtime / "hermes" / "logs" / "errors.log"
+    return "\n--- Hermes errors.log ---\n" + log.read_text(errors="replace")[-4000:] if log.exists() else ""
 
 
 def count_answers(entries):

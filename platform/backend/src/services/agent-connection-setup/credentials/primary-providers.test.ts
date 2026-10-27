@@ -2,7 +2,6 @@ import type { SupportedProvider } from "@archestra/shared";
 import { OPENCODE_PRIMARY_PROVIDERS } from "@archestra/shared/opencode-provider-routes";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
-import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
@@ -384,11 +383,11 @@ describe("Connection setup primary providers", () => {
       const secret = await fixtures.makeSecret();
       const keys = new Map<string, { id: string }>();
       const models = new Map<string, { id: string }>();
-      for (const [provider, modelId, supportsToolCalling] of [
-        ["anthropic", "claude-tools", true],
-        ["anthropic", "claude-no-tools", false],
-        ["openai", "gpt-unknown", null],
-        ["groq", "groq-no-tools", false],
+      for (const [provider, modelId, supportsToolCalling, inputModalities] of [
+        ["anthropic", "claude-tools", true, ["text", "image", "pdf"]],
+        ["anthropic", "claude-no-tools", false, ["text"]],
+        ["openai", "gpt-unknown", null, null],
+        ["groq", "groq-no-tools", false, ["text"]],
       ] as const) {
         if (!keys.has(provider)) {
           keys.set(
@@ -403,7 +402,7 @@ describe("Connection setup primary providers", () => {
           provider,
           modelId,
           externalId: modelId,
-          inputModalities: ["text"],
+          inputModalities: inputModalities ? [...inputModalities] : null,
           outputModalities: ["text"],
           supportsToolCalling,
         });
@@ -456,6 +455,29 @@ describe("Connection setup primary providers", () => {
       ).toEqual([expect.objectContaining({ id: "gpt-unknown" })]);
     });
 
+    test("tells the client what each model reads and leaves unknown modalities unset", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const { catalog } = await seed({
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeSecret,
+        makeLlmProviderApiKey,
+      });
+      const models = (await catalog()).flatMap((entry) => entry.models);
+      expect(
+        models.find((model) => model.id === "claude-tools")?.inputModalities,
+      ).toEqual(["text", "image", "pdf"]);
+      expect(
+        models.find((model) => model.id === "gpt-unknown")?.inputModalities,
+      ).toBeNull();
+    });
+
     test("fails clearly when no selected provider has a tool-capable model", async ({
       makeOrganization,
       makeUser,
@@ -495,7 +517,7 @@ describe("Connection setup primary providers", () => {
       );
     });
 
-    test("leads with the member's default model provider, then the organization's, then key order", async ({
+    test("leads with the organization's default model provider, then key order", async ({
       makeOrganization,
       makeUser,
       makeMember,
@@ -519,32 +541,23 @@ describe("Connection setup primary providers", () => {
       });
       expect((await order())[0]).toBe("openai");
 
-      await MemberModel.setDefaultModelSelection({
-        userId: user.id,
-        organizationId: org.id,
-        modelId: (models.get("claude-tools") as { id: string }).id,
-        apiKeyId: null,
+      await OrganizationModel.patch(org.id, {
+        defaultModelId: (models.get("claude-tools") as { id: string }).id,
       });
       expect((await order())[0]).toBe("anthropic");
 
-      // A member default whose model was filtered out (no tool calling) does
-      // not lead, even though its provider is in the catalog.
-      await MemberModel.setDefaultModelSelection({
-        userId: user.id,
-        organizationId: org.id,
-        modelId: (models.get("claude-no-tools") as { id: string }).id,
-        apiKeyId: null,
+      // A default whose model was filtered out (no tool calling) does not
+      // lead, even though its provider is in the catalog.
+      await OrganizationModel.patch(org.id, {
+        defaultModelId: (models.get("claude-no-tools") as { id: string }).id,
       });
-      expect((await order())[0]).toBe("openai");
+      expect(await order()).toEqual(initial);
 
-      // A member default outside the catalog falls through to the org default.
-      await MemberModel.setDefaultModelSelection({
-        userId: user.id,
-        organizationId: org.id,
-        modelId: (models.get("groq-no-tools") as { id: string }).id,
-        apiKeyId: null,
+      // A default outside the catalog falls through to key order.
+      await OrganizationModel.patch(org.id, {
+        defaultModelId: (models.get("groq-no-tools") as { id: string }).id,
       });
-      expect((await order())[0]).toBe("openai");
+      expect(await order()).toEqual(initial);
     });
   });
   test("Connect defaults apply to new keys and never switch the mode of an existing token", async ({

@@ -1,4 +1,4 @@
-import { RouteId, SupportedProviders } from "@archestra/shared";
+import { RouteId } from "@archestra/shared";
 import {
   buildForbiddenErrorMessage,
   requiredEndpointPermissionsMap,
@@ -16,7 +16,6 @@ import {
   SessionModel,
   UserModel,
 } from "@/models";
-import { MODEL_ROUTER_PREFIX } from "@/routes/proxy/common";
 import { getPublicRequestOrigin } from "@/routes/request-origin";
 import {
   AGENT_WORKSPACE_TRANSFER_PREFIX,
@@ -26,9 +25,12 @@ import {
   CONNECTION_INSTRUCTIONS_PATH,
   CONNECTION_RUNTIME_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
+  CONNECTION_STARTUP_GUARD_PATH,
+  GITHUB_ACTIONS_TOKEN_PATH,
   GUARDRAILS_NOOP_ANNOTATOR_PATH,
   HEALTH_PATH,
   INCOMING_EMAIL_WEBHOOK_PREFIX,
+  isLlmProxyPath,
   METRICS_PATH,
   MFILES_VAF_ADD_ON_PACKAGE_PATH,
   MFILES_VAF_ADD_ON_SCRIPT_PATH,
@@ -166,19 +168,10 @@ export class Authnz {
       return true;
     }
     const isGetOrHead = method === "GET" || method === "HEAD";
-    // Check if URL matches any LLM proxy route (e.g., /v1/openai, /v1/anthropic, /v1/vllm)
-    const isLlmProxyRoute = SupportedProviders.some((provider) =>
-      url.startsWith(`/v1/${provider}`),
-    );
-    // Prefer route consts here instead of hardcoding paths; these checks must
-    // stay in sync with route registration.
-    const isModelRouterRoute = url.startsWith(MODEL_ROUTER_PREFIX);
-
     if (
       url.startsWith("/api/auth") ||
       url.startsWith("/api/invitation/") || // Allow invitation check without auth
-      isLlmProxyRoute ||
-      isModelRouterRoute ||
+      isLlmProxyPath(url) ||
       url === "/openapi.json" ||
       url === HEALTH_PATH ||
       url === READY_PATH ||
@@ -243,6 +236,11 @@ export class Authnz {
       (isGetOrHead && url === CONNECTION_INSTRUCTIONS_PATH) ||
       // Executable updates have a distinct installation capability and live access checks.
       (isGetOrHead && url === CONNECTION_RUNTIME_PATH) ||
+      // Pure public code rendering: accepts no credential and grants no access.
+      (method === "POST" && url === CONNECTION_STARTUP_GUARD_PATH) ||
+      // GitHub Actions token exchange: the OIDC token in the body is the
+      // proof, verified in-route against the gateway's GitHub Actions setting.
+      (method === "POST" && url === GITHUB_ACTIONS_TOKEN_PATH) ||
       // Public existence check for connected remotes (Claude Code startup
       // guard) — the querystring rides along on request.url
       (isGetOrHead &&

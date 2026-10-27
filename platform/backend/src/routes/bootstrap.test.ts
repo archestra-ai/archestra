@@ -2,7 +2,7 @@ import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
-import { MemberModel, ModelModel } from "@/models";
+import { MemberModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -58,33 +58,14 @@ describe("bootstrap route", () => {
   // parts must be exactly what those endpoints return.
   test("returns the same data as the individual endpoints", async ({
     makeAgent,
-    makeSecret,
-    makeLlmProviderApiKey,
   }) => {
-    // Non-empty member defaults, so their parts are compared on real values.
+    // A non-empty member default, so its part is compared on real values.
     const agent = await makeAgent({
       organizationId,
       authorId: user.id,
       agentType: "agent",
     });
     await MemberModel.setDefaultAgent(user.id, organizationId, agent.id);
-    const secret = await makeSecret();
-    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
-      provider: "openai",
-    });
-    const model = await ModelModel.create({
-      provider: "openai",
-      modelId: "gpt-test",
-      externalId: "gpt-test",
-      inputModalities: ["text"],
-      outputModalities: ["text"],
-    });
-    await MemberModel.setDefaultModelSelection({
-      userId: user.id,
-      organizationId,
-      modelId: model.id,
-      apiKeyId: apiKey.id,
-    });
 
     const bootstrap = await get("/api/bootstrap");
 
@@ -96,14 +77,9 @@ describe("bootstrap route", () => {
       publicConfig: await get("/api/config/public"),
       appearance: await get("/api/organization/appearance-settings"),
       memberDefaultAgent: await get("/api/members/default-agent"),
-      memberDefaultModel: await get("/api/members/default-model"),
     });
     expect(Object.keys(bootstrap.permissions).length).toBeGreaterThan(0);
     expect(bootstrap.memberDefaultAgent.defaultAgentId).toBe(agent.id);
-    expect(bootstrap.memberDefaultModel).toEqual({
-      modelId: model.id,
-      chatApiKeyId: apiKey.id,
-    });
   });
 
   async function get(url: string) {

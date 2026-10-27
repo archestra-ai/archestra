@@ -11,7 +11,6 @@ import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
-import MemberModel from "@/models/member";
 import MessageModel from "@/models/message";
 import ModelModel from "@/models/model";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
@@ -298,7 +297,7 @@ describe("chat conversation and message routes", () => {
     expect(fork.json().id).not.toBe(id);
   });
 
-  test("honors member model preferences and explicit overrides for a policy assistant", async ({
+  test("uses the agent model unless the conversation picks one, for a policy assistant", async ({
     makeAgent,
     makeLlmProviderApiKey,
     makeSecret,
@@ -308,7 +307,7 @@ describe("chat conversation and message routes", () => {
       provider: "openai",
     });
     const models = await Promise.all(
-      ["agent", "member", "explicit"].map((name) =>
+      ["agent", "explicit"].map((name) =>
         ModelModel.create({
           externalId: `openai/policy-chat-${name}`,
           provider: "openai",
@@ -320,7 +319,7 @@ describe("chat conversation and message routes", () => {
         }),
       ),
     );
-    const [agentModel, memberModel, explicitModel] = models;
+    const [agentModel, explicitModel] = models;
     await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
       key.id,
       models.map((model) => model.id),
@@ -332,12 +331,6 @@ describe("chat conversation and message routes", () => {
       builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
       modelId: agentModel.id,
       llmApiKeyId: key.id,
-    });
-    await MemberModel.setDefaultModelSelection({
-      userId: currentUser.id,
-      organizationId,
-      modelId: memberModel.id,
-      apiKeyId: key.id,
     });
     for (const explicit of [false, true]) {
       const response = await app.inject({
@@ -353,7 +346,7 @@ describe("chat conversation and message routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject({
         agentId: agent.id,
-        modelId: explicit ? explicitModel.id : memberModel.id,
+        modelId: explicit ? explicitModel.id : agentModel.id,
         chatApiKeyId: key.id,
       });
     }

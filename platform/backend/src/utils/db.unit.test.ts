@@ -1,5 +1,11 @@
+import { DrizzleQueryError } from "drizzle-orm/errors";
 import { describe, expect, test } from "vitest";
-import { chunkForBulkStatement } from "./db";
+import {
+  chunkForBulkStatement,
+  clientErrorMessage,
+  FAILED_QUERY_CLIENT_MESSAGE,
+  hasFailedQueryText,
+} from "./db";
 
 describe("chunkForBulkStatement", () => {
   test("keeps a batch that fits in one statement intact", () => {
@@ -22,5 +28,45 @@ describe("chunkForBulkStatement", () => {
 
   test("returns nothing to execute for an empty batch", () => {
     expect(chunkForBulkStatement([])).toEqual([]);
+  });
+});
+
+describe("clientErrorMessage", () => {
+  const queryError = new DrizzleQueryError(
+    'select "secret" from "secret" where "id" = $1',
+    ["secret-id-1"],
+    new Error("timeout"),
+  );
+
+  test("replaces a failed query's text, also when a wrapper copies it", () => {
+    expect(hasFailedQueryText(queryError)).toBe(true);
+    expect(clientErrorMessage(queryError, "Internal error")).toBe(
+      FAILED_QUERY_CLIENT_MESSAGE,
+    );
+    expect(
+      clientErrorMessage(
+        new Error(`Hard reset failed: ${queryError.message}`),
+        "Internal error",
+      ),
+    ).toBe(FAILED_QUERY_CLIENT_MESSAGE);
+  });
+
+  test("keeps other messages, including a wrapper whose cause is the query", () => {
+    expect(
+      clientErrorMessage(
+        new Error("Could not save the key", { cause: queryError }),
+        "Internal error",
+      ),
+    ).toBe("Could not save the key");
+    expect(clientErrorMessage(new Error("Agent not found"), "x")).toBe(
+      "Agent not found",
+    );
+  });
+
+  test("uses the fallback for a non-Error or an empty message", () => {
+    expect(clientErrorMessage("boom", "Internal error")).toBe("Internal error");
+    expect(clientErrorMessage(new Error(""), "Internal error")).toBe(
+      "Internal error",
+    );
   });
 });

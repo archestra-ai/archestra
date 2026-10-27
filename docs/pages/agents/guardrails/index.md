@@ -64,7 +64,7 @@ The starting policy contains:
 - **Archestra's own tools:** rules from the bundled Archestra battery.
 - **Coding agent tools:** rules for the built-in tools of Claude Code, Codex, and OpenCode, such as shell commands, file edits, and web fetches.
 - **Your organization as the `internal` audience:** data your members can see may go to them, and no further.
-- **The annotator model for the rest:** it labels sandbox commands ([`run_command`](/docs/reference/archestra-mcp-server#run_command)), coding agent shell commands, and every tool no rule covers. It uses the model under **Annotator model** in **Settings → Guardrails**, or your organization's default model.
+- **The annotator model for the rest:** it labels sandbox commands ([`run_command`](/docs/reference/archestra-mcp-server#run_command)), coding agent shell commands, and every tool no rule covers. It uses the model under **Annotator model** in **Settings → Guardrails**: a fast model, such as Claude Haiku, on your organization's default key unless you pick another.
 - **Human approval:** the `human-approval` authority, the person running the session, can approve a blocked call.
 
 Required permissions:

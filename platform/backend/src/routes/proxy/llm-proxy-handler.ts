@@ -1,4 +1,5 @@
 import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
+import { validateAzureModelOperation } from "@/services/azure-model-capabilities";
 import type {
   BillingAttribution,
   PricedBillingUsage,
@@ -30,7 +31,10 @@ import {
   SOURCE_HEADER,
   stripClaudeContextVariantSuffix,
 } from "@archestra/shared";
-import { ARCHESTRA_CODEX_CONNECTION_ORIGINATOR } from "@archestra/shared/interactions/client";
+import {
+  ARCHESTRA_CODEX_CONNECTION_ORIGINATOR,
+  CLAUDE_DESKTOP_CLIENT_ID,
+} from "@archestra/shared/interactions/client";
 import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import {
   type Context,
@@ -38,7 +42,6 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { RequestLookups } from "@/auth/request-lookups";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
@@ -50,20 +53,22 @@ import {
   ENCRYPTED_CHAT_KEY_HEADER,
   parseEncryptedChatDekHeader,
 } from "@/content-encryption/encrypted-chat";
+import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import {
-  AgentTeamModel,
   AppModel,
   InteractionModel,
   LimitValidationService,
   LlmProviderApiKeyModel,
   ModelModel,
   OrganizationModel,
-  TeamModel,
   UserModel,
   UserTokenModel,
 } from "@/models";
+import ProxyRequestContextModel, {
+  type ProxyRequestState,
+} from "@/models/proxy-request-context";
 import { metrics } from "@/observability";
 import {
   ATTR_ARCHESTRA_BILLING_MODE,
@@ -108,8 +113,12 @@ import {
   type LlmProxyToolCallRefusal,
 } from "@/proxy/plugins/registry";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { llmProxyTiming } from "@/server/llm-proxy-timing";
+import { configCache } from "@/services/config-cache";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
-import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
+import { getGuardrailsDeploymentFromSnapshot } from "@/services/guardrails-deployment";
+import { LlmThroughput, ThroughputError } from "@/services/llm-throughput";
+import { resolveRequestAttributionLabels } from "@/services/request-attribution-labels";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   ApiError,
@@ -122,11 +131,14 @@ import {
   type LLMProvider,
   type LLMStreamAdapter,
   type OpenAiCodexPassthrough,
+  type StreamErrorFrameContext,
   type ToolCallBlock,
 } from "@/types";
+import type { AttributionLabels } from "@/types/attribution-label";
 import { asRecord } from "@/utils/as-record";
 import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
+import { withMediaUsageAvailability } from "@/utils/media-usage";
 import { isUuid } from "@/utils/uuid";
 import { CodexResponsesGenerationError } from "./adapters/openai-codex-translator";
 import {
@@ -140,6 +152,7 @@ import {
   assertPlatformAuthenticated,
   attemptJwksAuth,
   isJwtLike,
+  readPassthroughAuthenticationSnapshot,
   resolveAgent,
   validateLlmOAuthAccessToken,
   validatePassthroughVirtualKey,
@@ -152,6 +165,7 @@ import {
   buildInteractionRecord,
   calculateInteractionCosts,
   calculateUsageCost,
+  estimateCutOffAttemptUsage,
   handleError,
   isRetryableUpstreamConnectionFailure,
   planDispatchModeToolCallRewrites,
@@ -164,12 +178,32 @@ import {
   withProviderToolCallIds,
   withSessionContext,
 } from "./llm-proxy-helpers";
+import {
+  MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
+  MODEL_POOL_MAX_RESPONSE_TIMEOUT_MS,
+  MODEL_POOL_MS_PER_OUTPUT_TOKEN,
+  MODEL_POOL_RESPONSE_TIMEOUT_MS,
+  type ModelPoolPlan,
+  openThroughModelPool,
+  type PlannedMember,
+  planModelPool,
+  type UpstreamAttempt,
+} from "./model-pool-failover";
+import {
+  inboundPoolWire,
+  type MemberTransport,
+  memberAdapter,
+  memberTransport,
+  requestedMaxOutputTokens,
+} from "./model-pool-transport";
 import { StreamKeepAlive } from "./stream-keepalive";
 import {
   openUpstreamWithRetry,
   withFirstChunk,
 } from "./upstream-connection-retry";
 import * as utils from "./utils";
+import { getAzureProxyIngress } from "./utils/azure-ingress";
+import { withClaudeDesktopSubscriptionPreamble } from "./utils/claude-desktop-subscription";
 import { resolveClientGatewayBindings } from "./utils/client-gateway-bindings";
 import { consumeClientRuntimeEvidence } from "./utils/client-runtime-evidence";
 import {
@@ -191,7 +225,18 @@ const {
  * for maintainability and readability.
  */
 export interface LLMProxyContext<TRequest> {
+  attributionLabels?: AttributionLabels;
+  throughput?: LlmThroughput;
   usageAccountingMode?: PricedBillingUsage["mode"];
+  providerApiKeyId?: string;
+  /**
+   * The upstream attempt this request's interaction rows record: which
+   * provider key served it and, through a model pool, which attempt it was.
+   * Mutated as a pool moves between members.
+   */
+  upstreamAttempt: UpstreamAttempt;
+  /** Set when the request's model is a model pool's name. */
+  modelPool?: ModelPoolRouting;
   billingAttribution?: BillingAttribution;
   connectionVerification?: boolean;
   appaReceipts?: OpenappaReceipts;
@@ -256,6 +301,17 @@ export interface LLMProxyContext<TRequest> {
   streamTiming: StreamTiming;
 }
 
+/** How a request is spread across its model pool's members. */
+export interface ModelPoolRouting {
+  plan: ModelPoolPlan;
+  transportFor: (
+    member: PlannedMember,
+    signal: AbortSignal,
+  ) => Promise<MemberTransport>;
+  recordFailedAttempt: (attempt: UpstreamAttempt) => Promise<void>;
+  setResponseHeaders: (attempt: UpstreamAttempt) => void;
+}
+
 export interface StreamTiming {
   requestReceivedAt: number;
   firstByteAt?: number;
@@ -271,6 +327,8 @@ export type LLMProxyAuthOverride = {
   authMethod?: InteractionAuthMethod;
   /** Model Router virtual key ID, preserved for usage limits and interaction attribution. */
   virtualKeyId?: string;
+  /** A model pool the Model Router already let this caller use. */
+  modelPoolId?: string;
   authenticatedApp?: {
     id: string;
     name: string;
@@ -488,14 +546,18 @@ export async function handleLLMProxy<
   let serviceAccountId = authOverride?.serviceAccountId;
   let userId = (await utils.headers.userId.getUser(headersForExtraction))
     ?.userId;
-  let resolvedUser = userId ? await UserModel.getById(userId) : null;
+  let resolvedUser: LLMProxyContext<TRequest>["resolvedUser"] = userId
+    ? await UserModel.getById(userId)
+    : null;
   let virtualKeyId = authOverride?.virtualKeyId;
   let passthroughVirtualKeyId: string | undefined;
   // The first credential that names a billing team pays; the passthrough key
   // resolves first, matching its precedence for per-key limits.
   let billingTeamId = authOverride?.billingTeamId;
+  let attributionLabels: AttributionLabels | undefined;
   // Authenticated user identities, tracked per source for the consistency check.
   let passthroughUserId: string | undefined;
+  let nonOAuthTokenHash: string | undefined;
   let jwksUserId: string | undefined;
   let oauthUserId: string | undefined;
   let regularVirtualKeyUserId: string | undefined;
@@ -585,11 +647,35 @@ export async function handleLLMProxy<
     `[${providerName}Proxy] handleLLMProxy: request received`,
   );
 
-  // Resolve agent
-  const resolvedAgent = await resolveAgent(agentId);
+  let oauthTokenCandidate: string | undefined;
+  if (passthroughVirtualKeyToken && !authOverride) {
+    try {
+      const candidate = normalizeVirtualKeyCandidate(
+        provider.extractApiKey(headers),
+      );
+      if (candidate && !hasArchestraTokenPrefix(candidate))
+        oauthTokenCandidate = candidate;
+    } catch {
+      // Optional prefetch; normal extraction below retains its error ordering.
+    }
+  }
+  // Recently validated credentials already skip the failure-bucket read. Fetch
+  // their gateway and owner in one fresh statement; authorization is still
+  // checked below, after rate limiting. Cold and explicit-agent paths are unchanged.
+  const authenticationSnapshot =
+    !agentId &&
+    passthroughVirtualKeyToken &&
+    !authOverride &&
+    virtualKeyRateLimiter.hasRecentValidation(passthroughVirtualKeyToken)
+      ? await readPassthroughAuthenticationSnapshot({
+          tokenValue: passthroughVirtualKeyToken,
+          oauthTokenCandidate,
+        })
+      : undefined;
+  const resolvedAgent =
+    authenticationSnapshot?.agent ?? (await resolveAgent(agentId));
   const resolvedAgentId = resolvedAgent.id;
   // Pre-call reads shared within this request only; never stored or reused.
-  const lookups = new RequestLookups();
   logger.debug(
     { resolvedAgentId, agentName: resolvedAgent.name, wasExplicit: !!agentId },
     `[${providerName}Proxy] Agent resolved`,
@@ -628,16 +714,19 @@ export async function handleLLMProxy<
       const passthroughResult = await validatePassthroughVirtualKey({
         tokenValue: passthroughVirtualKeyToken,
         agent: resolvedAgent,
+        oauthTokenCandidate,
+        authenticationSnapshot,
       });
       await virtualKeyRateLimiter.recordSuccess({
         credential: passthroughVirtualKeyToken,
       });
       passthroughVirtualKeyId = passthroughResult.passthroughVirtualKeyId;
       passthroughUserId = passthroughResult.userId;
+      nonOAuthTokenHash = passthroughResult.nonOAuthTokenHash;
       billingTeamId ??= passthroughResult.billingTeamId;
       // Authenticated identity → overrides the unauthenticated X-Archestra-User-Id.
       userId = passthroughResult.userId;
-      resolvedUser = await UserModel.getById(userId);
+      resolvedUser = passthroughResult.user;
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
         await virtualKeyRateLimiter.recordFailure({
@@ -695,6 +784,8 @@ export async function handleLLMProxy<
   let perKeyChatApiKeyIdFromInternalHeader = false;
   let wasJwksAuthenticated = false;
   let wasVirtualKeyResolved = false;
+  /** The pool a virtual key with no key of this provider was let in for. */
+  let virtualKeyOnlyPoolId: string | undefined;
   let wasOAuthAuthenticated = false;
   let authMethod = authOverride?.authMethod;
   let authenticatedApp = authOverride?.authenticatedApp;
@@ -765,6 +856,7 @@ export async function handleLLMProxy<
   ) {
     const oauthResult = await validateLlmOAuthAccessToken({
       tokenValue: rawApiKey,
+      nonOAuthTokenHash,
       expectedProvider: providerName,
       agent: resolvedAgent,
       requestedModel: requestAdapter.getModel(),
@@ -811,6 +903,8 @@ export async function handleLLMProxy<
         await LlmProviderApiKeyModel.findById(chatKeyIdHeader);
       if (
         !providerKey ||
+        providerKey.organizationId !== resolvedAgent.organizationId ||
+        personalToken.organizationId !== resolvedAgent.organizationId ||
         (!internalCall &&
           !(await LlmProviderApiKeyModel.canUseKey(
             providerKey,
@@ -859,6 +953,7 @@ export async function handleLLMProxy<
         expectedProvider: providerName,
         expectedOrganizationId: resolvedAgent.organizationId,
         requestedModel: requestAdapter.getModel(),
+        allowModelPool: true,
       });
       await virtualKeyRateLimiter.recordSuccess({ credential: rawApiKey });
       apiKey = virtualResult.apiKey;
@@ -868,6 +963,7 @@ export async function handleLLMProxy<
       virtualKeyId = virtualResult.virtualKeyId;
       serviceAccountId = virtualResult.serviceAccountId;
       billingTeamId ??= virtualResult.billingTeamId;
+      virtualKeyOnlyPoolId = virtualResult.modelPoolId;
       // A personal standard virtual key identifies its owner; include it in the
       // cross-credential consistency check.
       if (virtualResult.virtualKeyIsPersonal) {
@@ -1070,11 +1166,39 @@ export async function handleLLMProxy<
   const isEncryptedChatSession = encryptedChat.kind !== "none";
   const suppressContent =
     isEncryptedChatSession || resolveLogContentMode() === "metadata_only";
+  const actualModel = stripClaudeContextVariantSuffix(
+    requestAdapter.getModel(),
+  );
+  const requestContext = await readProxyRequestState({
+    organizationId: resolvedAgent.organizationId,
+    provider: providerName,
+    modelId: actualModel,
+    agentId: resolvedAgent.id,
+    environmentId: resolvedAgent.environmentId,
+    limitVirtualKeyId: virtualKeyId,
+    passthroughVirtualKeyId,
+    llmOauthClientId: authenticatedApp?.id,
+    includeRuntime: hasProxyPlugins && enterpriseTier.isOpenappaActive(),
+    userId,
+    billingTeamId,
+    virtualKeyId:
+      authMethod === "virtual_key"
+        ? virtualKeyId
+        : authMethod === "passthrough_virtual_key"
+          ? passthroughVirtualKeyId
+          : undefined,
+    oauthClientId:
+      authMethod === "oauth_client_credentials"
+        ? authenticatedApp?.id
+        : undefined,
+  });
   const {
     active: appaActive,
     featureEnabled: appaFeatureEnabled,
     unsupportedClientAction,
-  } = await getGuardrailsDeployment();
+  } = await getGuardrailsDeploymentFromSnapshot({
+    row: requestContext.guardrails,
+  });
   // Enforcement is off, but OpenAPPA records what it must know when enforcement
   // turns on: the sessions that start now, and the calls governed sessions make.
   // The records hold ids only, so they cover encrypted chats too.
@@ -1095,6 +1219,9 @@ export async function handleLLMProxy<
     internalCall,
   );
 
+  const upstreamAttempt: UpstreamAttempt = {
+    providerApiKeyId: perKeyChatApiKeyId,
+  };
   try {
     // A redacted audit context cannot retain an enforceable trajectory safely.
     if (
@@ -1113,6 +1240,15 @@ export async function handleLLMProxy<
         "Encrypted chat key and escrow are required for policy storage",
       );
     }
+    if (
+      provider.unavailableUsageAccounting &&
+      config.llmProxy.usageAccountingMode === "enforce"
+    ) {
+      throw new ApiError(
+        422,
+        "Authoritative usage and cost accounting are unavailable for this media operation",
+      );
+    }
     // Check usage limits
     logger.debug(
       { resolvedAgentId },
@@ -1120,6 +1256,9 @@ export async function handleLLMProxy<
     );
     const limitViolation =
       await LimitValidationService.checkLimitsBeforeRequest({
+        unpricedMediaModel: provider.unavailableUsageAccounting
+          ? requestAdapter.getModel()
+          : undefined,
         agentId: resolvedAgentId,
         userId,
         virtualKeyId,
@@ -1127,7 +1266,7 @@ export async function handleLLMProxy<
         llmOauthClientId: authenticatedApp?.id,
         billingTeamId,
         agent: resolvedAgent,
-        teamSource: lookups,
+        snapshot: requestContext,
       });
 
     if (limitViolation) {
@@ -1216,18 +1355,45 @@ export async function handleLLMProxy<
       }
     }
 
-    // A client may mark a Claude id with a context variant (`…[1m]`). It names
-    // the same model at the same price, so it is dropped for bookkeeping —
-    // otherwise the request records a model no catalog lists, which can never be
-    // priced. The request itself is forwarded with the id the client sent.
-    const actualModel = stripClaudeContextVariantSuffix(
-      requestAdapter.getModel(),
-    );
+    // A request for a model pool's name is served by the pool's members when
+    // the caller may use the pool (see `mayUseModelPool`). Members on a wire
+    // the client's can't reach are left out of the plan.
+    const poolWire = openAiCodexPassthrough
+      ? null
+      : inboundPoolWire(provider.interactionType);
+    const modelPoolPlan = poolWire
+      ? await planModelPool({
+          organizationId: resolvedAgent.organizationId,
+          name: actualModel,
+          inbound: poolWire,
+          caller: {
+            virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
+            providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
+          },
+          grantedPoolId: authOverride?.modelPoolId ?? virtualKeyOnlyPoolId,
+          sessionId,
+        })
+      : null;
+    // A virtual key let in only for its pool has no key for this provider, so
+    // the request can't go anywhere but the pool.
+    if (virtualKeyOnlyPoolId && !modelPoolPlan) {
+      throw new ApiError(
+        400,
+        `Virtual API key is not mapped to provider "${providerName}".`,
+      );
+    }
 
-    // Ensure a model entry exists for cost tracking
-    const discovered = [
-      await ModelModel.ensureModelExists(actualModel, providerName),
-    ].filter((model) => model !== null);
+    // The catalog identity and independent metadata were read together after
+    // authentication. A first sighting still creates/enriches the model here.
+    // A pool's name is not a provider model; each member's own model is priced
+    // instead.
+    const catalogModel = requestContext.model;
+    const discovered =
+      modelPoolPlan || catalogModel
+        ? []
+        : [
+            await ModelModel.ensureModelExists(actualModel, providerName),
+          ].filter((model) => model !== null);
 
     // Only a first sighting reaches here, so the registry fetch (cached) and the
     // update stay off the per-request path. Enrichment is best-effort: a model
@@ -1273,18 +1439,9 @@ export async function handleLLMProxy<
     };
 
     // Fetch the agent's teams (with labels) once for trace span team attributes.
-    const teams = await AgentTeamModel.getTeamLabelInfoForAgent(
-      resolvedAgentId,
-      lookups,
-    );
+    const teams = requestContext.agentTeams;
 
-    // Fetch the requesting user's teams (with labels) for trace span attributes.
-    const userTeams = userId
-      ? await TeamModel.getTeamLabelInfoForUser({
-          userId,
-          organizationId: resolvedAgent.organizationId,
-        })
-      : [];
+    const userTeams = requestContext.userTeams;
 
     // Enforce model permissions before any upstream call. Checked on the model
     // actually being invoked (post cost-optimization rewrite), and against the
@@ -1295,6 +1452,14 @@ export async function handleLLMProxy<
       modelId: actualModel,
       organizationId: resolvedAgent.organizationId,
       authenticatedUserId,
+      catalogModel: catalogModel ?? undefined,
+      policySnapshot: catalogModel
+        ? {
+            organizationId: resolvedAgent.organizationId,
+            modelId: catalogModel.id,
+            policies: requestContext.modelPolicies,
+          }
+        : undefined,
     });
     if (!modelTeamAccess.allowed) {
       logger.info(
@@ -1358,6 +1523,7 @@ export async function handleLLMProxy<
         installerSetupBypass,
         ingress: appaIngress,
         toolIdentity,
+        runtimeSnapshot: requestContext.runtimeSnapshot,
       });
       pluginContext = {
         requestId: request.id,
@@ -1440,7 +1606,7 @@ export async function handleLLMProxy<
     // Apply tool result updates
     requestAdapter.applyToolResultUpdates(toolResultUpdates);
 
-    logger.info(
+    logger.debug(
       {
         resolvedAgentId,
         toolResultUpdatesCount: Object.keys(toolResultUpdates).length,
@@ -1502,7 +1668,7 @@ export async function handleLLMProxy<
         );
       }
     } else {
-      logger.info(
+      logger.debug(
         `[${providerName}Proxy] no chat_api_key id, skipping db header lookup`,
       );
     }
@@ -1537,38 +1703,213 @@ export async function handleLLMProxy<
     });
     let billingMode = credentialBillingMode;
 
+    if (providerName === "azure") {
+      const original = requestAdapter.getOriginalRequest() as Record<
+        string,
+        unknown
+      >;
+      const metadata = original.metadata as Record<string, unknown> | undefined;
+      const type = String(provider.interactionType);
+      const operation =
+        type === "azure:images"
+          ? metadata?.operation === "image-edit"
+            ? "image-edit"
+            : "image-generation"
+          : type === "azure:audio"
+            ? original.operation === "speech"
+              ? "audio-speech"
+              : original.operation === "transcriptions"
+                ? "audio-transcription"
+                : "audio-translation"
+            : type === "azure:realtime"
+              ? "realtime-turn"
+              : provider.spanName === "embedding"
+                ? "embedding"
+                : type === "azure:responses"
+                  ? "responses"
+                  : "chat";
+      await validateAzureModelOperation({
+        providerApiKeyId: perKeyChatApiKeyId,
+        modelId: requestAdapter.getModel(),
+        operation,
+        parameters: original,
+      });
+    }
+
     // Create client with observability (each provider handles metrics internally)
     // A guardrail caller disconnects once it stops waiting for the answer,
     // so its upstream call stops too instead of running on and being billed.
     const abortSignal =
-      providerName === "microsoft-365-copilot" || proof.guardrail
+      provider.cancelOnDisconnect ||
+      providerName === "microsoft-365-copilot" ||
+      providerName === "azure" ||
+      provider.interactionType === "azure:realtime" ||
+      proof.guardrail
         ? clientDisconnectSignal({ request, reply })
         : undefined;
-    const client = provider.createClient(apiKey, {
-      baseUrl: effectiveBaseUrl,
-      agent: resolvedAgent,
-      abortSignal,
-      source,
-      model: requestAdapter.getModel(),
-      defaultHeaders:
-        Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined,
-      llmProviderApiKeyId: perKeyChatApiKeyId,
-      sessionId: sessionId ?? undefined,
-      onResponseHeaders: (responseHeaders) => {
-        if (providerName === "anthropic") {
-          billingMode = utils.refineAnthropicBillingModeFromHeaders({
-            // A retry's response must not inherit a failed attempt's overage.
-            billingMode: credentialBillingMode,
-            headers: responseHeaders,
-          });
-        }
-      },
-      openAiCodexPassthrough,
-      ...(providerName === "gemini" &&
-      typeof headersForExtraction["x-goog-user-project"] === "string"
-        ? { googleUserProject: headersForExtraction["x-goog-user-project"] }
-        : {}),
-    });
+    const createUpstreamClient = (target: {
+      adapter: Pick<typeof provider, "createClient" | "provider">;
+      apiKey: string | undefined;
+      baseUrl: string | undefined;
+      headers: Record<string, string>;
+      providerApiKeyId: string | undefined;
+      model: string;
+      /** Aborts this call alone, on top of the request's own signal. */
+      attemptSignal?: AbortSignal;
+      /** The deployment and query of an Azure-shaped inbound URL. */
+      azureRequest?: ReturnType<typeof getAzureProxyIngress>;
+    }) =>
+      target.adapter.createClient(target.apiKey, {
+        ...(target.azureRequest ? { azureRequest: target.azureRequest } : {}),
+        baseUrl: target.baseUrl,
+        agent: resolvedAgent,
+        abortSignal:
+          abortSignal && target.attemptSignal
+            ? AbortSignal.any([abortSignal, target.attemptSignal])
+            : (target.attemptSignal ?? abortSignal),
+        source,
+        model: target.model,
+        defaultHeaders:
+          Object.keys(target.headers).length > 0 ? target.headers : undefined,
+        llmProviderApiKeyId: target.providerApiKeyId,
+        sessionId: sessionId ?? undefined,
+        onResponseHeaders: (responseHeaders) => {
+          if (target.adapter.provider === "anthropic") {
+            billingMode = utils.refineAnthropicBillingModeFromHeaders({
+              // A retry's response must not inherit a failed attempt's overage.
+              billingMode: credentialBillingMode,
+              headers: responseHeaders,
+            });
+          }
+        },
+        openAiCodexPassthrough,
+        ...(providerName === "gemini" &&
+        typeof headersForExtraction["x-goog-user-project"] === "string"
+          ? { googleUserProject: headersForExtraction["x-goog-user-project"] }
+          : {}),
+      });
+    // A pooled request never uses the caller's own key, which a Model Router
+    // pool request doesn't even carry.
+    const client = modelPoolPlan
+      ? undefined
+      : createUpstreamClient({
+          adapter: provider,
+          apiKey,
+          baseUrl: effectiveBaseUrl,
+          headers: mergedHeaders,
+          providerApiKeyId: perKeyChatApiKeyId,
+          model: requestAdapter.getModel(),
+          azureRequest:
+            providerName === "azure"
+              ? getAzureProxyIngress(request)
+              : undefined,
+        });
+
+    // Each pool member is reached with its own provider's client, its own
+    // model id and, when it speaks another wire, a translator.
+    const modelPool: ModelPoolRouting | undefined =
+      modelPoolPlan && poolWire
+        ? {
+            plan: modelPoolPlan,
+            transportFor: async (member, signal) => {
+              const row = await LlmProviderApiKeyModel.findById(
+                member.providerApiKeyId,
+              );
+              const adapter = memberAdapter(member.provider);
+              if (!row || !adapter) {
+                throw new ApiError(
+                  500,
+                  "Model pool member key no longer exists",
+                );
+              }
+              const sameWire =
+                inboundPoolWire(adapter.interactionType) === poolWire;
+              return memberTransport({
+                inbound: poolWire,
+                provider: member.provider,
+                modelId: member.modelId,
+                client: createUpstreamClient({
+                  adapter,
+                  apiKey: row.secretId
+                    ? await getSecretValueForLlmProviderApiKey(row.secretId)
+                    : undefined,
+                  baseUrl:
+                    row.inferenceBaseUrl ?? row.baseUrl ?? adapter.getBaseUrl(),
+                  // Protocol headers (anthropic-beta, ...) only mean something
+                  // to a member on the client's own wire.
+                  headers: {
+                    ...(row.extraHeaders ?? {}),
+                    ...(sameWire ? headersToForward : {}),
+                  },
+                  providerApiKeyId: row.id,
+                  model: member.modelId,
+                  attemptSignal: signal,
+                }),
+              });
+            },
+            recordFailedAttempt: async (attempt) => {
+              const cutOff = attempt.cutOff
+                ? await estimateCutOffAttemptUsage({
+                    provider: providerName,
+                    providerMessages: requestAdapter.getProviderMessages(),
+                    tools: requestAdapter.getTools(),
+                    member: attempt,
+                  })
+                : undefined;
+              await persistProxyInteraction({
+                record: {
+                  profileId: resolvedAgent.id,
+                  externalAgentId,
+                  runId,
+                  userId,
+                  serviceAccountId,
+                  virtualKeyId,
+                  passthroughVirtualKeyId,
+                  appId: attributedAppId,
+                  sessionId,
+                  sessionSource,
+                  source,
+                  authMethod,
+                  authenticatedAppId: authenticatedApp?.id,
+                  authenticatedAppName: authenticatedApp?.name,
+                  billingTeamId,
+                  type: provider.interactionType,
+                  request:
+                    requestAdapter.getOriginalRequest() as InteractionRequest,
+                  processedRequest: null,
+                  response: { error: attempt.failureReason ?? "failed" },
+                  model: actualModel,
+                  baselineModel: actualModel,
+                  // A refused attempt is free. One we cut off had read the
+                  // prompt, so it carries that input as an estimate.
+                  inputTokens: cutOff?.inputTokens ?? 0,
+                  inputTokensEstimated: cutOff !== undefined,
+                  outputTokens: 0,
+                  cost: cutOff ? cutOff.cost : "0",
+                  baselineCost: cutOff?.cost,
+                },
+                encryptedChat,
+                streamTiming,
+                attributionLabels,
+                upstreamAttempt: attempt,
+              });
+            },
+            setResponseHeaders: (attempt) => {
+              if (reply.raw.headersSent) return;
+              reply.raw.setHeader("x-archestra-pool", modelPoolPlan.poolName);
+              reply.raw.setHeader(
+                "x-archestra-attempts",
+                String(attempt.attempt ?? 1),
+              );
+              if (attempt.providerApiKeyId) {
+                reply.raw.setHeader(
+                  "x-archestra-provider-key",
+                  attempt.providerApiKeyId,
+                );
+              }
+            },
+          }
+        : undefined;
 
     if (pluginContext) {
       await pluginRegistry.onPrompt({
@@ -1605,12 +1946,19 @@ export async function handleLLMProxy<
         `[${providerName}Proxy] Replaced unpaired surrogates in the outbound request body; the provider would have rejected it as malformed JSON`,
       );
     }
+    const providerRequest =
+      providerName === "anthropic" &&
+      externalAgentId === CLAUDE_DESKTOP_CLIENT_ID &&
+      provider.isSubscriptionCredential?.(apiKey) === true
+        ? withClaudeDesktopSubscriptionPreamble(repairedRequest)
+        : repairedRequest;
+
     // A connection probe is not an agent task. This is request-local and does
     // not alter the client's model, sandbox, approval policy or configuration.
     const finalRequest = (
       connectionVerification
-        ? { ...asRecord(repairedRequest), tool_choice: "none" }
-        : repairedRequest
+        ? { ...asRecord(providerRequest), tool_choice: "none" }
+        : providerRequest
     ) as TRequest;
 
     // The tool names the request declares, in the canonical form tool-call
@@ -1651,8 +1999,30 @@ export async function handleLLMProxy<
         entity,
       ]),
     );
+    attributionLabels = await resolveRequestAttributionLabels(
+      {
+        organizationId: resolvedAgent.organizationId,
+        authMethod,
+        virtualKeyId,
+        passthroughVirtualKeyId,
+        oauthClientId: authenticatedApp?.id,
+        billingTeamId,
+      },
+      requestContext.attributionRows,
+    );
     const ctx: LLMProxyContext<TRequest> = {
+      attributionLabels,
+      throughput: new LlmThroughput({
+        entities: [...uniqueBillingEntities.values()],
+        model: actualModel,
+        provider: providerName,
+        subscription: billingMode === "subscription",
+        rules: requestContext.throughputRules,
+      }),
       usageAccountingMode: config.llmProxy.usageAccountingMode,
+      providerApiKeyId: perKeyChatApiKeyId,
+      upstreamAttempt,
+      ...(modelPool ? { modelPool } : {}),
       billingAttribution: {
         organizationId: resolvedAgent.organizationId,
         environmentId: resolvedAgent.environmentId,
@@ -1738,8 +2108,10 @@ export async function handleLLMProxy<
       }
     }
     if (
-      lifecycleError instanceof ObservedProviderUsageError &&
-      lifecycleError.billingRecorded
+      (lifecycleError instanceof ObservedProviderUsageError &&
+        lifecycleError.billingRecorded) ||
+      (lifecycleError instanceof ThroughputError &&
+        lifecycleError.interactionRecorded)
     )
       return handleError(
         lifecycleError,
@@ -1783,17 +2155,36 @@ export async function handleLLMProxy<
         type: provider.interactionType,
         request: requestAdapter.getOriginalRequest() as InteractionRequest,
         processedRequest: null,
-        response: { error: errorMessage },
+        response: (provider.unavailableUsageAccounting
+          ? withMediaUsageAvailability(
+              { error: errorMessage },
+              {
+                inputTokens: 0,
+                outputTokens: 0,
+                usageUnavailable: true,
+                costUnavailable: true,
+              },
+            )
+          : { error: errorMessage }) as InteractionResponse,
         model: stripClaudeContextVariantSuffix(requestAdapter.getModel()),
         // Mirrors `model`, as every write path does now that nothing rewrites
         // the model in flight. This row carries no cost either way.
         baselineModel: stripClaudeContextVariantSuffix(
           requestAdapter.getModel(),
         ),
-        inputTokens: 0,
-        outputTokens: 0,
+        inputTokens: provider.unavailableUsageAccounting ? null : 0,
+        outputTokens: provider.unavailableUsageAccounting ? null : 0,
+        // A pool member that failed before answering is free, like the
+        // attempts before it.
+        ...(upstreamAttempt.attemptOutcome === "failed" ? { cost: "0" } : {}),
       };
-      await persistProxyInteraction({ record, encryptedChat, streamTiming });
+      await persistProxyInteraction({
+        record,
+        encryptedChat,
+        streamTiming,
+        attributionLabels,
+        upstreamAttempt,
+      });
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: resolvedAgent.id },
@@ -1888,6 +2279,7 @@ async function handleStreaming<
   ensureStreamHeaders: () => void,
 ): Promise<FastifyReply> {
   const {
+    attributionLabels,
     agent,
     originalRequest,
     actualModel,
@@ -1936,6 +2328,11 @@ async function handleStreaming<
   let streamCompleted = false;
   let failedStreamResponse: unknown;
   let clientGone = false;
+  // Set once a terminal reaches the client, whichever path released it: the
+  // stream loop, the policy release, or a failed generation. An error frame
+  // after it must not end the response a second time.
+  const carriesStreamTerminal = provider.carriesStreamTerminal;
+  let terminalSent = false;
 
   // Every byte to the client goes through here so the keep-alive knows when
   // the stream last spoke. The keep-alive itself only ever writes to a stream
@@ -1985,6 +2382,8 @@ async function handleStreaming<
     ensureStreamHeaders();
     reply.raw.write(data);
     keepAlive.touch();
+    if (carriesStreamTerminal && !terminalSent)
+      terminalSent = carriesStreamTerminal(data);
   };
   const childStream = new BufferedChildStream({
     enabled: bufferModelResponse,
@@ -2026,13 +2425,27 @@ async function handleStreaming<
         type: provider.interactionType,
         request: originalRequest as InteractionRequest,
         processedRequest: request as InteractionRequest,
-        response: response as InteractionResponse,
+        response: (provider.unavailableUsageAccounting
+          ? withMediaUsageAvailability(response, {
+              inputTokens: 0,
+              outputTokens: 0,
+              usageUnavailable: true,
+              costUnavailable: true,
+            })
+          : response) as InteractionResponse,
         model: actualModel,
-        inputTokens: 0,
-        outputTokens: 0,
+        inputTokens: provider.unavailableUsageAccounting ? null : 0,
+        outputTokens: provider.unavailableUsageAccounting ? null : 0,
         toolCallBlock,
       };
-      await persistProxyInteraction({ record, encryptedChat, streamTiming });
+      await persistProxyInteraction({
+        record,
+        encryptedChat,
+        streamTiming,
+        attributionLabels,
+        throughput: ctx.throughput,
+        upstreamAttempt: ctx.upstreamAttempt,
+      });
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: agent.id },
@@ -2057,6 +2470,13 @@ async function handleStreaming<
   const finalizeInteraction = async () => {
     if (accountingFinalized) return;
     accountingFinalized = true;
+    try {
+      await ctx.throughput?.reconcile(streamAdapter.state.usage);
+    } catch (error) {
+      // A committed stream cannot become an HTTP 503. Preserve interaction
+      // accounting and surface the metering failure in server logs.
+      logger.error({ err: error }, "Unable to record streaming token usage");
+    }
 
     // Always record interaction (whether stream completed or was aborted)
     if (!upstreamFinished && !streamCompleted) {
@@ -2095,7 +2515,7 @@ async function handleStreaming<
     }
     if (usage) {
       withSessionContext(sessionId, () => {
-        if (ctx.usageAccountingMode !== "enforce")
+        if (ctx.usageAccountingMode !== "enforce" && !usage.usageUnavailable)
           metrics.llm.reportLLMTokens(
             providerName,
             agent,
@@ -2124,9 +2544,10 @@ async function handleStreaming<
 
       const costs = await calculateInteractionCosts({
         usageAccountingMode: ctx.usageAccountingMode,
-        actualModel,
+        providerApiKeyId: ctx.providerApiKeyId,
+        actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
         usage,
-        providerName,
+        providerName: ctx.upstreamAttempt.provider ?? providerName,
       });
 
       withSessionContext(sessionId, () => {
@@ -2192,7 +2613,14 @@ async function handleStreaming<
           costs,
           toolCallBlock,
         });
-        await persistProxyInteraction({ record, encryptedChat, streamTiming });
+        await persistProxyInteraction({
+          record,
+          encryptedChat,
+          streamTiming,
+          attributionLabels,
+          throughput: ctx.throughput,
+          upstreamAttempt: ctx.upstreamAttempt,
+        });
       } catch (interactionError) {
         logger.error(
           { err: interactionError, profileId: agent.id },
@@ -2235,9 +2663,8 @@ async function handleStreaming<
       authenticatedApp,
       source,
       serverAddress: provider.getBaseUrl(),
-      promptMessages: provider
-        .createRequestAdapter(originalRequest)
-        .getProviderMessages(),
+      getPromptMessages: () =>
+        provider.createRequestAdapter(originalRequest).getProviderMessages(),
       suppressContent,
       parentContext,
       user: toSpanUserInfo(resolvedUser),
@@ -2245,9 +2672,21 @@ async function handleStreaming<
         if (pluginRegistry && pluginContext) {
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         }
-        const stream = await openUpstreamWithRetry({
-          open: async () =>
-            withFirstChunk(await provider.executeStream(client, request)),
+        if (reply.raw.destroyed)
+          throw new ApiError(499, "Client disconnected before inference");
+        await ctx.throughput?.admit(request);
+        if (reply.raw.destroyed) {
+          await ctx.throughput?.cancelBeforeSend();
+          throw new ApiError(499, "Client disconnected before inference");
+        }
+        const stream = await openUpstream({
+          ctx,
+          transport: ownTransport(provider, client),
+          open: async (transport) =>
+            withFirstChunk(
+              (await transport.executeStream(request)) as AsyncIterable<TChunk>,
+            ),
+          memberTimeoutMs: MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
           // Gemini's SDK loses the HTTP status when an error body is cut off;
           // that is indistinguishable from a transport failure, so don't retry.
           isRetryable: (error) =>
@@ -2389,9 +2828,10 @@ async function handleStreaming<
           }
           const cost = await calculateUsageCost({
             usageAccountingMode: ctx.usageAccountingMode,
-            model: actualModel,
+            providerApiKeyId: ctx.providerApiKeyId,
+            model: ctx.upstreamAttempt.modelId ?? actualModel,
             usage: state.usage,
-            provider: providerName,
+            provider: ctx.upstreamAttempt.provider ?? providerName,
           });
           if (cost !== undefined) {
             llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
@@ -2828,22 +3268,42 @@ async function handleStreaming<
       );
       streamError = settlementError;
     }
+    if (provider.binaryStream && reply.raw.headersSent) {
+      reply.raw.destroy();
+      return reply;
+    }
     const formatStreamErrorFrame = provider.formatStreamErrorFrame;
+    // Read once, here: nothing else writes to the client before the error
+    // frame, so `terminalSent` cannot change after this point.
+    const frameContext: StreamErrorFrameContext = {
+      responseId:
+        streamAdapter.clientResponse?.id ??
+        (streamAdapter.state.responseId || undefined),
+      model:
+        streamAdapter.clientResponse?.model ??
+        (streamAdapter.state.model || actualModel),
+      terminalSent,
+    };
     return handleError(
       streamError,
       reply,
       provider.extractErrorMessage,
       true,
       provider.extractInternalCode.bind(provider),
-      eofError && formatStreamErrorFrame
+      formatStreamErrorFrame
         ? (event: unknown) => {
             const source = asRecord(event);
-            return formatStreamErrorFrame({
-              ...source,
-              error: { ...asRecord(source?.error), code: eofError.code },
-            });
+            return formatStreamErrorFrame(
+              eofError
+                ? {
+                    ...source,
+                    error: { ...asRecord(source?.error), code: eofError.code },
+                  }
+                : event,
+              frameContext,
+            );
           }
-        : formatStreamErrorFrame,
+        : undefined,
       provider.translatesWireFormat,
     );
   } finally {
@@ -2870,6 +3330,7 @@ async function handleNonStreaming<
   ctx: LLMProxyContext<TRequest>,
 ): Promise<FastifyReply> {
   const {
+    attributionLabels,
     agent,
     originalRequest,
     actualModel,
@@ -2910,6 +3371,7 @@ async function handleNonStreaming<
   let billingMode = initialBillingMode;
   const requestStartTime = Date.now();
   let codexGenerationError: CodexResponsesGenerationError | undefined;
+  let tokenAccountingError: unknown;
 
   logger.debug(
     { model: actualModel },
@@ -2934,9 +3396,8 @@ async function handleNonStreaming<
     authenticatedApp,
     source,
     serverAddress: provider.getBaseUrl(),
-    promptMessages: provider
-      .createRequestAdapter(originalRequest)
-      .getProviderMessages(),
+    getPromptMessages: () =>
+      provider.createRequestAdapter(originalRequest).getProviderMessages(),
     suppressContent,
     parentContext,
     user: toSpanUserInfo(resolvedUser),
@@ -2949,8 +3410,21 @@ async function handleNonStreaming<
         if (pluginRegistry && pluginContext) {
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         }
-        result = await openUpstreamWithRetry({
-          open: () => provider.execute(client, request),
+        if (reply.raw.destroyed)
+          throw new ApiError(499, "Client disconnected before inference");
+        await ctx.throughput?.admit(request);
+        if (reply.raw.destroyed) {
+          await ctx.throughput?.cancelBeforeSend();
+          throw new ApiError(499, "Client disconnected before inference");
+        }
+        result = await openUpstream({
+          ctx,
+          transport: ownTransport(provider, client),
+          open: async (transport) =>
+            (await llmProxyTiming.upstream(reply, () =>
+              transport.execute(request),
+            )) as TResponse,
+          memberTimeoutMs: poolResponseTimeoutMs(request),
           // See the streaming path: Gemini cannot safely classify this boundary.
           isRetryable: (error) =>
             providerName !== "gemini" &&
@@ -2967,11 +3441,22 @@ async function handleNonStreaming<
         billingMode = getBillingMode();
       } catch (error) {
         if (error instanceof ObservedProviderUsageError) {
+          try {
+            await ctx.throughput?.reconcile(error.usage);
+          } catch (accountingError) {
+            // Preserve the provider failure and its billed interaction even
+            // when recording the reported token usage also fails.
+            logger.error(
+              { err: accountingError },
+              "Unable to record tokens from failed provider generation",
+            );
+          }
           const costs = await calculateInteractionCosts({
-            actualModel,
+            actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
             usage: error.usage,
-            providerName,
+            providerName: ctx.upstreamAttempt.provider ?? providerName,
             usageAccountingMode: ctx.usageAccountingMode,
+            providerApiKeyId: ctx.providerApiKeyId,
           });
           const record = buildInteractionRecord({
             agent,
@@ -3002,6 +3487,9 @@ async function handleNonStreaming<
             record,
             encryptedChat,
             streamTiming,
+            attributionLabels,
+            throughput: ctx.throughput,
+            upstreamAttempt: ctx.upstreamAttempt,
           });
           if (costs.billingUsage?.mode === "enforce")
             withSessionContext(sessionId, () =>
@@ -3053,6 +3541,13 @@ async function handleNonStreaming<
         );
       }
       const adapter = provider.createResponseAdapter(result, request);
+      try {
+        await ctx.throughput?.reconcile(adapter.getUsage());
+      } catch (error) {
+        // Preserve interaction/spend accounting for the completed provider
+        // call before reporting token-meter storage failure to the client.
+        tokenAccountingError = error;
+      }
 
       // Set response attributes on span per OTEL GenAI semconv. Correct zero-input
       // usage here so the span cost and the downstream cost/persistence (which
@@ -3108,9 +3603,10 @@ async function handleNonStreaming<
       }
       const cost = await calculateUsageCost({
         usageAccountingMode: ctx.usageAccountingMode,
-        model: actualModel,
+        providerApiKeyId: ctx.providerApiKeyId,
+        model: ctx.upstreamAttempt.modelId ?? actualModel,
         usage,
-        provider: providerName,
+        provider: ctx.upstreamAttempt.provider ?? providerName,
       });
       if (cost !== undefined) {
         llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
@@ -3294,9 +3790,10 @@ async function handleNonStreaming<
       // Record interaction with refusal (usage already corrected above)
       const costs = await calculateInteractionCosts({
         usageAccountingMode: ctx.usageAccountingMode,
-        actualModel,
+        providerApiKeyId: ctx.providerApiKeyId,
+        actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
         usage,
-        providerName,
+        providerName: ctx.upstreamAttempt.provider ?? providerName,
       });
 
       withSessionContext(sessionId, () => {
@@ -3375,7 +3872,15 @@ async function handleNonStreaming<
         record: refusalRecord,
         encryptedChat,
         streamTiming,
+        attributionLabels,
+        throughput: ctx.throughput,
+        upstreamAttempt: ctx.upstreamAttempt,
       });
+      if (tokenAccountingError) {
+        if (tokenAccountingError instanceof ThroughputError)
+          tokenAccountingError.interactionRecorded = true;
+        throw tokenAccountingError;
+      }
 
       if (pluginRegistry && pluginContext) {
         // A refusal is a terminal answer: the turn ends here, as it does on
@@ -3460,9 +3965,10 @@ async function handleNonStreaming<
   // its HTTP wrapper records duration only. Other providers own HTTP tokens.
   const costs = await calculateInteractionCosts({
     usageAccountingMode: ctx.usageAccountingMode,
-    actualModel,
+    providerApiKeyId: ctx.providerApiKeyId,
+    actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
     usage,
-    providerName,
+    providerName: ctx.upstreamAttempt.provider ?? providerName,
   });
 
   withSessionContext(sessionId, () => {
@@ -3548,7 +4054,14 @@ async function handleNonStreaming<
       costs,
       toolCallBlock: toToolCallBlock(null, blockedToolCalls),
     });
-    await persistProxyInteraction({ record, encryptedChat, streamTiming });
+    await persistProxyInteraction({
+      record,
+      encryptedChat,
+      streamTiming,
+      attributionLabels,
+      throughput: ctx.throughput,
+      upstreamAttempt: ctx.upstreamAttempt,
+    });
     responsePersisted = true;
   } catch (interactionError) {
     logger.error(
@@ -3557,6 +4070,11 @@ async function handleNonStreaming<
     );
     if (ctx.usageAccountingMode === "enforce")
       throw new ApiError(503, "Unable to settle LLM usage");
+  }
+  if (tokenAccountingError) {
+    if (tokenAccountingError instanceof ThroughputError)
+      tokenAccountingError.interactionRecorded = responsePersisted;
+    throw tokenAccountingError;
   }
 
   if (generationFailed) {
@@ -3817,6 +4335,76 @@ function planDispatchRewrites(params: {
   return rewritten;
 }
 
+/**
+ * Opens the upstream call: on the request's own client, or across its model
+ * pool's members when it has one. Either way, the provider key that answered
+ * (or failed last) is left in `ctx.upstreamAttempt` and priced in
+ * `ctx.providerApiKeyId`.
+ */
+async function openUpstream<TRequest, T>(params: {
+  ctx: LLMProxyContext<TRequest>;
+  transport: MemberTransport;
+  open: (transport: MemberTransport) => Promise<T>;
+  /** Moves past a silent pool member; see openThroughModelPool. */
+  memberTimeoutMs?: number;
+  isRetryable: (error: unknown) => boolean;
+  shouldContinue: () => boolean;
+  onRetry?: (event: {
+    attempt: number;
+    delayMs: number;
+    error: unknown;
+  }) => void;
+}): Promise<T> {
+  const { ctx, transport, open, memberTimeoutMs, ...retry } = params;
+  const pool = ctx.modelPool;
+  if (!pool) {
+    return openUpstreamWithRetry({ open: () => open(transport), ...retry });
+  }
+  try {
+    return await openThroughModelPool({
+      plan: pool.plan,
+      attempt: ctx.upstreamAttempt,
+      transportFor: pool.transportFor,
+      open,
+      memberTimeoutMs,
+      recordFailedAttempt: pool.recordFailedAttempt,
+      ...retry,
+    });
+  } finally {
+    ctx.providerApiKeyId = ctx.upstreamAttempt.providerApiKeyId;
+    pool.setResponseHeaders(ctx.upstreamAttempt);
+  }
+}
+
+/**
+ * How long a pool member that isn't the last may take to answer a
+ * non-streaming request: the floor, plus time for every output token the
+ * request allows. A request with no output limit gets the most.
+ */
+function poolResponseTimeoutMs(request: unknown): number {
+  const maxOutputTokens = requestedMaxOutputTokens(request);
+  if (maxOutputTokens === undefined) return MODEL_POOL_MAX_RESPONSE_TIMEOUT_MS;
+  return Math.min(
+    MODEL_POOL_MAX_RESPONSE_TIMEOUT_MS,
+    MODEL_POOL_RESPONSE_TIMEOUT_MS +
+      maxOutputTokens * MODEL_POOL_MS_PER_OUTPUT_TOKEN,
+  );
+}
+
+/** The request's own provider and client, as a transport. */
+function ownTransport(
+  provider: Pick<
+    LLMProvider<unknown, unknown, unknown, unknown, unknown>,
+    "execute" | "executeStream"
+  >,
+  client: unknown,
+): MemberTransport {
+  return {
+    execute: (request) => provider.execute(client, request),
+    executeStream: (request) => provider.executeStream(client, request),
+  };
+}
+
 function logUpstreamRetry(params: {
   attempt: number;
   delayMs: number;
@@ -3929,22 +4517,45 @@ async function persistProxyInteraction({
   record,
   encryptedChat,
   streamTiming,
+  attributionLabels,
+  throughput,
+  upstreamAttempt,
 }: {
   record: InsertInteraction;
   encryptedChat: EncryptedChatAuditDisposition;
   streamTiming: StreamTiming;
+  attributionLabels?: AttributionLabels;
+  throughput?: LlmThroughput;
+  upstreamAttempt?: UpstreamAttempt;
 }): Promise<void> {
   // Snapshot before database work; streaming calls reach here after consumption,
   // so this includes the full stream rather than just time to its first byte.
   record = {
     ...record,
-    durationMs: Math.max(0, Date.now() - streamTiming.requestReceivedAt),
+    attributionLabels,
+    durationMs: Math.max(
+      0,
+      Date.now() -
+        (upstreamAttempt?.startedAt ?? streamTiming.requestReceivedAt),
+    ),
+    // A pooled attempt records the member model it was sent as; the pool's
+    // name stays the baseline the client asked for.
+    model: upstreamAttempt?.modelId ?? record.model,
+    providerApiKeyId: upstreamAttempt?.providerApiKeyId,
+    modelPoolId: upstreamAttempt?.modelPoolId,
+    attempt: upstreamAttempt?.attempt,
+    attemptOutcome: upstreamAttempt?.attemptOutcome,
+    failureReason: upstreamAttempt?.failureReason,
   };
-  await InteractionModel.create(
+  await InteractionModel.record(
     encryptedChat.kind === "redact"
       ? redactEncryptedChatInteraction(record)
       : record,
     encryptedChat.kind === "encrypt" ? encryptedChat.audit : null,
+  );
+  await throughput?.settleSpend(
+    record.cost,
+    record.billingMode === "subscription" ? "subscription" : "metered",
   );
 }
 
@@ -4019,4 +4630,16 @@ function readEncryptedChatDek(request: FastifyRequest): Buffer | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * The request's proxy state, served from the proxy configuration cache when
+ * it is live. Budget usage is not part of it; limit checks read usage fresh.
+ */
+async function readProxyRequestState(
+  params: Parameters<typeof ProxyRequestContextModel.readForProxy>[0],
+): Promise<ProxyRequestState> {
+  return configCache.read(`context:${JSON.stringify(params)}`, () =>
+    ProxyRequestContextModel.readForProxy(params),
+  );
 }

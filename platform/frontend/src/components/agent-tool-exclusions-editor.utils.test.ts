@@ -194,7 +194,7 @@ describe("computeDefaultExclusionToolIds", () => {
 
   it("keeps the runtime handoff tools enabled only on a personal gateway", () => {
     const tools = [
-      { id: "t-start-run", name: "acme__start_run" },
+      { id: "t-start-run", name: "acme__start_agent_run" },
       { id: "t-list-agents", name: "archestra__list_agents" },
       { id: "t-read-ws", name: "archestra__read_workspace_file" },
       { id: "t-create-agent", name: "archestra__create_agent" },

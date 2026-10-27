@@ -11,7 +11,7 @@ import {
   useChatAgentReferences,
   useChatAgents,
 } from "./agent.query";
-import { useInitialChatModelState } from "./chat/use-initial-chat-model-state.hook";
+import { useInitialChatModelState } from "./chat/use-initial-chat-model-state";
 
 const origin = "http://localhost:9000";
 const server = setupServer();
@@ -89,7 +89,6 @@ it("waits for exact preferred references before resolving a project default outs
         projectDefaultAgentId: "project-default",
         modelsByProvider: {},
         chatApiKeys: [],
-        memberDefault: null,
         canUseSavedAgent: true,
         isPermissionResolving: false,
         isOrgLoading: false,
@@ -157,7 +156,6 @@ it("fetches only explicit pages and preserves an off-page manual selection from 
         defaultAgentId: null,
         modelsByProvider: {},
         chatApiKeys: [],
-        memberDefault: null,
         canUseSavedAgent: true,
         isPermissionResolving: false,
         isOrgLoading: false,

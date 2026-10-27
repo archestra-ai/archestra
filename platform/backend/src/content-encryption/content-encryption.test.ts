@@ -149,6 +149,21 @@ describe("content encryption", () => {
       });
       // Public return value is plaintext…
       expect(created.request).toEqual(request);
+      expect(created.response).toEqual(response);
+      expect(created.sessionPreview).toMatchObject({
+        lastUserMessagePreview: "top secret question",
+      });
+      // …also when the id was already written and the stored row comes back,
+      // which keeps the persisted content rather than the retry's.
+      const replayed = await InteractionModel.create({
+        id: created.id,
+        profileId: null,
+        request: { ...request, model: "retry-model" },
+        response: { ...response, id: "retry-response" },
+        type: "anthropic:messages",
+      });
+      expect(replayed.request).toEqual(request);
+      expect(replayed.response).toEqual(response);
 
       // …while the stored row is an envelope.
       const raw = await rawInteraction(created.id);
@@ -273,31 +288,6 @@ describe("content encryption", () => {
         { search: "email-server" },
       );
       expect(byServer.data).toHaveLength(1);
-    });
-
-    test("first-successful-call scan decrypts results instead of trusting SQL isError", async () => {
-      setKeys(SECRET_A);
-      const { McpToolCallModel } = await import("@/models");
-      // Oldest row is an encrypted ERROR — the plain SQL predicate cannot see
-      // into the envelope and would misread it as the first success.
-      const errorCall = await McpToolCallModel.create({
-        mcpServerName: "email-server",
-        method: "tools/call",
-        toolCall,
-        toolResult: { ...toolResult, isError: true },
-      });
-      expect(await McpToolCallModel.getFirstSuccessfulToolCallAt()).toBeNull();
-
-      const successCall = await McpToolCallModel.create({
-        mcpServerName: "email-server",
-        method: "tools/call",
-        toolCall,
-        toolResult,
-      });
-      const firstSuccessAt =
-        await McpToolCallModel.getFirstSuccessfulToolCallAt();
-      expect(firstSuccessAt).toEqual(successCall.createdAt);
-      expect(firstSuccessAt).not.toEqual(errorCall.createdAt);
     });
   });
 

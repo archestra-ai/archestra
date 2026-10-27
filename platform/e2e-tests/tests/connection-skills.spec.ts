@@ -65,10 +65,14 @@ test("connection loads skills without treating the proxy as a skill agent", asyn
     await page.getByRole("button", { name: "Choose what to include" }).click();
     await expect(page.getByRole("switch", { name: /^Skills/ })).toBeChecked();
     await page.keyboard.press("Escape");
-    const prepare = page.getByRole("button", { name: "Prepare installer" });
+    const prepare = page.getByRole("button", { name: "Download installer" });
     await expect(prepare).toBeVisible();
     expect(setupRequests).toEqual([]);
+    const download = page.waitForEvent("download");
     await prepare.click();
+    expect((await download).suggestedFilename()).toBe(
+      "Connect-Claude-Desktop.mcpb",
+    );
     await expect(
       page.getByRole("link", { name: "Download installer" }),
     ).toBeVisible();

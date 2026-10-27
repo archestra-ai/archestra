@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 export function makeReturnLabelReview(offerId: string) {
-  const tool = "archestra__start_run";
+  const tool = "archestra__start_agent_run";
   const args = {
     agent_id: "00000000-0000-4000-8000-000000000001",
     message: "Read the synthetic specification. ".repeat(120),

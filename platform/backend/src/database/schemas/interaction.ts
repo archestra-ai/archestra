@@ -22,6 +22,7 @@ import type {
   InteractionResponse,
   ToolCallBlock,
 } from "@/types";
+import type { AttributionLabels } from "@/types/attribution-label";
 import type { InteractionSessionPreview } from "@/types/interaction";
 import agentsTable from "./agent";
 import environmentsTable from "./environment";
@@ -130,6 +131,24 @@ const interactionsTable = pgTable(
      */
     appId: uuid("app_id"),
     /**
+     * Provider key (chat_api_keys row) that served this call, when it went
+     * through a managed key. Not a foreign key and not indexed, for the same
+     * reason as `connectorId`: a deleted key's id is kept and resolves to no
+     * name on read.
+     */
+    providerApiKeyId: uuid("provider_api_key_id"),
+    /**
+     * Model pool this call was balanced through, with the attempt's 1-based
+     * number and outcome. A request that fails over writes one row per
+     * attempt, and a failed one says why in `failureReason`. A refused
+     * attempt carries no tokens or cost; one cut off by a timeout carries an
+     * estimate of the input it read. Null on calls that no pool handled.
+     */
+    modelPoolId: uuid("model_pool_id"),
+    attempt: integer("attempt"),
+    attemptOutcome: varchar("attempt_outcome"),
+    failureReason: text("failure_reason"),
+    /**
      * Session ID to group related LLM requests together.
      * Can be extracted from:
      * - X-Archestra-Session-Id header (explicit)
@@ -187,6 +206,8 @@ const interactionsTable = pgTable(
      * history on this write-hot table.
      */
     billingTeamId: text("billing_team_id"),
+    /** Admission-time labels; later edits/deletions must not rewrite showback. */
+    attributionLabels: jsonb("attribution_labels").$type<AttributionLabels>(),
     request: jsonb("request").$type<InteractionRequest>().notNull(),
     sessionPreview: jsonb("session_preview").$type<InteractionSessionPreview>(),
     processedRequest: jsonb("processed_request").$type<InteractionRequest>(),

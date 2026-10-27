@@ -3,7 +3,7 @@
 # the Alpine packages/binaries have historically lagged on Go patch releases, so
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
 ARG GOLANG_IMAGE=golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0
-ARG NODE_IMAGE=node:24-alpine3.23@sha256:2bdb65ed1dab192432bc31c95f94155ca5ad7fc1392fb7eb7526ab682fa5bf14
+ARG NODE_IMAGE=node:24-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2
 ARG KIND_VERSION=v0.31.0
 ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
 ARG DOCKER_CLI_VERSION=v29.3.0
@@ -451,7 +451,10 @@ ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 ENV ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS="620000"
 
 # Cloud database CA bundle for SSL certificate validation
-# This allows sslmode=require to work with AWS RDS and Google Cloud SQL
+# This allows sslmode=require to work with AWS RDS and Google Cloud SQL.
+# Node reads it through NODE_EXTRA_CA_CERTS. The OpenAPPA runtime connects
+# through OpenSSL, which reads only the system store, so the RUN below also
+# appends the bundle to /etc/ssl/certs/ca-certificates.crt.
 ENV NODE_EXTRA_CA_CERTS="/etc/ssl/certs/cloud-database-ca-bundle.pem"
 
 # Vendor cloud database CA bundles into the repository so image builds do not
@@ -489,6 +492,7 @@ RUN apk --no-cache upgrade && \
         "postgresql18>=18.5-r0" postgresql-pgvector su-exec git git-daemon && \
     # Combine all CA bundles
     cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
+    cat /etc/ssl/certs/cloud-database-ca-bundle.pem >> /etc/ssl/certs/ca-certificates.crt && \
     rm -f /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem && \
     # Remove NPM-related files and directories (as we do not use npm and it just brings extra dependencies/vulnerabilities)
     # See https://github.com/grafana/grafana-image-renderer/pull/625

@@ -65,6 +65,10 @@ beforeEach(() => {
     error: null,
   } as Awaited<ReturnType<typeof authClient.getSession>>);
   server.use(
+    // Let cold-load auth fall back to the individual permission/org handlers.
+    http.get(`${origin}/api/bootstrap`, () =>
+      HttpResponse.json(null, { status: 401 }),
+    ),
     http.get(`${origin}/api/environments`, () => {
       environmentRequests++;
       return HttpResponse.json({

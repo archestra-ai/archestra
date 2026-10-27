@@ -34,6 +34,10 @@ describe("Vertex AI location resolution", () => {
 
     test("reports global-only models as unreachable", () => {
       expect(isVertexModelReachable("gemini-3.5-flash")).toBe(false);
+      expect(isVertexModelReachable("gemini-nano-banana-2.1")).toBe(false);
+      expect(resolveVertexLocation("gemini-nano-banana-2.1")).toBe(
+        "us-central1",
+      );
       expect(isVertexModelReachable("gemini-embedding-2")).toBe(false);
       expect(isVertexModelReachable("gemini-2.5-pro")).toBe(true);
       expect(isVertexModelReachable("gemini-embedding-001")).toBe(true);
@@ -48,6 +52,7 @@ describe("Vertex AI location resolution", () => {
 
     test("sends only global-only models to the global endpoint", () => {
       expect(resolveVertexLocation("gemini-3.5-flash")).toBe("global");
+      expect(resolveVertexLocation("gemini-nano-banana-2.1")).toBe("global");
       expect(resolveVertexLocation("gemini-embedding-2")).toBe("global");
       // Everything the region can serve stays in the region, so enabling the
       // fallback does not relocate traffic that had no need to move.

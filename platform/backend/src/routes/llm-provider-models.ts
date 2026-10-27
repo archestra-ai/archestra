@@ -26,6 +26,8 @@ import {
   TeamModel,
 } from "@/models";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
+import { classifyAzureModelCapabilities } from "@/services/azure-model-capabilities";
+import { modelCostBackfillService } from "@/services/model-cost-backfill";
 import { withDistinctDisplayNames } from "@/services/model-sync";
 import { syncModelsForVisibleApiKeys } from "@/services/model-sync-schedule";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -43,6 +45,12 @@ import {
   SelectModelSchema,
   UuidIdSchema,
 } from "@/types";
+import {
+  CostBackfillPreviewSchema,
+  CostBackfillPricesSchema,
+  ModelCostBackfillResponseSchema,
+} from "@/types/model-cost-backfill";
+import { NamedTimeZoneSchema } from "@/types/time-zone";
 import { BulkIdsSchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 import { registerEntityLabelRoutes } from "./entity-labels";
 
@@ -344,10 +352,13 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, user }, reply) => {
-      // No visible keys: a picker needs each model and its `isBest` flag
-      // (still taken across every link), not the keys that serve it.
+      // Resolve prices from the caller's instances; conflicting rates remain
+      // unknown on a picker that has not selected a provider key yet.
       const linked = await LlmProviderApiKeyModelLinkModel.findLinkedModels({
-        visibleKeyIds: [],
+        visibleKeyIds: await LlmProviderApiKeyModel.getVisibleKeyIds(
+          organizationId,
+          user.id,
+        ),
       });
       const unlinked = await findUnlinkedLlmProxyModels(linked);
       const options = [
@@ -472,21 +483,11 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      await ResourcePermissions.require({
-        organizationId,
+      const existing = await requireEditableModel({
+        id,
         userId: user.id,
-        resource: "llmModel",
-        scope: id,
-        action: "update",
+        organizationId,
       });
-      // SPDX-SnippetEnd
-      const existing = await ModelModel.findById(id);
-      if (!existing) {
-        throw new ApiError(404, "Model not found");
-      }
 
       // Validated here rather than in the body schema, which carries neither the
       // provider nor the context length. The route gate (`llmModel:update`) is
@@ -609,6 +610,96 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(updated);
     },
   );
+
+  fastify.post(
+    "/api/llm-models/:id/cost-backfill/preview",
+    {
+      schema: {
+        operationId: RouteId.PreviewModelCostBackfill,
+        description:
+          "Preview recomputing the recorded cost of a model's past requests: recorded and recomputed cost per day, and what a recompute from `since` would change. Pass `prices` to preview unsaved custom prices.",
+        tags: ["LLM Models"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z.object({
+          /** IANA time zone the days are bucketed in. */
+          timeZone: NamedTimeZoneSchema,
+          since: z.coerce.date().nullable().optional(),
+          prices: CostBackfillPricesSchema.optional(),
+        }),
+        response: constructResponseSchema(CostBackfillPreviewSchema),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      const model = await requireEditableModel({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      return reply.send(
+        await modelCostBackfillService.getPreview({
+          model,
+          prices: body.prices,
+          timeZone: body.timeZone,
+          since: body.since ?? null,
+        }),
+      );
+    },
+  );
+
+  fastify.post(
+    "/api/llm-models/:id/cost-backfill",
+    {
+      schema: {
+        operationId: RouteId.StartModelCostBackfill,
+        description:
+          "Recompute the recorded cost of a model's past requests from `since` (all of them when null) at its current prices. Runs in the background; poll the GET endpoint for progress. Requests settled under an enforced cost limit keep their cost.",
+        tags: ["LLM Models"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z.object({
+          since: z.coerce.date().nullable(),
+          prices: CostBackfillPricesSchema.optional().describe(
+            "The custom prices you saved and expect the recompute to use. When the model's prices no longer match, nothing starts (409).",
+          ),
+        }),
+        response: constructResponseSchema(ModelCostBackfillResponseSchema),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      const model = await requireEditableModel({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      const backfill = await modelCostBackfillService.start({
+        model,
+        since: body.since,
+        expectedPrices: body.prices,
+        organizationId,
+        userId: user.id,
+      });
+      return reply.send(backfill);
+    },
+  );
+
+  fastify.get(
+    "/api/llm-models/:id/cost-backfill",
+    {
+      schema: {
+        operationId: RouteId.GetModelCostBackfill,
+        description:
+          "The model's most recent cost recompute and its progress, or null when none was started.",
+        tags: ["LLM Models"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(
+          ModelCostBackfillResponseSchema.nullable(),
+        ),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      await requireEditableModel({ id, userId: user.id, organizationId });
+      return reply.send(await modelCostBackfillService.getLatest(id));
+    },
+  );
 };
 
 export default llmModelsRoutes;
@@ -693,12 +784,59 @@ export async function getAvailableLlmModels(params: {
     );
   }
 
+  const azureLinks =
+    await LlmProviderApiKeyModelLinkModel.findCapabilitiesForApiKeyModels(
+      apiKeyIds,
+    );
+  filteredModels = filteredModels.map((entry) => {
+    if (entry.model.provider !== "azure") return entry;
+    const modelLinks = azureLinks
+      .filter((link) => link.model.id === entry.model.id)
+      .map(classifyAzureModelCapabilities);
+    const known = modelLinks.filter((evidence) => evidence.status === "known");
+    const signature = (evidence: (typeof known)[number]) =>
+      JSON.stringify([
+        evidence.kind,
+        evidence.operations,
+        evidence.inputModalities,
+        evidence.outputModalities,
+        evidence.supportsToolCalling,
+      ]);
+    if (
+      known.length > 0 &&
+      (known.length !== modelLinks.length ||
+        known.some((evidence) => signature(evidence) !== signature(known[0])))
+    ) {
+      // One unscoped alias cannot describe conflicting resources. The key-filtered
+      // picker and request resolver retain each resource's exact evidence.
+      return {
+        ...entry,
+        model: {
+          ...entry.model,
+          azureCapabilities: null,
+          inputModalities: null,
+          outputModalities: null,
+          supportsToolCalling: null,
+          embeddingDimensions: null,
+        },
+      };
+    }
+    const evidence = known[0];
+    return {
+      ...entry,
+      model: {
+        ...entry.model,
+        azureCapabilities: evidence?.status === "known" ? evidence : null,
+      },
+    };
+  });
+
   // Filter by embedding status if requested
   if (isEmbedding !== undefined) {
     filteredModels = filteredModels.filter(({ model }) =>
       isEmbedding
-        ? model.embeddingDimensions !== null
-        : model.embeddingDimensions === null,
+        ? ModelModel.supportsEmbeddings(model)
+        : !ModelModel.supportsEmbeddings(model),
     );
   }
 
@@ -931,4 +1069,32 @@ async function filterReadableModels<T extends { id: string }>(params: {
         (grant.scope === "*" || grant.scope === model.id),
     ),
   );
+}
+
+/**
+ * The model, if the caller may edit it. Recomputing past costs is part of
+ * editing a model's prices, so the cost backfill routes share this gate with
+ * the PATCH that sets them.
+ */
+async function requireEditableModel(params: {
+  id: string;
+  userId: string;
+  organizationId: string;
+}): Promise<Model> {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  await ResourcePermissions.require({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    resource: "llmModel",
+    scope: params.id,
+    action: "update",
+  });
+  // SPDX-SnippetEnd
+  const model = await ModelModel.findById(params.id);
+  if (!model) {
+    throw new ApiError(404, "Model not found");
+  }
+  return model;
 }

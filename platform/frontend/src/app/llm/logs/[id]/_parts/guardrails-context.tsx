@@ -16,7 +16,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { toConsultView } from "@/app/consults/logs/_components/consult-details";
+import { toConsultView } from "@/app/consults/logs/_parts/consult-details";
 import { CodeBlock } from "@/components/ai-elements/code-block";
 import { Button } from "@/components/ui/button";
 import {

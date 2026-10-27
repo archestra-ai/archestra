@@ -1,7 +1,11 @@
 import { BUILT_IN_AGENT_IDS, BUILT_IN_AGENT_NAMES } from "@archestra/shared";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
-import { AgentModel } from "@/models";
+import {
+  AgentModel,
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
+} from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -153,6 +157,54 @@ describe("built-in agents routes", () => {
     expect(updateResponse.statusCode).toBe(200);
     const updated = updateResponse.json();
     expect(updated.systemPrompt).toBe(newPrompt);
+  });
+
+  test("can set the fast and smart models of a built-in agent", async ({
+    makeLlmProviderApiKey,
+  }) => {
+    const key = await makeLlmProviderApiKey(organizationId, null, {
+      provider: "openai",
+    });
+    const [normal, fast, smart] = await Promise.all(
+      ["gpt-normal", "gpt-fast", "gpt-smart"].map((modelId) =>
+        ModelModel.create({
+          externalId: `openai/${modelId}`,
+          provider: "openai",
+          modelId,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          supportsToolCalling: true,
+          lastSyncedAt: new Date(),
+        }),
+      ),
+    );
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+      normal.id,
+      fast.id,
+      smart.id,
+    ]);
+    const builtIn = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
+      organizationId,
+    );
+    expect(builtIn).toBeTruthy();
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/agents/${builtIn?.id}`,
+      payload: {
+        llmApiKeyId: key.id,
+        modelId: normal.id,
+        fastModelId: fast.id,
+        smartModelId: smart.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      fastModelId: fast.id,
+      smartModelId: smart.id,
+    });
   });
 
   test("built-in agent excluded from /api/agents by default", async () => {

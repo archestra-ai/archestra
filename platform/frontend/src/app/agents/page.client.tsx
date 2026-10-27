@@ -49,6 +49,7 @@ import {
 } from "@/components/agent-pages/row-click-shield";
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
 import { AgentProviderIndicator } from "@/components/agent-provider-indicator";
+import { AgentScheduleIndicator } from "@/components/agent-schedules-indicator";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
@@ -247,10 +248,10 @@ function Agents() {
     | null;
   const scopeFilter = useScopeFilterParams({
     includeBuiltIn: true,
-    offerAdminAccess: false,
     queryParamsAdapter,
   });
   const labelsFromUrl = searchParams.get("labels");
+  const includeBuiltIn = searchParams.get("builtIn") === "true";
   const statusFromUrl = searchParams.get("status") as
     | "active"
     | "deleted"
@@ -279,6 +280,7 @@ function Agents() {
     access: scopeFilter.access,
     sharedWith: scopeFilter.sharedWith,
     owner: scopeFilter.owner,
+    includeBuiltIn: includeBuiltIn || undefined,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
     providerApiKeyId: providerApiKeyIdFilter,
@@ -619,6 +621,7 @@ function Agents() {
   const hasActiveFilters = !!(
     nameFilter ||
     scopeFilter.hasActiveScopeFilters ||
+    includeBuiltIn ||
     labelsFromUrl ||
     isDeletedView ||
     providerApiKeyIdFilter
@@ -635,6 +638,7 @@ function Agents() {
       access: null,
       sharedWith: null,
       owner: null,
+      builtIn: null,
       labels: null,
       status: null,
       providerApiKeyId: null,
@@ -779,6 +783,14 @@ function Agents() {
             description={agent.description}
             owner={{ resource: agent, currentUserId }}
             labels={agent.labels}
+            nameIndicator={
+              !agent.deletedAt && (
+                <AgentScheduleIndicator
+                  agentId={agent.id}
+                  agentName={agent.name}
+                />
+              )
+            }
             extraBadges={
               <>
                 {agent.runtime != null && (
@@ -1086,7 +1098,7 @@ function Agents() {
                   <ResourceAccessFilter
                     resource="agent"
                     noun="agents"
-                    offerAdminAccess={false}
+                    offerBuiltIn
                     queryParamsAdapter={queryParamsAdapter}
                   />
                   <ResourceScopeFilter

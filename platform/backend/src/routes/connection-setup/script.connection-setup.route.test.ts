@@ -17,6 +17,7 @@ import {
   MemberModel,
   OrganizationModel,
   PluginModel,
+  SkillMarketplaceRepoModel,
   SkillModel,
   SkillShareLinkModel,
   VirtualApiKeyModel,
@@ -24,6 +25,7 @@ import {
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import { readVirtualKeyValue } from "@/services/connection-setup";
+import { deriveMarketplaceName } from "@/skills/marketplace/marketplace-name";
 import { resolveMarketplaceViewer } from "@/skills/marketplace/static-marketplace";
 import {
   accessGrants,
@@ -245,9 +247,11 @@ describe("GET /api/connection-setups/script/:token", () => {
           string,
           Record<string, string>
         >;
-        expect(routes["archestra-anthropic"]).toMatch(
-          /^http:\/\/localhost:9000\/v1\/connection-setup\/[^/]+\/model-router$/,
-        );
+        // The organization's Anthropic key and the user's own Anthropic
+        // sign-in share the client's provider and its route.
+        expect(
+          Object.keys(routes).some((id) => id.startsWith("archestra-")),
+        ).toBe(false);
         expect(routes.anthropic).toMatch(
           /^http:\/\/localhost:9000\/v1\/connection-setup\/[^/]+\/anthropic\/v1$/,
         );
@@ -256,7 +260,6 @@ describe("GET /api/connection-setups/script/:token", () => {
         expect(routeHeaders.anthropic).toEqual({
           [VIRTUAL_KEY_HEADER]: passthroughValue,
         });
-        expect(routeHeaders["archestra-anthropic"]).toBeUndefined();
       }
     });
   }
@@ -633,6 +636,60 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect((await fetchScript(rawToken)).statusCode).toBe(410);
   });
 
+  test.for([
+    "one",
+    "all",
+    "none",
+  ] as const)("Pi delivers exactly the selected shared skills: %s", async (selection, {
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+    const first = await seedSkill({ organizationId, name: "native-checks" });
+    const second = await seedSkill({ organizationId, name: "native-format" });
+    const ids =
+      selection === "all"
+        ? [first.id, second.id]
+        : selection === "one"
+          ? [first.id]
+          : [];
+    const { rawToken } = await createSetup({
+      clientId: "pi",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: gateway.id,
+      provider: "openai",
+      proxyAuth: "provider-key",
+      attributePassthrough: true,
+      model: "openai:gpt-6.1-sol",
+      ...(ids.length ? { skills: { skillIds: ids, ttlDays: 30 } } : {}),
+    });
+    const response = await fetchScript(rawToken);
+    expect(response.statusCode, response.body).toBe(200);
+    const links = await SkillShareLinkModel.listByOrganization({
+      organizationId,
+    });
+    expect(links).toHaveLength(ids.length ? 1 : 0);
+    if (ids.length) {
+      expect(links[0].skills.map((item) => item.id).sort()).toEqual(
+        [...ids].sort(),
+      );
+      expect(response.body).toContain("archestra_skl_");
+    } else {
+      expect(response.body).not.toContain("archestra_skl_");
+    }
+    // Pi uses a share link, so it must not create a shared-marketplace repo
+    // row with a name the client never registers.
+    expect(
+      await SkillMarketplaceRepoModel.findForViewer({
+        organizationId,
+        userId: user.id,
+      }),
+    ).toBeNull();
+    expect((await fetchScript(rawToken)).statusCode).toBe(410);
+  });
+
   test("404s an unknown token", async () => {
     const response = await fetchScript("archestra_con_does-not-exist-at-all");
     expect(response.statusCode).toBe(404);
@@ -745,6 +802,72 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(
       await SkillShareLinkModel.listByOrganization({ organizationId }),
     ).toHaveLength(0);
+  });
+
+  test("a skills-only setup names the marketplace after the repo the user already cloned", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    // Codex registers the marketplace under the served manifest's name, which
+    // the user's repo row freezes. After an app rename the setup must still
+    // remove and guard that name, or the add collides with it.
+    const skill = await seedSkill({ organizationId, name: "alpha" });
+    await OrganizationModel.patch(organizationId, { appName: "Acme Staging" });
+    const derived = await deriveMarketplaceName(organizationId, "skills");
+    expect(derived).toMatch(/^acme-staging-/);
+
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId);
+    await SkillMarketplaceRepoModel.ensureForViewer({
+      organizationId,
+      userId: user.id,
+      marketplaceName: "archestra-old-skills",
+    });
+
+    const renderCodex = async (platform: "linux" | "windows" = "linux") => {
+      const { rawToken } = await createSetup({
+        clientId: "codex",
+        platform,
+        baseUrl: "http://localhost:9000/v1",
+        skills: { skillIds: [skill.id], ttlDays: null },
+      });
+      const response = await fetchScript(rawToken);
+      expect(response.statusCode).toBe(200);
+      return response.body;
+    };
+
+    const script = await renderCodex();
+    expect(script).toContain(
+      "cli codex plugin marketplace remove 'archestra-old-skills'",
+    );
+    expect(script).toContain("SKILLS_MARKETPLACE_NAME='archestra-old-skills'");
+    expect(script).not.toContain(derived);
+
+    const windowsScript = await renderCodex("windows");
+    expect(windowsScript).toContain(
+      "codex plugin marketplace remove 'archestra-old-skills'",
+    );
+    expect(windowsScript).toContain(
+      "$SkillsMarketplaceName = 'archestra-old-skills'",
+    );
+    expect(windowsScript).not.toContain(derived);
+
+    // Someone who never cloned gets the derived name, frozen when the script
+    // renders, so a rename before their first clone cannot split the names.
+    // The request hook reads `user`, so the setups below belong to otherUser.
+    user = otherUser;
+    const fresh = await renderCodex();
+    expect(fresh).toContain(`cli codex plugin marketplace remove '${derived}'`);
+    expect(fresh).toContain(`SKILLS_MARKETPLACE_NAME='${derived}'`);
+
+    await OrganizationModel.patch(organizationId, {
+      appName: "Acme Production",
+    });
+    const afterRename = await renderCodex();
+    expect(afterRename).toContain(
+      `cli codex plugin marketplace remove '${derived}'`,
+    );
+    expect(afterRename).toContain(`SKILLS_MARKETPLACE_NAME='${derived}'`);
   });
 
   test("the shared marketplace URL carries the token as its password", async ({

@@ -1,9 +1,9 @@
 "use client";
 
 import {
-  DEFAULT_MODELS,
   E2eTestId,
   isModelRouterSupportedProvider,
+  PROVIDER_MODEL_TIERS,
   providerSupportsChat,
   requiresPerplexityAgentApi,
   type SupportedProvider,
@@ -46,8 +46,10 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   buildCurlExample,
+  getImageExampleOperations,
   getProviderAuthHeader,
   getProxyBaseUrl,
+  type ImageExampleOperation,
   providerKeyEnvVar,
   type RequestCredential,
   type RequestTarget,
@@ -436,12 +438,15 @@ export function RequestExample({
   const isPending = usesCatalog
     ? passthroughModelsPending
     : readsLinkedModels && linkedModelsPending;
+  const imageOperations = getImageExampleOperations(target);
   const candidates = usesCatalog
     ? (passthroughModels ?? []).map((model) => ({
         id: model.id,
         provider: model.provider,
         isBest: model.isBest,
         supportedEndpoints: model.capabilities?.supportedEndpoints,
+        isImage:
+          model.capabilities?.outputModalities?.includes("image") ?? false,
       }))
     : (linkedModels ?? [])
         .filter((model) =>
@@ -456,12 +461,14 @@ export function RequestExample({
             // Decision models answer with probabilities, not text.
             (model.provider === "jev" ||
               !model.outputModalities ||
-              model.outputModalities.includes("text")),
+              model.outputModalities.includes("text") ||
+              model.outputModalities.includes("image")),
         )
         .map((model) => ({
           id: model.modelId,
           provider: model.provider,
           isBest: model.isBest,
+          isImage: model.outputModalities?.includes("image") ?? false,
           supportedEndpoints: Array.isArray(model.supportedEndpoints)
             ? model.supportedEndpoints.filter(
                 (endpoint): endpoint is string => typeof endpoint === "string",
@@ -469,6 +476,7 @@ export function RequestExample({
             : null,
         }));
   const modelOptions = candidates
+    .filter((model) => !model.isImage || imageOperations.length > 0)
     .filter((model) =>
       target.kind === "model-router"
         ? routerProviders.includes(model.provider) &&
@@ -486,13 +494,15 @@ export function RequestExample({
           ? `${model.provider}:${model.id}`
           : model.id,
       supportedEndpoints: model.supportedEndpoints,
+      isImage: model.isImage,
     }));
   // A provider route still has a request to show before its models sync: the
   // provider's default model stands in rather than leaving the step empty.
   if (!isPending && modelOptions.length === 0 && target.kind === "provider") {
     modelOptions.push({
-      value: DEFAULT_MODELS[target.provider],
+      value: PROVIDER_MODEL_TIERS[target.provider].normal,
       supportedEndpoints: null,
+      isImage: false,
     });
   }
 
@@ -502,6 +512,14 @@ export function RequestExample({
       ? pickedModel
       : modelOptions[0]?.value;
   const selectedModel = modelOptions.find((option) => option.value === model);
+  const [imageOperation, setImageOperation] =
+    useState<ImageExampleOperation>("generate");
+  const selectedImageOperation = selectedModel?.isImage
+    ? (imageOperations.find((operation) => operation === imageOperation) ??
+      imageOperations[0])
+    : undefined;
+  const showImageOperationPicker =
+    selectedModel?.isImage && imageOperations.length > 1;
 
   const example =
     model &&
@@ -512,6 +530,7 @@ export function RequestExample({
       keyValue: secret ? MASKED_KEY : (keyValue ?? `$${credentialEnvVar}`),
       model,
       supportedEndpoints: selectedModel?.supportedEndpoints,
+      imageOperation: selectedImageOperation,
     });
   const providerLabel =
     target.kind === "provider" ? providerCatalog.label(target.provider) : null;
@@ -519,7 +538,13 @@ export function RequestExample({
   if (!isPending && modelOptions.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No runnable model example is available for this key and endpoint yet.
+        {target.kind === "model-router" &&
+        candidates.some(
+          (candidate) =>
+            candidate.isImage && routerProviders.includes(candidate.provider),
+        )
+          ? "Choose the native provider API for image generation examples."
+          : "No runnable model example is available for this key and endpoint yet."}
       </p>
     );
   }
@@ -564,38 +589,84 @@ export function RequestExample({
           )}
         </p>
       )}
-      <div className="space-y-1.5">
-        <Label htmlFor="virtual-key-example-model">Model</Label>
-        <Select
-          value={model ?? ""}
-          onValueChange={setPickedModel}
-          disabled={isPending || modelOptions.length === 0}
-        >
-          <SelectTrigger
-            id="virtual-key-example-model"
-            className="w-full sm:w-80"
+      <div
+        className={cn(
+          "grid gap-3",
+          showImageOperationPicker ? "sm:grid-cols-2" : "sm:max-w-80",
+        )}
+      >
+        <div className="space-y-1.5">
+          <Label htmlFor="virtual-key-example-model">Model</Label>
+          <Select
+            value={model ?? ""}
+            onValueChange={setPickedModel}
+            disabled={isPending || modelOptions.length === 0}
           >
-            <SelectValue
-              placeholder={
-                isPending ? "Loading models…" : "No models found for this key"
+            <SelectTrigger id="virtual-key-example-model" className="w-full">
+              <SelectValue
+                placeholder={
+                  isPending ? "Loading models…" : "No models found for this key"
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {modelOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.value}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {usesCatalog && (
+            <p className="text-xs text-muted-foreground">
+              From your organization&apos;s model catalog. Your own key may have
+              access to different models.
+            </p>
+          )}
+        </div>
+        {showImageOperationPicker && (
+          <div className="space-y-1.5">
+            <Label htmlFor="virtual-key-image-operation">Image operation</Label>
+            <Select
+              value={selectedImageOperation}
+              onValueChange={(value) =>
+                setImageOperation(value as ImageExampleOperation)
               }
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {modelOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.value}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {usesCatalog && (
-          <p className="text-xs text-muted-foreground">
-            From your organization&apos;s model catalog. Your own key may have
-            access to different models.
-          </p>
+            >
+              <SelectTrigger
+                id="virtual-key-image-operation"
+                className="w-full"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {imageOperations.map((operation) => (
+                  <SelectItem key={operation} value={operation}>
+                    {operation === "generate"
+                      ? "Generate an image"
+                      : "Edit an image"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         )}
       </div>
+      {selectedImageOperation === "edit" && (
+        <p className="text-xs text-muted-foreground">
+          Save your input image as <InlineCode>edit.png</InlineCode> in the
+          current directory. Use a deployment that supports image editing. cURL
+          sets the multipart boundary automatically.
+        </p>
+      )}
+      {selectedImageOperation &&
+        target.kind === "provider" &&
+        target.provider === "gemini" && (
+          <p className="text-xs text-muted-foreground">
+            The response includes base64 image data in{" "}
+            <InlineCode>inlineData</InlineCode>.
+          </p>
+        )}
       {secret ? (
         <MaskedCodeExample
           language="cURL"

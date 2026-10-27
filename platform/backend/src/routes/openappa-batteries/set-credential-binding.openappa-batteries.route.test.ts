@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { ADMIN_ROLE_NAME, ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
+import { authPlugin } from "@/auth/fastify-plugin";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
@@ -17,6 +18,7 @@ import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
+import ServiceAccountModel from "@/models/service-account";
 import ToolModel from "@/models/tool";
 import { openappaDeclarations } from "@/openappa/declarations";
 import helperRoutes from "@/routes/openappa-helpers/openappa-helpers.routes";
@@ -344,6 +346,71 @@ describe("binding a battery credential", () => {
 });
 
 /** Grant one person `use` on a credential, the way its Permissions tab would. */
+describe("binding a battery credential as a service account", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  beforeEach(async ({ makeOrganization }) => {
+    organizationId = (await makeOrganization()).id;
+    config.openappa.enabled = true;
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    app = createFastifyInstance();
+    await app.register(authPlugin);
+    await app.register(routes);
+  });
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("stores the binding with no user attribution", async ({ makeUser }) => {
+    const account = await ServiceAccountModel.create({
+      organizationId,
+      name: "Terraform",
+      role: ADMIN_ROLE_NAME,
+      createdBy: null,
+    });
+    const { token } = await ServiceAccountModel.createToken({
+      serviceAccountId: account.id,
+      organizationId,
+      name: "terraform",
+    });
+    await RuntimeCredentialDefinitionModel.create({
+      organizationId,
+      createdBy: (await makeUser()).id,
+      definition: {
+        key: "github-token",
+        name: "GitHub token",
+        kind: "secret",
+        description: "",
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
+    await RuntimeCredentialConnectionModel.upsert({
+      organizationId,
+      scope: "organization",
+      userId: null,
+      credentialId: "github-token",
+      value: TOKEN_VALUE,
+    });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/openappa/credential-bindings/${GITHUB_TOKEN}`,
+      headers: { authorization: token },
+      payload: { key: "github-token" },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(
+      await OpenAppaCredentialBindingModel.find({
+        organizationId,
+        variable: GITHUB_TOKEN,
+      }),
+    ).toMatchObject({ credentialKey: "github-token", updatedBy: null });
+  });
+});
+
 async function grantCredentialUse(params: {
   organizationId: string;
   key: string;

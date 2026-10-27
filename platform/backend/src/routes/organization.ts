@@ -22,7 +22,7 @@ import { z } from "zod";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasPermission } from "@/auth";
-import { getPermissionsForUserContext } from "@/auth/utils";
+import { getPermissionsForUserContext, isGlobalAdmin } from "@/auth/utils";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { syncBuiltInSkillsForOrganization } from "@/database/seed";
@@ -59,6 +59,7 @@ import { openappaBatteriesService } from "@/openappa/batteries";
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
 import { knowledgeSettingsService } from "@/services/knowledge-settings";
 import { removeMemberTarget } from "@/services/member-removal";
+import { reconcileManagedPlaywrightSetting } from "@/services/playwright-runtime";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
@@ -82,6 +83,7 @@ import {
   UpdateSecuritySettingsSchema,
   UpdateSkillsSettingsSchema,
 } from "@/types";
+import { assertModelTrioTiers } from "@/utils/llm-resolution";
 
 const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -212,8 +214,25 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
-    async ({ organizationId, body }, reply) => {
-      const organization = await OrganizationModel.patch(organizationId, body);
+    async ({ organizationId, body, user }, reply) => {
+      // Keep the existing permission gate for security settings; the browser
+      // lifecycle control additionally requires a built-in administrator role.
+      if (
+        body.playwrightMcpEnabled !== undefined &&
+        !(await isGlobalAdmin(user.id, organizationId))
+      ) {
+        throw new ApiError(
+          403,
+          "Only administrators can change the built-in browser setting",
+        );
+      }
+      const organization =
+        body.playwrightMcpEnabled !== undefined
+          ? await reconcileManagedPlaywrightSetting({
+              organizationId,
+              settings: body,
+            })
+          : await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");
@@ -306,24 +325,41 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, body }, reply) => {
       // The default model and its API key are a pair: persist both or neither.
+      const currentOrg =
+        body.defaultModelId !== undefined ||
+        body.defaultLlmApiKeyId !== undefined ||
+        body.defaultFastModelId !== undefined ||
+        body.defaultSmartModelId !== undefined
+          ? await OrganizationModel.getById(organizationId)
+          : null;
+      const merged = {
+        modelId:
+          body.defaultModelId !== undefined
+            ? body.defaultModelId
+            : (currentOrg?.defaultModelId ?? null),
+        apiKeyId:
+          body.defaultLlmApiKeyId !== undefined
+            ? body.defaultLlmApiKeyId
+            : (currentOrg?.defaultLlmApiKeyId ?? null),
+        fastModelId:
+          body.defaultFastModelId !== undefined
+            ? body.defaultFastModelId
+            : (currentOrg?.defaultFastModelId ?? null),
+        smartModelId:
+          body.defaultSmartModelId !== undefined
+            ? body.defaultSmartModelId
+            : (currentOrg?.defaultSmartModelId ?? null),
+      };
+
       // Validate the merged result only when this update touches either field.
       if (
         body.defaultModelId !== undefined ||
         body.defaultLlmApiKeyId !== undefined
       ) {
-        const currentOrg = await OrganizationModel.getById(organizationId);
-        const mergedModelId =
-          body.defaultModelId !== undefined
-            ? body.defaultModelId
-            : (currentOrg?.defaultModelId ?? null);
-        const mergedApiKeyId =
-          body.defaultLlmApiKeyId !== undefined
-            ? body.defaultLlmApiKeyId
-            : (currentOrg?.defaultLlmApiKeyId ?? null);
         if (
           !isModelSelectionComplete({
-            modelId: mergedModelId,
-            apiKeyId: mergedApiKeyId,
+            modelId: merged.modelId,
+            apiKeyId: merged.apiKeyId,
           })
         ) {
           throw new ApiError(
@@ -333,13 +369,21 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         await assertOrganizationDefaultModelSelection({
           organizationId,
-          modelId: mergedModelId,
-          apiKeyId: mergedApiKeyId,
+          modelId: merged.modelId,
+          apiKeyId: merged.apiKeyId,
         });
         await assertRuntimeAgentsSupportOrganizationDefault({
           organizationId,
-          modelId: mergedModelId,
+          modelId: merged.modelId,
         });
+      }
+
+      if (
+        body.defaultLlmApiKeyId !== undefined ||
+        body.defaultFastModelId !== undefined ||
+        body.defaultSmartModelId !== undefined
+      ) {
+        await assertModelTrioTiers(merged);
       }
 
       if (body.defaultAgentId) {

@@ -66,4 +66,17 @@ describe("requestScope", () => {
       expect(share(method, "/api/teams")).toBe(false);
     }
   });
+
+  test("LLM proxy calls share lookups; other /v1 routes never do", () => {
+    const share = (method: string, url: string) =>
+      shouldShareCallerLookups({ method, url });
+    expect(share("POST", "/v1/anthropic/agent-id/v1/messages")).toBe(true);
+    expect(share("POST", "/v1/openai/chat/completions")).toBe(true);
+    expect(share("POST", "/v1/model-router/agent-id/responses")).toBe(true);
+    expect(share("GET", "/v1/gemini/v1beta/models")).toBe(true);
+    expect(share("POST", "/v1/mcp/agent-id")).toBe(false);
+    expect(share("POST", "/v1/a2a/agent-id")).toBe(false);
+    expect(share("GET", "/v1/health?mcp=agent-id")).toBe(false);
+    expect(share("GET", "/v1/connection-instructions")).toBe(false);
+  });
 });

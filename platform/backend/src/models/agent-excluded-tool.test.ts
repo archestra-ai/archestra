@@ -8,7 +8,7 @@ import {
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
-  TOOL_START_RUN_FULL_NAME,
+  TOOL_START_AGENT_RUN_FULL_NAME,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import config from "@/config";
@@ -255,7 +255,7 @@ describe("All-tools exclusion pre-fill", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const handoffToolIds = [
-      await builtInToolId(TOOL_START_RUN_FULL_NAME),
+      await builtInToolId(TOOL_START_AGENT_RUN_FULL_NAME),
       await builtInToolId(TOOL_LIST_AGENTS_FULL_NAME),
     ];
 

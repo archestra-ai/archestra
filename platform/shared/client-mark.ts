@@ -18,3 +18,11 @@ export interface ClientMark {
   /** Tile colour behind the glyph. */
   background: string;
 }
+
+/** Pi Coding Agent's official mark: https://pi.dev/favicon.svg. */
+export const PI_MARK: ClientMark = {
+  viewBox: "0 0 560 560",
+  path: "M420 280H280V140H0V0H420V280Z M560 560H420V280H560V560Z M140 560H0V140H140V280H280V420H140V560Z",
+  color: "currentColor",
+  background: "var(--muted)",
+};

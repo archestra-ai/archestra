@@ -1,6 +1,8 @@
 import type * as k8s from "@kubernetes/client-node";
 import { PatchStrategy } from "@kubernetes/client-node";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, vi } from "vitest";
+import db, { schema } from "@/database";
+import { beforeEach, test as it } from "@/test";
 
 vi.mock("@/k8s/shared", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/k8s/shared")>()),
@@ -64,6 +66,32 @@ const mockLoadKubeConfig = vi.mocked(loadKubeConfig);
 const mockCreateK8sClients = vi.mocked(createK8sClients);
 const mockGetK8sCapabilities = vi.mocked(getK8sCapabilities);
 const mockGetClusterDnsIps = vi.mocked(clusterDnsResolver.getClusterDnsIps);
+
+let testOrganizationId: string;
+beforeEach(async ({ makeOrganization }) => {
+  testOrganizationId = (await makeOrganization()).id;
+});
+
+// Policy/scheduling tests use real Environment rows; lifecycle races are tested
+// separately against the real Kubernetes client at its HTTP boundary.
+async function reconcilePersistedEnvironment(environment: Environment) {
+  const [row] = await db
+    .insert(schema.environmentsTable)
+    .values({
+      ...environment,
+      organizationId: testOrganizationId,
+      name: "Engine policy test",
+    })
+    .onConflictDoUpdate({
+      target: schema.environmentsTable.id,
+      set: {
+        namespace: environment.namespace,
+        networkPolicy: environment.networkPolicy,
+      },
+    })
+    .returning();
+  return daggerEnvironmentRuntimeManager.reconcileEnvironment(row);
+}
 
 function makeEnv(overrides: Partial<Environment> = {}): Environment {
   return {
@@ -491,7 +519,7 @@ describe("reconcileEnvironment — applyCustomPolicy upsert (AWS ApplicationNetw
   });
 
   function reconcile() {
-    return daggerEnvironmentRuntimeManager.reconcileEnvironment(
+    return reconcilePersistedEnvironment(
       makeEnv({
         namespace: "test-ns",
         networkPolicy: restrictedPolicy as never,
@@ -595,6 +623,7 @@ describe("reconcileOrganizationDefault", () => {
       appsApi: {
         createNamespacedStatefulSet: vi.fn().mockResolvedValue({}),
         deleteNamespacedStatefulSet: vi.fn().mockResolvedValue({}),
+        readNamespacedStatefulSet: vi.fn().mockRejectedValue({ code: 404 }),
       },
       networkingApi: {
         createNamespacedNetworkPolicy: vi.fn().mockResolvedValue({}),
@@ -638,9 +667,7 @@ describe("reconcileOrganizationDefault", () => {
       await daggerEnvironmentRuntimeManager.reconcileOrganizationDefault(
         makeOrg({ id: "org-off" }),
       );
-      await daggerEnvironmentRuntimeManager.reconcileEnvironment(
-        makeEnv({ namespace: "release-ns" }),
-      );
+      await reconcilePersistedEnvironment(makeEnv({ namespace: "release-ns" }));
       expect(
         clients.appsApi.createNamespacedStatefulSet,
       ).not.toHaveBeenCalled();
@@ -673,9 +700,7 @@ describe("reconcileOrganizationDefault", () => {
       ).not.toHaveBeenCalled();
       expect(clients.coreApi.createNamespacedConfigMap).not.toHaveBeenCalled();
 
-      await daggerEnvironmentRuntimeManager.reconcileEnvironment(
-        makeEnv({ namespace: "release-ns" }),
-      );
+      await reconcilePersistedEnvironment(makeEnv({ namespace: "release-ns" }));
       expect(clients.appsApi.createNamespacedStatefulSet).toHaveBeenCalledTimes(
         1,
       );
@@ -989,9 +1014,7 @@ describe("engine scheduling", () => {
   // A platform pinned to a tainted node pool would otherwise leave its engines
   // Pending (no toleration) or scheduled onto nodes outside that pool.
   it("inherits the platform pod's nodeSelector and tolerations", async () => {
-    await daggerEnvironmentRuntimeManager.reconcileEnvironment(
-      makeEnv({ namespace: "env-ns" }),
-    );
+    await reconcilePersistedEnvironment(makeEnv({ namespace: "env-ns" }));
 
     expect(clients.coreApi.readNamespacedPod).toHaveBeenCalledWith({
       name: "archestra-platform-0",
@@ -1007,9 +1030,7 @@ describe("engine scheduling", () => {
     const original = engine.nodeSelector;
     engine.nodeSelector = { "archestra-sandbox": "true" };
     try {
-      await daggerEnvironmentRuntimeManager.reconcileEnvironment(
-        makeEnv({ namespace: "env-ns" }),
-      );
+      await reconcilePersistedEnvironment(makeEnv({ namespace: "env-ns" }));
     } finally {
       engine.nodeSelector = original;
     }
@@ -1031,9 +1052,7 @@ describe("engine scheduling", () => {
       new Error("forbidden"),
     );
 
-    await daggerEnvironmentRuntimeManager.reconcileEnvironment(
-      makeEnv({ namespace: "env-ns" }),
-    );
+    await reconcilePersistedEnvironment(makeEnv({ namespace: "env-ns" }));
 
     const spec = engineTemplateSpec();
     expect(spec?.nodeSelector).toBeUndefined();

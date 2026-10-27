@@ -173,9 +173,14 @@ describe("ConversationProjectActions", () => {
     expect(screen.queryByRole("option", { name: "Bulk 59" })).toBeNull();
 
     await user.type(screen.getByRole("combobox"), "bulk 59");
-    // ...and a project beyond it is found by asking the server.
+    // ...and a project beyond it is found by asking the server, after the
+    // search debounce, which the default 1s wait leaves little room for.
     expect(
-      await screen.findByRole("option", { name: "Bulk 59" }),
+      await screen.findByRole(
+        "option",
+        { name: "Bulk 59" },
+        { timeout: 5_000 },
+      ),
     ).toBeVisible();
     expect(listRequests.at(-1)?.searchParams.get("search")).toBe("bulk 59");
   });

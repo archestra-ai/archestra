@@ -4,6 +4,7 @@ import {
   APPA_PARENT_HEADER,
   APPA_SESSION_HEADER,
   extractMcpToolError,
+  isAgentTool,
   isSeededAppRenderToolResult,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
@@ -44,8 +45,10 @@ import {
   type RuntimeFailureCode,
   runtimeFailureCode,
   unansweredAnnotationNotice,
+  undeclaredToolNotice,
 } from "@/openappa/failure";
 import { retryWhilePolicyMoved } from "@/openappa/policy-moved";
+import { toolEntries } from "@/openappa/policy-text";
 import { startedUnenforced } from "@/openappa/unenforced";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { readYellResult } from "@/openappa/yell-session";
@@ -468,7 +471,7 @@ export async function executeYell(params: {
           }),
         ),
     });
-    if (config.analytics.enabled) {
+    if (config.openappa.yellForwardingEnabled && !encryptedChat) {
       await OpenAppaYellModel.recordDelivery({
         id: record.id,
         organizationId: record.organizationId,
@@ -1296,16 +1299,31 @@ export async function evaluateToolCalls(
         return { kind: "allow" as const };
       }
       // The target is already canonical, so it is read, not re-canonicalized.
-      const tool = shortName === "yell" ? "yell" : target.toolCallName;
+      const canonicalTool = shortName === "yell" ? "yell" : target.toolCallName;
       const spawn =
         options.spawnCallIds?.has(call.id) === true ||
         options.isSpawn?.(call.name, call.namespace) === true;
-      const spelling = spawnRetrySpelling({
-        call,
-        tool,
-        spawn,
-        canonicalize: options.canonicalize,
-      });
+      // An agent__<slug> spawn starts a subagent like the host's own Agent
+      // tool, so it is ruled as one unless the policy rules it by name. The
+      // model keeps its own spelling.
+      const tool =
+        spawn &&
+        isAgentTool(shortName ?? canonicalTool) &&
+        !declaresTool((await policy()).content, canonicalTool)
+          ? SUBAGENT_TOOL
+          : canonicalTool;
+      const spelling =
+        spawnRetrySpelling({
+          call,
+          tool: canonicalTool,
+          spawn,
+          canonicalize: options.canonicalize,
+        }) ??
+        (tool === canonicalTool
+          ? undefined
+          : target.isRunToolDispatchTarget
+            ? canonicalTool
+            : call.name);
       const event = {
         event: "tool_call",
         operation_id: `call:${call.id}`,
@@ -1346,10 +1364,10 @@ export async function evaluateToolCalls(
       try {
         decision = await dispatchCall(event);
       } catch (error) {
-        // An annotator that gives no answer refuses only this call. Failing the
-        // batch would cancel the calls already admitted, and an admitted call
-        // that spent an approval would lose it.
-        const notice = unansweredAnnotationNotice(error);
+        // These unrecorded refusals apply only to this call. Failing the batch
+        // would cancel admitted siblings, including spent approvals.
+        const notice =
+          undeclaredToolNotice(error) ?? unansweredAnnotationNotice(error);
         if (notice === null) throw error;
         logger.warn(
           {
@@ -1358,7 +1376,7 @@ export async function evaluateToolCalls(
             sessionId: session.session_id,
             tool,
           },
-          "OpenAPPA could not rule on a tool call because its annotator gave no answer; the call is returned as a notice",
+          "OpenAPPA refused a tool call before recording it; the call is returned as a notice",
         );
         return {
           kind: "deny" as const,
@@ -2319,6 +2337,16 @@ function spawnRetrySpelling(params: {
   return params.call.name.startsWith(prefix)
     ? params.call.name
     : `${prefix}${params.call.name}`;
+}
+
+/** The host tool a subagent spawn is ruled and recorded under, unless the policy names it. */
+export const SUBAGENT_TOOL = "Agent";
+
+/** Whether the policy has a rule of its own for `tool`, selector rules included. */
+function declaresTool(content: string, tool: string): boolean {
+  return toolEntries(content).some(
+    ({ name }) => name === tool || name.startsWith(`${tool}(`),
+  );
 }
 
 function nativePresentation(

@@ -1024,8 +1024,46 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
 
     codex.stripCarrierMetadata(request);
 
-    expect(request.client_metadata).toEqual({ thread_id: "t1" });
+    expect(request.client_metadata).toEqual({
+      thread_id: "t1",
+      "x-codex-turn-metadata": { thread_id: "t1" },
+    });
     expect(request.metadata).toEqual({ thread_id: "t1" });
+  });
+
+  test("keeps Codex turn state beside the stripped carriers", () => {
+    // Continuing a chat that the Codex backend's misalignment monitor paused
+    // rides in the turn metadata. Dropped, the next turn is blocked again.
+    const override = JSON.stringify({ timestamp: 1792597758000 });
+    const request = {
+      client_metadata: {
+        "x-codex-turn-metadata": JSON.stringify({
+          thread_id: "t1",
+          parent_thread_id: "t0",
+          agent_id: "a1",
+          misalignment_override: override,
+        }),
+      },
+    };
+
+    codex.stripCarrierMetadata(request);
+
+    expect(
+      JSON.parse(request.client_metadata["x-codex-turn-metadata"]),
+    ).toEqual({ thread_id: "t1", misalignment_override: override });
+  });
+
+  test("drops Codex turn metadata it cannot read, so no carrier hides in it", () => {
+    const request = {
+      client_metadata: {
+        thread_id: "t1",
+        "x-codex-turn-metadata": '{"parent_thread_id": "t0"',
+      },
+    };
+
+    codex.stripCarrierMetadata(request);
+
+    expect(request.client_metadata).toEqual({ thread_id: "t1" });
   });
 
   test("mints Claude Code child ids from agent_id under the native parent session", () => {

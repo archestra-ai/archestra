@@ -917,8 +917,8 @@ describe("runtime proof attachments", () => {
   };
   const attachment: LlmProxyRuntimeToolProof = {
     id: "call-1",
-    name: "archestra__get_run",
-    action: "get_run",
+    name: "archestra__get_agent_run",
+    action: "get_agent_run",
     session,
     spawn: false,
     wrapped: false,
@@ -1093,7 +1093,7 @@ test("runtime proofs cannot move an approved call to another namespace", async (
   const proof = signRuntimeToolProof({
     session,
     toolCallId: "call-1",
-    action: "get_run",
+    action: "get_agent_run",
     arguments: args,
     spawn: false,
     secret: config.openappa.offerSigningSecret,
@@ -1115,9 +1115,9 @@ test("runtime proofs cannot move an approved call to another namespace", async (
         runtimeProofs: [
           {
             id: "call-1",
-            name: "get_run",
+            name: "get_agent_run",
             session,
-            action: "get_run",
+            action: "get_agent_run",
             spawn: false,
             wrapped: false,
           },
@@ -1133,7 +1133,7 @@ test("runtime proofs cannot move an approved call to another namespace", async (
       toolCalls: [
         {
           id: "call-1",
-          name: "get_run",
+          name: "get_agent_run",
           namespace: "gateway",
           arguments: args,
         },

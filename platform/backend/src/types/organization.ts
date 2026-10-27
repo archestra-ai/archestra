@@ -345,7 +345,9 @@ const extendedFields = {
   defaultLlmProvider: SupportedProvidersSchema.nullable(),
   defaultUserLimitValue: z.number().int().positive().nullable(),
   defaultUserLimitModel: z.array(z.string()).nullable(),
-  defaultUserLimitCleanupInterval: LimitCleanupIntervalSchema.nullable(),
+  defaultUserLimitCleanupInterval: LimitCleanupIntervalSchema.exclude([
+    "minute",
+  ]).nullable(),
   defaultMemberRole: z.string().nullable(),
   defaultAgentId: z.string().uuid().nullable(),
   favicon: z.string().nullable(),
@@ -450,6 +452,7 @@ export const UpdateAppearanceSettingsSchema = z.object({
 });
 
 export const UpdateSecuritySettingsSchema = z.object({
+  playwrightMcpEnabled: z.boolean().optional(),
   allowChatFileUploads: z.boolean().optional(),
   allowUnauthenticatedLlmProxyRequests: z.boolean().optional(),
   newAppsDisabledByDefault: z.boolean().optional(),
@@ -460,6 +463,7 @@ export const UpdateSecuritySettingsSchema = z.object({
 
 export const UpdateMcpSettingsSchema = z.object({
   onlineMcpCatalogEnabled: z.boolean().optional(),
+  defaultPersonalAgentAccessAllTools: z.boolean().optional(),
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -477,6 +481,8 @@ export const UpdateAgentSettingsSchema = z.object({
   defaultModelId: z.string().uuid().nullable().optional(),
   defaultLlmApiKeyId: z.string().uuid().nullable().optional(),
   defaultAgentId: z.string().uuid().nullable().optional(),
+  defaultFastModelId: z.string().uuid().nullable().optional(),
+  defaultSmartModelId: z.string().uuid().nullable().optional(),
 });
 
 export const UpdateKnowledgeSettingsSchema = z.object({

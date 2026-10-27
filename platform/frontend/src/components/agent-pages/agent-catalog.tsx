@@ -111,6 +111,26 @@ export function getAgentCatalogTemplates(
       platformName: appName,
       image: images.openclaw,
     }),
+    template({
+      id: "grok",
+      name: AGENT_CATALOG_TEMPLATE_NAMES.grok,
+      summary:
+        "xAI's coding agent. Runs on each person's SuperGrok subscription or an xAI API key.",
+      icon: CATALOG_AGENT_ICONS.grok,
+      description: `xAI's coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
+      platformName: appName,
+      image: images.grok,
+    }),
+    template({
+      id: "kimi",
+      name: AGENT_CATALOG_TEMPLATE_NAMES.kimi,
+      summary:
+        "Kimi's coding agent. Runs on each person's Kimi for Coding membership or a Kimi API Platform key.",
+      icon: CATALOG_AGENT_ICONS.kimi,
+      description: `Kimi's coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
+      platformName: appName,
+      image: images.kimi,
+    }),
   ] as const;
 }
 
@@ -153,7 +173,7 @@ export function AgentCatalog({
   onStartFromImage: () => void;
   onAddExternalAgent: () => void;
   onSelect: (template: AgentCatalogTemplate) => void;
-  /** Coding agents run in a dedicated runtime; undefined while loading. */
+  /** Agent Runtimes run in a dedicated container; undefined while loading. */
   runtimeAvailable: boolean | undefined;
 }) {
   const { templates, isError, isLoading, refetch } =
@@ -175,11 +195,11 @@ export function AgentCatalog({
 
       {/* Always laid out, so it does not pop in and push the rest down; only
           its cards wait for the fresh settings read that decides which
-          coding agents are offered. */}
+          Agent Runtimes are offered. */}
       <CatalogSection
         title={
           <>
-            <span>Coding agents</span>{" "}
+            <span>Agent Runtimes</span>{" "}
             <Badge
               variant="outline"
               className="align-middle border-transparent bg-sidebar-chip px-1.5 py-0 text-[10px] text-sidebar-emphasis dark:border-sidebar-emphasis dark:bg-sidebar"
@@ -195,7 +215,7 @@ export function AgentCatalog({
         {runtimeAvailable === undefined || isLoading ? (
           <output
             className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-            aria-label="Loading coding agents"
+            aria-label="Loading Agent Runtimes"
           >
             {[0, 1, 2].map((index) => (
               <Skeleton key={index} className="h-[132px] rounded-xl" />
@@ -203,7 +223,7 @@ export function AgentCatalog({
           </output>
         ) : isError ? (
           <QueryLoadError
-            title="Could not load coding agents"
+            title="Could not load Agent Runtimes"
             onRetry={() => refetch()}
           />
         ) : (
@@ -346,7 +366,7 @@ function CatalogSection({
   );
 }
 
-/** Where a coding agent's tasks can come from, so the reader knows before picking. */
+/** Where an Agent Runtime's tasks can come from, so the reader knows before picking. */
 function GiveItWorkFrom() {
   const appName = useAppName();
   const { visibleIds } = useMessagingChannelCatalog();

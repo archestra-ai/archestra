@@ -24,12 +24,6 @@ type OrganizationInfo = {
   defaultLlmApiKeyId?: string | null;
 } | null;
 
-/** The current user's saved default (model, key) pair — the "member" level. */
-type MemberDefaultInfo = {
-  modelId?: string | null;
-  chatApiKeyId?: string | null;
-} | null;
-
 /** A model identifier is the models.id UUID throughout the chat model flow. */
 export type ResolvedInitialAgentState = {
   agentId: string;
@@ -137,14 +131,12 @@ export function resolveInitialAgentState(params: {
   modelsByProvider: Record<string, LlmModel[]>;
   chatApiKeys: ChatApiKeyInfo[];
   organization: OrganizationInfo;
-  memberDefault: MemberDefaultInfo;
 }): ResolvedInitialAgentState | null {
   const resolved = resolveChatModelState({
     agent: params.agent,
     modelsByProvider: params.modelsByProvider,
     chatApiKeys: params.chatApiKeys,
     organization: params.organization,
-    memberDefault: params.memberDefault,
   });
 
   if (!resolved) {
@@ -163,21 +155,7 @@ export function resolveChatModelState(params: {
   modelsByProvider: Record<string, LlmModel[]>;
   chatApiKeys: ChatApiKeyInfo[];
   organization: OrganizationInfo;
-  memberDefault: MemberDefaultInfo;
 }): ResolvedChatModelState | null {
-  const agentModel = params.agent?.modelId
-    ? Object.values(params.modelsByProvider)
-        .flat()
-        .find((model) => model.dbId === params.agent?.modelId)
-    : undefined;
-  // Selecting an agent whose pinned subscription is not connected must first
-  // surface that requirement. Otherwise the saved member default immediately
-  // becomes a "chat override", and resetting it just restores the same value.
-  const memberDefault =
-    agentModel?.requiresUserConnection && agentModel.isConnected === false
-      ? null
-      : params.memberDefault;
-
   // The resolver identifies models by their models.id UUID.
   const modelsByProvider = Object.fromEntries(
     Object.entries(params.modelsByProvider).map(([provider, models]) => [
@@ -193,14 +171,12 @@ export function resolveChatModelState(params: {
           modelsByProvider,
           chatApiKeys: params.chatApiKeys,
           organization: params.organization,
-          memberDefault,
         },
       })
     : resolveInitialModel({
         modelsByProvider,
         chatApiKeys: params.chatApiKeys,
         organization: params.organization,
-        memberDefault,
         agent: null,
       });
 

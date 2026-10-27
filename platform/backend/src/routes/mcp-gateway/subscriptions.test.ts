@@ -12,6 +12,7 @@ import { EventEmitter } from "node:events";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { vi } from "vitest";
 import McpServerModel from "@/models/mcp-server";
 import { describe, expect, test } from "@/test";
 import {
@@ -387,7 +388,14 @@ describe("runSubscriptionStream", () => {
     polls = 0;
     let writesAfterDisconnect = 0;
     let disconnected = false;
+    let pollsAtDisconnect = 0;
     const abortServer = http.createServer((req, res) => {
+      // The contract starts when the server sees the disconnect: a poll can
+      // still tick between the client aborting and the socket closing here.
+      res.on("close", () => {
+        disconnected = true;
+        pollsAtDisconnect = polls;
+      });
       const write = res.write.bind(res);
       res.write = ((chunk: string | Uint8Array, ...args: unknown[]) => {
         if (disconnected) writesAfterDisconnect += 1;
@@ -434,9 +442,8 @@ describe("runSubscriptionStream", () => {
         await sleep(5);
       }
       expect(polls).toBeGreaterThanOrEqual(2);
-      const pollsAtDisconnect = polls;
-      disconnected = true;
       controller.abort();
+      await vi.waitFor(() => expect(disconnected).toBe(true));
       // Past the duration cap, so a timer that was not cleared would write.
       await sleep(200);
       expect(polls).toBe(pollsAtDisconnect);

@@ -4,6 +4,8 @@ import type { OAuthClientScope } from "@archestra/shared/oauth";
 import { useMutation } from "@tanstack/react-query";
 import { Bot, Network, Workflow } from "lucide-react";
 import { type UseFormReturn, useWatch } from "react-hook-form";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import type { ProfileLabelsRef } from "@/components/agent-labels";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
 import {
   BudgetFields,
@@ -185,8 +187,10 @@ export function OAuthClientAccessFields({
 
 export function OAuthClientAdvancedFields({
   form,
+  labelsRef,
 }: {
   form: UseFormReturn<OAuthClientFormValues>;
+  labelsRef: React.Ref<ProfileLabelsRef>;
 }) {
   const values = useWatch({
     control: form.control,
@@ -231,6 +235,18 @@ export function OAuthClientAdvancedFields({
           />
         </section>
       )}
+      <AdvancedLabelsSection
+        ref={labelsRef}
+        attributionSource={
+          values.scopes.includes("llm:proxy") && !userMode
+            ? "credential"
+            : undefined
+        }
+        labels={values.labels ?? []}
+        onLabelsChange={(labels) =>
+          form.setValue("labels", labels, { shouldDirty: true })
+        }
+      />
     </div>
   );
 }

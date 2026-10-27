@@ -2,8 +2,7 @@ import { describe, expect, test } from "vitest";
 import { logRingBuffer } from "./log-ring-buffer";
 
 function write(record: Record<string, unknown>): void {
-  const stream = logRingBuffer.createStream();
-  stream.write(Buffer.from(`${JSON.stringify(record)}\n`));
+  logRingBuffer.ingest(record);
 }
 
 describe("logRingBuffer", () => {
@@ -53,11 +52,10 @@ describe("logRingBuffer", () => {
     ).toEqual(["msg-4", "msg-5"]);
   });
 
-  test("ignores non-JSON and shape-invalid chunks", () => {
-    const stream = logRingBuffer.createStream();
-    stream.write(Buffer.from("not json\n"));
-    stream.write(Buffer.from(`${JSON.stringify({ msg: "no level" })}\n`));
-
+  test("ignores shape-invalid records", () => {
+    logRingBuffer.ingest(null);
+    logRingBuffer.ingest("not a record");
+    logRingBuffer.ingest({ msg: "no level" });
     expect(
       logRingBuffer.getRecent({ traceId: "does-not-exist", limit: 10 }),
     ).toEqual([]);

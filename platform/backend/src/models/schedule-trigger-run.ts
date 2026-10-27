@@ -16,6 +16,7 @@ import type {
   ScheduleRunBlocker,
   ScheduleTrigger,
   ScheduleTriggerRun,
+  ScheduleTriggerRunKind,
   ScheduleTriggerRunStatus,
 } from "@/types";
 import TaskModel from "./task";
@@ -139,6 +140,7 @@ class ScheduleTriggerRunModel {
     organizationId: string;
     triggerId: string;
     status?: ScheduleTriggerRunStatus;
+    runKind?: ScheduleTriggerRunKind;
   }): Promise<number> {
     const conditions = [
       eq(schema.scheduleTriggerRunsTable.organizationId, params.organizationId),
@@ -150,6 +152,11 @@ class ScheduleTriggerRunModel {
         eq(schema.scheduleTriggerRunsTable.status, params.status),
       );
     }
+
+    if (params.runKind)
+      conditions.push(
+        eq(schema.scheduleTriggerRunsTable.runKind, params.runKind),
+      );
 
     const [result] = await db
       .select({ count: count() })
@@ -166,6 +173,7 @@ class ScheduleTriggerRunModel {
     offset?: number;
     cursor?: string;
     status?: ScheduleTriggerRunStatus;
+    runKind?: ScheduleTriggerRunKind;
   }): Promise<(ScheduleTriggerRun & { cursorCreatedAt: string })[]> {
     const conditions = [
       eq(schema.scheduleTriggerRunsTable.organizationId, params.organizationId),
@@ -177,6 +185,11 @@ class ScheduleTriggerRunModel {
         eq(schema.scheduleTriggerRunsTable.status, params.status),
       );
     }
+
+    if (params.runKind)
+      conditions.push(
+        eq(schema.scheduleTriggerRunsTable.runKind, params.runKind),
+      );
 
     const position = decodeCursor(params.cursor);
     if (

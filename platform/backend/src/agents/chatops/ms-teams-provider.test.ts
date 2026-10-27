@@ -2,6 +2,7 @@ import { Activity } from "@microsoft/agents-activity";
 import { CloudAdapter, TurnContext } from "@microsoft/agents-hosting";
 import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { ChatOpsMsTeamsUserConnectionModel } from "@/models";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import type {
@@ -1810,6 +1811,10 @@ describe("MSTeamsProvider files sent in Teams messages", () => {
   const TEAM_ID = "33333333-3333-4333-8333-333333333333";
   const CHANNEL_ID = "19:files@thread.tacv2";
   const CHAT_ID = "19:group-chat@thread.v2";
+  // Teams message ids are the message's epoch-millisecond timestamp.
+  const GROUP_MESSAGE_ID = "1792632504796";
+  const ROOT_MESSAGE_ID = "1792632400000";
+  const REPLY_MESSAGE_ID = "1792632504797";
   const PDF_BYTES = Buffer.from("%PDF-1.7 test document");
   const server = useMswServer(...graphAuthHandlers());
 
@@ -1928,10 +1933,10 @@ describe("MSTeamsProvider files sent in Teams messages", () => {
   test("a file sent in a channel thread is read from SharePoint with the Graph token", async () => {
     server.use(
       http.get(
-        `https://graph.microsoft.com/v1.0/teams/${TEAM_ID}/channels/:channelId/messages/root-1/replies/reply-1`,
+        `https://graph.microsoft.com/v1.0/teams/${TEAM_ID}/channels/:channelId/messages/${ROOT_MESSAGE_ID}/replies/${REPLY_MESSAGE_ID}`,
         () =>
           HttpResponse.json({
-            id: "reply-1",
+            id: REPLY_MESSAGE_ID,
             attachments: [
               {
                 id: "att-1",
@@ -1955,10 +1960,10 @@ describe("MSTeamsProvider files sent in Teams messages", () => {
     await provider.initialize();
 
     const outcomes = await provider.downloadMessageFiles({
-      messageId: "reply-1",
+      messageId: REPLY_MESSAGE_ID,
       channelId: CHANNEL_ID,
       workspaceId: TEAM_ID,
-      threadId: "root-1",
+      threadId: ROOT_MESSAGE_ID,
       senderId: "user-1",
       senderName: "Alice",
       text: "",
@@ -1983,10 +1988,10 @@ describe("MSTeamsProvider files sent in Teams messages", () => {
   test("a file sent in a group chat is read from the sender's OneDrive", async () => {
     server.use(
       http.get(
-        "https://graph.microsoft.com/v1.0/chats/:chatId/messages/msg-1",
+        `https://graph.microsoft.com/v1.0/chats/:chatId/messages/${GROUP_MESSAGE_ID}`,
         () =>
           HttpResponse.json({
-            id: "msg-1",
+            id: GROUP_MESSAGE_ID,
             attachments: [
               {
                 id: "att-1",
@@ -2010,7 +2015,7 @@ describe("MSTeamsProvider files sent in Teams messages", () => {
     await provider.initialize();
 
     const outcomes = await provider.downloadMessageFiles({
-      messageId: "msg-1",
+      messageId: GROUP_MESSAGE_ID,
       channelId: CHAT_ID,
       workspaceId: null,
       senderId: "user-1",
@@ -2037,10 +2042,10 @@ describe("MSTeamsProvider files sent in Teams messages", () => {
   test("without a Graph file permission the file is reported as not downloaded", async () => {
     server.use(
       http.get(
-        "https://graph.microsoft.com/v1.0/chats/:chatId/messages/msg-1",
+        `https://graph.microsoft.com/v1.0/chats/:chatId/messages/${GROUP_MESSAGE_ID}`,
         () =>
           HttpResponse.json({
-            id: "msg-1",
+            id: GROUP_MESSAGE_ID,
             attachments: [
               {
                 contentType: "reference",
@@ -2064,7 +2069,7 @@ describe("MSTeamsProvider files sent in Teams messages", () => {
     await provider.initialize();
 
     const outcomes = await provider.downloadMessageFiles({
-      messageId: "msg-1",
+      messageId: GROUP_MESSAGE_ID,
       channelId: CHAT_ID,
       workspaceId: null,
       senderId: "user-1",
@@ -2089,7 +2094,7 @@ describe("MSTeamsProvider files sent in Teams messages", () => {
     await provider.initialize();
 
     const outcomes = await provider.downloadMessageFiles({
-      messageId: "msg-1",
+      messageId: GROUP_MESSAGE_ID,
       channelId: "a:dm-1",
       workspaceId: null,
       senderId: "user-1",
@@ -2102,5 +2107,245 @@ describe("MSTeamsProvider files sent in Teams messages", () => {
     });
 
     expect(outcomes).toEqual([]);
+  });
+});
+
+describe("MSTeamsProvider group-chat files read with the sender's sign-in", () => {
+  const TENANT_ID = "11111111-1111-4111-8111-111111111111";
+  const APP_ID = "22222222-2222-4222-8222-222222222222";
+  const SENDER_ID = "44444444-4444-4444-8444-444444444444";
+  const CHAT_ID = "19:group-chat@thread.v2";
+  const MESSAGE_ID = "1792632504796";
+  const ONEDRIVE =
+    "https://contoso-my.sharepoint.com/personal/alice_contoso_com";
+  const PDF_BYTES = Buffer.from("%PDF-1.7 group chat document");
+  const server = useMswServer(...graphAuthHandlers());
+  setupTestCacheManager();
+
+  function makeProvider(groupChatFileSignIn = true): MSTeamsProvider {
+    return new MSTeamsProvider({
+      enabled: true,
+      appId: APP_ID,
+      appSecret: "test-secret",
+      tenantId: TENANT_ID,
+      graphTenantId: TENANT_ID,
+      graphClientId: APP_ID,
+      graphClientSecret: "test-secret",
+      groupChatFileSignIn,
+    });
+  }
+
+  function groupChatMessage(
+    overrides: Partial<IncomingChatMessage> = {},
+  ): IncomingChatMessage {
+    return {
+      messageId: MESSAGE_ID,
+      channelId: CHAT_ID,
+      workspaceId: null,
+      senderId: SENDER_ID,
+      senderName: "Alice",
+      senderEmail: "alice@contoso.com",
+      text: "what's in this?",
+      rawText: "what's in this?",
+      timestamp: new Date(),
+      isThreadReply: false,
+      metadata: { conversationType: "groupChat", tenantId: TENANT_ID },
+      ...overrides,
+    };
+  }
+
+  /** The Graph message, the sender's drive, and its file, readable only with `user-token`. */
+  function groupChatFile(fileUrl: string) {
+    return [
+      http.get(
+        `https://graph.microsoft.com/v1.0/chats/:chatId/messages/${MESSAGE_ID}`,
+        () =>
+          HttpResponse.json({
+            id: MESSAGE_ID,
+            attachments: [
+              {
+                contentType: "reference",
+                contentUrl: fileUrl,
+                name: "report.pdf",
+              },
+            ],
+          }),
+      ),
+      http.get("https://graph.microsoft.com/v1.0/me/drive", ({ request }) =>
+        request.headers.get("authorization") === "Bearer user-token"
+          ? HttpResponse.json({
+              id: "drive-alice",
+              webUrl: `${ONEDRIVE}/Documents`,
+            })
+          : new HttpResponse(null, { status: 401 }),
+      ),
+      http.get(
+        "https://graph.microsoft.com/v1.0/drives/drive-alice/:root/:folder/:file/content",
+        ({ request }) => {
+          const path = decodeURIComponent(new URL(request.url).pathname);
+          return request.headers.get("authorization") === "Bearer user-token" &&
+            path ===
+              "/v1.0/drives/drive-alice/root:/Microsoft Teams Chat Files/report.pdf:/content"
+            ? new HttpResponse(PDF_BYTES, {
+                headers: { "content-type": "application/octet-stream" },
+              })
+            : new HttpResponse(null, { status: 404 });
+        },
+      ),
+    ];
+  }
+
+  async function signInSender(): Promise<void> {
+    await ChatOpsMsTeamsUserConnectionModel.save({
+      tenantId: TENANT_ID,
+      aadObjectId: SENDER_ID,
+      scope: "Files.Read",
+      tokens: {
+        accessToken: "user-token",
+        refreshToken: "user-refresh",
+        accessTokenExpiresAt: Date.now() + 60 * 60 * 1000,
+      },
+    });
+  }
+
+  test("a sender who has not signed in gets their file marked as needing sign-in", async () => {
+    server.use(
+      ...groupChatFile(
+        `${ONEDRIVE}/Documents/Microsoft%20Teams%20Chat%20Files/report.pdf`,
+      ),
+    );
+    const provider = makeProvider();
+    await provider.initialize();
+
+    const outcomes = await provider.downloadMessageFiles(groupChatMessage());
+
+    expect(outcomes).toEqual([
+      {
+        status: "skipped",
+        skipped: { name: "report.pdf", reason: "sign_in_required" },
+      },
+    ]);
+  });
+
+  test("a signed-in sender's file is read from their own OneDrive with their token", async () => {
+    server.use(
+      ...groupChatFile(
+        `${ONEDRIVE}/Documents/Microsoft%20Teams%20Chat%20Files/report.pdf`,
+      ),
+    );
+    await signInSender();
+    const provider = makeProvider();
+    await provider.initialize();
+
+    const outcomes = await provider.downloadMessageFiles(groupChatMessage());
+
+    expect(outcomes).toEqual([
+      {
+        status: "delivered",
+        attachment: {
+          contentType: "application/pdf",
+          contentBase64: PDF_BYTES.toString("base64"),
+          name: "report.pdf",
+        },
+      },
+    ]);
+  });
+
+  test("the sender's token never reads a file from someone else's OneDrive", async () => {
+    server.use(
+      ...groupChatFile(
+        "https://contoso-my.sharepoint.com/personal/bob_contoso_com/Documents/Microsoft%20Teams%20Chat%20Files/report.pdf",
+      ),
+    );
+    await signInSender();
+    const provider = makeProvider();
+    await provider.initialize();
+
+    const outcomes = await provider.downloadMessageFiles(groupChatMessage());
+
+    expect(outcomes).toEqual([
+      {
+        status: "skipped",
+        skipped: { name: "report.pdf", reason: "download_failed" },
+      },
+    ]);
+  });
+
+  test("with sign-in off, a group-chat file is tried with the app's own grant only", async () => {
+    server.use(
+      ...groupChatFile(
+        `${ONEDRIVE}/Documents/Microsoft%20Teams%20Chat%20Files/report.pdf`,
+      ),
+      http.get(
+        "https://graph.microsoft.com/v1.0/sites/:host/:kind/:name",
+        () => new HttpResponse(null, { status: 403 }),
+      ),
+    );
+    await signInSender();
+    const provider = makeProvider(false);
+    await provider.initialize();
+
+    const outcomes = await provider.downloadMessageFiles(groupChatMessage());
+
+    expect(outcomes).toEqual([
+      {
+        status: "skipped",
+        skipped: { name: "report.pdf", reason: "download_failed" },
+      },
+    ]);
+  });
+
+  test("the sign-in card goes to the chat and its link starts the sender's Microsoft sign-in", async () => {
+    const provider = makeProvider();
+    await provider.initialize();
+    const sent: Activity[] = [];
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — bypass private field
+    (provider as any).adapter = {
+      continueConversation: async (
+        _appId: string,
+        _ref: unknown,
+        logic: (context: {
+          sendActivity: (a: Activity) => void;
+        }) => Promise<void>,
+      ) => logic({ sendActivity: (activity) => sent.push(activity) }),
+    };
+
+    const posted = await provider.requestFileSignIn({
+      message: groupChatMessage({
+        metadata: {
+          conversationType: "groupChat",
+          tenantId: TENANT_ID,
+          conversationReference: { conversation: { id: CHAT_ID } },
+        },
+      }),
+      fileNames: ["report.pdf"],
+    });
+
+    expect(posted).toBe(true);
+    const card = sent[0]?.attachments?.[0]?.content as {
+      body: Array<{ text: string }>;
+      actions: Array<{ url: string }>;
+    };
+    expect(card.body[0].text).toContain("Alice");
+    expect(card.body[0].text).toContain("report.pdf");
+    const key = new URL(card.actions[0].url).searchParams.get("key") ?? "";
+    const authorize = new URL((await provider.beginUserSignIn(key)) ?? "");
+    expect(authorize.origin).toBe("https://login.microsoftonline.com");
+    expect(authorize.searchParams.get("client_id")).toBe(APP_ID);
+    expect(authorize.searchParams.get("login_hint")).toBe("alice@contoso.com");
+  });
+
+  test("no sign-in is offered to someone from another tenant", async () => {
+    const provider = makeProvider();
+    await provider.initialize();
+
+    const posted = await provider.requestFileSignIn({
+      message: groupChatMessage({
+        metadata: { conversationType: "groupChat", tenantId: "other-tenant" },
+      }),
+      fileNames: ["report.pdf"],
+    });
+
+    expect(posted).toBe(false);
   });
 });

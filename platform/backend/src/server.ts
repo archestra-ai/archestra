@@ -16,6 +16,7 @@ if (isMainModule) {
   await import("./observability/tracing/sdk");
 }
 
+import { isWorker } from "node:cluster";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -170,6 +171,7 @@ import {
   CONNECTION_SETUP_SCRIPT_PREFIX,
   HEALTH_PATH,
   MCP_GATEWAY_PREFIX,
+  MS_TEAMS_SIGN_IN_PATH,
   READY_PATH,
   SKILL_MARKETPLACE_PREFIX,
 } from "./routes/route-paths";
@@ -809,6 +811,8 @@ const startWebServer = async () => {
     if (url.startsWith(`${SKILL_MARKETPLACE_PREFIX}/`)) return true;
     // one-time setup token is embedded in the URL path; never log it
     if (url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)) return true;
+    // Teams sign-in key and OAuth code are in the query string; never log them
+    if (url.startsWith(MS_TEAMS_SIGN_IN_PATH)) return true;
     return false;
   };
 
@@ -1234,6 +1238,9 @@ const startWebServer = async () => {
       processedEmailCleanupIntervalId,
       activeChatRunReaperIntervalId,
     });
+    // A cluster supervisor must wait for initialization, not the temporary
+    // startup-health listener that opens this same port before seeding.
+    if (isWorker) process.send?.({ type: "archestra.web.ready" });
   } catch (err) {
     await startupHealth.close();
     fastify.log.error(err);

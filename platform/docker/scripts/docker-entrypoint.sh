@@ -284,6 +284,21 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
             echo "Connected to KinD network successfully"
         fi
 
+        # Agent Runtime pods call back into the platform (MCP gateway, LLM
+        # proxy). The internal URL is this container's loopback, which inside a
+        # pod is the pod itself, so hand them this container's address on the
+        # KinD network instead. Given as an IP, the run's egress policy allows
+        # exactly that address.
+        if [ -z "${ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL:-}" ]; then
+            KIND_NETWORK_IP=$(docker inspect -f "{{with index .NetworkSettings.Networks \"${KIND_NETWORK}\"}}{{.IPAddress}}{{end}}" "$CONTAINER_ID")
+            PLATFORM_PORT=$(printf '%s' "${ARCHESTRA_INTERNAL_API_BASE_URL:-}" | sed -n 's#^[a-z]*://[^/]*:\([0-9][0-9]*\).*#\1#p')
+            if [ -n "$KIND_NETWORK_IP" ]; then
+                export ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL="http://${KIND_NETWORK_IP}:${PLATFORM_PORT:-9000}"
+            else
+                echo "WARNING: Could not read this container's KinD network IP; Agent Runtime runs cannot reach the platform"
+            fi
+        fi
+
         # Export the kubeconfig path for supervisord to inherit, only if setup succeeded
         export ARCHESTRA_ORCHESTRATOR_KUBECONFIG="${KUBECONFIG_PATH}"
         export ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="${ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE:-default}"

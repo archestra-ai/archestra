@@ -112,8 +112,9 @@ describe("MCP gateway tools/list query budget", () => {
     );
     // Was 157 before the caller and agent were resolved once per request.
     // One more: the constant check for tools whose installations describe
-    // them differently (per-installation descriptions).
-    expect(statements.length).toBeLessThanOrEqual(61);
+    // them differently (per-installation descriptions). Seven fewer since a
+    // listing shares caller lookups between authentication and the listing.
+    expect(statements.length).toBeLessThanOrEqual(54);
     // Listing several installations must batch catalog metadata and labels,
     // reuse caller teams, and avoid enriching each server with its users.
     expect(
@@ -126,8 +127,13 @@ describe("MCP gateway tools/list query budget", () => {
           query.includes('"installation_command"'),
       ),
     ).toHaveLength(1);
+    // The caller's team memberships, read once by the combined lookup.
     expect(
-      statements.filter((query) => query.includes('from "team_member"')),
+      statements.filter(
+        (query) =>
+          query.includes('from "team_member"') ||
+          query.includes("subject_teams"),
+      ),
     ).toHaveLength(1);
     expect(
       statements.filter((query) => query.includes('from "mcp_server_user"')),
@@ -137,6 +143,41 @@ describe("MCP gateway tools/list query budget", () => {
         (query) =>
           query.startsWith("select distinct") &&
           query.includes('from "agent_tools"'),
+      ),
+    ).toHaveLength(0);
+
+    // A tool call reads its catalog item once, without the labels, teams and
+    // authors only catalog pages show. The upstream server is unreachable;
+    // everything before the upstream call still runs.
+    const call = () =>
+      app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${token.value}`,
+        },
+        payload: {
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: { name: "budget-0__tool-0", arguments: {} },
+        },
+      });
+    const { statements: callStatements } = await recordQueries(call);
+    expect(
+      callStatements.filter(
+        (query) =>
+          query.includes('from "internal_mcp_catalog"') &&
+          query.includes('"installation_command"'),
+      ),
+    ).toHaveLength(1);
+    expect(
+      callStatements.filter(
+        (query) =>
+          query.includes('from "mcp_catalog_labels"') ||
+          query.includes('from "user" where "user"."id" = ANY'),
       ),
     ).toHaveLength(0);
   });

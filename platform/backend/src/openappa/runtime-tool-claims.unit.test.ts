@@ -16,7 +16,7 @@ const session = {
 const request = {
   session,
   toolCallId: "call-start",
-  action: "start_run",
+  action: "start_agent_run",
   arguments: {
     agent_id: "worker",
     prompt: "Prepare a report",
@@ -170,7 +170,7 @@ describe("runtime tool origin proofs", () => {
         },
         {
           arguments: JSON.stringify({
-            tool_name: "archestra__steer_run",
+            tool_name: "archestra__steer_agent_run",
             tool_args: { message: "original", runtime_proof: "proof" },
           }),
         },
@@ -180,7 +180,7 @@ describe("runtime tool origin proofs", () => {
     stripRuntimeToolProofs(body);
     expect(JSON.parse(body.input[0].arguments)).toEqual({ task_id: "task" });
     expect(JSON.parse(body.input[1].arguments)).toEqual({
-      tool_name: "archestra__steer_run",
+      tool_name: "archestra__steer_agent_run",
       tool_args: { message: "original" },
     });
     expect(body.input[2].arguments).toBe("non-JSON custom tool input");
@@ -191,7 +191,7 @@ describe("runtime tool origin proofs", () => {
       input: [
         {
           arguments: JSON.stringify({
-            tool_name: "archestra__steer_run",
+            tool_name: "archestra__steer_agent_run",
             tool_args: JSON.stringify({
               message: "original",
               runtime_proof: "proof",
@@ -221,7 +221,7 @@ describe("runtime reads signed while enforcement is off", () => {
     const transfer = (args: Record<string, unknown>) =>
       isObservedRead({ action: "transfer_workspace_file", args });
 
-    expect(isObservedRead({ action: "get_run", args: {} })).toBe(true);
+    expect(isObservedRead({ action: "get_agent_run", args: {} })).toBe(true);
     expect(isObservedRead({ action: "read_workspace_file", args: {} })).toBe(
       true,
     );
@@ -229,7 +229,11 @@ describe("runtime reads signed while enforcement is off", () => {
     expect(transfer({ direction: "upload" })).toBe(false);
     expect(transfer({ direction: "sync" })).toBe(false);
     expect(transfer({})).toBe(false);
-    for (const action of ["start_run", "steer_run", "write_workspace_file"]) {
+    for (const action of [
+      "start_agent_run",
+      "steer_agent_run",
+      "write_workspace_file",
+    ]) {
       expect(isObservedRead({ action, args: {} })).toBe(false);
     }
   });

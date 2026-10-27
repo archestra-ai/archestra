@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useIsAuthenticated } from "@/lib/auth/auth.hook";
+import { useIsAuthenticated } from "@/lib/auth/use-is-authenticated";
 import { throwOnApiError } from "@/lib/utils/api";
 
 export const onboardingKeys = {
@@ -9,8 +9,6 @@ export const onboardingKeys = {
   seenNavItems: () => [...onboardingKeys.all, "seen-nav-items"] as const,
   surveyEligibility: () =>
     [...onboardingKeys.all, "survey-eligibility"] as const,
-  feedbackPopupActivation: () =>
-    [...onboardingKeys.all, "feedback-popup-activation"] as const,
 };
 
 /**
@@ -91,27 +89,6 @@ export function useOnboardingSurveyEligibility({
         await archestraApiSdk.getOnboardingSurveyEligibility();
       throwOnApiError(error, { toastOnError: false });
       return data ?? { eligible: false };
-    },
-  });
-}
-
-/**
- * When the instance got activated (MCP server connected + a successful tool
- * call routed) — the trigger signal for the feedback pop-up. Admin-only
- * endpoint, so the caller gates `enabled`. No error toast: on failure the
- * pop-up simply isn't shown.
- */
-export function useFeedbackPopupActivation({ enabled }: { enabled: boolean }) {
-  return useQuery({
-    queryKey: onboardingKeys.feedbackPopupActivation(),
-    enabled,
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-    queryFn: async () => {
-      const { data, error } =
-        await archestraApiSdk.getFeedbackPopupActivation();
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? { activatedAt: null };
     },
   });
 }

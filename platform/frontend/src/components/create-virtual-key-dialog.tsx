@@ -460,6 +460,7 @@ export function CreateVirtualKeyDialog({
                   />
                 )}
                 <AdvancedLabelsSection
+                  attributionSource="credential"
                   ref={labelsRef}
                   labels={labels}
                   onLabelsChange={setLabels}

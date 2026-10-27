@@ -273,6 +273,7 @@ export function EditVirtualKeyDialog({
             currentUsage={virtualKey.spendCap?.currentUsage ?? null}
           />
           <AdvancedLabelsSection
+            attributionSource="credential"
             ref={labelsRef}
             labels={labels}
             onLabelsChange={setLabels}

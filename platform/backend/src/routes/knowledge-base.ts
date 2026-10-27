@@ -85,6 +85,7 @@ import {
   mfilesConnectorGateViolation,
 } from "@/knowledge-base/mfiles-gates";
 import { nextPermissionSyncDueAt } from "@/knowledge-base/permission-sync-schedule";
+import { salesforceAuthPolicyViolation } from "@/knowledge-base/salesforce-auth-policy";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -1200,6 +1201,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // SPDX-SnippetEnd
       }
 
+      const salesforceViolation = salesforceAuthPolicyViolation({
+        connectorType: body.connectorType,
+        nextConfig: body.config,
+      });
+      if (salesforceViolation) throw new ApiError(400, salesforceViolation);
       // Validate connector config
       const connectorImpl = getConnector(body.connectorType);
       const validation = await connectorImpl.validateConfig(body.config);
@@ -1208,6 +1214,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400,
           `Invalid connector configuration: ${validation.error}`,
         );
+      }
+
+      if (
+        body.connectorType === "salesforce" &&
+        !body.credentials?.apiToken.trim()
+      ) {
+        throw new ApiError(400, "Salesforce OAuth consumer secret is required");
       }
 
       // Validate knowledge base IDs if provided
@@ -1712,6 +1725,23 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // resolve the connector's auth shape after this update so credential
       // storage stays consistent across App <-> inline-secret transitions
       const nextConfig = body.config ?? connector.config;
+      const salesforceViolation = salesforceAuthPolicyViolation({
+        connectorType: connector.connectorType,
+        nextConfig: body.config,
+        existingConfig: connector.config,
+        hasNewSecret: Boolean(body.credentials?.apiToken?.trim()),
+      });
+      if (salesforceViolation) throw new ApiError(400, salesforceViolation);
+      if (connector.connectorType === "salesforce" && body.config) {
+        const validation = await getConnector("salesforce").validateConfig(
+          body.config,
+        );
+        if (!validation.valid)
+          throw new ApiError(
+            400,
+            `Invalid connector configuration: ${validation.error}`,
+          );
+      }
       const appConfigRef = await resolveGithubAppConfigReference({
         config: nextConfig,
         organizationId,
@@ -2149,6 +2179,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               id,
               organizationId,
               userId: user.id,
+              action: "delete",
             }).catch(() => null);
             if (connector) found.set(id, connector);
           }
@@ -2184,6 +2215,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id,
         organizationId,
         userId: user.id,
+        action: "delete",
       });
 
       // Soft-delete via the shared service: cancels queued syncs (they no longer
@@ -3550,7 +3582,7 @@ async function findConnectorOrThrow(params: {
   id: string;
   organizationId: string;
   userId: string;
-  action?: "read" | "update";
+  action?: "read" | "update" | "delete";
 }) {
   const connector = await KnowledgeBaseConnectorModel.findById(params.id);
   if (!connector || connector.organizationId !== params.organizationId) {
@@ -3567,10 +3599,15 @@ async function findConnectorOrThrow(params: {
           access,
           connector,
         )
-      : knowledgeSourceAccessControlService.canAccessConnector(
-          access,
-          connector,
-        );
+      : params.action === "delete"
+        ? knowledgeSourceAccessControlService.canDeleteConnector(
+            access,
+            connector,
+          )
+        : knowledgeSourceAccessControlService.canAccessConnector(
+            access,
+            connector,
+          );
   if (!permitted) {
     throw new ApiError(404, "Connector not found");
   }

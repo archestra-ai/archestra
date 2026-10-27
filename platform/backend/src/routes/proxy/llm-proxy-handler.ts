@@ -1929,6 +1929,7 @@ export async function handleLLMProxy<
         serviceAccountId,
         virtualKeyId,
         passthroughVirtualKeyId,
+        llmProviderApiKeyId: perKeyChatApiKeyId,
         appId: attributedAppId,
         sessionId,
         sessionSource,
@@ -2365,6 +2366,7 @@ async function handleStreaming<
 
       try {
         const record = buildInteractionRecord({
+          llmProviderApiKeyId: ctx.providerApiKeyId,
           billingAttribution: ctx.billingAttribution,
           agent,
           externalAgentId,
@@ -3230,6 +3232,7 @@ async function handleNonStreaming<
             providerApiKeyId: ctx.providerApiKeyId,
           });
           const record = buildInteractionRecord({
+            llmProviderApiKeyId: ctx.providerApiKeyId,
             agent,
             billingAttribution: ctx.billingAttribution,
             externalAgentId,
@@ -3613,6 +3616,7 @@ async function handleNonStreaming<
       });
 
       const refusalRecord = buildInteractionRecord({
+        llmProviderApiKeyId: ctx.providerApiKeyId,
         billingAttribution: ctx.billingAttribution,
         agent,
         externalAgentId,
@@ -3786,6 +3790,7 @@ async function handleNonStreaming<
   let responsePersisted = false;
   try {
     const record = buildInteractionRecord({
+      llmProviderApiKeyId: ctx.providerApiKeyId,
       billingAttribution: ctx.billingAttribution,
       agent,
       externalAgentId,

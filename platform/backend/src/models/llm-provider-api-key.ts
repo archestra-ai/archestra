@@ -1186,6 +1186,60 @@ class LlmProviderApiKeyModel {
    * oldest). Self-contained so the per-user-credential guard can call it before
    * the rest of getCurrentApiKey runs.
    */
+  /**
+   * For GitHub Copilot keys: whether each served requests as an organization
+   * subscription (with its GitHub organization) or a personal sign-in. Keys
+   * that no longer exist are left out.
+   */
+  static async findCopilotCredentialSources(
+    ids: string[],
+  ): Promise<
+    Map<
+      string,
+      | { kind: "organization"; organization: string | null }
+      | { kind: "personal" }
+    >
+  > {
+    const unique = [...new Set(ids)];
+    const sources = new Map<
+      string,
+      | { kind: "organization"; organization: string | null }
+      | { kind: "personal" }
+    >();
+    if (unique.length === 0) return sources;
+    const rows = await db
+      .select({
+        id: schema.llmProviderApiKeysTable.id,
+        provider: schema.llmProviderApiKeysTable.provider,
+        credentialKind: schema.llmProviderApiKeysTable.credentialKind,
+        secretId: schema.llmProviderApiKeysTable.secretId,
+        secret: schema.secretsTable.secret,
+        secretIsVault: schema.secretsTable.isVault,
+        secretIsByosVault: schema.secretsTable.isByosVault,
+      })
+      .from(schema.llmProviderApiKeysTable)
+      .leftJoin(
+        schema.secretsTable,
+        eq(schema.llmProviderApiKeysTable.secretId, schema.secretsTable.id),
+      )
+      .where(inArray(schema.llmProviderApiKeysTable.id, unique));
+    await Promise.all(
+      rows.map(async (row) => {
+        if (row.provider !== "github-copilot") return;
+        sources.set(
+          row.id,
+          row.credentialKind === "github_app"
+            ? {
+                kind: "organization",
+                organization: await githubOrganizationOf(row),
+              }
+            : { kind: "personal" },
+        );
+      }),
+    );
+    return sources;
+  }
+
   /** True when the key stores an organization's GitHub App credential. */
   static async isGithubAppKey(id: string | null | undefined): Promise<boolean> {
     if (!id) return false;

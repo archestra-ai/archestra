@@ -55958,6 +55958,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -56029,6 +56030,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -56044,6 +56051,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -56263,6 +56271,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -56278,6 +56292,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -56372,6 +56387,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
         } | {
@@ -56385,6 +56406,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -56479,6 +56501,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
         } | {
@@ -56492,6 +56520,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -56586,6 +56615,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
         } | {
@@ -56599,6 +56634,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -56693,6 +56729,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
         } | {
@@ -56706,6 +56748,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -56777,6 +56820,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -56792,6 +56841,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -56863,6 +56913,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -56878,6 +56934,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -57390,6 +57447,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -57405,6 +57468,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -58016,6 +58080,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -58031,6 +58101,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -58102,6 +58173,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -58117,6 +58194,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -58188,6 +58266,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -58203,6 +58287,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -58274,6 +58359,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -58289,6 +58380,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -58360,6 +58452,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -58375,6 +58473,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -58446,6 +58545,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -58461,6 +58566,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -58532,6 +58638,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -58547,6 +58659,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -58618,6 +58731,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -58633,6 +58752,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -58704,6 +58824,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -58719,6 +58845,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -58790,6 +58917,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -58805,6 +58938,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -58876,6 +59010,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -58891,6 +59031,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -58962,6 +59103,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -58977,6 +59124,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -59048,6 +59196,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -59063,6 +59217,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -59858,6 +60013,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -59873,6 +60034,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -60668,6 +60830,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -60683,6 +60851,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -61478,6 +61647,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -61493,6 +61668,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -61564,6 +61740,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -61579,6 +61761,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -61718,6 +61901,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -61733,6 +61922,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -62528,6 +62718,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -62543,6 +62739,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -62647,6 +62844,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -62662,6 +62865,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -62766,6 +62970,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -62781,6 +62991,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -62897,6 +63108,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -62912,6 +63129,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -63090,6 +63308,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -63105,6 +63329,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -63283,6 +63508,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -63298,6 +63529,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -63476,6 +63708,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -63491,6 +63729,7 @@ export type GetInteractionsResponses = {
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
             connectorId: string | null;
+            llmProviderApiKeyId: string | null;
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
@@ -63562,6 +63801,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             externalAgentIdLabel?: string | null;
@@ -63860,6 +64105,12 @@ export type GetInteractionSessionsResponses = {
             userIds: Array<string>;
             unattributedReason: 'shared_virtual_key' | 'provider_key' | 'client_credentials' | 'internal' | 'unknown' | null;
             virtualKeys: Array<InteractionVirtualKey>;
+            copilotCredentialSources?: Array<{
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            }>;
             /**
              * Short preview (max 200 chars) of the session's last user message. Raw request bodies are not returned by this listing.
              */
@@ -64250,6 +64501,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -64321,6 +64573,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -64336,6 +64594,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -64555,6 +64814,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -64570,6 +64835,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -64664,6 +64930,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
     } | {
@@ -64677,6 +64949,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -64771,6 +65044,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
     } | {
@@ -64784,6 +65063,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -64878,6 +65158,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
     } | {
@@ -64891,6 +65177,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -64985,6 +65272,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
     } | {
@@ -64998,6 +65291,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -65069,6 +65363,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -65084,6 +65384,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -65155,6 +65456,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -65170,6 +65477,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -65682,6 +65990,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -65697,6 +66011,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -66308,6 +66623,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -66323,6 +66644,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -66394,6 +66716,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -66409,6 +66737,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -66480,6 +66809,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -66495,6 +66830,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -66566,6 +66902,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -66581,6 +66923,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -66652,6 +66995,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -66667,6 +67016,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -66738,6 +67088,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -66753,6 +67109,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -66824,6 +67181,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -66839,6 +67202,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -66910,6 +67274,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -66925,6 +67295,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -66996,6 +67367,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -67011,6 +67388,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -67082,6 +67460,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -67097,6 +67481,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -67168,6 +67553,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -67183,6 +67574,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -67254,6 +67646,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -67269,6 +67667,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -67340,6 +67739,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -67355,6 +67760,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -68150,6 +68556,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -68165,6 +68577,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -68960,6 +69373,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -68975,6 +69394,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -69770,6 +70190,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -69785,6 +70211,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -69856,6 +70283,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -69871,6 +70304,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -70010,6 +70444,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -70025,6 +70465,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -70820,6 +71261,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -70835,6 +71282,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -70939,6 +71387,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -70954,6 +71408,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -71058,6 +71513,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -71073,6 +71534,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -71189,6 +71651,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -71204,6 +71672,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -71382,6 +71851,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -71397,6 +71872,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -71575,6 +72051,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -71590,6 +72072,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -71768,6 +72251,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -71783,6 +72272,7 @@ export type GetInteractionResponses = {
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
         connectorId: string | null;
+        llmProviderApiKeyId: string | null;
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
@@ -71854,6 +72344,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         externalAgentIdLabel?: string | null;

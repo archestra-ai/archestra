@@ -1,0 +1,1 @@
+ALTER TABLE "interactions" ADD COLUMN "llm_provider_api_key_id" uuid;

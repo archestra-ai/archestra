@@ -573,6 +573,8 @@ export function buildInteractionRecord(params: {
   serviceAccountId?: string;
   virtualKeyId?: string;
   passthroughVirtualKeyId?: string;
+  /** The provider key that served the call, when Archestra resolved one. */
+  llmProviderApiKeyId?: string;
   /** MCP App whose runtime made this call; only app-runtime completions set it. */
   appId?: string;
   sessionId?: string | null;
@@ -608,6 +610,7 @@ export function buildInteractionRecord(params: {
     serviceAccountId: params.serviceAccountId,
     virtualKeyId: params.virtualKeyId,
     passthroughVirtualKeyId: params.passthroughVirtualKeyId,
+    llmProviderApiKeyId: params.llmProviderApiKeyId,
     appId: params.appId,
     sessionId: params.sessionId,
     sessionSource: params.sessionSource,

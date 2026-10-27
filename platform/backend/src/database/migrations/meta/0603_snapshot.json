@@ -1,5 +1,5 @@
 {
-  "id": "4bcf8244-9ffd-41fd-a96d-ecab757d6b76",
+  "id": "e16e6894-b7f2-4b90-aced-7c2ad5e9e0bd",
   "prevId": "4b3388ce-99a7-4717-89ab-4fb3ae64c453",
   "version": "7",
   "dialect": "postgresql",
@@ -23221,6 +23221,13 @@
           "notNull": true,
           "default": "'0'"
         },
+        "call_cost_usd": {
+          "name": "call_cost_usd",
+          "type": "numeric(12, 6)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
         "attempts": {
           "name": "attempts",
           "type": "integer",
@@ -23296,6 +23303,12 @@
         "error": {
           "name": "error",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fit_generation": {
+          "name": "fit_generation",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": false
         },

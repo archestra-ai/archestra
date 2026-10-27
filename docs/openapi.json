@@ -109947,6 +109947,9 @@
                           "nullable": true,
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "awaitingFit": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -109964,7 +109967,8 @@
                         "spentCostUsd",
                         "progress",
                         "error",
-                        "completedAt"
+                        "completedAt",
+                        "awaitingFit"
                       ],
                       "additionalProperties": false
                     },
@@ -109972,6 +109976,16 @@
                       "nullable": true,
                       "type": "object",
                       "properties": {
+                        "backfillId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "scorerVersionId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "sessions": {
                           "type": "integer",
                           "minimum": 0,
@@ -109995,6 +110009,8 @@
                         }
                       },
                       "required": [
+                        "backfillId",
+                        "scorerVersionId",
                         "sessions",
                         "remaining",
                         "estimatedCostUsd",
@@ -110399,6 +110415,9 @@
                           "nullable": true,
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "awaitingFit": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -110416,7 +110435,8 @@
                         "spentCostUsd",
                         "progress",
                         "error",
-                        "completedAt"
+                        "completedAt",
+                        "awaitingFit"
                       ],
                       "additionalProperties": false
                     },
@@ -110424,6 +110444,16 @@
                       "nullable": true,
                       "type": "object",
                       "properties": {
+                        "backfillId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "scorerVersionId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "sessions": {
                           "type": "integer",
                           "minimum": 0,
@@ -110447,6 +110477,8 @@
                         }
                       },
                       "required": [
+                        "backfillId",
+                        "scorerVersionId",
                         "sessions",
                         "remaining",
                         "estimatedCostUsd",
@@ -110853,6 +110885,9 @@
                           "nullable": true,
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "awaitingFit": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -110870,7 +110905,8 @@
                         "spentCostUsd",
                         "progress",
                         "error",
-                        "completedAt"
+                        "completedAt",
+                        "awaitingFit"
                       ],
                       "additionalProperties": false
                     },
@@ -110878,6 +110914,16 @@
                       "nullable": true,
                       "type": "object",
                       "properties": {
+                        "backfillId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "scorerVersionId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "sessions": {
                           "type": "integer",
                           "minimum": 0,
@@ -110901,6 +110947,8 @@
                         }
                       },
                       "required": [
+                        "backfillId",
+                        "scorerVersionId",
                         "sessions",
                         "remaining",
                         "estimatedCostUsd",
@@ -111174,6 +111222,16 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "backfillId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "scorerVersionId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "maxSessions": {
                     "default": 3000,
                     "type": "integer",
@@ -111184,10 +111242,13 @@
                     "type": "number",
                     "minimum": 0,
                     "exclusiveMinimum": true,
-                    "maximum": 1000
+                    "maximum": 1000,
+                    "description": "Spending limit for the scorer calls in USD; may be exceeded by at most 4 × the per-call cost of the calls in flight"
                   }
                 },
                 "required": [
+                  "backfillId",
+                  "scorerVersionId",
                   "maxCostUsd"
                 ],
                 "additionalProperties": false
@@ -111335,6 +111396,9 @@
                           "nullable": true,
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "awaitingFit": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -111352,7 +111416,8 @@
                         "spentCostUsd",
                         "progress",
                         "error",
-                        "completedAt"
+                        "completedAt",
+                        "awaitingFit"
                       ],
                       "additionalProperties": false
                     },
@@ -111360,6 +111425,16 @@
                       "nullable": true,
                       "type": "object",
                       "properties": {
+                        "backfillId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "scorerVersionId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "sessions": {
                           "type": "integer",
                           "minimum": 0,
@@ -111383,6 +111458,8 @@
                         }
                       },
                       "required": [
+                        "backfillId",
+                        "scorerVersionId",
                         "sessions",
                         "remaining",
                         "estimatedCostUsd",

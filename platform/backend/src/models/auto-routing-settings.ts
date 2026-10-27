@@ -64,6 +64,24 @@ class AutoRoutingSettingsModel {
   }
 
   /**
+   * Requests a re-plan inside `tx`, under the plan lock, so the bump commits
+   * with whatever made it necessary. The new generation; null without an LLM
+   * Proxy.
+   */
+  static async bumpGeneration(
+    organizationId: string,
+    tx: Transaction,
+  ): Promise<number | null> {
+    await lockRoutingPlan(tx, organizationId);
+    const [row] = await tx
+      .update(agents)
+      .set({ autoRoutingGeneration: sql`${agents.autoRoutingGeneration} + 1` })
+      .where(organizationLlmProxy(organizationId))
+      .returning({ generation: agents.autoRoutingGeneration });
+    return row?.generation ?? null;
+  }
+
+  /**
    * Makes `scorerVersionId` the organization's scorer version, bumping the
    * generation so plans fitted for the previous version stop serving and
    * cannot publish. Rechecked under the lock: concurrent callers bump once.

@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { logContentNotStored } from "@archestra/shared";
+import {
+  AUTO_ROUTING_BACKFILL_SCORER_CALLS,
+  logContentNotStored,
+} from "@archestra/shared";
 import { eq, inArray, sql } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import config from "@/config";
@@ -8,6 +11,7 @@ import AgentModel from "@/models/agent";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import RoutingBackfillModel from "@/models/routing-backfill";
 import RoutingHistoryModel from "@/models/routing-history";
+import { autoRoutingDispatcher } from "@/task-queue/handlers/auto-routing-dispatch-handler";
 import { beforeEach, describe, expect, type TestFixtures, test } from "@/test";
 import {
   configureAutoRouting,
@@ -78,13 +82,19 @@ describe("auto routing backfill", () => {
     },
   );
 
-  function answerJev(respond?: () => Promise<void>) {
+  function answerJev(
+    options: { respond?: () => Promise<void>; costUsd?: number } = {},
+  ) {
     server.use(
       http.post(JEV_ENDPOINT, async ({ request }) => {
         const body = (await request.json()) as { state: { prompt: string } };
         prompts.push(body.state.prompt);
-        await respond?.();
-        return HttpResponse.json(ANSWERS);
+        await options.respond?.();
+        return HttpResponse.json(
+          options.costUsd === undefined
+            ? ANSWERS
+            : { ...ANSWERS, usage: { cost: options.costUsd } },
+        );
       }),
     );
   }
@@ -108,8 +118,8 @@ describe("auto routing backfill", () => {
     });
   }
 
-  async function sessions(count: number) {
-    const keys = Array.from({ length: count }, (_, i) => `session-${i}`);
+  async function sessions(count: number, prefix = "session") {
+    const keys = Array.from({ length: count }, (_, i) => `${prefix}-${i}`);
     for (const [i, key] of keys.entries()) {
       await turn(key, `Task number ${i}`, {
         createdAt: new Date(Date.now() - (2 + i) * DAY_MS),
@@ -123,15 +133,26 @@ describe("auto routing backfill", () => {
     await runBackfill();
   }
 
+  /** Starts scoring what the organization is offered, as an admin confirming it would. */
+  async function startScoring(
+    body: { maxSessions?: number; maxCostUsd?: number } = {},
+  ) {
+    const { scoreOffer } = await describeBackfill(organizationId);
+    if (!scoreOffer) throw new Error("Nothing is offered for scoring");
+    return startBackfillScoring(organizationId, userId, {
+      backfillId: scoreOffer.backfillId,
+      scorerVersionId: scoreOffer.scorerVersionId,
+      maxSessions: body.maxSessions ?? 3000,
+      maxCostUsd: body.maxCostUsd ?? 10,
+    });
+  }
+
   async function scanAndScore(body: {
     maxSessions?: number;
     maxCostUsd?: number;
   }) {
     await scan();
-    await startBackfillScoring(organizationId, userId, {
-      maxSessions: body.maxSessions ?? 3000,
-      maxCostUsd: body.maxCostUsd ?? 10,
-    });
+    await startScoring(body);
     await runBackfill();
   }
 
@@ -189,6 +210,11 @@ describe("auto routing backfill", () => {
       createdAt: new Date(Date.now() - 40 * DAY_MS),
     });
     await turn("delta", "Only the new suffix", { parentId: parent.id });
+    // Began before the window: its continuation is not a new session.
+    await turn("crossing", "An old conversation", {
+      createdAt: new Date(Date.now() - 36 * DAY_MS),
+    });
+    await turn("crossing", "Picked up again");
     for (const attempt of [1, 2]) {
       await turn("failover", "Write the migration tests", {
         attempt,
@@ -232,7 +258,6 @@ describe("auto routing backfill", () => {
       "side-turn": "scored",
       failover: "scored",
       "shared-id": "scored",
-      delta: "no_text",
       "metadata-only": "no_text",
       encrypted: "no_text",
     });
@@ -242,7 +267,7 @@ describe("auto routing backfill", () => {
       .where(eq(schema.routingHistorySessionsTable.sessionKey, "failover"));
     expect(failover).toMatchObject({ interactions: 2, totalTokens: 2_400 });
     const { backfill } = await describeBackfill(organizationId);
-    expect(backfill).toMatchObject({ status: "done", eligibleSessions: 7 });
+    expect(backfill).toMatchObject({ status: "done", eligibleSessions: 6 });
     expect(backfill?.breakdown).toContainEqual({
       apiShape: "messages",
       client: "claude-code",
@@ -307,10 +332,7 @@ describe("auto routing backfill", () => {
   test("a run that stops or dies resumes where it committed, calling the scorer once per session", async () => {
     await sessions(10);
     await scan();
-    await startBackfillScoring(organizationId, userId, {
-      maxSessions: 10,
-      maxCostUsd: 10,
-    });
+    await startScoring({ maxSessions: 10 });
     // A worker claims the backfill and dies; its lease is already expired.
     await RoutingBackfillModel.claimNext({
       owner: "dead-worker",
@@ -335,14 +357,13 @@ describe("auto routing backfill", () => {
   test("cancelling mid-score drops the readings still in flight", async () => {
     await sessions(5);
     await scan();
-    await startBackfillScoring(organizationId, userId, {
-      maxSessions: 5,
-      maxCostUsd: 10,
-    });
+    await startScoring({ maxSessions: 5 });
     let cancelled: Promise<void> | null = null;
-    answerJev(async () => {
-      cancelled ??= cancelBackfill(organizationId);
-      await cancelled;
+    answerJev({
+      respond: async () => {
+        cancelled ??= cancelBackfill(organizationId);
+        await cancelled;
+      },
     });
 
     await runBackfill();
@@ -365,7 +386,7 @@ describe("auto routing backfill", () => {
     const { backfill } = await describeBackfill(organizationId);
     expect(backfill).toMatchObject({
       status: "done",
-      error: "Stopped at the cost ceiling.",
+      error: "Stopped at the spending limit.",
       spentCostUsd: 0.002,
       progress: { scored: 2 },
     });
@@ -381,6 +402,7 @@ describe("auto routing backfill", () => {
     const waiting = await RoutingBackfillModel.findLatest(organizationId);
     await RoutingBackfillModel.startScore({
       id: waiting?.id ?? "",
+      organizationId,
       scorerVersionId: previous.id,
       maxSessions: 4,
       maxCostUsd: 10,
@@ -397,10 +419,7 @@ describe("auto routing backfill", () => {
     });
     expect(prompts).toHaveLength(0);
 
-    await startBackfillScoring(organizationId, userId, {
-      maxSessions: 4,
-      maxCostUsd: 10,
-    });
+    await startScoring({ maxSessions: 4 });
     await runBackfill();
     // Readings of the earlier version stay next to the new ones.
     const [first] = await RoutingHistoryModel.nextToScore({
@@ -479,10 +498,7 @@ describe("auto routing backfill", () => {
     config.autoRouting.minSessions = 3;
     await sessions(6);
     await scan();
-    await startBackfillScoring(organizationId, userId, {
-      maxSessions: 3,
-      maxCostUsd: 10,
-    });
+    await startScoring({ maxSessions: 3 });
     const before = await prepareFit(organizationId);
 
     await runBackfill();
@@ -531,5 +547,288 @@ describe("auto routing backfill", () => {
       pastSessions: 3,
       volumeSource: "live",
     });
+  });
+  test("a call costing more than its reservation raises the next ones; the overshoot stays within the calls in flight", async () => {
+    await sessions(20);
+    // The first answer comes alone: once it reported its cost, a call
+    // reserving the least a call reserves would still fit under the limit.
+    let arrived = 0;
+    let answerAll: () => void = () => {};
+    const answered = new Promise<void>((resolve) => {
+      answerAll = resolve;
+    });
+    answerJev({
+      costUsd: 0.01,
+      respond: async () => {
+        const call = ++arrived;
+        if (call === 1) {
+          setTimeout(answerAll, 300);
+          return;
+        }
+        if (call > AUTO_ROUTING_BACKFILL_SCORER_CALLS) answerAll();
+        await answered;
+      },
+    });
+
+    await scanAndScore({ maxSessions: 20, maxCostUsd: 0.02 });
+
+    expect(prompts.length).toBeLessThanOrEqual(
+      AUTO_ROUTING_BACKFILL_SCORER_CALLS,
+    );
+    const [row] = await db
+      .select()
+      .from(schema.routingBackfillsTable)
+      .where(eq(schema.routingBackfillsTable.organizationId, organizationId));
+    expect(row).toMatchObject({
+      status: "done",
+      error: "Stopped at the spending limit.",
+      reservedCostUsd: "0.000000",
+      callCostUsd: "0.010000",
+    });
+    expect(Number(row.spentCostUsd)).toBeCloseTo(prompts.length * 0.01);
+  });
+
+  test("a failed usage copy pays for nothing, and the retry pays each session once", async () => {
+    await sessions(3);
+    await scan();
+    await startScoring();
+    await db.execute(sql`
+      create function fail_history_usage() returns trigger language plpgsql
+      as $$ begin raise exception 'usage copy failed'; end $$`);
+    await db.execute(sql`
+      create trigger fail_history_usage before insert on routing_history_usage
+      for each row execute function fail_history_usage()`);
+
+    await runBackfill();
+    const failed = await describeBackfill(organizationId);
+    expect(failed.backfill).toMatchObject({
+      status: "running",
+      spentCostUsd: 0,
+      progress: { scored: 0 },
+    });
+    expect(prompts).toHaveLength(0);
+
+    await db.execute(
+      sql`drop trigger fail_history_usage on routing_history_usage`,
+    );
+    await runBackfill();
+    const { backfill } = await describeBackfill(organizationId);
+    expect(backfill).toMatchObject({
+      status: "done",
+      spentCostUsd: 0.003,
+      progress: { scored: 3 },
+    });
+    expect(prompts).toHaveLength(3);
+  });
+
+  test("completion and its re-plan request commit together; the dispatcher fits what it requested", async () => {
+    await sessions(2);
+    await scan();
+    await startScoring();
+    const before = await AutoRoutingSettingsModel.find(organizationId);
+    await db.execute(sql`
+      create function fail_generation() returns trigger language plpgsql
+      as $$ begin raise exception 'generation bump failed'; end $$`);
+    await db.execute(sql`
+      create trigger fail_generation before update of auto_routing_generation on agents
+      for each row execute function fail_generation()`);
+
+    await runBackfill();
+    expect((await describeBackfill(organizationId)).backfill?.status).toBe(
+      "running",
+    );
+    await db.execute(sql`drop trigger fail_generation on agents`);
+    await runBackfill();
+
+    const after = await AutoRoutingSettingsModel.find(organizationId);
+    expect(after?.generation).toBe((before?.generation ?? 0) + 1);
+    expect((await describeBackfill(organizationId)).backfill).toMatchObject({
+      status: "done",
+      awaitingFit: true,
+    });
+    // The enqueue after the commit is lost; the dispatcher still fits.
+    await db
+      .delete(schema.tasksTable)
+      .where(eq(schema.tasksTable.taskType, "auto_routing_fit"));
+    await autoRoutingDispatcher.dispatch();
+    const fits = await db
+      .select()
+      .from(schema.tasksTable)
+      .where(eq(schema.tasksTable.taskType, "auto_routing_fit"));
+    expect(fits).toHaveLength(1);
+    await runFit(organizationId);
+    expect((await describeBackfill(organizationId)).backfill?.awaitingFit).toBe(
+      false,
+    );
+  });
+
+  test("finds the opening past a page of auxiliary rows and decodes it by its own request shape", async () => {
+    const start = Date.now() - 4 * DAY_MS;
+    for (let i = 0; i < 25; i++) {
+      await turn("long-preamble", "", {
+        type: "openai:responses",
+        request: {
+          model: "gpt-4o",
+          input: "Please write a 5-10 word title for this conversation",
+        } as unknown as InteractionRequest,
+        createdAt: new Date(start + i * 1000),
+      });
+    }
+    await turn("long-preamble", "Refactor the billing module", {
+      createdAt: new Date(start + 60_000),
+    });
+
+    await scanAndScore({});
+
+    expect(prompts).toEqual(["Refactor the billing module"]);
+    expect(await readings()).toEqual({ "long-preamble": "scored" });
+  });
+
+  test("scoring starts only for the scan and scorer the admin was offered", async () => {
+    await sessions(2);
+    await scan();
+    const { scoreOffer: offered } = await describeBackfill(organizationId);
+    if (!offered) throw new Error("Nothing is offered for scoring");
+    const confirm = (offer: { backfillId: string; scorerVersionId: string }) =>
+      startBackfillScoring(organizationId, userId, {
+        ...offer,
+        maxSessions: 2,
+        maxCostUsd: 1,
+      });
+
+    await expect(
+      confirm({ ...offered, scorerVersionId: (await makeScorerVersion()).id }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    // Another admin scans again before the first one confirms.
+    await scan();
+    await expect(confirm(offered)).rejects.toMatchObject({ statusCode: 409 });
+
+    const current = await describeBackfill(organizationId);
+    expect(current.backfill?.status).toBe("scanned");
+    expect(current.scoreOffer?.backfillId).not.toBe(offered.backfillId);
+    expect(prompts).toHaveLength(0);
+    if (!current.scoreOffer) throw new Error("Nothing is offered for scoring");
+    await confirm(current.scoreOffer);
+    await runBackfill();
+    expect(prompts).toHaveLength(2);
+  });
+
+  test("a fit learns from one frame: the gap-free rank prefix of the latest scan, at its population's weight", async () => {
+    await sessions(4, "early");
+    await scanAndScore({ maxSessions: 4 });
+    await sessions(8, "late");
+    await scan();
+    await startScoring({ maxSessions: 3 });
+    await runBackfill();
+
+    const ranked = await db.execute<{ key: string; attempted: boolean }>(sql`
+      select s.session_key as key, exists (
+        select 1 from routing_history_scores sc where sc.history_session_id = s.id
+      ) as attempted
+      from routing_history_sessions s
+      where s.organization_id = ${organizationId}
+      order by s.sample_rank, s.id`);
+    const gap = ranked.rows.findIndex((row) => !row.attempted);
+    const prefix = gap === -1 ? ranked.rows.length : gap;
+    const inputs = await prepareFit(organizationId);
+    const weights = inputs?.history.sample.map((row) => row.weight) ?? [];
+    expect(weights).toHaveLength(prefix);
+    expect(weights.reduce((total, weight) => total + weight, 0)).toBeCloseTo(
+      12,
+    );
+    expect(inputs?.history.pastSessions).toBe(prefix);
+  });
+
+  test("a capped live sample and the past sample each stand for their whole window", async () => {
+    await sessions(6);
+    await scanAndScore({ maxSessions: 3 });
+    const settings = await AutoRoutingSettingsModel.find(organizationId);
+    await seedFitHistory({
+      organizationId,
+      modelId: settings?.normalModelId ?? "",
+      scorerVersionId: (await activeSourceVersion()).id,
+      sessions: 10,
+    });
+
+    const inputs = await prepareFit(organizationId, undefined, 5);
+
+    const weights = inputs?.history.sample.map((row) => row.weight) ?? [];
+    expect(weights).toHaveLength(8);
+    expect(weights.reduce((total, weight) => total + weight, 0)).toBeCloseTo(
+      16,
+    );
+  });
+
+  test("the purge drops past sessions out of every window, obsolete readings and spent backfills, but not what a waiting scan covers", async () => {
+    await sessions(3);
+    await scanAndScore({});
+    const done = await RoutingBackfillModel.findLatest(organizationId);
+    const keep = (await activeSourceVersion()).id;
+    const age = (key: string, days: number) =>
+      db
+        .update(schema.routingHistorySessionsTable)
+        .set({ startedAt: new Date(Date.now() - days * DAY_MS) })
+        .where(eq(schema.routingHistorySessionsTable.sessionKey, key));
+    const purge = () =>
+      RoutingHistoryModel.purgeExpired({
+        windowStart: new Date(Date.now() - 35 * DAY_MS),
+        keepScorerVersionId: keep,
+      });
+    const remaining = async () =>
+      (
+        await db
+          .select({ key: schema.routingHistorySessionsTable.sessionKey })
+          .from(schema.routingHistorySessionsTable)
+      )
+        .map((row) => row.key)
+        .sort();
+    await age("session-0", 36);
+    await age("session-1", 34);
+    const [kept] = await db
+      .select()
+      .from(schema.routingHistorySessionsTable)
+      .where(eq(schema.routingHistorySessionsTable.sessionKey, "session-2"));
+    await db.insert(schema.routingHistoryScoresTable).values({
+      historySessionId: kept.id,
+      scorerVersionId: (await makeScorerVersion()).id,
+      status: "no_text",
+    });
+
+    expect(await purge()).toEqual({ sessions: 1, scores: 1, backfills: 0 });
+    expect(await remaining()).toEqual(["session-1", "session-2"]);
+    expect(await readings()).toEqual({
+      "session-1": "scored",
+      "session-2": "scored",
+    });
+    const usage = await db.select().from(schema.routingHistoryUsageTable);
+    expect(usage).toHaveLength(2);
+
+    // A waiting scan whose window reaches further back keeps its sessions.
+    await scan();
+    const waiting = await RoutingBackfillModel.findLatest(organizationId);
+    await db
+      .update(schema.routingBackfillsTable)
+      .set({ windowStart: new Date(Date.now() - 40 * DAY_MS) })
+      .where(eq(schema.routingBackfillsTable.id, waiting?.id ?? ""));
+    await age("session-1", 36);
+    await age("session-2", 36);
+    expect(await purge()).toEqual({ sessions: 0, scores: 0, backfills: 0 });
+
+    await db
+      .update(schema.routingBackfillsTable)
+      .set({ windowStart: new Date(Date.now() - 35 * DAY_MS) })
+      .where(eq(schema.routingBackfillsTable.id, waiting?.id ?? ""));
+    await db
+      .update(schema.routingBackfillsTable)
+      .set({ cutoff: new Date(Date.now() - 36 * DAY_MS) })
+      .where(eq(schema.routingBackfillsTable.id, done?.id ?? ""));
+    expect(await purge()).toEqual({ sessions: 2, scores: 0, backfills: 1 });
+    // The waiting scan found session-0 again, from its own interactions.
+    expect(await remaining()).toEqual(["session-0"]);
+    expect(
+      (await db.select().from(schema.routingBackfillsTable)).map(
+        (row) => row.id,
+      ),
+    ).toEqual([waiting?.id]);
   });
 });

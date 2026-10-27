@@ -51,6 +51,10 @@ const routingBackfillsTable = pgTable(
     spentCostUsd: numeric("spent_cost_usd", { precision: 12, scale: 6 })
       .notNull()
       .default("0"),
+    /** Highest cost one scorer call settled at; later calls reserve at least this. */
+    callCostUsd: numeric("call_cost_usd", { precision: 12, scale: 6 })
+      .notNull()
+      .default("0"),
     attempts: integer("attempts").notNull().default(0),
     populationSessions: integer("population_sessions").notNull().default(0),
     populationTokens: bigint("population_tokens", { mode: "number" })
@@ -70,6 +74,8 @@ const routingBackfillsTable = pgTable(
     leaseEpoch: bigint("lease_epoch", { mode: "number" }).notNull().default(0),
     consecutiveFailures: integer("consecutive_failures").notNull().default(0),
     error: text("error"),
+    /** The settings generation its completion raised, so readers can wait for that fit. */
+    fitGeneration: bigint("fit_generation", { mode: "number" }),
     startedBy: text("started_by").references(() => usersTable.id, {
       onDelete: "set null",
     }),

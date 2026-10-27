@@ -1,4 +1,8 @@
-import { SupportedProvidersSchema } from "@archestra/shared";
+import {
+  AUTO_ROUTING_BACKFILL_MAX_COST_USD,
+  AUTO_ROUTING_BACKFILL_SCORER_CALLS,
+  SupportedProvidersSchema,
+} from "@archestra/shared";
 import { z } from "zod";
 import {
   RouterDocumentSchema,
@@ -199,15 +203,23 @@ export type AutoRoutingPreviewResponse = z.infer<
 /** Most past sessions one backfill scores. */
 export const AUTO_ROUTING_BACKFILL_MAX_SESSIONS = 5000;
 
+/** Starts scoring what `scoreOffer` named; refused with a 409 once it names something else. */
 export const AutoRoutingScoreBackfillBodySchema = z.strictObject({
+  backfillId: z.string().uuid(),
+  scorerVersionId: z.string().uuid(),
   maxSessions: z
     .number()
     .int()
     .min(1)
     .max(AUTO_ROUTING_BACKFILL_MAX_SESSIONS)
     .default(3000),
-  /** Ceiling on what the scorer calls cost, in USD. */
-  maxCostUsd: z.number().positive().max(1000),
+  maxCostUsd: z
+    .number()
+    .positive()
+    .max(AUTO_ROUTING_BACKFILL_MAX_COST_USD)
+    .describe(
+      `Spending limit for the scorer calls in USD; may be exceeded by at most ${AUTO_ROUTING_BACKFILL_SCORER_CALLS} × the per-call cost of the calls in flight`,
+    ),
 });
 export type AutoRoutingScoreBackfillBody = z.infer<
   typeof AutoRoutingScoreBackfillBodySchema
@@ -241,11 +253,16 @@ export const AutoRoutingBackfillResponseSchema = z.object({
         .nullable(),
       error: z.string().nullable(),
       completedAt: z.date().nullable(),
+      /** The fit its completion requested has no outcome yet. */
+      awaitingFit: z.boolean(),
     })
     .nullable(),
   /** What scoring the latest scan with the running scorer version would take; null when nothing is left to score. */
   scoreOffer: z
     .object({
+      /** The scan and scorer version scoring would use; a score request names both. */
+      backfillId: z.string().uuid(),
+      scorerVersionId: z.string().uuid(),
       sessions: z.number().int().positive(),
       remaining: z.number().int().positive(),
       estimatedCostUsd: z.number(),

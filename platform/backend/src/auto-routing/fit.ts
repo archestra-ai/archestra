@@ -8,6 +8,7 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
+import RoutingBackfillModel from "@/models/routing-backfill";
 import RoutingHistoryModel, {
   type HistoryFitRow,
   type PastWindow,
@@ -182,10 +183,7 @@ export async function readFitWindow(params: {
 }): Promise<FitWindowSummary> {
   const [live, past] = await Promise.all([
     RoutingUsageModel.findFitVolume(params),
-    RoutingHistoryModel.findPopulation({
-      ...params,
-      windowStart: historyWindowStart(params.inputWatermark),
-    }),
+    readPastSessions({ ...params, longContextThreshold: null }, false),
   ]);
   return summarizeWindow(live, past);
 }
@@ -422,7 +420,10 @@ function volumeDocument(window: FitWindowSummary): RouterDocument {
   };
 }
 
-/** Live auto sessions at weight 1 and scored past sessions at their inverse-inclusion weight. */
+/**
+ * Live auto sessions and scored past sessions, each weighted by how many
+ * sessions of its window it stands for.
+ */
 async function readFitHistory(
   params: {
     organizationId: string;
@@ -434,18 +435,40 @@ async function readFitHistory(
 ): Promise<FitHistory> {
   const [live, past] = await Promise.all([
     RoutingUsageModel.findFitHistory(params, maxSessions),
-    RoutingHistoryModel.findFitHistory({
-      ...params,
-      windowStart: historyWindowStart(params.inputWatermark),
-    }),
+    readPastSessions(params, true),
   ]);
+  // The live sample is capped while its volume counts the whole window.
+  const liveWeight =
+    live.sample.length === 0 ? 1 : live.volume.sessions / live.sample.length;
   return {
     ...summarizeWindow(live.volume, past),
     sample: [
-      ...live.sample.map((row) => ({ ...row, weight: 1 })),
+      ...live.sample.map((row) => ({ ...row, weight: liveWeight })),
       ...past.sample,
     ],
   };
+}
+
+async function readPastSessions(
+  params: {
+    organizationId: string;
+    scorerVersionId: string;
+    inputWatermark: Date;
+    longContextThreshold: number | null;
+  },
+  withSample: boolean,
+): Promise<PastWindow & { sample: HistoryFitRow[] }> {
+  const frame = await RoutingBackfillModel.findLatestScanned(
+    params.organizationId,
+  );
+  if (!frame)
+    return { scored: 0, population: EMPTY_HISTORY.volume, sample: [] };
+  return RoutingHistoryModel.findFitSnapshot({
+    ...params,
+    frame,
+    windowStart: new Date(params.inputWatermark.getTime() - HISTORY_MS),
+    withSample,
+  });
 }
 
 function summarizeWindow(live: FitVolume, past: PastWindow): FitWindowSummary {
@@ -460,10 +483,6 @@ function summarizeWindow(live: FitVolume, past: PastWindow): FitWindowSummary {
     volume: fromHistory ? past.population : live,
     volumeSource: fromHistory ? "history" : "live",
   };
-}
-
-function historyWindowStart(inputWatermark: Date): Date {
-  return new Date(inputWatermark.getTime() - HISTORY_MS);
 }
 
 const INFEASIBLE_ERROR =

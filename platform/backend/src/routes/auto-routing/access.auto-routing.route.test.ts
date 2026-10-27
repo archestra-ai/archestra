@@ -34,7 +34,12 @@ const WRITES = [
   {
     method: "POST",
     url: "/api/auto-routing/backfill/score",
-    payload: { maxSessions: 10, maxCostUsd: 1 },
+    payload: {
+      backfillId: "00000000-0000-4000-8000-000000000001",
+      scorerVersionId: "00000000-0000-4000-8000-000000000002",
+      maxSessions: 10,
+      maxCostUsd: 1,
+    },
   },
   { method: "DELETE", url: "/api/auto-routing/backfill" },
 ] as const;
@@ -114,7 +119,7 @@ describe("auto routing API access", () => {
   test("an admin passes the permission check on every write", async () => {
     const authorization = await tokenFor("admin");
     // Preview gets past the gate and stops at the missing scorer key; scoring
-    // waits for the scan it just started, which the cancel then stops.
+    // refuses an offer nobody made, and the cancel stops the scan.
     const expected = [200, 200, 400, 200, 409, 200];
 
     const statuses = [];

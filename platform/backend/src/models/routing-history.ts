@@ -39,8 +39,9 @@ const SESSION_SOURCES: Exclude<SessionSource, null>[] = [
 const HISTORY_IDLE_MS = 24 * 60 * 60 * 1000;
 /** Every query into `interactions` runs under this, so a slow scan fails its batch instead of holding a connection. */
 const STATEMENT_TIMEOUT_MS = 20_000;
-/** Rows of a session read to find its opening main turn. */
-const OPENING_ROWS = 20;
+/** Rows of a session read per page while looking for its opening main turn. */
+const OPENING_PAGE_ROWS = 20;
+const PURGE_BATCH_SIZE = 5000;
 
 /** One eligible interaction of a scan batch, scalars only. */
 type ScanRow = {
@@ -53,9 +54,11 @@ type ScanRow = {
   tokens: number;
 };
 
-/** A session's first rows, decrypted where the server holds the key. */
+/** A session's row, decrypted where the server holds the key. */
 export type OpeningRow = {
   id: string;
+  createdAtText: string;
+  apiShape: RoutingApiShape;
   request: unknown;
   sessionSource: string | null;
   source: string | null;
@@ -204,6 +207,18 @@ class RoutingHistoryModel {
           sql`${sessions.lastActivityAt} >= ${idleBefore.toISOString()}::timestamptz`,
         ),
       );
+    // A conversation that began before the window would enter as a false new
+    // session, opened at its continuation and with only its tail's usage.
+    await setStatementTimeout(tx);
+    await tx.execute(sql`
+      delete from routing_history_sessions s
+      where s.backfill_id = ${backfill.id}
+        and exists (
+          select 1 from interactions i
+          where i.session_id = s.session_key
+            and i.profile_id in (select a.id from agents a where a.organization_id = s.organization_id)
+            and i.created_at < ${utc(backfill.windowStart)}::timestamp
+        )`);
     const rows = await tx.execute<{
       api_shape: string;
       client: string;
@@ -290,14 +305,9 @@ class RoutingHistoryModel {
   }
 
   /** Copies the session's per-interaction usage, read through the organization's profiles. */
-  static async copyUsage(
-    session: RoutingHistorySession,
-    tx: Transaction,
-  ): Promise<void> {
-    await tx.execute(
-      sql`select set_config('statement_timeout', ${String(STATEMENT_TIMEOUT_MS)}, true)`,
-    );
-    await tx.execute(sql`
+  static async copyUsage(session: RoutingHistorySession): Promise<void> {
+    await withStatementTimeout((tx) =>
+      tx.execute(sql`
       insert into routing_history_usage
         (interaction_id, history_session_id, created_at, input, cache_read, cache_write, cache_write_1h, output)
       select i.id, ${session.id}, i.created_at at time zone 'UTC',
@@ -307,33 +317,42 @@ class RoutingHistoryModel {
       from interactions i
       where ${sessionInteractions(session)}
         and (i.input_tokens is not null or i.output_tokens is not null)
-      on conflict (interaction_id) do nothing`);
+      on conflict (interaction_id) do nothing`),
+    );
   }
 
-  /** The session's first rows in (created_at, id) order, decrypted where the server holds the key. */
+  /** The session's next page of rows after `after`, in (created_at, id) order. */
   static async openingRows(
     session: RoutingHistorySession,
-  ): Promise<OpeningRow[]> {
+    after: { createdAtText: string; id: string } | null,
+  ): Promise<{ rows: OpeningRow[]; last: boolean }> {
+    const start = after
+      ? sql`and (i.created_at, i.id) > (${after.createdAtText}::timestamp, ${after.id}::uuid)`
+      : sql``;
     const result = await withStatementTimeout((tx) =>
       tx.execute<{
         id: string;
+        created_at_text: string;
+        type: string;
         request: unknown;
         session_source: string | null;
         source: string | null;
         parent_id: string | null;
         encrypted_chat_conversation_id: string | null;
       }>(sql`
-        select i.id, i.request, i.session_source, i.source, i.parent_id,
-          i.encrypted_chat_conversation_id
+        select i.id, i.created_at::text as created_at_text, i.type, i.request,
+          i.session_source, i.source, i.parent_id, i.encrypted_chat_conversation_id
         from interactions i
-        where ${sessionInteractions(session)}
+        where ${sessionInteractions(session)} ${start}
         order by i.created_at, i.id
-        limit ${OPENING_ROWS}`),
+        limit ${OPENING_PAGE_ROWS}`),
     );
-    return result.rows.map((raw) => {
+    const rows = result.rows.map((raw) => {
       const row = readInteractionRow(raw);
       return {
         id: row.id,
+        createdAtText: row.created_at_text,
+        apiShape: apiShape(row.type),
         request: row.request,
         sessionSource: row.session_source,
         source: row.source,
@@ -341,6 +360,7 @@ class RoutingHistoryModel {
         encrypted: row.encrypted_chat_conversation_id !== null,
       };
     });
+    return { rows, last: rows.length < OPENING_PAGE_ROWS };
   }
 
   static async recordScore(
@@ -363,48 +383,21 @@ class RoutingHistoryModel {
   }
 
   /**
-   * The past sessions a fit over the history window from `windowStart`
-   * would read: the population (scanned, not seen by live routing) and how
-   * many of them the scorer version scored. Cheap: no session is
-   * materialized.
+   * The past sessions a fit learns from, in one statement so counts and rows
+   * agree: the frame is the population of the latest finished scan (`frame`)
+   * started from `windowStart`; the sample, the rank prefix of the frame the
+   * scorer version attempted without a gap. Each scored session of the
+   * sample stands for `population / scored` sessions. `withSample: false`
+   * counts without reading the sessions.
    */
-  static async findPopulation(params: PopulationParams): Promise<PastWindow> {
-    const [row] = (
-      await db.execute<{
-        sessions: number;
-        scored: number;
-        tokens: string;
-        first_ms: string | null;
-        last_ms: string | null;
-      }>(sql`
-        select count(*)::int as sessions,
-          count(*) filter (where ${scoredWithUsage(params.scorerVersionId)})::int as scored,
-          coalesce(sum(s.total_tokens), 0) as tokens,
-          extract(epoch from min(s.started_at)) * 1000 as first_ms,
-          extract(epoch from max(s.started_at)) * 1000 as last_ms
-        from routing_history_sessions s
-        where ${fitPopulation(params)}`)
-    ).rows;
-    return {
-      scored: row?.scored ?? 0,
-      population: {
-        sessions: row?.sessions ?? 0,
-        tokens: Number(row?.tokens ?? 0),
-        firstCreatedAt: row?.first_ms ? new Date(Number(row.first_ms)) : null,
-        lastCreatedAt: row?.last_ms ? new Date(Number(row.last_ms)) : null,
-      },
-    };
-  }
-
-  /**
-   * Each past session the scorer version scored, with its usage split at
-   * `longContextThreshold` like live usage and weighted by the inverse of
-   * the scored share of the population, so the sample stands for all of it.
-   */
-  static async findFitHistory(
-    params: PopulationParams & { longContextThreshold: number | null },
-  ): Promise<PastWindow & { sample: HistoryFitRow[] }> {
-    const window = await RoutingHistoryModel.findPopulation(params);
+  static async findFitSnapshot(params: {
+    organizationId: string;
+    scorerVersionId: string;
+    frame: { windowStart: Date; cutoff: Date };
+    windowStart: Date;
+    longContextThreshold: number | null;
+    withSample: boolean;
+  }): Promise<PastWindow & { sample: HistoryFitRow[] }> {
     const prompt = sql`u.input + u.cache_read + u.cache_write`;
     const long =
       params.longContextThreshold === null
@@ -415,8 +408,17 @@ class RoutingHistoryModel {
       coalesce(sum(u.cache_read) filter (where ${filter}), 0) as ${sql.raw(`${prefix}_cache_read`)},
       coalesce(sum(u.cache_write) filter (where ${filter}), 0) as ${sql.raw(`${prefix}_cache_write`)},
       coalesce(sum(u.output) filter (where ${filter}), 0) as ${sql.raw(`${prefix}_output`)}`;
-    const rows = await db.execute<{
-      started_ms: string;
+    const windowStart =
+      params.windowStart > params.frame.windowStart
+        ? params.windowStart
+        : params.frame.windowStart;
+    const result = await db.execute<{
+      sessions: number;
+      scored: number;
+      tokens: string;
+      first_ms: string | null;
+      last_ms: string | null;
+      started_ms: string | null;
       features: unknown;
       s_input: string;
       s_cache_read: string;
@@ -427,54 +429,153 @@ class RoutingHistoryModel {
       l_cache_write: string;
       l_output: string;
     }>(sql`
-      select extract(epoch from s.started_at) * 1000 as started_ms, sc.features,
-        ${block(sql`not (${long})`, "s")}, ${block(long, "l")}
-      from routing_history_sessions s
-      join routing_history_scores sc
-        on sc.history_session_id = s.id
-        and sc.scorer_version_id = ${params.scorerVersionId}
-        and sc.status = 'scored'
-      join routing_history_usage u on u.history_session_id = s.id
-      where ${fitPopulation(params)}
-      group by s.id, s.started_at, sc.features
-      order by s.started_at, s.id`);
-    const weight =
-      window.scored === 0 ? 1 : window.population.sessions / window.scored;
+      with frame as (
+        select s.id, s.sample_rank, s.started_at, s.total_tokens, sc.status, sc.features
+        from routing_history_sessions s
+        left join routing_history_scores sc
+          on sc.history_session_id = s.id and sc.scorer_version_id = ${params.scorerVersionId}
+        where ${population({
+          organizationId: params.organizationId,
+          windowStart,
+          cutoff: params.frame.cutoff,
+          includeBackfillId: null,
+        })}
+      ),
+      gap as (
+        select sample_rank, id from frame where status is null
+        order by sample_rank, id limit 1
+      ),
+      sample as (
+        select f.* from frame f
+        where f.status = 'scored'
+          and not exists (select 1 from gap g where (f.sample_rank, f.id) > (g.sample_rank, g.id))
+          and exists (select 1 from routing_history_usage u where u.history_session_id = f.id)
+      ),
+      summary as (
+        select count(*)::int as sessions,
+          (select count(*)::int from sample) as scored,
+          coalesce(sum(total_tokens), 0) as tokens,
+          extract(epoch from min(started_at)) * 1000 as first_ms,
+          extract(epoch from max(started_at)) * 1000 as last_ms
+        from frame
+      ),
+      rows as (
+        select extract(epoch from s.started_at) * 1000 as started_ms, s.features,
+          ${block(sql`not (${long})`, "s")}, ${block(long, "l")}
+        from sample s
+        join routing_history_usage u on u.history_session_id = s.id
+        where ${params.withSample ? sql`true` : sql`false`}
+        group by s.id, s.started_at, s.features
+      )
+      select summary.*, rows.* from summary left join rows on true
+      order by rows.started_ms`);
+    const [summary] = result.rows;
+    const scored = summary?.scored ?? 0;
+    const volume = {
+      sessions: summary?.sessions ?? 0,
+      tokens: Number(summary?.tokens ?? 0),
+      firstCreatedAt: summary?.first_ms
+        ? new Date(Number(summary.first_ms))
+        : null,
+      lastCreatedAt: summary?.last_ms
+        ? new Date(Number(summary.last_ms))
+        : null,
+    };
+    // Ranks are a uniform hash, so the prefix is a simple random sample of the
+    // frame; its unscorable sessions are taken as missing at random.
+    const weight = scored === 0 ? 1 : volume.sessions / scored;
     return {
-      ...window,
-      sample: rows.rows.map((row) => ({
-        createdAt: new Date(Number(row.started_ms)),
-        features: RoutingDecisionFeaturesSchema.parse(row.features),
-        short: {
-          input: Number(row.s_input),
-          cacheRead: Number(row.s_cache_read),
-          cacheWrite: Number(row.s_cache_write),
-          output: Number(row.s_output),
-        },
-        long: {
-          input: Number(row.l_input),
-          cacheRead: Number(row.l_cache_read),
-          cacheWrite: Number(row.l_cache_write),
-          output: Number(row.l_output),
-        },
-        weight,
-      })),
+      scored,
+      population: volume,
+      sample: result.rows.flatMap((row) =>
+        row.started_ms === null
+          ? []
+          : [
+              {
+                createdAt: new Date(Number(row.started_ms)),
+                features: RoutingDecisionFeaturesSchema.parse(row.features),
+                short: {
+                  input: Number(row.s_input),
+                  cacheRead: Number(row.s_cache_read),
+                  cacheWrite: Number(row.s_cache_write),
+                  output: Number(row.s_output),
+                },
+                long: {
+                  input: Number(row.l_input),
+                  cacheRead: Number(row.l_cache_read),
+                  cacheWrite: Number(row.l_cache_write),
+                  output: Number(row.l_output),
+                },
+                weight,
+              },
+            ],
+      ),
+    };
+  }
+
+  /**
+   * Deletes, `batchSize` rows per statement, history no fit can read any
+   * more: sessions started before `windowStart` (with their usage and
+   * scores), scores by a scorer version that is neither `keepScorerVersionId`
+   * nor the organization's, and finished backfills whose sessions are gone.
+   * Nothing a running or waiting backfill covers is touched.
+   */
+  static async purgeExpired(params: {
+    windowStart: Date;
+    keepScorerVersionId: string;
+    batchSize?: number;
+  }): Promise<{ sessions: number; scores: number; backfills: number }> {
+    const batchSize = params.batchSize ?? PURGE_BATCH_SIZE;
+    const active = (organizationId: SQL, covers: SQL) => sql`exists (
+      select 1 from routing_backfills b
+      where b.organization_id = ${organizationId} and b.status in ('running', 'scanned')
+        and ${covers})`;
+    return {
+      sessions: await deleteInBatches(
+        batchSize,
+        (limit) => sql`
+          delete from routing_history_sessions where id in (
+            select s.id from routing_history_sessions s
+            where s.started_at < ${params.windowStart.toISOString()}::timestamptz
+              and not ${active(sql`s.organization_id`, sql`s.started_at >= b.window_start`)}
+            limit ${limit})`,
+      ),
+      scores: await deleteInBatches(
+        batchSize,
+        (limit) => sql`
+          delete from routing_history_scores where (history_session_id, scorer_version_id) in (
+            select sc.history_session_id, sc.scorer_version_id
+            from routing_history_scores sc
+            join routing_history_sessions s on s.id = sc.history_session_id
+            where sc.scorer_version_id <> ${params.keepScorerVersionId}
+              and not exists (
+                select 1 from agents a
+                where a.organization_id = s.organization_id
+                  and a.auto_routing_scorer_version_id = sc.scorer_version_id
+              )
+              and not ${active(sql`s.organization_id`, sql`b.scorer_version_id = sc.scorer_version_id`)}
+            limit ${limit})`,
+      ),
+      backfills: await deleteInBatches(
+        batchSize,
+        (limit) => sql`
+          delete from routing_backfills where id in (
+            select b.id from routing_backfills b
+            where b.status not in ('running', 'scanned')
+              and b.cutoff < ${params.windowStart.toISOString()}::timestamptz
+              and not exists (select 1 from routing_history_sessions s where s.backfill_id = b.id)
+            limit ${limit})`,
+      ),
     };
   }
 }
 
 export default RoutingHistoryModel;
 
-type PopulationParams = {
-  organizationId: string;
-  scorerVersionId: string;
-  windowStart: Date;
-};
-
 /** Past sessions in a fit's history window. */
 export type PastWindow = {
   population: FitVolume;
-  /** Sessions of the population scored by the scorer version, with usage. */
+  /** Scored sessions of the sample, with usage. */
   scored: number;
 };
 
@@ -562,18 +663,6 @@ function population(params: {
     )`;
 }
 
-function fitPopulation(params: PopulationParams): SQL {
-  return population({ ...params, cutoff: null, includeBackfillId: null });
-}
-
-function scoredWithUsage(scorerVersionId: string): SQL {
-  return sql`exists (
-      select 1 from routing_history_scores sc
-      where sc.history_session_id = s.id and sc.scorer_version_id = ${scorerVersionId}
-        and sc.status = 'scored'
-    ) and exists (select 1 from routing_history_usage u where u.history_session_id = s.id)`;
-}
-
 function sample(params: SampleParams): SQL {
   return sql`select s.* from routing_history_sessions s
     where ${population({ ...params, includeBackfillId: null })}
@@ -594,9 +683,28 @@ async function withStatementTimeout<T>(
   callback: (tx: Transaction) => Promise<T>,
 ): Promise<T> {
   return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`select set_config('statement_timeout', ${String(STATEMENT_TIMEOUT_MS)}, true)`,
-    );
+    await setStatementTimeout(tx);
     return callback(tx);
   });
+}
+
+async function setStatementTimeout(tx: Transaction): Promise<void> {
+  await tx.execute(
+    sql`select set_config('statement_timeout', ${String(STATEMENT_TIMEOUT_MS)}, true)`,
+  );
+}
+
+async function deleteInBatches(
+  batchSize: number,
+  statement: (limit: number) => SQL,
+): Promise<number> {
+  let total = 0;
+  for (;;) {
+    const result = await db.execute<{ deleted: number }>(sql`
+      with removed as (${statement(batchSize)} returning 1)
+      select count(*)::int as deleted from removed`);
+    const deleted = result.rows[0]?.deleted ?? 0;
+    total += deleted;
+    if (deleted < batchSize) return total;
+  }
 }

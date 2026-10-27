@@ -12,7 +12,9 @@ const t = schema.routingBackfillsTable;
 /** A worker's claim on a running backfill; every write it makes is fenced by the epoch. */
 export type BackfillLease = { id: string; epoch: number };
 
-type ReserveOutcome = "reserved" | "ceiling" | "attempts" | "lost";
+type ReserveOutcome =
+  | { kind: "reserved"; amount: number }
+  | { kind: "ceiling" | "attempts" | "lost" };
 
 /**
  * Historical backfill jobs, one active (running or waiting to be scored) per
@@ -41,10 +43,15 @@ class RoutingBackfillModel {
     return row ? SelectRoutingBackfillSchema.parse(row) : null;
   }
 
-  /** A scored run over `scan`'s sessions, without scanning again. */
+  /**
+   * A scored run over the sessions of scan `scanId`, without scanning again.
+   * Null unless that scan is still the organization's latest and no backfill
+   * is active.
+   */
   static async createRescore(
     params: {
-      scan: RoutingBackfill;
+      scanId: string;
+      organizationId: string;
       scorerVersionId: string;
       maxSessions: number;
       maxCostUsd: number;
@@ -52,7 +59,11 @@ class RoutingBackfillModel {
     },
     tx: Transaction,
   ): Promise<RoutingBackfill | null> {
-    const { scan } = params;
+    const scan = await RoutingBackfillModel.findLatestScanned(
+      params.organizationId,
+      tx,
+    );
+    if (scan?.id !== params.scanId) return null;
     const [row] = await tx
       .insert(t)
       .values({
@@ -81,6 +92,7 @@ class RoutingBackfillModel {
   /** Starts scoring a scan that waits for it. Null when it no longer waits. */
   static async startScore(params: {
     id: string;
+    organizationId: string;
     scorerVersionId: string;
     maxSessions: number;
     maxCostUsd: number;
@@ -98,7 +110,13 @@ class RoutingBackfillModel {
         leaseOwner: null,
         leaseExpiresAt: null,
       })
-      .where(and(eq(t.id, params.id), eq(t.status, "scanned")))
+      .where(
+        and(
+          eq(t.id, params.id),
+          eq(t.organizationId, params.organizationId),
+          eq(t.status, "scanned"),
+        ),
+      )
       .returning();
     return row ? SelectRoutingBackfillSchema.parse(row) : null;
   }
@@ -118,8 +136,9 @@ class RoutingBackfillModel {
   /** The newest backfill whose scan finished, the sessions a re-score reuses. */
   static async findLatestScanned(
     organizationId: string,
+    tx?: Transaction,
   ): Promise<RoutingBackfill | null> {
-    const [row] = await db
+    const [row] = await (tx ?? db)
       .select()
       .from(t)
       .where(
@@ -160,6 +179,9 @@ class RoutingBackfillModel {
         leaseOwner: params.owner,
         leaseExpiresAt: sql`now() + make_interval(secs => ${params.leaseTtlSeconds})`,
         leaseEpoch: sql`${t.leaseEpoch} + 1`,
+        // A previous owner's unsettled calls may have been paid.
+        spentCostUsd: sql`${t.spentCostUsd} + ${t.reservedCostUsd}`,
+        reservedCostUsd: "0",
       })
       .where(
         eq(
@@ -255,46 +277,57 @@ class RoutingBackfillModel {
   }
 
   /**
-   * Reserves `amount` of the USD ceiling for one scorer call and counts the
+   * Reserves one scorer call's share of the USD ceiling — `minAmount` or the
+   * most a call has cost so far, whichever is higher — and counts the
    * attempt. Refused once the call could take spend past the ceiling, or
    * attempts past `maxAttempts`.
    */
   static async reserve(params: {
     lease: BackfillLease;
-    amount: number;
+    minAmount: number;
     maxAttempts: number;
   }): Promise<ReserveOutcome> {
-    const amount = params.amount.toFixed(6);
-    const fits = sql`${t.spentCostUsd} + ${t.reservedCostUsd} + ${amount}::numeric <= ${t.maxCostUsd}`;
+    const amount = sql`greatest(${t.callCostUsd}, ${params.minAmount.toFixed(6)}::numeric)`;
     const [row] = await db
       .update(t)
       .set({
-        reservedCostUsd: sql`${t.reservedCostUsd} + ${amount}::numeric`,
+        reservedCostUsd: sql`${t.reservedCostUsd} + ${amount}`,
         attempts: sql`${t.attempts} + 1`,
       })
       .where(
-        and(ownedBy(params.lease), fits, lt(t.attempts, params.maxAttempts)),
+        and(
+          ownedBy(params.lease),
+          sql`${t.spentCostUsd} + ${t.reservedCostUsd} + ${amount} <= ${t.maxCostUsd}`,
+          lt(t.attempts, params.maxAttempts),
+        ),
       )
-      .returning({ id: t.id });
-    if (row) return "reserved";
+      .returning({ amount: sql<string>`${amount}` });
+    if (row) return { kind: "reserved", amount: Number(row.amount) };
     const [current] = await db
       .select({ attempts: t.attempts })
       .from(t)
       .where(ownedBy(params.lease));
-    if (!current) return "lost";
-    return current.attempts >= params.maxAttempts ? "attempts" : "ceiling";
+    if (!current) return { kind: "lost" };
+    return {
+      kind: current.attempts >= params.maxAttempts ? "attempts" : "ceiling",
+    };
   }
 
-  /** Swaps a reservation for what the call cost; recorded however the backfill ended meanwhile. */
+  /**
+   * Swaps a reservation for what the call cost, raising later calls'
+   * reservations to it; recorded however the backfill ended meanwhile.
+   */
   static async settle(
     params: { id: string; reserved: number; spent: number },
     tx: Transaction,
   ): Promise<void> {
+    const spent = sql`${params.spent.toFixed(6)}::numeric`;
     await tx
       .update(t)
       .set({
         reservedCostUsd: sql`greatest(${t.reservedCostUsd} - ${params.reserved.toFixed(6)}::numeric, 0)`,
-        spentCostUsd: sql`${t.spentCostUsd} + ${params.spent.toFixed(6)}::numeric`,
+        spentCostUsd: sql`${t.spentCostUsd} + ${spent}`,
+        callCostUsd: sql`greatest(${t.callCostUsd}, ${spent})`,
       })
       .where(eq(t.id, params.id));
   }
@@ -315,7 +348,11 @@ class RoutingBackfillModel {
 
   static async finish(
     lease: BackfillLease,
-    outcome: { status: "done" | "superseded" | "failed"; error?: string },
+    outcome: {
+      status: "done" | "superseded" | "failed";
+      error?: string;
+      fitGeneration?: number | null;
+    },
     tx?: Transaction,
   ): Promise<boolean> {
     return setOwned(
@@ -323,6 +360,7 @@ class RoutingBackfillModel {
       {
         status: outcome.status,
         error: outcome.error ?? null,
+        fitGeneration: outcome.fitGeneration ?? null,
         completedAt: sql`now()`,
         leaseOwner: null,
         leaseExpiresAt: null,

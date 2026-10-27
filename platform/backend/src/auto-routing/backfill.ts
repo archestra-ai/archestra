@@ -1,6 +1,9 @@
 import { hostname } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
-import { isLogContentNotStored } from "@archestra/shared";
+import {
+  AUTO_ROUTING_BACKFILL_SCORER_CALLS,
+  isLogContentNotStored,
+} from "@archestra/shared";
 import { Semaphore } from "@/agents/chatops/utils";
 import config from "@/config";
 import { withDbTransaction } from "@/database";
@@ -30,7 +33,11 @@ import { activeSourceVersion, decisionFeatures, preRunSource } from "./signals";
 import type { JevSessionReading } from "./signals/jev-session";
 import { SignalSourceError } from "./signals/types";
 
-/** What one scorer call reserves of the ceiling, and costs when Jev reports no cost. */
+/**
+ * The least one scorer call reserves of the ceiling; calls reserve the most
+ * any call has cost once that is higher, and cost their reservation when Jev
+ * reports no cost.
+ */
 const SCORER_CALL_RESERVATION_USD = 0.001;
 const DEFAULT_BACKFILL_SESSIONS = 3000;
 
@@ -70,18 +77,22 @@ export async function scanOnFirstEnable(organizationId: string) {
 }
 
 /**
- * Starts scoring the deterministic sample of the latest scan with the
- * running scorer version: in place when the scan waits for it, else as a new
- * backfill over the stored sessions (a re-score after a scorer change).
+ * Starts scoring the deterministic sample of the scan the admin was offered,
+ * with the scorer version they were offered: in place when the scan waits for
+ * it, else as a new backfill over its stored sessions (a re-score after a
+ * scorer change). Refused when either is no longer what an offer would name.
  */
 export async function startBackfillScoring(
   organizationId: string,
   startedBy: string | null,
   body: AutoRoutingScoreBackfillBody,
 ): Promise<RoutingBackfill> {
-  const scorerVersionId = (await activeSourceVersion()).id;
+  if ((await activeSourceVersion()).id !== body.scorerVersionId) {
+    throw new ApiError(409, STALE_OFFER_MESSAGE);
+  }
   const params = {
-    scorerVersionId,
+    organizationId,
+    scorerVersionId: body.scorerVersionId,
     maxSessions: body.maxSessions,
     maxCostUsd: body.maxCostUsd,
     startedBy,
@@ -90,9 +101,17 @@ export async function startBackfillScoring(
   if (latest?.status === "running") throw new ApiError(409, BUSY_MESSAGE);
   const started =
     latest?.status === "scanned"
-      ? await RoutingBackfillModel.startScore({ id: latest.id, ...params })
-      : await rescore(organizationId, params);
-  if (!started) throw new ApiError(409, BUSY_MESSAGE);
+      ? await RoutingBackfillModel.startScore({
+          id: body.backfillId,
+          ...params,
+        })
+      : await withDbTransaction((tx) =>
+          RoutingBackfillModel.createRescore(
+            { scanId: body.backfillId, ...params },
+            tx,
+          ),
+        );
+  if (!started) throw new ApiError(409, STALE_OFFER_MESSAGE);
   await enqueueRun();
   return started;
 }
@@ -109,10 +128,11 @@ export async function cancelBackfill(organizationId: string): Promise<void> {
 export async function describeBackfill(
   organizationId: string,
 ): Promise<AutoRoutingBackfillResponse> {
-  const [latest, scan, scorer] = await Promise.all([
+  const [latest, scan, scorer, settings] = await Promise.all([
     RoutingBackfillModel.findLatest(organizationId),
     RoutingBackfillModel.findLatestScanned(organizationId),
     activeSourceVersion(),
+    AutoRoutingSettingsModel.find(organizationId),
   ]);
   const progress =
     latest?.phase === "score" && latest.scorerVersionId && latest.maxSessions
@@ -140,6 +160,10 @@ export async function describeBackfill(
       progress,
       error: latest.error,
       completedAt: latest.completedAt,
+      awaitingFit:
+        latest.fitGeneration !== null &&
+        settings !== null &&
+        settings.plannedGeneration < latest.fitGeneration,
     },
     scoreOffer:
       latest?.status === "running" || !scan
@@ -191,6 +215,8 @@ export async function runBackfill(params?: {
 
 const BUSY_MESSAGE =
   "A backfill is already running for this organization; wait for it or cancel it.";
+const STALE_OFFER_MESSAGE =
+  "The past sessions or the session scorer changed since this offer was shown; review the new offer.";
 const WORKER_ID = `${hostname()}#${process.pid}`;
 const RUN_TIME_BUDGET_MS = 45_000;
 const LEASE_TTL_SECONDS = 120;
@@ -202,7 +228,7 @@ const SCAN_THROTTLE_RATIO = 4;
 const SCORE_BATCH_SIZE = 8;
 const SCORER_TIMEOUT_MS = 10_000;
 /** Scorer calls in flight across every backfill of this process. */
-const scorerCalls = new Semaphore(4);
+const scorerCalls = new Semaphore(AUTO_ROUTING_BACKFILL_SCORER_CALLS);
 /** Calls a backfill may make per sampled session, retries of failed calls included. */
 const ATTEMPTS_PER_SESSION = 1.2;
 
@@ -215,24 +241,6 @@ async function enqueueRun(): Promise<void> {
       "[AutoRouting] Could not enqueue a backfill run; the dispatcher resumes it",
     );
   }
-}
-
-async function rescore(
-  organizationId: string,
-  params: {
-    scorerVersionId: string;
-    maxSessions: number;
-    maxCostUsd: number;
-    startedBy: string | null;
-  },
-): Promise<RoutingBackfill | null> {
-  const scan = await RoutingBackfillModel.findLatestScanned(organizationId);
-  if (!scan) {
-    throw new ApiError(409, "Find past sessions before scoring them.");
-  }
-  return withDbTransaction((tx) =>
-    RoutingBackfillModel.createRescore({ scan, ...params }, tx),
-  );
 }
 
 function sampleOf(backfill: RoutingBackfill, maxSessions: number) {
@@ -258,6 +266,8 @@ async function scoreOffer(
   if (remaining <= 0) return null;
   const estimatedCostUsd = remaining * SCORER_CALL_RESERVATION_USD;
   return {
+    backfillId: scan.id,
+    scorerVersionId,
     sessions,
     remaining,
     estimatedCostUsd,
@@ -356,7 +366,7 @@ type ScoreOutcome =
 const STOP_MESSAGES = {
   lost: null,
   no_credentials: "No Jev API key is configured for the organization.",
-  ceiling: "Stopped at the cost ceiling.",
+  ceiling: "Stopped at the spending limit.",
   attempts: "Stopped after too many failed scorer calls.",
 } as const satisfies Record<Exclude<ScoreOutcome, "continue">, string | null>;
 
@@ -385,7 +395,9 @@ async function score(
       await complete(backfill, lease);
       return true;
     }
-    const outcomes = await Promise.all(
+    // Settled, not raced: a failure surfaces only once every call of the
+    // round has been accounted for.
+    const settled = await Promise.allSettled(
       batch.map((session) =>
         scoreSession({
           backfill,
@@ -395,6 +407,11 @@ async function score(
           session,
         }),
       ),
+    );
+    const failure = settled.find((result) => result.status === "rejected");
+    if (failure) throw failure.reason;
+    const outcomes = settled.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : [],
     );
     // The round's other calls committed first, so a stop keeps what they scored.
     const stop = (
@@ -422,19 +439,36 @@ async function score(
 }
 
 /**
- * Done, possibly stopped short (`error`). The generation bump makes the next
- * fit read the new history, and keeps a fit already running from standing in
- * for it.
+ * Done, possibly stopped short (`error`), in one commit with the generation
+ * bump that makes the next fit read the new history and keeps a fit already
+ * running from standing in for it. The dispatcher fits any generation above
+ * the planned one, so the enqueue here only saves its wait.
  */
 async function complete(
   backfill: RoutingBackfill,
   lease: BackfillLease,
   error?: string,
 ) {
-  if (!(await RoutingBackfillModel.finish(lease, { status: "done", error })))
-    return;
-  await AutoRoutingSettingsModel.update(backfill.organizationId, {});
-  await AutoRoutingDispatchModel.enqueueFits([backfill.organizationId]);
+  const finished = await withDbTransaction(async (tx) => {
+    if (!(await RoutingBackfillModel.lockOwned(lease, tx))) return false;
+    const fitGeneration = await AutoRoutingSettingsModel.bumpGeneration(
+      backfill.organizationId,
+      tx,
+    );
+    return RoutingBackfillModel.finish(
+      lease,
+      { status: "done", error, fitGeneration },
+      tx,
+    );
+  });
+  if (!finished) return;
+  await AutoRoutingDispatchModel.enqueueFits([backfill.organizationId]).catch(
+    (enqueueError: unknown) =>
+      logger.warn(
+        { err: enqueueError, backfillId: backfill.id },
+        "[AutoRouting] Could not enqueue the fit after a backfill; the dispatcher runs it",
+      ),
+  );
   logger.info(
     { backfillId: backfill.id, organizationId: backfill.organizationId },
     "[AutoRouting] Backfill scoring finished",
@@ -449,10 +483,7 @@ async function scoreSession(params: {
   session: RoutingHistorySession;
 }): Promise<ScoreOutcome> {
   const { backfill, lease, scorerVersionId, session } = params;
-  const text = openingText(
-    session,
-    await RoutingHistoryModel.openingRows(session),
-  );
+  const text = openingText(await findOpening(session));
   if (text === null) {
     await withDbTransaction(async (tx) => {
       if (!(await RoutingBackfillModel.lockOwned(lease, tx))) return;
@@ -469,114 +500,139 @@ async function scoreSession(params: {
     });
     return "continue";
   }
+  // Copied before the paid call, so all a reading needs afterwards is the
+  // short commit that settles the call.
+  await RoutingHistoryModel.copyUsage(session);
 
   const input = { firstUserText: text, client: session.client };
   // Reserved once a call slot is free, so a backfill cancelled meanwhile
   // makes no further calls.
   await scorerCalls.acquire();
   let reading: Reading;
+  let stored: boolean;
   try {
-    const reserved = await RoutingBackfillModel.reserve({
+    const reservation = await RoutingBackfillModel.reserve({
       lease,
-      amount: SCORER_CALL_RESERVATION_USD,
+      minAmount: SCORER_CALL_RESERVATION_USD,
       maxAttempts: params.maxAttempts,
     });
-    if (reserved !== "reserved") return reserved;
+    if (reservation.kind !== "reserved") return reservation.kind;
+    const reserved = reservation.amount;
     reading = await preRunSource
       .read(input, {
         organizationId: backfill.organizationId,
         timeoutMs: SCORER_TIMEOUT_MS,
       })
       .then(
-        (value) => ({ kind: "read" as const, value }),
-        (error: unknown) => {
-          if (!(error instanceof SignalSourceError)) throw error;
-          return { kind: "error" as const, error };
-        },
+        (value): Reading => ({ kind: "read", value }),
+        (error: unknown): Reading =>
+          error instanceof SignalSourceError
+            ? { kind: "error", error }
+            : { kind: "unexpected", error },
       );
+    const spent = ((): number => {
+      switch (reading.kind) {
+        case "read":
+          return reading.value.costUsd ?? reserved;
+        case "error":
+          // No key: nothing was sent.
+          return reading.error.reason === "no_credentials" ? 0 : reserved;
+        case "unexpected":
+          return reserved;
+      }
+    })();
+    stored = await withDbTransaction(async (tx) => {
+      await RoutingBackfillModel.settle(
+        { id: backfill.id, reserved, spent },
+        tx,
+      );
+      if (!(await RoutingBackfillModel.lockOwned(lease, tx))) return false;
+      const status = readingStatus(reading);
+      if (status) {
+        await RoutingHistoryModel.recordScore(
+          {
+            historySessionId: session.id,
+            scorerVersionId,
+            status,
+            features:
+              reading.kind === "read"
+                ? decisionFeatures({
+                    version: scorerVersionId,
+                    reading: reading.value,
+                    input,
+                  })
+                : null,
+            scorerCost: reading.kind === "read" ? reading.value.costUsd : null,
+          },
+          tx,
+        );
+      }
+      return true;
+    });
   } finally {
+    // Released only once the call is settled, so the calls in flight are
+    // the only spend the ceiling has not seen.
     scorerCalls.release();
   }
-
-  const spent = ((): number => {
-    switch (reading.kind) {
-      case "read":
-        return reading.value.costUsd ?? SCORER_CALL_RESERVATION_USD;
-      case "error":
-        // No key: nothing was sent.
-        return reading.error.reason === "no_credentials"
-          ? 0
-          : SCORER_CALL_RESERVATION_USD;
-    }
-  })();
-  const settle = {
-    id: backfill.id,
-    reserved: SCORER_CALL_RESERVATION_USD,
-    spent,
-  };
-  const stored = await withDbTransaction(async (tx) => {
-    await RoutingBackfillModel.settle(settle, tx);
-    if (!(await RoutingBackfillModel.lockOwned(lease, tx))) return false;
-    if (reading.kind === "read") {
-      await RoutingHistoryModel.copyUsage(session, tx);
-      await RoutingHistoryModel.recordScore(
+  switch (reading.kind) {
+    case "unexpected":
+      throw reading.error;
+    case "error":
+      logger.warn(
         {
-          historySessionId: session.id,
-          scorerVersionId,
-          status: "scored",
-          features: decisionFeatures({
-            version: scorerVersionId,
-            reading: reading.value,
-            input,
-          }),
-          scorerCost: reading.value.costUsd,
+          backfillId: backfill.id,
+          reason: reading.error.reason,
+          status: reading.error.status,
         },
-        tx,
+        "[AutoRouting] Backfill scorer call failed",
       );
-    } else if (reading.error.reason === "invalid_response") {
-      await RoutingHistoryModel.recordScore(
-        {
-          historySessionId: session.id,
-          scorerVersionId,
-          status: "failed",
-          features: null,
-          scorerCost: null,
-        },
-        tx,
-      );
-    }
-    return true;
-  });
-  if (!stored) return "lost";
-  if (reading.kind === "error") {
-    logger.warn(
-      {
-        backfillId: backfill.id,
-        reason: reading.error.reason,
-        status: reading.error.status,
-      },
-      "[AutoRouting] Backfill scorer call failed",
-    );
-    if (reading.error.reason === "no_credentials") return "no_credentials";
+      if (reading.error.reason === "no_credentials") return "no_credentials";
   }
-  return "continue";
+  return stored ? "continue" : "lost";
+}
+
+/** What a reading stores; null leaves the session to be read again. */
+function readingStatus(reading: Reading): "scored" | "failed" | null {
+  switch (reading.kind) {
+    case "read":
+      return "scored";
+    case "error":
+      return reading.error.reason === "invalid_response" ? "failed" : null;
+    case "unexpected":
+      return null;
+  }
+}
+
+/**
+ * The session's opening: its first main turn, as the sessions list picks
+ * one, read page by page until found or the session ends. A slow page fails
+ * the run, which retries the session.
+ */
+async function findOpening(
+  session: RoutingHistorySession,
+): Promise<OpeningRow | null> {
+  let after: OpeningRow | null = null;
+  for (;;) {
+    const page = await RoutingHistoryModel.openingRows(session, after);
+    const opening = page.rows.find((row) => isSessionMainTurn(row));
+    if (opening) return opening;
+    if (page.last) return null;
+    after = page.rows[page.rows.length - 1];
+  }
 }
 
 type Reading =
   | { kind: "read"; value: JevSessionReading }
-  | { kind: "error"; error: SignalSourceError };
+  | { kind: "error"; error: SignalSourceError }
+  | { kind: "unexpected"; error: unknown };
 
 /**
- * The text of the session's opening: its first main turn, as the sessions
- * list picks one. Null when that turn has nothing the server can read — its
- * content was withheld or is end-to-end encrypted, or the row stores only
- * the suffix of a conversation that started earlier.
+ * The text of the session's opening, decoded by its own request shape. Null
+ * when there is none or the server cannot read it — its content was withheld
+ * or is end-to-end encrypted, or the row stores only the suffix of a
+ * conversation that started earlier.
  */
-function openingText(
-  session: RoutingHistorySession,
-  rows: OpeningRow[],
-): string | null {
-  const opening = rows.find((row) => isSessionMainTurn(row));
+function openingText(opening: OpeningRow | null): string | null {
   if (
     !opening ||
     opening.encrypted ||
@@ -586,7 +642,7 @@ function openingText(
     return null;
   }
   return firstUserText(
-    session.apiShape === "responses" ? "responses" : "chat_completions",
+    opening.apiShape === "responses" ? "responses" : "chat_completions",
     opening.request,
   );
 }

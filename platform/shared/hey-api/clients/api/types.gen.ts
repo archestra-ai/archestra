@@ -31017,8 +31017,11 @@ export type CancelAutoRoutingBackfillResponses = {
             } | null;
             error: string | null;
             completedAt: string | null;
+            awaitingFit: boolean;
         } | null;
         scoreOffer: {
+            backfillId: string;
+            scorerVersionId: string;
             sessions: number;
             remaining: number;
             estimatedCostUsd: number;
@@ -31135,8 +31138,11 @@ export type GetAutoRoutingBackfillResponses = {
             } | null;
             error: string | null;
             completedAt: string | null;
+            awaitingFit: boolean;
         } | null;
         scoreOffer: {
+            backfillId: string;
+            scorerVersionId: string;
             sessions: number;
             remaining: number;
             estimatedCostUsd: number;
@@ -31253,8 +31259,11 @@ export type ScanAutoRoutingBackfillResponses = {
             } | null;
             error: string | null;
             completedAt: string | null;
+            awaitingFit: boolean;
         } | null;
         scoreOffer: {
+            backfillId: string;
+            scorerVersionId: string;
             sessions: number;
             remaining: number;
             estimatedCostUsd: number;
@@ -31268,7 +31277,12 @@ export type ScanAutoRoutingBackfillResponse = ScanAutoRoutingBackfillResponses[k
 
 export type ScoreAutoRoutingBackfillData = {
     body: {
+        backfillId: string;
+        scorerVersionId: string;
         maxSessions?: number;
+        /**
+         * Spending limit for the scorer calls in USD; may be exceeded by at most 4 × the per-call cost of the calls in flight
+         */
         maxCostUsd: number;
     };
     path?: never;
@@ -31374,8 +31388,11 @@ export type ScoreAutoRoutingBackfillResponses = {
             } | null;
             error: string | null;
             completedAt: string | null;
+            awaitingFit: boolean;
         } | null;
         scoreOffer: {
+            backfillId: string;
+            scorerVersionId: string;
             sessions: number;
             remaining: number;
             estimatedCostUsd: number;

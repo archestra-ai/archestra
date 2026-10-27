@@ -173,7 +173,7 @@ describe("AutoRoutingOverviewPage", () => {
     const budget = await screen.findByLabelText("Daily budget (USD)");
     await user.clear(budget);
     await user.type(budget, "55.5");
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
 
     await waitFor(() => expect(updates).toEqual([{ budgetUsdPerDay: 55.5 }]));
   });
@@ -196,26 +196,44 @@ describe("AutoRoutingOverviewPage", () => {
     const [fastTier] = screen.getAllByRole("combobox");
     await user.click(fastTier);
     await user.click(await screen.findByText("claude-haiku-next"));
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
 
     await waitFor(() =>
       expect(updates).toEqual([{ fastModelId: toolModel.dbId }]),
     );
   });
 
-  it("keeps an unsaved budget edit across a settings refresh, then shows the saved value", async () => {
+  it("re-plans on the saved settings while the form is clean", async () => {
+    let replans = 0;
     server.use(
-      http.post(`${API_ORIGIN}/api/auto-routing/replan`, () =>
-        HttpResponse.json({
-          ...makeSettings({
-            status: {
-              ...makeSettings().status,
-              coldStart: { ...makeSettings().status.coldStart, sessions: 13 },
-            },
-          }),
+      http.post(`${API_ORIGIN}/api/auto-routing/replan`, () => {
+        replans += 1;
+        return HttpResponse.json({
+          ...makeSettings(),
           fit: null,
-        } satisfies AutoRoutingSettingsChange),
-      ),
+        } satisfies AutoRoutingSettingsChange);
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: "Re-plan now" }),
+    );
+
+    await waitFor(() => expect(replans).toBe(1));
+    expect(updates).toEqual([]);
+  });
+
+  it("turns the action into a save while edited, then back into a re-plan", async () => {
+    let replans = 0;
+    server.use(
+      http.post(`${API_ORIGIN}/api/auto-routing/replan`, () => {
+        replans += 1;
+        return HttpResponse.json({
+          ...makeSettings(),
+          fit: null,
+        } satisfies AutoRoutingSettingsChange);
+      }),
       http.put(
         `${API_ORIGIN}/api/auto-routing/settings`,
         async ({ request }) => {
@@ -233,21 +251,17 @@ describe("AutoRoutingOverviewPage", () => {
     const budget = await screen.findByLabelText("Daily budget (USD)");
     await user.clear(budget);
     await user.type(budget, "55.5");
-    await user.click(screen.getByRole("button", { name: "Re-plan now" }));
+    expect(
+      screen.queryByRole("button", { name: "Re-plan now" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
 
-    await waitFor(() =>
-      expect(screen.getByTestId("auto-routing-status")).toHaveTextContent(
-        "13 of 100",
-      ),
-    );
-    expect(budget).toHaveValue(55.5);
-
-    await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(updates).toEqual([{ budgetUsdPerDay: 55.5 }]));
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Save" })).toBeDisabled(),
-    );
+    expect(
+      await screen.findByRole("button", { name: "Re-plan now" }),
+    ).toBeEnabled();
     expect(budget).toHaveValue(55.5);
+    expect(replans).toBe(0);
   });
 
   it("offers a retry when the settings fail to load", async () => {
@@ -280,7 +294,7 @@ describe("AutoRoutingOverviewPage", () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole("switch", { name: "Enabled" }));
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
 
     expect(await screen.findByText("Set a daily budget")).toBeInTheDocument();
     expect(updates).toEqual([]);
@@ -322,7 +336,7 @@ describe("AutoRoutingOverviewPage", () => {
     const budget = await screen.findByLabelText("Daily budget (USD)");
     await user.clear(budget);
     await user.type(budget, "0");
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
 
     expect(
       await screen.findByText(/Enter an amount between 0.01/),
@@ -338,7 +352,7 @@ describe("AutoRoutingOverviewPage", () => {
     expect(screen.getByRole("switch", { name: "Enabled" })).toBeDisabled();
     expect(screen.getByLabelText("Try a prompt")).toBeDisabled();
     expect(
-      screen.queryByRole("button", { name: "Save" }),
+      screen.queryByRole("button", { name: "Save and re-plan" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Re-plan now" }),
@@ -435,7 +449,7 @@ describe("AutoRoutingOverviewPage", () => {
     const budget = screen.getByLabelText("Daily budget (USD)");
     await user.clear(budget);
     await user.type(budget, "30");
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
 
     expect(await screen.findByText("$12.50/day")).toBeInTheDocument();
     expect(screen.getByTestId("auto-routing-status")).toHaveTextContent(

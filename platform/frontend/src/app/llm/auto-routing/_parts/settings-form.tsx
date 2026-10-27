@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import {
@@ -22,6 +22,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   type AutoRoutingSettings,
   type AutoRoutingSettingsUpdate,
+  useReplanAutoRouting,
   useUpdateAutoRoutingSettings,
 } from "@/lib/auto-routing.query";
 import { useLlmModels } from "@/lib/llm-models.query";
@@ -42,6 +43,7 @@ export function AutoRoutingSettingsForm({
   canUpdate: boolean;
 }) {
   const update = useUpdateAutoRoutingSettings();
+  const replan = useReplanAutoRouting();
   const form = useForm<FormValues>({ defaultValues: toFormValues(settings) });
   // A refresh (refetch, re-plan) must not discard unsaved edits.
   useEffect(() => {
@@ -51,7 +53,8 @@ export function AutoRoutingSettingsForm({
   const modelOptions = useTierModelOptions(settings);
   const budget = Number(form.watch("budgetUsdPerDay")) || 0;
   const sliderMax = Math.max(100, Math.ceil(budget * 2));
-  const disabled = !canUpdate || update.isPending;
+  const pending = update.isPending || replan.isPending;
+  const disabled = !canUpdate || pending;
 
   const onSubmit = (values: FormValues) =>
     update.mutate(changedFields(values, form.formState.dirtyFields), {
@@ -145,12 +148,21 @@ export function AutoRoutingSettingsForm({
         </div>
         {canUpdate && (
           <Button
-            type="submit"
+            // Remounted per action so a click never flips its own type.
+            key={form.formState.isDirty ? "save" : "replan"}
+            type={form.formState.isDirty ? "submit" : "button"}
             size="sm"
-            disabled={update.isPending || !form.formState.isDirty}
+            disabled={pending}
+            onClick={form.formState.isDirty ? undefined : () => replan.mutate()}
           >
-            {update.isPending && <Loader2 className="animate-spin" />}
-            <span>Save</span>
+            {pending ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              !form.formState.isDirty && <RefreshCw />
+            )}
+            <span>
+              {form.formState.isDirty ? "Save and re-plan" : "Re-plan now"}
+            </span>
           </Button>
         )}
       </form>

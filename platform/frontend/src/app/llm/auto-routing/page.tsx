@@ -1,8 +1,7 @@
 "use client";
 
-import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { QueryLoadError } from "@/components/query-load-error";
-import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
@@ -10,7 +9,6 @@ import {
   type AutoRoutingSettings,
   useAutoRoutingPlan,
   useAutoRoutingSettings,
-  useReplanAutoRouting,
 } from "@/lib/auto-routing.query";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { formatDate } from "@/lib/utils/date-time";
@@ -40,21 +38,14 @@ export default function AutoRoutingOverviewPage() {
   return (
     <div className="space-y-6">
       <AutoRoutingSettingsForm settings={settings} canUpdate={canUpdate} />
-      <PlanStatus settings={settings} canUpdate={canUpdate} />
+      <PlanStatus settings={settings} />
       <ActivePlanSummary settings={settings} />
       <TryPrompt canUpdate={canUpdate} />
     </div>
   );
 }
 
-function PlanStatus({
-  settings,
-  canUpdate,
-}: {
-  settings: AutoRoutingSettings;
-  canUpdate: boolean;
-}) {
-  const replan = useReplanAutoRouting();
+function PlanStatus({ settings }: { settings: AutoRoutingSettings }) {
   const { activePlan, coldStart, lastFitError } = settings.status;
 
   return (
@@ -65,22 +56,6 @@ function PlanStatus({
             ? `Active plan from ${formatDate({ date: activePlan.createdAt })}`
             : `Cold start: ${coldStart.sessions} of ${coldStart.required} sessions`}
         </span>
-        {canUpdate && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="ml-auto"
-            disabled={replan.isPending}
-            onClick={() => replan.mutate()}
-          >
-            {replan.isPending ? (
-              <Loader2 className="animate-spin" />
-            ) : (
-              <RefreshCw />
-            )}
-            <span>Re-plan now</span>
-          </Button>
-        )}
       </div>
       {lastFitError && (
         <InlineNotice variant="error">

@@ -1,10 +1,9 @@
 import type { RemoteServerInstallResult } from "@/app/mcp/registry/_parts/remote-server-install-dialog";
 
 export function buildRemoteInstallCredentialPayload(
-  result: Pick<RemoteServerInstallResult, "metadata" | "isByosVault">,
+  result: Pick<RemoteServerInstallResult, "metadata">,
 ) {
   const accessToken =
-    !result.isByosVault &&
     typeof result.metadata?.access_token === "string" &&
     result.metadata.access_token.length > 0
       ? result.metadata.access_token
@@ -17,7 +16,6 @@ export function buildRemoteInstallCredentialPayload(
   return {
     ...(accessToken ? { accessToken } : {}),
     ...(userConfigValues ? { userConfigValues } : {}),
-    isByosVault: result.isByosVault,
   };
 }
 

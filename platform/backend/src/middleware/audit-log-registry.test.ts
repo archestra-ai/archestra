@@ -140,7 +140,6 @@ describe("resolveAuditableRouteConfig", () => {
         "serviceAccount",
         "serviceAccount.updated",
       ],
-      ["/api/teams/:teamId/vault-folder", "team", "team.updated"],
     ];
     for (const [route, resourceType, action] of cases) {
       const resolved = resolveAuditableRouteConfig(route);

@@ -205,7 +205,7 @@ class HandoffFixture(unittest.TestCase):
 
     def test_preserved_oci_copy_binds_registry_runtime_and_all_provenance(self):
         record = self.index["records"][0]
-        image = "ghcr.io/archestra-ai/platform"
+        image = "docker.io/archestra/platform"
         directory = self.root / "promotion"
         directory.mkdir()
         root_digest = "sha256:" + "e" * 64

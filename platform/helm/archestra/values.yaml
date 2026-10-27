@@ -1,7 +1,7 @@
 archestra:
   # The Docker image to use for the Archestra Platform
   # This image contains both the backend API and frontend
-  image: ghcr.io/archestra-ai/platform
+  image: archestra/platform
 
   # The image tag for the Archestra Platform
   #

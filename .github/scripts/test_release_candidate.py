@@ -93,7 +93,7 @@ class BuildInputsTests(unittest.TestCase):
     def inputs(self, manifests, image="platform", arch="arm64"):
         manifest = json.dumps({"platform": "1.4.1"})
         with patch.object(Path, "read_text", return_value=manifest), patch.object(
-            CANDIDATE, "command", side_effect=["platform-v1.4.0", "platform-v1.4.0", "archestra:\n  image: archestra/platform\n", json.dumps({"manifests": manifests})]
+            CANDIDATE, "command", side_effect=["platform-v1.4.0", "platform-v1.4.0", json.dumps({"manifests": manifests})]
         ):
             return CANDIDATE.build_inputs(image, arch)
 
@@ -107,16 +107,6 @@ class BuildInputsTests(unittest.TestCase):
         for rows in ([], rows[:1], rows[1:] * 2, [rows[1] | {"digest": "mutable"}]):
             with self.assertRaises(ValueError):
                 self.inputs(rows)
-
-    def test_previous_registry_comes_from_the_released_chart(self):
-        for value, expected in (("archestra/platform", CANDIDATE.LEGACY_PLATFORM),
-                                (CANDIDATE.PLATFORM, CANDIDATE.PLATFORM)):
-            with self.subTest(value=value), patch.object(CANDIDATE, "command", return_value=f"archestra:\n  image: {value}\n") as command:
-                self.assertEqual(CANDIDATE.predecessor_repository("platform-v1.4.0"), expected)
-                command.assert_called_once_with("git", "show", "platform-v1.4.0:platform/helm/archestra/values.yaml")
-        for value in ("registry.example/platform", "ghcr.io.evil/archestra-ai/platform", ""):
-            with self.subTest(value=value), patch.object(CANDIDATE, "command", return_value=f"archestra:\n  image: {value}\n"), self.assertRaises(ValueError):
-                CANDIDATE.predecessor_repository("platform-v1.4.0")
 
     def test_companions_use_release_version_and_initial_release_needs_no_previous_image(self):
         with patch.object(Path, "read_text", return_value='{"platform":"1.5.0-rc.7"}'), patch.object(

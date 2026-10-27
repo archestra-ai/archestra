@@ -21909,7 +21909,6 @@ export type DisconnectClaudeCodeAccountResponses = {
      */
     200: {
         state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
-        requiresVaultReference?: boolean;
         expiresAt?: string | null;
         flowId?: string;
         authorizationUrl?: string;
@@ -22001,7 +22000,6 @@ export type GetClaudeCodeAccountResponses = {
      */
     200: {
         state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
-        requiresVaultReference?: boolean;
         expiresAt?: string | null;
         flowId?: string;
         authorizationUrl?: string;
@@ -22011,9 +22009,7 @@ export type GetClaudeCodeAccountResponses = {
 export type GetClaudeCodeAccountResponse = GetClaudeCodeAccountResponses[keyof GetClaudeCodeAccountResponses];
 
 export type StartClaudeCodeSignInData = {
-    body: {
-        vaultReference?: string;
-    } | null;
+    body?: never;
     path: {
         id: string;
     };
@@ -22095,7 +22091,6 @@ export type StartClaudeCodeSignInResponses = {
      */
     200: {
         state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
-        requiresVaultReference?: boolean;
         expiresAt?: string | null;
         flowId?: string;
         authorizationUrl?: string;
@@ -22190,7 +22185,6 @@ export type CompleteClaudeCodeSignInResponses = {
      */
     200: {
         state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
-        requiresVaultReference?: boolean;
         expiresAt?: string | null;
         flowId?: string;
         authorizationUrl?: string;
@@ -37074,8 +37068,6 @@ export type GetBootstrapResponses = {
                 sandboxArtifactBytesLimit: number;
                 chatAttachmentStorageBytesLimit: number;
                 apiBodyLimitBytes: number;
-                byosEnabled: boolean;
-                byosVaultKvVersion: '1' | '2';
                 azureOpenAiEntraIdEnabled: boolean;
                 anthropicWifEnabled: boolean;
                 anthropicKeylessAuthEnabled: boolean;
@@ -37332,9 +37324,7 @@ export type GetNewChatBootstrapResponses = {
             } | null;
             teamName?: string | null;
             userName?: string | null;
-            vaultSecretPath?: string | null;
-            vaultSecretKey?: string | null;
-            secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+            secretStorageType?: 'vault' | 'database' | 'none';
             bestModelId?: string | null;
             isAgentKey?: boolean;
             subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
@@ -37373,9 +37363,7 @@ export type GetNewChatBootstrapResponses = {
             } | null;
             teamName?: string | null;
             userName?: string | null;
-            vaultSecretPath?: string | null;
-            vaultSecretKey?: string | null;
-            secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+            secretStorageType?: 'vault' | 'database' | 'none';
             bestModelId?: string | null;
             isAgentKey?: boolean;
             subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
@@ -37888,9 +37876,7 @@ export type GetConversationBootstrapResponses = {
                 } | null;
                 teamName?: string | null;
                 userName?: string | null;
-                vaultSecretPath?: string | null;
-                vaultSecretKey?: string | null;
-                secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+                secretStorageType?: 'vault' | 'database' | 'none';
                 bestModelId?: string | null;
                 isAgentKey?: boolean;
                 subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
@@ -37929,9 +37915,7 @@ export type GetConversationBootstrapResponses = {
                 } | null;
                 teamName?: string | null;
                 userName?: string | null;
-                vaultSecretPath?: string | null;
-                vaultSecretKey?: string | null;
-                secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+                secretStorageType?: 'vault' | 'database' | 'none';
                 bestModelId?: string | null;
                 isAgentKey?: boolean;
                 subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
@@ -45973,8 +45957,6 @@ export type GetConfigResponses = {
             sandboxArtifactBytesLimit: number;
             chatAttachmentStorageBytesLimit: number;
             apiBodyLimitBytes: number;
-            byosEnabled: boolean;
-            byosVaultKvVersion: '1' | '2';
             azureOpenAiEntraIdEnabled: boolean;
             anthropicWifEnabled: boolean;
             anthropicKeylessAuthEnabled: boolean;
@@ -74048,10 +74030,6 @@ export type CreateInternalMcpCatalogItemData = {
             };
             actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
-        oauthClientSecretVaultPath?: string;
-        oauthClientSecretVaultKey?: string;
-        localConfigVaultPath?: string;
-        localConfigVaultKey?: string;
     };
     path?: never;
     query?: never;
@@ -74529,7 +74507,7 @@ export type SearchMcpRegistryResponses = {
                 accessAllTools?: boolean;
                 organizationId?: string;
             }>;
-            secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+            secretStorageType?: 'vault' | 'database' | 'none';
             alertMutes: Array<{
                 catalogId: string;
                 mcpServerId: string | null;
@@ -75486,10 +75464,6 @@ export type UpdateInternalMcpCatalogItemData = {
         scope?: unknown;
         teams?: unknown;
         multitenant?: boolean;
-        oauthClientSecretVaultPath?: string;
-        oauthClientSecretVaultKey?: string;
-        localConfigVaultPath?: string;
-        localConfigVaultKey?: string;
     };
     path: {
         id: string;
@@ -90163,9 +90137,7 @@ export type GetLlmProviderApiKeysResponses = {
         } | null;
         teamName?: string | null;
         userName?: string | null;
-        vaultSecretPath?: string | null;
-        vaultSecretKey?: string | null;
-        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        secretStorageType?: 'vault' | 'database' | 'none';
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
@@ -90195,8 +90167,6 @@ export type CreateLlmProviderApiKeyData = {
          */
         shared?: boolean;
         isPrimary?: boolean;
-        vaultSecretPath?: string;
-        vaultSecretKey?: string;
         awsAccessKeyId?: string;
         awsSecretAccessKey?: string;
         awsSessionToken?: string;
@@ -90334,9 +90304,7 @@ export type CreateLlmProviderApiKeyResponses = {
         } | null;
         teamName?: string | null;
         userName?: string | null;
-        vaultSecretPath?: string | null;
-        vaultSecretKey?: string | null;
-        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        secretStorageType?: 'vault' | 'database' | 'none';
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
@@ -90461,9 +90429,7 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         } | null;
         teamName?: string | null;
         userName?: string | null;
-        vaultSecretPath?: string | null;
-        vaultSecretKey?: string | null;
-        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        secretStorageType?: 'vault' | 'database' | 'none';
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
@@ -90675,9 +90641,7 @@ export type GetLlmProviderApiKeyResponses = {
         } | null;
         teamName?: string | null;
         userName?: string | null;
-        vaultSecretPath?: string | null;
-        vaultSecretKey?: string | null;
-        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        secretStorageType?: 'vault' | 'database' | 'none';
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
@@ -90702,8 +90666,6 @@ export type UpdateLlmProviderApiKeyData = {
             [key: string]: string;
         } | null;
         isPrimary?: boolean;
-        vaultSecretPath?: string;
-        vaultSecretKey?: string;
         awsAccessKeyId?: string;
         awsSecretAccessKey?: string;
         awsSessionToken?: string;
@@ -90824,9 +90786,7 @@ export type UpdateLlmProviderApiKeyResponses = {
         } | null;
         teamName?: string | null;
         userName?: string | null;
-        vaultSecretPath?: string | null;
-        vaultSecretKey?: string | null;
-        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        secretStorageType?: 'vault' | 'database' | 'none';
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
@@ -90952,9 +90912,7 @@ export type ReconnectLlmProviderApiKeyResponses = {
         } | null;
         teamName?: string | null;
         userName?: string | null;
-        vaultSecretPath?: string | null;
-        vaultSecretKey?: string | null;
-        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        secretStorageType?: 'vault' | 'database' | 'none';
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
@@ -92612,7 +92570,7 @@ export type GetMcpServersResponses = {
             accessAllTools?: boolean;
             organizationId?: string;
         }>;
-        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        secretStorageType?: 'vault' | 'database' | 'none';
         alertMutes: Array<{
             catalogId: string;
             mcpServerId: string | null;
@@ -92651,7 +92609,6 @@ export type InstallMcpServerData = {
         };
         agentIds?: Array<string>;
         accessToken?: string;
-        isByosVault?: boolean;
     };
     path?: never;
     query?: never;
@@ -92781,7 +92738,7 @@ export type InstallMcpServerResponses = {
             accessAllTools?: boolean;
             organizationId?: string;
         }>;
-        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        secretStorageType?: 'vault' | 'database' | 'none';
     };
 };
 
@@ -93007,7 +92964,7 @@ export type GetMcpServerResponses = {
             accessAllTools?: boolean;
             organizationId?: string;
         }>;
-        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        secretStorageType?: 'vault' | 'database' | 'none';
     };
 };
 
@@ -93023,7 +92980,6 @@ export type ReauthenticateMcpServerData = {
         environmentValues?: {
             [key: string]: string;
         };
-        isByosVault?: boolean;
     };
     path: {
         id: string;
@@ -93155,7 +93111,7 @@ export type ReauthenticateMcpServerResponses = {
             accessAllTools?: boolean;
             organizationId?: string;
         }>;
-        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        secretStorageType?: 'vault' | 'database' | 'none';
     };
 };
 
@@ -93393,7 +93349,7 @@ export type RestoreMcpServerResponses = {
             accessAllTools?: boolean;
             organizationId?: string;
         }>;
-        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        secretStorageType?: 'vault' | 'database' | 'none';
     };
 };
 
@@ -93878,7 +93834,6 @@ export type ReinstallMcpServerData = {
         userConfigValues?: {
             [key: string]: string;
         };
-        isByosVault?: boolean;
         hibernationMode?: 'inherit' | 'enabled' | 'disabled';
     };
     path: {
@@ -94011,7 +93966,7 @@ export type ReinstallMcpServerResponses = {
             accessAllTools?: boolean;
             organizationId?: string;
         }>;
-        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        secretStorageType?: 'vault' | 'database' | 'none';
     };
 };
 
@@ -119772,7 +119727,7 @@ export type GetSecretsTypeResponses = {
      * Default Response
      */
     200: {
-        type: 'DB' | 'Vault' | 'BYOS_VAULT';
+        type: 'DB' | 'Vault';
         meta: {
             [key: string]: string;
         };
@@ -119780,102 +119735,6 @@ export type GetSecretsTypeResponses = {
 };
 
 export type GetSecretsTypeResponse = GetSecretsTypeResponses[keyof GetSecretsTypeResponses];
-
-export type GetSecretData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/secrets/{id}';
-};
-
-export type GetSecretErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetSecretError = GetSecretErrors[keyof GetSecretErrors];
-
-export type GetSecretResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        secret: {
-            [key: string]: unknown;
-        };
-        isVault: boolean;
-        isByosVault: boolean;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetSecretResponse = GetSecretResponses[keyof GetSecretResponses];
 
 export type CheckSecretsConnectivityData = {
     body?: never;
@@ -135120,548 +134979,3 @@ export type IngestRumEventsResponses = {
 };
 
 export type IngestRumEventsResponse = IngestRumEventsResponses[keyof IngestRumEventsResponses];
-
-export type DeleteTeamVaultFolderData = {
-    body?: never;
-    path: {
-        teamId: string;
-    };
-    query?: never;
-    url: '/api/teams/{teamId}/vault-folder';
-};
-
-export type DeleteTeamVaultFolderErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type DeleteTeamVaultFolderError = DeleteTeamVaultFolderErrors[keyof DeleteTeamVaultFolderErrors];
-
-export type DeleteTeamVaultFolderResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteTeamVaultFolderResponse = DeleteTeamVaultFolderResponses[keyof DeleteTeamVaultFolderResponses];
-
-export type GetTeamVaultFolderData = {
-    body?: never;
-    path: {
-        teamId: string;
-    };
-    query?: never;
-    url: '/api/teams/{teamId}/vault-folder';
-};
-
-export type GetTeamVaultFolderErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetTeamVaultFolderError = GetTeamVaultFolderErrors[keyof GetTeamVaultFolderErrors];
-
-export type GetTeamVaultFolderResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        teamId: string;
-        vaultPath: string;
-        createdAt: string;
-        updatedAt: string;
-    } | null;
-};
-
-export type GetTeamVaultFolderResponse = GetTeamVaultFolderResponses[keyof GetTeamVaultFolderResponses];
-
-export type SetTeamVaultFolderData = {
-    body: {
-        vaultPath: string;
-    };
-    path: {
-        teamId: string;
-    };
-    query?: never;
-    url: '/api/teams/{teamId}/vault-folder';
-};
-
-export type SetTeamVaultFolderErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type SetTeamVaultFolderError = SetTeamVaultFolderErrors[keyof SetTeamVaultFolderErrors];
-
-export type SetTeamVaultFolderResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        teamId: string;
-        vaultPath: string;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type SetTeamVaultFolderResponse = SetTeamVaultFolderResponses[keyof SetTeamVaultFolderResponses];
-
-export type CheckTeamVaultFolderConnectivityData = {
-    body: {
-        vaultPath?: string;
-    };
-    path: {
-        teamId: string;
-    };
-    query?: never;
-    url: '/api/teams/{teamId}/vault-folder/check-connectivity';
-};
-
-export type CheckTeamVaultFolderConnectivityErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type CheckTeamVaultFolderConnectivityError = CheckTeamVaultFolderConnectivityErrors[keyof CheckTeamVaultFolderConnectivityErrors];
-
-export type CheckTeamVaultFolderConnectivityResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        connected: boolean;
-        secretCount: number;
-        error?: string;
-    };
-};
-
-export type CheckTeamVaultFolderConnectivityResponse = CheckTeamVaultFolderConnectivityResponses[keyof CheckTeamVaultFolderConnectivityResponses];
-
-export type ListTeamVaultFolderSecretsData = {
-    body?: never;
-    path: {
-        teamId: string;
-    };
-    query?: never;
-    url: '/api/teams/{teamId}/vault-folder/secrets';
-};
-
-export type ListTeamVaultFolderSecretsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type ListTeamVaultFolderSecretsError = ListTeamVaultFolderSecretsErrors[keyof ListTeamVaultFolderSecretsErrors];
-
-export type ListTeamVaultFolderSecretsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        name: string;
-        path: string;
-    }>;
-};
-
-export type ListTeamVaultFolderSecretsResponse = ListTeamVaultFolderSecretsResponses[keyof ListTeamVaultFolderSecretsResponses];
-
-export type GetTeamVaultSecretKeysData = {
-    body: {
-        secretPath: string;
-    };
-    path: {
-        teamId: string;
-    };
-    query?: never;
-    url: '/api/teams/{teamId}/vault-folder/secrets/keys';
-};
-
-export type GetTeamVaultSecretKeysErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetTeamVaultSecretKeysError = GetTeamVaultSecretKeysErrors[keyof GetTeamVaultSecretKeysErrors];
-
-export type GetTeamVaultSecretKeysResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        keys: Array<string>;
-    };
-};
-
-export type GetTeamVaultSecretKeysResponse = GetTeamVaultSecretKeysResponses[keyof GetTeamVaultSecretKeysResponses];

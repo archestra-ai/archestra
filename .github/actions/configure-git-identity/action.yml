@@ -1,0 +1,14 @@
+name: Configure Git identity
+description: Use the verified Archestra CI bot as the checkout's commit identity
+inputs:
+  working-directory:
+    description: Git checkout whose local identity should be configured
+    required: false
+    default: .
+runs:
+  using: composite
+  steps:
+    - name: Configure repository-local identity
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: bash "$GITHUB_ACTION_PATH/configure.sh"

@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { lazy, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { type UseFormReturn, useFieldArray, useForm } from "react-hook-form";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
@@ -102,7 +102,6 @@ import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useMcpDeploymentPermission } from "@/lib/mcp/use-mcp-deployment-permission";
 import { useDefaultEnvironment } from "@/lib/organization.query";
-import { useGetSecret } from "@/lib/secrets.query";
 import { cn } from "@/lib/utils/tailwind";
 import {
   type CascadeSnapshot,
@@ -121,12 +120,6 @@ import {
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
-
-const ExternalSecretSelector = lazy(
-  () =>
-    // biome-ignore lint/style/noRestrictedImports: lazy loading
-    import("@/components/external-secret-selector.ee"),
-);
 
 // Markdown renderer for catalog-supplied setup instructions shown atop the form.
 const INSTRUCTIONS_MARKDOWN_COMPONENTS: Components = {
@@ -231,13 +224,6 @@ export function McpCatalogForm({
   affectedServerCount = 0,
   detailsOnly = false,
 }: McpCatalogFormProps) {
-  const localConfigSecretId =
-    initialValues?.serverType === "local"
-      ? initialValues.localConfigSecretId
-      : null;
-  // Fetch local config secrets only for local MCP catalog items.
-  const { data: localConfigSecret } = useGetSecret(localConfigSecretId);
-
   // Pre-existing secret env-var keys, used to render a `••••••••` placeholder.
   const storedSecretKeys = useMemo(() => {
     if (initialValues?.serverType !== "local" || !initialValues.localConfig) {
@@ -290,7 +276,7 @@ export function McpCatalogForm({
     resolver: zodResolver(formSchema as any),
     defaultValues: withCreationAccess(
       initialValues
-        ? transformCatalogItemToFormValues(initialValues, undefined)
+        ? transformCatalogItemToFormValues(initialValues)
         : (formValues ?? {
             name: "",
             description: "",
@@ -496,15 +482,6 @@ export function McpCatalogForm({
       );
     }
   }, [authMethod, defaultIdentityProviderId, form, selectedIdentityProviderId]);
-
-  // BYOS (Bring Your Own Secrets) state for OAuth
-  const [oauthVaultTeamId, setOauthVaultTeamId] = useState<string | null>(null);
-  const [oauthVaultSecretPath, setOauthVaultSecretPath] = useState<
-    string | null
-  >(null);
-  const [oauthVaultSecretKey, setOauthVaultSecretKey] = useState<string | null>(
-    null,
-  );
 
   // Baseline `additionalHeaders` derived from `initialValues.userConfig`.
   // Used by `isHeadersDirty`'s schema-evolution check — RHF's
@@ -736,8 +713,6 @@ export function McpCatalogForm({
     ) : null;
   const enterpriseAuthDisabled =
     enterpriseAuthDisabledReason != null || enterpriseAuthDisabledBadge != null;
-  // Check if BYOS feature is available (enterprise license)
-  const showByosOption = useFeature("byosEnabled");
 
   // Use field array for environment variables
   const { fields, append, remove } = useFieldArray({
@@ -817,18 +792,6 @@ export function McpCatalogForm({
     [k8sSecrets],
   );
 
-  // Update form values when BYOS paths/keys change
-  useEffect(() => {
-    form.setValue(
-      "oauthClientSecretVaultPath",
-      oauthVaultSecretPath || undefined,
-    );
-    form.setValue(
-      "oauthClientSecretVaultKey",
-      oauthVaultSecretKey || undefined,
-    );
-  }, [oauthVaultSecretPath, oauthVaultSecretKey, form]);
-
   // Reset form when formValues change (catalog pre-fill in create mode)
   useEffect(() => {
     if (formValues && !initialValues) {
@@ -840,13 +803,9 @@ export function McpCatalogForm({
   }, [formValues, initialValues, form, mode]);
 
   // Reset form when initial values change (for edit mode)
-  // Also reset when localConfigSecret loads (if it exists)
   useEffect(() => {
     if (initialValues) {
-      const transformedValues = transformCatalogItemToFormValues(
-        initialValues,
-        localConfigSecret ?? undefined,
-      );
+      const transformedValues = transformCatalogItemToFormValues(initialValues);
       form.reset(withCreationAccess(transformedValues, mode));
       // Reset labels state
       const resetLabels =
@@ -854,17 +813,9 @@ export function McpCatalogForm({
         [];
       setLabels(resetLabels);
       setLabelsBaseline(resetLabels);
-      // Initialize OAuth BYOS state from transformed values (parsed vault references)
       // Note: teamId cannot be derived from path, so we leave it null (user can reselect if needed)
-      setOauthVaultTeamId(null);
-      setOauthVaultSecretPath(
-        transformedValues.oauthClientSecretVaultPath || null,
-      );
-      setOauthVaultSecretKey(
-        transformedValues.oauthClientSecretVaultKey || null,
-      );
     }
-  }, [mode, initialValues, localConfigSecret, form]);
+  }, [mode, initialValues, form]);
 
   // The bar's mode is captured at submit-time so the bar stays consistent
   // even if the form state drifts during the confirm step. `null` means
@@ -1385,7 +1336,6 @@ export function McpCatalogForm({
                     fieldNamePrefix="localConfig.environment"
                     form={form}
                     validateValue={validateConfigValue}
-                    useExternalSecretsManager={showByosOption}
                     secretKeysWithStoredValue={storedSecretKeys}
                     disablePromptOnInstallation={isMultitenant}
                     disablePromptOnInstallationReason="Multi-tenant servers share one deployment, so env vars are set once at deploy time and cannot be prompted per install."
@@ -1767,23 +1717,7 @@ export function McpCatalogForm({
                                       </FormItem>
                                     )}
                                   />
-                                  {showByosOption ? (
-                                    <div className="space-y-2">
-                                      <Label>Client Secret</Label>
-                                      <ExternalSecretSelector
-                                        selectedTeamId={oauthVaultTeamId}
-                                        selectedSecretPath={
-                                          oauthVaultSecretPath
-                                        }
-                                        selectedSecretKey={oauthVaultSecretKey}
-                                        onTeamChange={setOauthVaultTeamId}
-                                        onSecretChange={setOauthVaultSecretPath}
-                                        onSecretKeyChange={
-                                          setOauthVaultSecretKey
-                                        }
-                                      />
-                                    </div>
-                                  ) : (
+                                  {
                                     <FormField
                                       control={form.control}
                                       name="oauthConfig.client_secret"
@@ -1801,7 +1735,7 @@ export function McpCatalogForm({
                                         </FormItem>
                                       )}
                                     />
-                                  )}
+                                  }
                                   <FormField
                                     control={form.control}
                                     name="oauthConfig.redirect_uris"

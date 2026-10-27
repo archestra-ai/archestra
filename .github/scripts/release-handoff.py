@@ -123,7 +123,7 @@ def validate_index(index, run, repository, branch, tree, version, matrix, now):
         candidate.verify_record(record, {key: index[key] for key in (
             "repository", "source_sha", "source_tree", "run_id", "run_attempt")}, now)
         previous = record.get("previous_image", "")
-        if previous and not re.fullmatch(r"(?:docker\.io/archestra/platform|ghcr\.io/archestra-ai/platform)@sha256:[0-9a-f]{64}", previous):
+        if previous and not re.fullmatch(r"docker\.io/archestra/platform@sha256:[0-9a-f]{64}", previous):
             raise ValueError("Candidate previous assets are not immutable")
         actual.add(pair)
     if actual != expected:
@@ -229,7 +229,7 @@ def verify_archive(selection, image, arch, directory):
 
 
 def push(record, image, arch):
-    if not re.fullmatch(r"ghcr\.io/archestra-ai/[a-z0-9-]+", image):
+    if not re.fullmatch(r"(?:docker\.io/archestra/platform|ghcr\.io/archestra-ai/[a-z0-9-]+)", image):
         raise ValueError("Unexpected release image destination")
     suffix = f"{int(os.environ['GITHUB_RUN_ID'])}-{int(os.environ['GITHUB_RUN_ATTEMPT'])}-{arch}"
     incoming = f"{image}:candidate-{suffix}"

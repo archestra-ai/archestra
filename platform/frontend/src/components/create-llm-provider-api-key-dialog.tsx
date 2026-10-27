@@ -43,8 +43,6 @@ export type CreateLlmProviderApiKeyDialogProps = {
   allowedProviders?: LlmProviderApiKeyFormValues["provider"][];
   /** Selects the focused progressive flow shown by this dialog. */
   credentialMode?: "api-key" | "subscription";
-  /** This dialog must connect the exact subscription kind pinned by an agent. */
-  requiresExactSubscriptionCredential?: boolean;
   showConsoleLink?: boolean;
   onSuccess?: (keyId?: string) => void;
   /**
@@ -63,7 +61,6 @@ export function CreateLlmProviderApiKeyDialog({
   defaultValues,
   allowedProviders,
   credentialMode = "api-key",
-  requiresExactSubscriptionCredential = false,
   showConsoleLink = false,
   onSuccess,
   reconnectKeyId,
@@ -71,7 +68,7 @@ export function CreateLlmProviderApiKeyDialog({
   const createMutation = useCreateLlmProviderApiKey();
   const reconnectMutation = useReconnectLlmProviderApiKey();
   const { data: existingKeys } = useLlmProviderApiKeys({ enabled: open });
-  const byosEnabled = useFeature("byosEnabled");
+
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicKeylessAuthEnabled = useFeature("anthropicKeylessAuthEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
@@ -139,7 +136,7 @@ export function CreateLlmProviderApiKeyDialog({
     getIsCreateFormValid({
       azureOpenAiEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
       anthropicKeylessAuthEnabled: anthropicKeylessAuthEnabled === true,
-      byosEnabled: Boolean(byosEnabled),
+
       values: formValues,
     });
 
@@ -188,14 +185,7 @@ export function CreateLlmProviderApiKeyDialog({
               ),
         // SPDX-SnippetEnd
         isPrimary: values.isPrimary,
-        vaultSecretPath:
-          !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
-            ? values.vaultSecretPath
-            : undefined,
-        vaultSecretKey:
-          !isBedrockSigV4 && byosEnabled && values.vaultSecretKey
-            ? values.vaultSecretKey
-            : undefined,
+
         awsAccessKeyId: isBedrockSigV4
           ? values.awsAccessKeyId || undefined
           : undefined,
@@ -268,7 +258,6 @@ export function CreateLlmProviderApiKeyDialog({
       allowedProviders={availableProviders}
       hideUnavailableProviders
       credentialMode={credentialMode}
-      requiresExactSubscriptionCredential={requiresExactSubscriptionCredential}
       progressive
       allowPersonalSubscriptions={credentialMode === "subscription"}
       onSubscriptionCredential={handleSubscriptionCredential}
@@ -340,9 +329,7 @@ function getDefaultFormValues(params: {
     inferenceBaseUrl: null,
     extraHeaders: [],
     initialGrants: [],
-    teamId: null,
-    vaultSecretPath: null,
-    vaultSecretKey: null,
+
     isPrimary: false,
     bedrockAuthMethod: "api-key",
     awsAccessKeyId: null,
@@ -362,13 +349,13 @@ function getDefaultFormValues(params: {
 function getIsCreateFormValid(params: {
   azureOpenAiEntraIdEnabled: boolean;
   anthropicKeylessAuthEnabled: boolean;
-  byosEnabled: boolean;
+
   values: LlmProviderApiKeyFormValues;
 }) {
   const {
     azureOpenAiEntraIdEnabled,
     anthropicKeylessAuthEnabled,
-    byosEnabled,
+
     values,
   } = params;
 
@@ -378,12 +365,11 @@ function getIsCreateFormValid(params: {
 
   return Boolean(
     values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
-      (byosEnabled
-        ? values.vaultSecretPath && values.vaultSecretKey
-        : isProviderApiKeyOptional({
-            provider: values.provider,
-            azureEntraIdEnabled: azureOpenAiEntraIdEnabled,
-            anthropicKeylessAuthEnabled,
-          }) || values.apiKey),
+      (isProviderApiKeyOptional({
+        provider: values.provider,
+        azureEntraIdEnabled: azureOpenAiEntraIdEnabled,
+        anthropicKeylessAuthEnabled,
+      }) ||
+        values.apiKey),
   );
 }

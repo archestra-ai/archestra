@@ -267,11 +267,6 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.StartClaudeCodeSignIn,
-        body: z
-          .object({
-            vaultReference: z.string().trim().min(1).max(2048).optional(),
-          })
-          .nullish(),
         tags: ["Agents"],
         params: z.object({ id: z.string().uuid() }),
         response: constructResponseSchema(ClaudeCodeAccountSchema),
@@ -284,10 +279,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...owner,
         inspectFlow: false,
       });
-      const after = await claudeCodeAccountManager.start({
-        ...owner,
-        ...request.body,
-      });
+      const after = await claudeCodeAccountManager.start(owner);
       request.auditBefore = {
         claudeCodeAccount: {
           state: before.state,

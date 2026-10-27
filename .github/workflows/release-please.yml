@@ -451,14 +451,14 @@ jobs:
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   build-and-push-platform-docker-image-to-dockerhub:
-    name: Build and push platform Docker image to GHCR
+    name: Build and push platform Docker image to DockerHub
     # The platform Docker image references the MCP server base image tag via
     # ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE env var, but does NOT use it as a FROM base image.
     # The tag is baked as a default value at build time, so the MCP server image doesn't need to
     # exist yet. Both images are built in parallel and the publish-github-release job gates on
     # all artifacts being ready before un-drafting the release.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
-    uses: $/.github/workflows/build-release-image.yml
+    uses: $/.github/workflows/build-dockerhub-image.yml
     needs:
       - release-please
     permissions:
@@ -573,6 +573,12 @@ jobs:
           workload_identity_provider: ${{ vars.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
           registry: europe-west1-docker.pkg.dev
 
+      - name: Log in to Docker Hub
+        uses: $/.github/actions/docker-login
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Log in to GHCR
         uses: $/.github/actions/docker-login
         with:
@@ -596,7 +602,7 @@ jobs:
       - name: Move the platform latest tag
         shell: bash
         run: |
-          # Quickstart pulls ghcr.io/archestra-ai/platform:latest, so it follows the newest
+          # Quickstart pulls archestra/platform:latest, so it follows the newest
           # published release, release candidates included. Companion and agent
           # images keep :latest on the stable line: stable platforms reference
           # the agent images by that tag. This step runs after the companion

@@ -65,14 +65,12 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
     onSuccess,
     open,
     reconnectKeyId,
-    requiresExactSubscriptionCredential,
   }: {
     title: string;
     defaultValues?: { provider?: string; authMethod?: string };
     onSuccess?: (keyId?: string) => void;
     open: boolean;
     reconnectKeyId?: string;
-    requiresExactSubscriptionCredential?: boolean;
   }) =>
     open ? (
       <div>
@@ -80,9 +78,6 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
         <span>{defaultValues?.provider}</span>
         <span>{defaultValues?.authMethod}</span>
         {reconnectKeyId && <span>{`reconnect:${reconnectKeyId}`}</span>}
-        {requiresExactSubscriptionCredential && (
-          <span>exact-subscription-required</span>
-        )}
         <button type="button" onClick={() => onSuccess?.("new-key-id")}>
           Create key
         </button>
@@ -346,7 +341,6 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
 
     expect(screen.getByText("Sign in with ChatGPT")).toBeInTheDocument();
     expect(screen.getByText("subscription")).toBeInTheDocument();
-    expect(screen.getByText("exact-subscription-required")).toBeInTheDocument();
   });
 
   it("re-opens the sign-in flow to reconnect a connected subscription that is already selected", async () => {

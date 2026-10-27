@@ -231,7 +231,7 @@ export function renderSummary(summary, baseline = null) {
   }
   lines.push(
     "",
-    `${cpu ? `${cpu}, ` : ""}${number(summary.logicalCpus, 0)} vCPU / ${number(summary.memoryGiB, 1)} GiB runner · ${summary.webWorkers ?? 1} web process, database pool 20 · mock upstream · ${number(summary.repeats, 0)} repeats of ${number(summary.requestsPerBlock, 0)} requests (${number(summary.streamingRequestsPerBlock, 0)} streaming), warmup excluded. Overhead is gateway time minus the upstream call. [Method](https://archestra.ai/docs/admin/observability/performance-benchmarks)`,
+    `${cpu ? `${cpu}, ` : ""}${number(summary.logicalCpus, 0)} vCPU / ${number(summary.memoryGiB, 1)} GiB runner · ${summary.webWorkers ?? 1} web process, database pool 20 · mock upstream · ${number(summary.repeats, 0)} repeats of ${number(summary.requestsPerBlock, 0)} requests (${number(summary.streamingRequestsPerBlock, 0)} streaming), warmup excluded. Overhead is gateway time minus the upstream call. [Method](https://archestra.ai/docs/admin/performance-benchmarks)`,
   );
   return `${lines.join("\n")}\n`;
 }

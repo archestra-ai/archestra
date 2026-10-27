@@ -112,40 +112,6 @@ describe("oauth-session user config storage", () => {
     sessionStorage.clear();
   });
 
-  it("persists only non-sensitive user config values for non-BYOS local OAuth", () => {
-    setOAuthUserConfigValues({
-      values: {
-        tenant_id: "tenant-123",
-        api_key: "super-secret",
-      },
-      userConfig: {
-        tenant_id: { sensitive: false },
-        api_key: { sensitive: true },
-      },
-      isByosVault: false,
-    });
-
-    expect(getOAuthUserConfigValues()).toEqual({
-      tenant_id: "tenant-123",
-    });
-  });
-
-  it("keeps vault references for sensitive user config values in BYOS mode", () => {
-    setOAuthUserConfigValues({
-      values: {
-        api_key: "kv/team/service#api_key",
-      },
-      userConfig: {
-        api_key: { sensitive: true },
-      },
-      isByosVault: true,
-    });
-
-    expect(getOAuthUserConfigValues()).toEqual({
-      api_key: "kv/team/service#api_key",
-    });
-  });
-
   it("clears stored user config when nothing safe should persist", () => {
     setOAuthUserConfigValues({
       values: {
@@ -154,7 +120,6 @@ describe("oauth-session user config storage", () => {
       userConfig: {
         api_key: { sensitive: true },
       },
-      isByosVault: false,
     });
 
     expect(getOAuthUserConfigValues()).toBeNull();
@@ -166,7 +131,6 @@ describe("oauth-session user config storage", () => {
         tenant_id: "tenant-123",
       },
       userConfig: undefined,
-      isByosVault: false,
     });
 
     expect(getOAuthUserConfigValues()).toBeNull();

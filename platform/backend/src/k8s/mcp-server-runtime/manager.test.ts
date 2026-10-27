@@ -1445,7 +1445,6 @@ describe("McpServerRuntimeManager", () => {
     });
 
     test("passes all keys through when catalog has no environment config (backward compat)", async () => {
-      // For servers without catalog environment config (e.g., BYOS with no defined env schema),
       // all vault keys should pass through to maintain backward compatibility
       const { manager, mcpServer, cleanup } = await setupStartServerTest({
         vaultSecret: {

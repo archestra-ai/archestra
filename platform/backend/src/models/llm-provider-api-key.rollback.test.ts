@@ -884,7 +884,6 @@ describe("LlmProviderApiKeyModel", () => {
         expect(visible[0].name).toBe("Key From Before Rotation");
         // Metadata derived from the secret value degrades to its defaults.
         expect(visible[0].subscriptionKind).toBeNull();
-        expect(visible[0].vaultSecretPath).toBeNull();
       } finally {
         config.secretsManager.encryptionSecret = original;
         _resetCachedKey();

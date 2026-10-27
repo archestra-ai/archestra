@@ -121,9 +121,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   extraHeaders: [],
   // An organization embedding/reranking key belongs to no one.
   shared: true,
-  teamId: null,
-  vaultSecretPath: null,
-  vaultSecretKey: null,
+
   isPrimary: true,
   bedrockAuthMethod: "api-key",
   awsAccessKeyId: null,
@@ -174,7 +172,7 @@ function AddApiKeyDialog({
   forEmbedding?: boolean;
 }) {
   const createMutation = useCreateLlmProviderApiKey();
-  const byosEnabled = useFeature("byosEnabled");
+
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicKeylessAuthEnabled = useFeature("anthropicKeylessAuthEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
@@ -198,13 +196,12 @@ function AddApiKeyDialog({
   const isValid =
     formValues.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
     formValues.name &&
-    (byosEnabled
-      ? formValues.vaultSecretPath && formValues.vaultSecretKey
-      : isProviderApiKeyOptional({
-          provider: formValues.provider,
-          azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
-          anthropicKeylessAuthEnabled: anthropicKeylessAuthEnabled === true,
-        }) || formValues.apiKey);
+    (isProviderApiKeyOptional({
+      provider: formValues.provider,
+      azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+      anthropicKeylessAuthEnabled: anthropicKeylessAuthEnabled === true,
+    }) ||
+      formValues.apiKey);
 
   const handleCreate = form.handleSubmit(async (values) => {
     const isBedrockSigV4 =
@@ -218,14 +215,7 @@ function AddApiKeyDialog({
         inferenceBaseUrl: values.inferenceBaseUrl || undefined,
         shared: true,
         isPrimary: values.isPrimary,
-        vaultSecretPath:
-          !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
-            ? values.vaultSecretPath
-            : undefined,
-        vaultSecretKey:
-          !isBedrockSigV4 && byosEnabled && values.vaultSecretKey
-            ? values.vaultSecretKey
-            : undefined,
+
         awsAccessKeyId: isBedrockSigV4
           ? values.awsAccessKeyId || undefined
           : undefined,

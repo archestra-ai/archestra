@@ -48,7 +48,7 @@ vi.mock("@/secrets-manager", async (importOriginal) => {
   const { default: SecretModel } = await import("@/models/secret");
   return {
     ...actual,
-    isByosEnabled: vi.fn().mockReturnValue(false),
+
     // The real getSecretValueForLlmProviderApiKey runs on top of this mocked
     // manager, so getSecret must return the (plaintext) DB row for routes that
     // inspect the stored credential (PATCH scope checks, reconnect).
@@ -1329,7 +1329,7 @@ describe("LLM Provider API Keys CRUD", () => {
 
     expect(createResponse.statusCode).toBe(400);
     expect(createResponse.json().error.message).toContain(
-      "Either apiKey, both vaultSecretPath and vaultSecretKey, or AWS SigV4 credentials (Bedrock only) must be provided",
+      "Either apiKey or AWS SigV4 credentials (Bedrock only) must be provided",
     );
   });
 });
@@ -2097,29 +2097,6 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain("plain API key");
-  });
-
-  test("rejects when the stored secret lives in a read-only BYOS Vault", async ({
-    makeSecret,
-    makeLlmProviderApiKey,
-  }) => {
-    const secret = await makeSecret({
-      secret: { apiKey: "vault/data/llm#openai" },
-      isByosVault: true,
-    } as never);
-    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
-      provider: "openai",
-      userId: memberUser.id,
-    });
-
-    const response = await app.inject({
-      method: "POST",
-      url: `/api/llm-provider-api-keys/${key.id}/reconnect`,
-      payload: { apiKey: freshCredential },
-    });
-
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain("Vault");
   });
 });
 

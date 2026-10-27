@@ -312,7 +312,6 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
         name: localServerCatalogItem.name,
         environmentValues: installResult.environmentValues,
         userConfigValues: installResult.userConfigValues,
-        isByosVault: installResult.isByosVault,
       });
 
       closeDialog("local-install");
@@ -333,13 +332,11 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
             .filter((e) => e.type === "secret")
             .map((e) => e.key),
         );
-        const safeValues = installResult.isByosVault
-          ? installResult.environmentValues
-          : Object.fromEntries(
-              Object.entries(installResult.environmentValues).filter(
-                ([key]) => !secretKeys.has(key),
-              ),
-            );
+        const safeValues = Object.fromEntries(
+          Object.entries(installResult.environmentValues).filter(
+            ([key]) => !secretKeys.has(key),
+          ),
+        );
         if (Object.keys(safeValues).length > 0) {
           setOAuthEnvironmentValues(safeValues);
         }
@@ -351,7 +348,6 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
         setOAuthUserConfigValues({
           values: installResult.userConfigValues,
           userConfig: localServerCatalogItem.userConfig,
-          isByosVault: installResult.isByosVault,
         });
       }
       closeDialog("local-install");
@@ -366,7 +362,7 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
       catalogId: installResult.catalogId,
       environmentValues: installResult.environmentValues,
       userConfigValues: installResult.userConfigValues,
-      isByosVault: installResult.isByosVault,
+
       scope: installResult.scope,
       teamId:
         installResult.scope === "team"

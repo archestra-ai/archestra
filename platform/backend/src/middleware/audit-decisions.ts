@@ -598,12 +598,7 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: team × external group; parent (team) audited",
   },
-  // Vault folder mutations are captured under the parent team resource via
-  // /api/teams/:teamId/vault-folder → resourceType: "team".
-  teamVaultFoldersTable: {
-    audited: false,
-    reason: "team vault folder; mutations captured under parent team resource",
-  },
+
   virtualApiKeyProviderApiKeysTable: {
     audited: false,
     reason: "join: virtual key × provider key; parent audited",

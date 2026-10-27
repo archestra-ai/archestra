@@ -18,18 +18,7 @@ import sys
 
 SHA = re.compile(r"[0-9a-f]{40}")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
-PLATFORM = "ghcr.io/archestra-ai/platform"
-LEGACY_PLATFORM = "docker.io/archestra/platform"
-
-
-def predecessor_repository(tag):
-    values = command("git", "show", f"{tag}:platform/helm/archestra/values.yaml")
-    matches = re.findall(r"^  image: ([^\s#]+)\s*$", values, re.M)
-    if matches == [PLATFORM]:
-        return PLATFORM
-    if matches in (["archestra/platform"], [LEGACY_PLATFORM]):
-        return LEGACY_PLATFORM
-    raise ValueError("Previous release has an unexpected platform image registry")
+PLATFORM = "docker.io/archestra/platform"
 
 
 def command(*args):
@@ -51,15 +40,14 @@ def build_inputs(image, arch):
             tag = command("git", "describe", "--tags", "--abbrev=0", "--match", "platform-v*", "HEAD^")
             if tag == f"platform-v{version}":
                 raise ValueError("Candidate version is already a release ancestor")
-            repository = predecessor_repository(tag)
-            reference = f"{repository}:{tag.removeprefix('platform-v')}"
+            reference = f"{PLATFORM}:{tag.removeprefix('platform-v')}"
             index = json.loads(command("docker", "buildx", "imagetools", "inspect", reference, "--raw"))
             matches = [row["digest"] for row in index["manifests"]
                        if row.get("platform", {}).get("os") == "linux"
                        and row.get("platform", {}).get("architecture") == arch]
             if len(matches) != 1 or not DIGEST.fullmatch(matches[0]):
                 raise ValueError("Previous release must resolve to exactly one immutable architecture")
-            previous = f"{repository}@{matches[0]}"
+            previous = f"{PLATFORM}@{matches[0]}"
     return {"version": version, "previous_image": previous}
 
 

@@ -184,7 +184,6 @@ import {
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
 } from "@/models";
-import SecretModel from "@/models/secret";
 import {
   getSecretValueForLlmProviderApiKey,
   secretManager,
@@ -417,46 +416,6 @@ describe("rotation persistence compare-and-swap", () => {
     expect(decodeOpenAiCodexCredential(value)).toMatchObject({
       refreshToken: rtFresh,
     });
-  });
-
-  test("skips the write when the secret row is a read-only BYOS Vault reference", async ({
-    makeOrganization,
-    makeUser,
-  }) => {
-    const organization = await makeOrganization();
-    const user = await makeUser();
-    // A BYOS row stores the vault REFERENCE; the resolved value (what the
-    // old guard inspected) would look like an ordinary credential.
-    const secret = await SecretModel.create({
-      name: `codex-byos-${crypto.randomUUID()}`,
-      secret: { apiKey: "vault/data/llm#openai" },
-      isByosVault: true,
-    });
-    const key = await LlmProviderApiKeyModel.create({
-      organizationId: organization.id,
-      name: "ChatGPT Subscription",
-      provider: "openai",
-      secretId: secret.id,
-      scope: "personal",
-      userId: user.id,
-    });
-    const rtOld = `rt-byos-${crypto.randomUUID()}`;
-    stubTokenEndpoint({
-      [rtOld]: {
-        accessToken: "at_1",
-        rotatedTo: `rt-byos2-${crypto.randomUUID()}`,
-      },
-    });
-
-    await openAiCodexTokenManager.getAccessToken({
-      refreshToken: rtOld,
-      providerApiKeyId: key.id,
-      accountId: "acc-1",
-    });
-    await openAiCodexTokenManager.waitForPersistFlush(key.id);
-
-    const row = await SecretModel.findById(secret.id);
-    expect(row?.secret).toMatchObject({ apiKey: "vault/data/llm#openai" });
   });
 });
 

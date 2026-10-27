@@ -9,7 +9,6 @@ import {
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
-  AlertTriangle,
   Boxes,
   CheckCircle2,
   Loader2,
@@ -56,7 +55,6 @@ import { SearchInput } from "@/components/search-input";
 import { SettingsLink } from "@/components/settings-link";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -118,9 +116,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   inferenceBaseUrl: null,
   extraHeaders: [],
   shared: false,
-  teamId: null,
-  vaultSecretPath: null,
-  vaultSecretKey: null,
+
   isPrimary: false,
   bedrockAuthMethod: "api-key",
   awsAccessKeyId: null,
@@ -187,7 +183,7 @@ export default function ApiKeysPage() {
   const updateMutation = useUpdateLlmProviderApiKey();
   const deleteMutation = useDeleteLlmProviderApiKey();
   const bulkDeleteMutation = useBulkDeleteLlmProviderApiKeys();
-  const byosEnabled = useFeature("byosEnabled");
+
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicKeylessAuthEnabled = useFeature("anthropicKeylessAuthEnabled");
 
@@ -274,9 +270,7 @@ export default function ApiKeysPage() {
         inferenceBaseUrl: editingApiKey.inferenceBaseUrl ?? null,
         extraHeaders: deserializeExtraHeaders(editingApiKey.extraHeaders),
         shared: editingApiKey.userId === null,
-        teamId: null,
-        vaultSecretPath: editingApiKey.vaultSecretPath ?? null,
-        vaultSecretKey: editingApiKey.vaultSecretKey ?? null,
+
         isPrimary: editingApiKey.isPrimary ?? false,
         bedrockAuthMethod: "api-key",
         awsAccessKeyId: null,
@@ -325,14 +319,7 @@ export default function ApiKeysPage() {
           // The update route no longer accepts the retired `scope`/`teamId`
           // fields; sharing is edited in the key's permissions section.
           isPrimary: values.isPrimary,
-          vaultSecretPath:
-            !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
-              ? values.vaultSecretPath
-              : undefined,
-          vaultSecretKey:
-            !isBedrockSigV4 && byosEnabled && values.vaultSecretKey
-              ? values.vaultSecretKey
-              : undefined,
+
           awsAccessKeyId: sigV4Provided
             ? (values.awsAccessKeyId ?? undefined)
             : undefined,
@@ -769,19 +756,6 @@ export default function ApiKeysPage() {
               />
             </FilterBar>
           </CollectionFilters>
-
-          {byosEnabled &&
-            apiKeys.some((key) => key.secretStorageType === "database") && (
-              <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Database-stored API keys detected</AlertTitle>
-                <AlertDescription>
-                  External Vault storage is enabled, but some of your API keys
-                  are still stored in the database. To migrate them to the
-                  vault, delete them and create new ones with vault references.
-                </AlertDescription>
-              </Alert>
-            )}
 
           <div data-testid={E2eTestId.ChatApiKeysTable}>
             <BulkActions

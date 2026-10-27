@@ -46,14 +46,11 @@ class RegistryNoticeTests(unittest.TestCase):
         self.assertIn('registry.example/team/platform:custom', rendered)
         self.assertIn('registry.example/team', rendered)
 
-    def test_old_public_platform_and_companion_overrides_are_named(self):
-        for image in ('archestra/platform', 'docker.io/archestra/platform:1.4.0',
-                      'europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:pinned'):
-            with self.subTest(image=image):
-                rendered = self.render('archestra.image=' + image)
-                self.assertIn('Registry migration notice:', rendered)
-                self.assertIn('  - archestra.image', rendered)
-                self.assertIn(image, rendered)
+    def test_platform_dockerhub_overrides_remain_supported(self):
+        for image in ('archestra/platform', 'docker.io/archestra/platform:1.4.0'):
+            self.assertNotIn('Registry migration notice:', self.render('archestra.image=' + image))
+
+    def test_old_companion_overrides_are_named(self):
         for variable in ('ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY',
                          'ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE',
                          'ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE'):

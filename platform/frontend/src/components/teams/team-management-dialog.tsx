@@ -49,7 +49,6 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useMemberSearch } from "@/lib/member.query";
 import {
@@ -68,11 +67,7 @@ import { EnterpriseLicenseRequired } from "../enterprise-license-required";
 
 type Team = archestraApiTypes.GetTeamResponses["200"];
 type TeamListItem = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
-type TeamDialogSection =
-  | "team"
-  | "members"
-  | "vault-folder"
-  | "external-groups";
+type TeamDialogSection = "team" | "members" | "external-groups";
 type TeamMemberRole = typeof ADMIN_ROLE_NAME | typeof MEMBER_ROLE_NAME;
 
 const MEMBERS_PAGE_SIZE = 20;
@@ -91,10 +86,6 @@ type TeamManagementExternalSyncSectionComponent = ComponentType<{
   open: boolean;
   team: Team;
   readOnly?: boolean;
-}>;
-type TeamManagementVaultFolderSectionComponent = ComponentType<{
-  open: boolean;
-  team: Team;
 }>;
 
 type TeamManagementDialogProps =
@@ -122,11 +113,6 @@ const editNavItems = [
   { id: "external-groups", label: "External Group Sync" },
 ] satisfies Array<{ id: TeamDialogSection; label: string }>;
 
-const vaultFolderNavItem = {
-  id: "vault-folder",
-  label: "Vault Folder",
-} satisfies { id: TeamDialogSection; label: string };
-
 const createNavItems = [{ id: "team", label: "Team" }] satisfies Array<{
   id: TeamDialogSection;
   label: string;
@@ -137,7 +123,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
   const mode = props.mode ?? "edit";
   const [createdTeam, setCreatedTeam] = useState<Team | null>(null);
   const editTeam = "team" in props ? props.team : null;
-  const readOnly = ("readOnly" in props && props.readOnly) || false;
+  const readOnly = "readOnly" in props && props.readOnly;
   const team = editTeam ?? createdTeam;
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState<TeamDialogSection>("team");
@@ -157,8 +143,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const TeamManagementExternalSyncSection =
     useTeamManagementExternalSyncSection();
-  const TeamManagementVaultFolderSection =
-    useTeamManagementVaultFolderSection();
+
   const { data: canUpdateTeams = false } = useHasPermissions({
     team: ["update"],
   });
@@ -166,7 +151,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     includeRelations: false,
     enabled: open && (mode === "create" || canUpdateTeams),
   });
-  const byosEnabled = useFeature("byosEnabled");
+
   const navItems = useMemo(() => {
     if (mode === "create") {
       return team ? [editNavItems[0], editNavItems[1]] : createNavItems;
@@ -180,17 +165,8 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
       return editNavItems;
     }
 
-    if (!byosEnabled) {
-      return editNavItems;
-    }
-
-    return [
-      editNavItems[0],
-      editNavItems[1],
-      vaultFolderNavItem,
-      editNavItems[2],
-    ];
-  }, [byosEnabled, canUpdateTeams, mode, readOnly, team]);
+    return editNavItems;
+  }, [canUpdateTeams, mode, readOnly, team]);
   const title =
     mode === "create" && !team
       ? "Create Team"
@@ -225,16 +201,12 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     const canShowActiveSection =
       (activeSection === "team" && !readOnly) ||
       (activeSection === "members" && !!team && !readOnly) ||
-      activeSection === "external-groups" ||
-      (activeSection === "vault-folder" &&
-        canUpdateTeams &&
-        byosEnabled &&
-        !readOnly);
+      activeSection === "external-groups";
 
     if (!canShowActiveSection) {
       setActiveSection(readOnly ? "external-groups" : "team");
     }
-  }, [activeSection, byosEnabled, canUpdateTeams, readOnly, team]);
+  }, [activeSection, readOnly, team]);
 
   const saveTeam = useMutation({
     mutationFn: async () => {
@@ -474,9 +446,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
           }}
         />
       )}
-      {activeSection === "vault-folder" && mode === "edit" && team && (
-        <TeamManagementVaultFolderSection open={open} team={team} />
-      )}
+
       {activeSection === "external-groups" && mode === "edit" && team && (
         <TeamManagementExternalSyncSection
           open={open}
@@ -1009,10 +979,6 @@ function TeamManagementExternalSyncSectionUnavailable() {
   return <EnterpriseLicenseRequired featureName="Team Sync" />;
 }
 
-function TeamManagementVaultFolderSectionUnavailable() {
-  return <EnterpriseLicenseRequired featureName="Team Vault Folders" />;
-}
-
 function useTeamManagementExternalSyncSection(): TeamManagementExternalSyncSectionComponent {
   const [Section, setSection] =
     useState<TeamManagementExternalSyncSectionComponent>(
@@ -1029,35 +995,6 @@ function useTeamManagementExternalSyncSection(): TeamManagementExternalSyncSecti
       const module = await import("./team-management-external-sync.ee");
       if (!cancelled) {
         setSection(() => module.TeamManagementExternalSyncSection);
-      }
-    }
-
-    loadEnterpriseSection();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return Section;
-}
-
-function useTeamManagementVaultFolderSection(): TeamManagementVaultFolderSectionComponent {
-  const [Section, setSection] =
-    useState<TeamManagementVaultFolderSectionComponent>(
-      () => TeamManagementVaultFolderSectionUnavailable,
-    );
-
-  useEffect(() => {
-    if (!config.enterpriseFeatures.core) return;
-
-    let cancelled = false;
-
-    async function loadEnterpriseSection() {
-      // biome-ignore lint/style/noRestrictedImports: conditional ee component with vault folder management
-      const module = await import("./team-management-vault-folder.ee");
-      if (!cancelled) {
-        setSection(() => module.TeamManagementVaultFolderSection);
       }
     }
 

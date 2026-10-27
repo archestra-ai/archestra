@@ -1,0 +1,467 @@
+{
+  "records": [
+    {
+      "profile": "archestra",
+      "repeat": 1,
+      "container": "db",
+      "windowSeconds": 12.0,
+      "cpuStatDelta": {
+        "usage_usec": 5679616,
+        "user_usec": 4780929,
+        "system_usec": 898688,
+        "nice_usec": 0,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 121,
+        "nr_throttled": 0,
+        "throttled_usec": 0,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "cpuPressureDeltaUs": {
+        "some": 1236467,
+        "full": 35379
+      },
+      "memoryEventsDelta": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "memoryPressureDeltaUs": {
+        "some": 0,
+        "full": 0
+      },
+      "afterMemoryBytes": 422420480,
+      "lifetimePeakMemoryBytes": 431251456,
+      "beforeSwapBytes": 0,
+      "afterSwapBytes": 0
+    },
+    {
+      "profile": "archestra",
+      "repeat": 1,
+      "container": "archestra",
+      "windowSeconds": 12.0,
+      "cpuStatDelta": {
+        "usage_usec": 10751193,
+        "user_usec": 9471027,
+        "system_usec": 1280167,
+        "nice_usec": 0,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 123,
+        "nr_throttled": 0,
+        "throttled_usec": 0,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "cpuPressureDeltaUs": {
+        "some": 90799,
+        "full": 12761
+      },
+      "memoryEventsDelta": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "memoryPressureDeltaUs": {
+        "some": 0,
+        "full": 0
+      },
+      "afterMemoryBytes": 1582747648,
+      "lifetimePeakMemoryBytes": 1589227520,
+      "beforeSwapBytes": 0,
+      "afterSwapBytes": 0
+    },
+    {
+      "profile": "archestra",
+      "repeat": 2,
+      "container": "db",
+      "windowSeconds": 13.0,
+      "cpuStatDelta": {
+        "usage_usec": 5783610,
+        "user_usec": 4892986,
+        "system_usec": 890624,
+        "nice_usec": 0,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 120,
+        "nr_throttled": 0,
+        "throttled_usec": 0,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "cpuPressureDeltaUs": {
+        "some": 1284876,
+        "full": 33793
+      },
+      "memoryEventsDelta": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "memoryPressureDeltaUs": {
+        "some": 0,
+        "full": 0
+      },
+      "afterMemoryBytes": 481030144,
+      "lifetimePeakMemoryBytes": 540225536,
+      "beforeSwapBytes": 0,
+      "afterSwapBytes": 0
+    },
+    {
+      "profile": "archestra",
+      "repeat": 2,
+      "container": "archestra",
+      "windowSeconds": 12.0,
+      "cpuStatDelta": {
+        "usage_usec": 10601613,
+        "user_usec": 9326224,
+        "system_usec": 1275389,
+        "nice_usec": 0,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 125,
+        "nr_throttled": 0,
+        "throttled_usec": 0,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "cpuPressureDeltaUs": {
+        "some": 92687,
+        "full": 13816
+      },
+      "memoryEventsDelta": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "memoryPressureDeltaUs": {
+        "some": 0,
+        "full": 0
+      },
+      "afterMemoryBytes": 1578483712,
+      "lifetimePeakMemoryBytes": 1583300608,
+      "beforeSwapBytes": 0,
+      "afterSwapBytes": 0
+    },
+    {
+      "profile": "litellm",
+      "repeat": 1,
+      "container": "db",
+      "windowSeconds": 52.0,
+      "cpuStatDelta": {
+        "usage_usec": 1990053,
+        "user_usec": 1648652,
+        "system_usec": 341401,
+        "nice_usec": 0,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 227,
+        "nr_throttled": 0,
+        "throttled_usec": 0,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "cpuPressureDeltaUs": {
+        "some": 16628,
+        "full": 5639
+      },
+      "memoryEventsDelta": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "memoryPressureDeltaUs": {
+        "some": 0,
+        "full": 0
+      },
+      "afterMemoryBytes": 535572480,
+      "lifetimePeakMemoryBytes": 539652096,
+      "beforeSwapBytes": 0,
+      "afterSwapBytes": 0
+    },
+    {
+      "profile": "litellm",
+      "repeat": 1,
+      "container": "litellm",
+      "windowSeconds": 52.0,
+      "cpuStatDelta": {
+        "usage_usec": 52604176,
+        "user_usec": 51961091,
+        "system_usec": 643084,
+        "nice_usec": 0,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 512,
+        "nr_throttled": 0,
+        "throttled_usec": 0,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "cpuPressureDeltaUs": {
+        "some": 44596,
+        "full": 36174
+      },
+      "memoryEventsDelta": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "memoryPressureDeltaUs": {
+        "some": 0,
+        "full": 0
+      },
+      "afterMemoryBytes": 945414144,
+      "lifetimePeakMemoryBytes": 952627200,
+      "beforeSwapBytes": 0,
+      "afterSwapBytes": 0
+    },
+    {
+      "profile": "litellm",
+      "repeat": 2,
+      "container": "db",
+      "windowSeconds": 52.0,
+      "cpuStatDelta": {
+        "usage_usec": 1932365,
+        "user_usec": 1649657,
+        "system_usec": 282707,
+        "nice_usec": 0,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 225,
+        "nr_throttled": 0,
+        "throttled_usec": 0,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "cpuPressureDeltaUs": {
+        "some": 7574,
+        "full": 5382
+      },
+      "memoryEventsDelta": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "memoryPressureDeltaUs": {
+        "some": 0,
+        "full": 0
+      },
+      "afterMemoryBytes": 462159872,
+      "lifetimePeakMemoryBytes": 540225536,
+      "beforeSwapBytes": 0,
+      "afterSwapBytes": 0
+    },
+    {
+      "profile": "litellm",
+      "repeat": 2,
+      "container": "litellm",
+      "windowSeconds": 52.0,
+      "cpuStatDelta": {
+        "usage_usec": 51808495,
+        "user_usec": 51200028,
+        "system_usec": 608467,
+        "nice_usec": 0,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 508,
+        "nr_throttled": 0,
+        "throttled_usec": 0,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "cpuPressureDeltaUs": {
+        "some": 39562,
+        "full": 35631
+      },
+      "memoryEventsDelta": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "memoryPressureDeltaUs": {
+        "some": 0,
+        "full": 0
+      },
+      "afterMemoryBytes": 915140608,
+      "lifetimePeakMemoryBytes": 919244800,
+      "beforeSwapBytes": 0,
+      "afterSwapBytes": 0
+    },
+    {
+      "profile": "litellm-default",
+      "repeat": 1,
+      "container": "db",
+      "windowSeconds": 48.0,
+      "cpuStatDelta": {
+        "usage_usec": 1306141,
+        "user_usec": 1081793,
+        "system_usec": 224348,
+        "nice_usec": 0,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 216,
+        "nr_throttled": 0,
+        "throttled_usec": 0,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "cpuPressureDeltaUs": {
+        "some": 13222,
+        "full": 5178
+      },
+      "memoryEventsDelta": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "memoryPressureDeltaUs": {
+        "some": 0,
+        "full": 0
+      },
+      "afterMemoryBytes": 442998784,
+      "lifetimePeakMemoryBytes": 540225536,
+      "beforeSwapBytes": 0,
+      "afterSwapBytes": 0
+    },
+    {
+      "profile": "litellm-default",
+      "repeat": 1,
+      "container": "litellm-default",
+      "windowSeconds": 48.0,
+      "cpuStatDelta": {
+        "usage_usec": 47948495,
+        "user_usec": 47361387,
+        "system_usec": 587108,
+        "nice_usec": 0,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 477,
+        "nr_throttled": 0,
+        "throttled_usec": 0,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "cpuPressureDeltaUs": {
+        "some": 58207,
+        "full": 37690
+      },
+      "memoryEventsDelta": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "memoryPressureDeltaUs": {
+        "some": 0,
+        "full": 0
+      },
+      "afterMemoryBytes": 883859456,
+      "lifetimePeakMemoryBytes": 888086528,
+      "beforeSwapBytes": 0,
+      "afterSwapBytes": 0
+    },
+    {
+      "profile": "litellm-default",
+      "repeat": 2,
+      "container": "db",
+      "windowSeconds": 49.0,
+      "cpuStatDelta": {
+        "usage_usec": 1260075,
+        "user_usec": 1039765,
+        "system_usec": 220310,
+        "nice_usec": 0,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 191,
+        "nr_throttled": 0,
+        "throttled_usec": 0,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "cpuPressureDeltaUs": {
+        "some": 15316,
+        "full": 5111
+      },
+      "memoryEventsDelta": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "memoryPressureDeltaUs": {
+        "some": 0,
+        "full": 0
+      },
+      "afterMemoryBytes": 422641664,
+      "lifetimePeakMemoryBytes": 540225536,
+      "beforeSwapBytes": 0,
+      "afterSwapBytes": 0
+    },
+    {
+      "profile": "litellm-default",
+      "repeat": 2,
+      "container": "litellm-default",
+      "windowSeconds": 49.0,
+      "cpuStatDelta": {
+        "usage_usec": 47734004,
+        "user_usec": 47135346,
+        "system_usec": 598658,
+        "nice_usec": 0,
+        "core_sched.force_idle_usec": 0,
+        "nr_periods": 475,
+        "nr_throttled": 0,
+        "throttled_usec": 0,
+        "nr_bursts": 0,
+        "burst_usec": 0
+      },
+      "cpuPressureDeltaUs": {
+        "some": 45048,
+        "full": 34245
+      },
+      "memoryEventsDelta": {
+        "low": 0,
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      },
+      "memoryPressureDeltaUs": {
+        "some": 0,
+        "full": 0
+      },
+      "afterMemoryBytes": 875012096,
+      "lifetimePeakMemoryBytes": 883249152,
+      "beforeSwapBytes": 0,
+      "afterSwapBytes": 0
+    }
+  ],
+  "allMemoryEventsDeltaZero": true,
+  "allMemoryPressureDeltaZero": true,
+  "allSwapZero": true,
+  "throttledPeriodsDeltaTotal": 0,
+  "throttledUsecDeltaTotal": 0,
+  "maxDatabaseCgroupPeakBytes": 540225536,
+  "maxCpuSomePressureFraction": 0.10303891666666666
+}

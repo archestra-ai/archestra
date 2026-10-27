@@ -171,7 +171,7 @@ const FlowSchema = z.object({
   flowId: z.string().uuid(),
   namespace: z.string().optional(),
   image: z.string().optional(),
-  vaultReference: z.string().optional(),
+
   oauth: z
     .object({
       state: z.string(),

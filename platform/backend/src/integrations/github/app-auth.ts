@@ -78,8 +78,8 @@ export async function resolveInstallationCredential(
  */
 export async function createRepositoryInstallationToken(
   credentials: Omit<GithubAppCredentials, "minimumValidityMs"> & {
-    /** Repository name within the installation's account, without the owner. */
-    repository: string;
+    /** GitHub's id of a repository the installation covers. */
+    repositoryId: number;
     permissions: Record<string, "read" | "write">;
   },
   fetchImpl: typeof fetch = globalThis.fetch,
@@ -90,7 +90,7 @@ export async function createRepositoryInstallationToken(
     installationId: credentials.installationId,
     signingKey: readAppSigningKey(credentials),
     restrictTo: {
-      repositories: [credentials.repository],
+      repository_ids: [credentials.repositoryId],
       permissions: credentials.permissions,
     },
     fetchImpl,
@@ -186,7 +186,7 @@ async function mintInstallationToken(params: {
   installationId: string;
   signingKey: KeyObject;
   restrictTo?: {
-    repositories: string[];
+    repository_ids: number[];
     permissions: Record<string, "read" | "write">;
   };
   fetchImpl: typeof fetch;

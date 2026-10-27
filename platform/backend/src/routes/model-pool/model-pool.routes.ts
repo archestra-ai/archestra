@@ -55,9 +55,9 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, body }, reply) => {
       assertModelPoolsEnabled();
+      assertNameNotReserved(body);
       await assertValidMembers({ organizationId, input: body });
       await assertValidVirtualApiKeys({ organizationId, input: body });
-      assertNameNotReserved(body);
       await assertNameHasNoOtherPool({ organizationId, input: body });
       return reply.send(
         await ModelPoolModel.create({ organizationId, input: body }),
@@ -79,9 +79,9 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, params, body }, reply) => {
       assertModelPoolsEnabled();
+      assertNameNotReserved(body);
       await assertValidMembers({ organizationId, input: body });
       await assertValidVirtualApiKeys({ organizationId, input: body });
-      assertNameNotReserved(body);
       await assertNameHasNoOtherPool({
         organizationId,
         input: body,

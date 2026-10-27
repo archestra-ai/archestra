@@ -8,6 +8,26 @@ import { buildSandboxSupervisorScript } from "./sandbox-supervisor";
 describe.skipIf(!process.env.ARCHESTRA_TEST_SANDBOX_IMAGE)(
   "sandbox supervisor",
   () => {
+    it("preserves a failed TUI result when its exited pane had focus reporting enabled", () => {
+      const result = runInContainer(`
+cat > /tmp/focused-client.sh <<'CLIENT'
+printf '\\033[?1004h'
+printf 'provider unavailable\\n' > /tmp/answer
+touch /tmp/done.failed /tmp/done
+sleep 60
+CLIENT
+printf 'archestra-tui-run /tmp/done /tmp/answer /bin/sh /tmp/focused-client.sh\\n' > /var/run/archestra/turns/1.request
+wait_for /var/run/archestra/turns/1.exit
+test "$(cat /var/run/archestra/turns/1.exit)" = 1
+tmux has-session -t agent
+grep -q 'provider unavailable' /var/run/archestra/turns/1.log
+test ! -f /var/run/archestra/turns/1.failure
+echo VERIFIED
+`);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("VERIFIED");
+    }, 30_000);
+
     it("clears retained terminal ownership when recording fails after completion", () => {
       const result = runInContainer(`
 cat > /var/run/archestra/turns/1.request <<'TURN'

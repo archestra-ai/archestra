@@ -28,6 +28,13 @@ export const DevFeedbackCommentSchema = DevFeedbackAnchorSchema.extend({
   replyCount: z.number(),
   permalink: z.string().nullable(),
   createdAt: z.string(),
+  dispatch: z
+    .object({
+      status: z.enum(["started", "failed"]),
+      runId: z.string().nullable(),
+      message: z.string().nullable(),
+    })
+    .optional(),
 });
 
 export const DevFeedbackReplySchema = z.object({
@@ -50,16 +57,23 @@ export const CreateDevFeedbackCommentBodySchema =
   });
 
 /** The saved choice of bot and channel. Holds no credential. */
-const DevFeedbackSetupSchema = z.object({
+export const DevFeedbackSetupSchema = z.object({
   /** Slack app id of a chatops bot (the main one or an agent's). */
   botId: z.string(),
   channelId: z.string(),
   channelName: z.string(),
+  organizationId: z.string().optional(),
+  agentId: z.string().uuid().nullable().optional(),
+  workspaceId: z.string().optional(),
+  bindingId: z.string().uuid().optional(),
+  pinnedAgentId: z.string().uuid().optional(),
 });
 
 export const DevFeedbackSetupStatusSchema = z.object({
   configured: z.boolean(),
   channelName: z.string().nullable(),
+  agentId: z.string().uuid().nullable().optional(),
+  agentName: z.string().nullable().optional(),
 });
 
 export const DevFeedbackBotSchema = z.object({
@@ -76,6 +90,7 @@ export const DevFeedbackChannelSchema = z.object({
 export const SaveDevFeedbackSetupBodySchema = z.object({
   botId: z.string().min(1).max(64),
   channelId: z.string().regex(/^[CG][A-Z0-9]+$/),
+  agentId: z.string().uuid().nullable().optional(),
 });
 
 export type DevFeedbackAnchor = z.infer<typeof DevFeedbackAnchorSchema>;
@@ -102,3 +117,20 @@ function DevFeedbackFileSchema<const T extends readonly [string, ...string[]]>(
     base64: z.string().min(1),
   });
 }
+
+/** In-memory handoff after Slack confirms the original report. */
+export type DevFeedbackReport = {
+  id: string;
+  organizationId: string;
+  actorUserId: string;
+  authorName: string;
+  body: CreateDevFeedbackCommentBody;
+  target: DevFeedbackSetup;
+  rootTs: string;
+  permalink: string | null;
+  createdAt: Date;
+  media: {
+    screenshot: "absent" | "uploaded" | "unavailable";
+    clip: "absent" | "uploaded" | "unavailable";
+  };
+};

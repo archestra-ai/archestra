@@ -67,6 +67,8 @@ export class FakeSlack {
       this.method("auth.test", () => ({
         url: this.workspaceUrl,
         user: this.botName,
+        team_id: "T1",
+        bot_id: "B1",
       })),
       this.method("conversations.list", () => ({
         channels: this.channels

@@ -16,7 +16,14 @@ export function useDevFeedbackSetup() {
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getDevFeedbackSetup();
       throwOnApiError(error, { toastOnError: false });
-      return data ?? { configured: false, channelName: null };
+      return (
+        data ?? {
+          configured: false,
+          channelName: null,
+          agentId: null,
+          agentName: null,
+        }
+      );
     },
   });
 }
@@ -50,7 +57,9 @@ export function useDevFeedbackChannels(botId: string | null) {
 export function useSaveDevFeedbackSetup() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: { botId: string; channelId: string }) => {
+    mutationFn: async (
+      body: archestraApiTypes.SaveDevFeedbackSetupData["body"],
+    ) => {
       const { data, error } = await archestraApiSdk.saveDevFeedbackSetup({
         body,
       });
@@ -115,6 +124,11 @@ export function useCreateDevFeedbackComment() {
     onSuccess: (comment) => {
       queryClient.invalidateQueries({ queryKey: devFeedbackKeys.all });
       toast.success("Posted to Slack", {
+        description: comment.dispatch
+          ? comment.dispatch.status === "started"
+            ? "Agent review started. Its response will appear in the Slack thread."
+            : `${comment.dispatch.message ?? "Agent review could not start."} Open the Slack thread and ask the configured agent manually. Do not repost the feedback.`
+          : undefined,
         action: comment.permalink
           ? {
               label: "Open",

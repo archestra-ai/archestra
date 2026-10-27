@@ -264,6 +264,7 @@ export function DevFeedbackOverlay() {
       {setupOpen && (
         <DevFeedbackSetupPanel
           currentChannelName={setup?.channelName ?? null}
+          currentAgentId={setup?.agentId ?? null}
           onClose={() => setSetupOpen(false)}
           onSaved={() => setSetupOpen(false)}
         />

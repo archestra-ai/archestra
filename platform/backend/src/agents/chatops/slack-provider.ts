@@ -865,6 +865,20 @@ class SlackProvider implements ChatOpsProvider {
     this.botId = identity.bot_id;
   }
 
+  /** Prepare outbound thread delivery without configuring the app or opening inbound listeners. */
+  async initializeOutbound(workspaceId: string): Promise<void> {
+    if (this.client && this.teamId === workspaceId) return;
+    const client = this.runtimeNoticeClient();
+    const identity = await client.auth.test();
+    if (identity.team_id !== workspaceId || !identity.bot_id)
+      throw new Error("Slack outbound workspace mismatch");
+    this.botId = identity.bot_id;
+    this.botUserId = identity.user_id ?? null;
+    this.teamId = workspaceId;
+    this.client = client;
+    this.bestEffortClient = client;
+  }
+
   /** Generic runtime attention only: no command, prompt, or approval payload. */
   async postRuntimeAttentionNotice(params: {
     channelId: string;

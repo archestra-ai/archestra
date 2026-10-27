@@ -35,6 +35,7 @@ import {
 } from "@/models";
 import A2ATaskApprovalRequestModel from "@/models/a2a/task-approval-request";
 import ChatOpsUserAdmissionModel from "@/models/chatops-user-admission";
+import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { RouteCategory } from "@/observability/tracing";
 import {
@@ -66,6 +67,7 @@ import type {
 } from "@/types";
 import { AgentRuntimeCredentialsRequiredError } from "@/types/agent-runtime";
 import type { ChatOpsChannelBinding } from "@/types/chatops-channel-binding";
+import type { DevFeedbackReport } from "@/types/dev-feedback";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import { stripThinkingBlocks } from "@/utils/strip-thinking-blocks";
@@ -92,6 +94,7 @@ import {
   claimThreadMuteHint,
   getThreadMuteMarker,
   invalidateChannelAnswerAll,
+  markChannelThreadActive,
 } from "./channel-activation";
 import { compactChatOpsResponse } from "./chatops-response";
 import { chatOpsRunRegistry, wasRunSuperseded } from "./chatops-run-registry";
@@ -108,6 +111,7 @@ import {
   SLACK_THREAD_MUTE_HINT,
   THREAD_MUTE_HINT,
 } from "./constants";
+import { buildDevFeedbackHandoff } from "./dev-feedback-prompt";
 import MSTeamsProvider from "./ms-teams-provider";
 import {
   assertRuntimeAcknowledgementSettled,
@@ -169,6 +173,124 @@ export class ChatOpsManager {
   getSlackProvider(agentId?: string): SlackProvider | null {
     if (agentId) return this.slackAgentBots.get(agentId) ?? null;
     return this.slackProvider;
+  }
+
+  /** A server-authenticated feedback submission is addressed explicitly, without inventing a Slack sender. */
+  async dispatchFeedbackReport(params: {
+    report: DevFeedbackReport;
+    attachments: A2AAttachment[];
+  }): Promise<ChatOpsProcessingResult & { taskId?: string }> {
+    const { report } = params;
+    const target = report.target;
+    if (
+      !target.agentId ||
+      !target.bindingId ||
+      !target.workspaceId ||
+      !report.rootTs ||
+      target.organizationId !== report.organizationId
+    )
+      throw new Error(
+        "The feedback run has no verified organization, Agent or Slack thread.",
+      );
+    if ((await getHiddenMessagingChannels()).has("slack"))
+      throw new Error("Slack messaging is disabled.");
+    const [binding, agent, user] = await Promise.all([
+      ChatOpsChannelBindingModel.findById(target.bindingId),
+      AgentModel.findById(target.agentId),
+      UserModel.getById(report.actorUserId),
+    ]);
+    if (
+      !user ||
+      user.banned ||
+      !(await MemberModel.getByUserId(
+        report.actorUserId,
+        report.organizationId,
+      )) ||
+      !binding ||
+      binding.organizationId !== report.organizationId ||
+      binding.provider !== "slack" ||
+      binding.channelId !== target.channelId ||
+      binding.workspaceId !== target.workspaceId ||
+      binding.isDm ||
+      (!target.pinnedAgentId && binding.agentId !== target.agentId)
+    )
+      throw new Error(
+        "The feedback requester or Slack binding is no longer available.",
+      );
+    if (
+      !agent ||
+      agent.organizationId !== report.organizationId ||
+      agent.agentType !== "agent" ||
+      !resolveAgentRuntime(agent)
+    )
+      throw new Error("The configured feedback Agent Runtime is unavailable.");
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    await ResourcePermissions.require({
+      organizationId: report.organizationId,
+      userId: report.actorUserId,
+      resource: "agent",
+      scope: agent.id,
+      action: "use",
+    });
+    // SPDX-SnippetEnd
+    const provider =
+      this.getSlackProvider(target.pinnedAgentId) ??
+      (await this.getSlackRuntimeNoticeProvider(target.pinnedAgentId));
+    const botConfig = target.pinnedAgentId
+      ? (await ChatOpsConfigModel.getSlackAgentBots()).find(
+          (bot) => bot.agentId === target.pinnedAgentId,
+        )
+      : await ChatOpsConfigModel.getSlackConfig();
+    if (
+      !provider?.isConfigured() ||
+      !botConfig?.enabled ||
+      botConfig.appId !== target.botId ||
+      (target.pinnedAgentId && target.pinnedAgentId !== agent.id)
+    )
+      throw new Error(
+        "The feedback Slack bot changed. Review feedback setup before retrying.",
+      );
+    await provider.initializeOutbound(target.workspaceId);
+    const handoff = buildDevFeedbackHandoff(report);
+    // This envelope is transport routing only; the authenticated actor comes from the HTTP request.
+    return this.startAgentRuntimeRun({
+      agent,
+      binding,
+      provider,
+      userId: report.actorUserId,
+      message: {
+        messageId: report.rootTs,
+        threadId: report.rootTs,
+        channelId: target.channelId,
+        workspaceId: target.workspaceId,
+        senderId: report.actorUserId,
+        senderName: report.authorName,
+        text: report.body.text,
+        rawText: report.body.text,
+        timestamp: report.createdAt,
+        isThreadReply: true,
+        attachments: params.attachments,
+      },
+      fullMessage: [
+        buildChannelInstructionsBlock(binding.channelInstructions),
+        handoff.message,
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+      cleanedMessageText: report.body.text,
+      sessionSetup: handoff.sessionSetup,
+      sendReply: false,
+      onTaskCreated: async () => {
+        await markChannelThreadActive({
+          provider: "slack",
+          channelId: target.channelId,
+          threadId: report.rootTs as string,
+          scope: provider.stateScope,
+        });
+      },
+    });
   }
 
   /** Workers send notices without starting inbound Slack listeners or sockets. */
@@ -322,10 +444,17 @@ export class ChatOpsManager {
         "Progress updates are only supported for Slack runtime runs.",
       );
     }
-    const provider = this.providerForBinding(
+    let provider = this.providerForBinding(
       binding.provider,
       params.pinnedAgentId,
     );
+    if (!provider && binding.provider === "slack" && binding.workspaceId) {
+      const outbound = await this.getSlackRuntimeNoticeProvider(
+        params.pinnedAgentId,
+      );
+      await outbound?.initializeOutbound(binding.workspaceId);
+      provider = outbound;
+    }
     if (!provider?.isConfigured()) {
       if (params.progress)
         throw new Error("The run's Slack provider is not configured.");
@@ -2704,7 +2833,8 @@ export class ChatOpsManager {
     ephemeralExecutionPrefix?: string;
     sendReply: boolean;
     userId: string;
-  }): Promise<ChatOpsProcessingResult> {
+    onTaskCreated?: (taskId: string) => Promise<void>;
+  }): Promise<ChatOpsProcessingResult & { taskId?: string }> {
     const {
       agent,
       binding,
@@ -2823,6 +2953,7 @@ export class ChatOpsManager {
         attachments: message.attachments,
         onTaskCreated: async (taskId) => {
           completionTarget.originatingTaskId = taskId;
+          await params.onTaskCreated?.(taskId);
         },
         systemParams: {
           resumeFromTaskId,
@@ -2912,7 +3043,7 @@ export class ChatOpsManager {
         "[ChatOps] Started Agent Runtime run",
       );
       return nativeConversation
-        ? { success: true, agentResponse: "" }
+        ? { success: true, agentResponse: "", taskId: task.id }
         : await acknowledge(
             `Started a run for this. I will post the result in this thread when it finishes: ${agentRunUrl(workspaceRetained ? workspace.id : task.id)}`,
           );

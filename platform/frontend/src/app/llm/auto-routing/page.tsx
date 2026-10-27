@@ -73,9 +73,7 @@ function PlanStatus({ settings }: { settings: AutoRoutingSettings }) {
           <InlineNoticeText>
             {fitError.message}
             {fitError.code && (
-              <span className="ml-1 font-mono text-xs">
-                ({fitError.code})
-              </span>
+              <span className="ml-1 font-mono text-xs">({fitError.code})</span>
             )}
           </InlineNoticeText>
         </InlineNotice>

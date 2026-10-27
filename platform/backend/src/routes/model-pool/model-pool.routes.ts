@@ -1,4 +1,4 @@
-import { RouteId } from "@archestra/shared";
+import { RouteId, SupportedProvidersSchema } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
@@ -7,6 +7,7 @@ import {
   ModelPoolModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { listChatModelPools } from "@/services/chat-model-pools";
 import {
   ApiError,
   constructResponseSchema,
@@ -38,6 +39,29 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await withMemberHealth(await ModelPoolModel.list(organizationId)),
       );
     },
+  );
+
+  fastify.get(
+    "/api/model-pools/available",
+    {
+      schema: {
+        operationId: RouteId.GetAvailableModelPools,
+        description:
+          "List the model pools the current user can pick in chat: those with a member on a key the user may use",
+        tags: ["Model Pools"],
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              id: z.string().uuid(),
+              name: z.string(),
+              providers: z.array(SupportedProvidersSchema),
+            }),
+          ),
+        ),
+      },
+    },
+    async ({ organizationId, user }, reply) =>
+      reply.send(await listChatModelPools({ organizationId, userId: user.id })),
   );
 
   fastify.post(

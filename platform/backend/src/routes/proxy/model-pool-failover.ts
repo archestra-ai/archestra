@@ -130,6 +130,11 @@ export function mayUseModelPool(params: {
 export async function planModelPool(params: {
   organizationId: string;
   name: string;
+  /**
+   * The pool a chat was set to, found by id: the chat sends one member's
+   * model rather than the pool's name, and picking the pool let it in.
+   */
+  poolId?: string;
   inbound: PoolWire;
   caller: ModelPoolCaller;
   /** Set when the Model Router already let this caller use the pool. */
@@ -137,12 +142,18 @@ export async function planModelPool(params: {
   sessionId?: string | null;
 }): Promise<ModelPoolPlan | null> {
   if (!config.llmProxy.modelPoolsEnabled) return null;
-  const pool = await ModelPoolModel.findByName({
-    organizationId: params.organizationId,
-    name: params.name,
-  });
+  const pool = params.poolId
+    ? await ModelPoolModel.findById({
+        organizationId: params.organizationId,
+        id: params.poolId,
+      })
+    : await ModelPoolModel.findByName({
+        organizationId: params.organizationId,
+        name: params.name,
+      });
   if (!pool) return null;
   if (
+    pool.id !== params.poolId &&
     pool.id !== params.grantedPoolId &&
     !mayUseModelPool({ pool, caller: params.caller })
   ) {

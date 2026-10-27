@@ -138,6 +138,9 @@ export interface ChatPromptInputToolsProps {
   /** Reasoning depth for Gemini flash models; ignored by every other model. */
   thinkingEffort?: ThinkingEffortSetting;
   onThinkingEffortChange?: (effort: ThinkingEffortSetting) => void;
+  /** The model pool the chat is set to, in place of a key and model. */
+  modelPoolId?: string | null;
+  onModelPoolChange?: (modelPoolId: string | null) => void;
   /**
    * The selected agent pins a per-user-credential model (e.g. GitHub Copilot)
    * that the viewer hasn't connected. Keep the agent's model and subscription
@@ -204,6 +207,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onResetModelOverride,
   thinkingEffort = null,
   onThinkingEffortChange,
+  modelPoolId,
+  onModelPoolChange,
   agentRequiresPerUserConnect = false,
   subscriptionConnectRequired = false,
   subscriptionProvider,
@@ -469,6 +474,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               subscriptionSignInTitle={subscriptionSignInTitle}
               thinkingEffort={thinkingEffort}
               onThinkingEffortChange={onThinkingEffortChange}
+              modelPoolId={modelPoolId}
+              onModelPoolChange={onModelPoolChange}
               toolsUnavailable={toolsUnavailable}
               notRecommendedForAgents={notRecommendedForAgents}
             />
@@ -674,6 +681,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               subscriptionSignInTitle={subscriptionSignInTitle}
               thinkingEffort={thinkingEffort}
               onThinkingEffortChange={onThinkingEffortChange}
+              modelPoolId={modelPoolId}
+              onModelPoolChange={onModelPoolChange}
               toolsUnavailable={toolsUnavailable}
               notRecommendedForAgents={notRecommendedForAgents}
             />

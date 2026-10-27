@@ -126,6 +126,7 @@ import {
   resolveOpenedApp,
 } from "@/services/apps/opened-app-context";
 import { resolveAzureModelCapabilities } from "@/services/azure-model-capabilities";
+import { resolveChatModelPool } from "@/services/chat-model-pools";
 import { conversationFilesService } from "@/services/conversation-files";
 import {
   getGuardrailsDeployment,
@@ -1183,6 +1184,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     sessionId: conversationId,
                     source: "chat",
                     agentLlmApiKeyId: agent.llmApiKeyId,
+                    modelPoolId: conversation.modelPoolId,
                     // Lets the proxy store this turn's interaction encrypted
                     // rather than redacted. Only sent when an escrow record
                     // exists, since without one the row could never be reopened.
@@ -1421,6 +1423,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           sessionId: conversationId,
                           source: "chat:tool_call_repair",
                           agentLlmApiKeyId: agent.llmApiKeyId,
+                          modelPoolId: conversation.modelPoolId,
                           // A repair prompt carries the same conversation
                           // content as the turn it repairs.
                           encryptedChatKey: encryptedChatAudit?.dek ?? null,
@@ -2931,6 +2934,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           title: true,
           modelId: true,
           chatApiKeyId: true,
+          modelPoolId: true,
           projectId: true,
           encryptedChat: true,
           thinkingEffort: true,
@@ -2940,6 +2944,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             title: true,
             modelId: true,
             chatApiKeyId: true,
+            modelPoolId: true,
             projectId: true,
             encryptedChat: true,
             thinkingEffort: true,
@@ -2954,6 +2959,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           title,
           modelId,
           chatApiKeyId,
+          modelPoolId,
           projectId,
           encryptedChat,
           thinkingEffort,
@@ -3007,21 +3013,30 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate chatApiKeyId if provided
       // Skip validation if it matches the agent's configured key (permission flows through agent access)
-      if (chatApiKeyId && chatApiKeyId !== agent.llmApiKeyId) {
+      if (!modelPoolId && chatApiKeyId && chatApiKeyId !== agent.llmApiKeyId) {
         await validateChatApiKeyAccess(chatApiKeyId, user.id, organizationId);
       }
 
       // Resolve the model via the priority chain:
-      // explicit pick -> member -> agent -> organization -> best available.
+      // pool -> explicit pick -> member -> agent -> organization -> best available.
       // The explicit pick is a (model, key) pair — both are carried so the
       // chosen key is honored instead of being re-derived.
-      const llmSelection = await resolveConversationLlmSelectionForAgent({
-        agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
-        organizationId,
-        userId: user.id,
-        explicitModelId: modelId,
-        explicitApiKeyId: chatApiKeyId,
-      });
+      const llmSelection = modelPoolId
+        ? {
+            ...(await resolveChatModelPool({
+              organizationId,
+              userId: user.id,
+              modelPoolId,
+            })),
+            selectedModel: null,
+          }
+        : await resolveConversationLlmSelectionForAgent({
+            agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
+            organizationId,
+            userId: user.id,
+            explicitModelId: modelId,
+            explicitApiKeyId: chatApiKeyId,
+          });
 
       logger.info(
         {
@@ -3065,6 +3080,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId,
           modelId: llmSelection.modelId,
           chatApiKeyId: llmSelection.chatApiKeyId,
+          modelPoolId: modelPoolId ?? null,
           projectId: projectId ?? null,
           thinkingEffort,
         }),
@@ -3134,10 +3150,30 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // configured key of the agent the conversation will run on after this
       // update (permission flows through agent access) — the new agent when
       // this request switches agents, not the one being left.
+      // Picking a pool stores one of its members as the conversation's key
+      // and model; picking a key or model, or another agent, leaves the pool.
+      if (body.modelPoolId) {
+        const pooled = await resolveChatModelPool({
+          organizationId,
+          userId: user.id,
+          modelPoolId: body.modelPoolId,
+        });
+        body.modelId = pooled.modelId;
+        body.chatApiKeyId = pooled.chatApiKeyId;
+      } else if (
+        body.modelPoolId === undefined &&
+        (body.modelId !== undefined ||
+          body.chatApiKeyId !== undefined ||
+          nextAgent)
+      ) {
+        body.modelPoolId = null;
+      }
+
       const effectiveAgentLlmApiKeyId = nextAgent
         ? nextAgent.llmApiKeyId
         : currentConversation.agent?.llmApiKeyId;
       if (
+        !body.modelPoolId &&
         body.chatApiKeyId &&
         body.chatApiKeyId !== effectiveAgentLlmApiKeyId
       ) {
@@ -3150,6 +3186,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (
         nextAgent &&
+        !body.modelPoolId &&
         body.modelId === undefined &&
         body.chatApiKeyId === undefined
       ) {
@@ -3164,6 +3201,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         body.modelId = llmSelection.modelId;
         body.chatApiKeyId = llmSelection.chatApiKeyId;
+        // The new agent's pool comes with its model.
+        if (
+          nextAgent.modelPoolId &&
+          llmSelection.modelId === nextAgent.modelId
+        ) {
+          body.modelPoolId = nextAgent.modelPoolId;
+        }
       }
 
       // A conversation's model and API key are a pair: persist both or

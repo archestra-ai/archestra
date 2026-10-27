@@ -7,11 +7,18 @@ import { runBulkAction } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
-const { getModelPools, createModelPool, updateModelPool, deleteModelPool } =
-  archestraApiSdk;
+const {
+  getModelPools,
+  getAvailableModelPools,
+  createModelPool,
+  updateModelPool,
+  deleteModelPool,
+} = archestraApiSdk;
 
 export type ModelPool = archestraApiTypes.GetModelPoolsResponses["200"][number];
 export type ModelPoolInput = archestraApiTypes.CreateModelPoolData["body"];
+export type AvailableModelPool =
+  archestraApiTypes.GetAvailableModelPoolsResponses["200"][number];
 
 const MODEL_POOLS_QUERY_KEY = ["model-pools"] as const;
 
@@ -37,15 +44,32 @@ export function useModelPools(options?: {
 }
 
 /**
+ * The pools the viewer can pick in chat: those with a member on a key they may
+ * use. Empty while model pools are off.
+ */
+export function useAvailableModelPools(options?: { enabled?: boolean }) {
+  const enabled = useFeature("llmModelPoolsEnabled") === true;
+  return useQuery({
+    queryKey: [...MODEL_POOLS_QUERY_KEY, "available"],
+    enabled: enabled && options?.enabled !== false,
+    queryFn: async () => {
+      const { data, error } = await getAvailableModelPools();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+  });
+}
+
+/**
  * Whether a provider's model is served by a pool: a request for a pool's name
  * on a provider with a member goes to the pool. Always false while model
  * pools are off or the viewer can't read them.
  */
-export function useIsPooledModel() {
+export function useIsPooledModel(active = true) {
   const enabled = useFeature("llmModelPoolsEnabled") === true;
   const { data: canRead } = useHasPermissions({ llmModel: ["read"] });
   const { data: pools } = useModelPools({
-    enabled: enabled && canRead === true,
+    enabled: active && enabled && canRead === true,
     toastOnError: false,
   });
   return useMemo(() => {
@@ -55,8 +79,8 @@ export function useIsPooledModel() {
       ),
     );
     return (provider: string, modelId: string) =>
-      pooled.has(`${provider}:${modelId}`);
-  }, [pools]);
+      active && pooled.has(`${provider}:${modelId}`);
+  }, [pools, active]);
 }
 
 export function useCreateModelPool() {

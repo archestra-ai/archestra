@@ -134,6 +134,11 @@ interface ModelSelectorProps {
   modelFilter?: (model: LlmModel) => boolean;
   /** Names why the current selection is retained but cannot be selected again. */
   unavailableModelHeading?: string;
+  /**
+   * Marks the models a pool serves. Off where a pool is picked by itself,
+   * so a model picked here is never pooled.
+   */
+  markPooledModels?: boolean;
 }
 
 /**
@@ -488,6 +493,7 @@ export const ModelSelector = memo(function ModelSelector({
   fallbackModelName,
   modelFilter,
   unavailableModelHeading,
+  markPooledModels = true,
 }: ModelSelectorProps) {
   const catalogQuery = useLlmModelsByProvider({
     apiKeyId: apiKeyId ?? undefined,
@@ -564,7 +570,7 @@ export const ModelSelector = memo(function ModelSelector({
     ? logoNameForProvider(selectedModelProvider, selectedKeySubscriptionKind)
     : null;
 
-  const isPooledModel = useIsPooledModel();
+  const isPooledModel = useIsPooledModel(markPooledModels);
   // Get display name for selected model
   const selectedModelDisplayName = useMemo(() => {
     for (const provider of fetchedProviders) {
@@ -757,6 +763,7 @@ export const ModelSelector = memo(function ModelSelector({
               onSelectModel={handleSelectModel}
               onClose={() => handleOpenChange(false)}
               unavailableModelHeading={unavailableModelHeading}
+              markPooledModels={markPooledModels}
             />
           </ModelSelectorContent>
         )}
@@ -793,6 +800,7 @@ function ModelSelectorDialogBody({
   onSelectModel,
   onClose,
   unavailableModelHeading = "Current (API key missing)",
+  markPooledModels,
 }: {
   modelsByProvider: Record<SupportedProvider, LlmModel[]>;
   availableProviders: SupportedProvider[];
@@ -804,8 +812,9 @@ function ModelSelectorDialogBody({
   onSelectModel: (modelValue: string) => void;
   onClose: () => void;
   unavailableModelHeading?: string;
+  markPooledModels: boolean;
 }) {
-  const isPooledModel = useIsPooledModel();
+  const isPooledModel = useIsPooledModel(markPooledModels);
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
   const providerCatalog = useModelProviderCatalog();
 

@@ -14573,6 +14573,7 @@ export type GetAgentCatalogResponses = {
                 llmApiKeyId: string | null;
                 llmModel: string | null;
                 modelId: string | null;
+                modelPoolId: string | null;
                 fastModelId: string | null;
                 smartModelId: string | null;
                 identityProviderId: string | null;
@@ -14959,6 +14960,7 @@ export type GetAgentsResponses = {
             llmApiKeyId: string | null;
             llmModel: string | null;
             modelId: string | null;
+            modelPoolId: string | null;
             fastModelId: string | null;
             smartModelId: string | null;
             identityProviderId: string | null;
@@ -15112,6 +15114,7 @@ export type CreateAgentData = {
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         modelId?: string | null;
+        modelPoolId?: string | null;
         fastModelId?: string | null;
         smartModelId?: string | null;
         identityProviderId?: string | null;
@@ -15379,6 +15382,7 @@ export type CreateAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
+        modelPoolId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
         identityProviderId: string | null;
@@ -15812,6 +15816,7 @@ export type GetChatAgentRosterResponses = {
         } | null;
         modelId: string | null;
         llmApiKeyId: string | null;
+        modelPoolId: string | null;
     }>;
 };
 
@@ -15958,6 +15963,7 @@ export type GetChatAgentRosterPageResponses = {
             } | null;
             modelId: string | null;
             llmApiKeyId: string | null;
+            modelPoolId: string | null;
         }>;
         pagination: {
             limit: number;
@@ -16648,6 +16654,7 @@ export type GetDefaultMcpGatewayResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
+        modelPoolId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
         identityProviderId: string | null;
@@ -16953,6 +16960,7 @@ export type ImportAgentResponses = {
             llmApiKeyId: string | null;
             llmModel: string | null;
             modelId: string | null;
+            modelPoolId: string | null;
             fastModelId: string | null;
             smartModelId: string | null;
             identityProviderId: string | null;
@@ -17267,6 +17275,7 @@ export type GetAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
+        modelPoolId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
         identityProviderId: string | null;
@@ -17402,6 +17411,7 @@ export type UpdateAgentData = {
         llmApiKeyId?: string | null;
         llmModel?: string | null;
         modelId?: string | null;
+        modelPoolId?: string | null;
         fastModelId?: string | null;
         smartModelId?: string | null;
         identityProviderId?: string | null;
@@ -17576,6 +17586,7 @@ export type UpdateAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
+        modelPoolId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
         identityProviderId: string | null;
@@ -18164,6 +18175,7 @@ export type RestoreAgentVersionResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
+        modelPoolId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
         identityProviderId: string | null;
@@ -18407,6 +18419,7 @@ export type CloneAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
+        modelPoolId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
         identityProviderId: string | null;
@@ -20889,6 +20902,7 @@ export type RestoreAgentResponses = {
         llmApiKeyId: string | null;
         llmModel: string | null;
         modelId: string | null;
+        modelPoolId: string | null;
         fastModelId: string | null;
         smartModelId: string | null;
         identityProviderId: string | null;
@@ -37303,6 +37317,7 @@ export type GetNewChatBootstrapResponses = {
             } | null;
             modelId: string | null;
             llmApiKeyId: string | null;
+            modelPoolId: string | null;
         }>;
         apiKeys: Array<{
             id: string;
@@ -37436,6 +37451,7 @@ export type GetNewChatBootstrapResponses = {
                 llmApiKeyId: string | null;
                 llmModel: string | null;
                 modelId: string | null;
+                modelPoolId: string | null;
                 fastModelId: string | null;
                 smartModelId: string | null;
                 identityProviderId: string | null;
@@ -37729,6 +37745,7 @@ export type GetConversationBootstrapResponses = {
             selectedModel: string;
             selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             modelId: string | null;
+            modelPoolId: string | null;
             thinkingEffort: 'low' | 'medium' | 'high';
             hasCustomToolSelection: boolean;
             hooksDebugEnabled: boolean;
@@ -37859,6 +37876,7 @@ export type GetConversationBootstrapResponses = {
                 } | null;
                 modelId: string | null;
                 llmApiKeyId: string | null;
+                modelPoolId: string | null;
             }>;
             apiKeys: Array<{
                 id: string;
@@ -37992,6 +38010,7 @@ export type GetConversationBootstrapResponses = {
                     llmApiKeyId: string | null;
                     llmModel: string | null;
                     modelId: string | null;
+                    modelPoolId: string | null;
                     fastModelId: string | null;
                     smartModelId: string | null;
                     identityProviderId: string | null;
@@ -39113,6 +39132,7 @@ export type GetChatConversationsResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
+        modelPoolId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -39203,6 +39223,7 @@ export type CreateChatConversationData = {
         title?: string | null;
         modelId?: string | null;
         chatApiKeyId?: string | null;
+        modelPoolId?: string | null;
         projectId?: string | null;
         encryptedChat?: boolean;
         thinkingEffort?: 'low' | 'medium' | 'high';
@@ -39294,6 +39315,7 @@ export type CreateChatConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
+        modelPoolId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -39460,6 +39482,7 @@ export type GetDeletedChatConversationsResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
+        modelPoolId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -39721,6 +39744,7 @@ export type GetChatConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
+        modelPoolId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -39803,6 +39827,7 @@ export type UpdateChatConversationData = {
         title?: string | null;
         modelId?: string | null;
         chatApiKeyId?: string | null;
+        modelPoolId?: string | null;
         agentId?: string;
         artifact?: string | null;
         projectId?: string | null;
@@ -39898,6 +39923,7 @@ export type UpdateChatConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
+        modelPoolId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -40611,6 +40637,7 @@ export type ForkChatConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
+        modelPoolId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -40872,6 +40899,7 @@ export type RestoreChatConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
+        modelPoolId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -41143,6 +41171,7 @@ export type CompactChatConversationResponses = {
             selectedModel: string;
             selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             modelId: string | null;
+            modelPoolId: string | null;
             thinkingEffort: 'low' | 'medium' | 'high';
             hasCustomToolSelection: boolean;
             hooksDebugEnabled: boolean;
@@ -41317,6 +41346,7 @@ export type GenerateChatConversationTitleResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
+        modelPoolId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -41490,6 +41520,7 @@ export type UpdateChatMessageResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
+        modelPoolId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
@@ -97007,6 +97038,94 @@ export type CreateModelPoolResponses = {
 
 export type CreateModelPoolResponse = CreateModelPoolResponses[keyof CreateModelPoolResponses];
 
+export type GetAvailableModelPoolsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/model-pools/available';
+};
+
+export type GetAvailableModelPoolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAvailableModelPoolsError = GetAvailableModelPoolsErrors[keyof GetAvailableModelPoolsErrors];
+
+export type GetAvailableModelPoolsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        providers: Array<'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev'>;
+    }>;
+};
+
+export type GetAvailableModelPoolsResponse = GetAvailableModelPoolsResponses[keyof GetAvailableModelPoolsResponses];
+
 export type DeleteModelPoolData = {
     body?: never;
     path: {
@@ -119625,6 +119744,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
+        modelPoolId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;

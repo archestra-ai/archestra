@@ -23,6 +23,7 @@ import {
   InteractionSourceSchema,
   isCodexOriginator,
   isProviderApiKeyOptional,
+  MODEL_POOL_ID_HEADER,
   OPENCODE_AGENT_HEADER,
   openCodeFamilySource,
   PROVIDER_BASE_URL_HEADER,
@@ -1363,19 +1364,30 @@ export async function handleLLMProxy<
     const poolWire = openAiCodexPassthrough
       ? null
       : inboundPoolWire(provider.interactionType);
-    const modelPoolPlan = poolWire
-      ? await planModelPool({
-          organizationId: resolvedAgent.organizationId,
-          name: actualModel,
-          inbound: poolWire,
-          caller: {
-            virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
-            providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
-          },
-          grantedPoolId: authOverride?.modelPoolId ?? grantedPoolId,
-          sessionId,
-        })
-      : null;
+    // A chat or agent set to a pool names it, and sends one of its members'
+    // models. Any other platform call runs on the key and model it names.
+    const chatModelPoolHeader = internalCall
+      ? headersForExtraction[MODEL_POOL_ID_HEADER.toLowerCase()]
+      : undefined;
+    const chatModelPoolId =
+      typeof chatModelPoolHeader === "string" && chatModelPoolHeader
+        ? chatModelPoolHeader
+        : undefined;
+    const modelPoolPlan =
+      poolWire && (!internalCall || chatModelPoolId)
+        ? await planModelPool({
+            organizationId: resolvedAgent.organizationId,
+            name: actualModel,
+            poolId: chatModelPoolId,
+            inbound: poolWire,
+            caller: {
+              virtualKeyId: virtualKeyId ?? passthroughVirtualKeyId,
+              providerApiKeyIds: perKeyChatApiKeyId ? [perKeyChatApiKeyId] : [],
+            },
+            grantedPoolId: authOverride?.modelPoolId ?? grantedPoolId,
+            sessionId,
+          })
+        : null;
     // A credential let in only for a pool has no key for this provider, so
     // the request can't go anywhere but the pool.
     if (grantedPoolId && !perKeyChatApiKeyId && !modelPoolPlan) {

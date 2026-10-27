@@ -248,6 +248,39 @@ describe("planModelPool", () => {
     expect(await plan({ providerApiKeyIds: [] }, pool.id)).not.toBeNull();
   });
 
+  test("plans a chat's pool by id, whatever member model it sends", async ({
+    makeOrganization,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const zai = await makeLlmProviderApiKey(org.id, null, {
+      provider: "zhipuai",
+    });
+    const bedrock = await makeLlmProviderApiKey(org.id, null, {
+      provider: "bedrock",
+    });
+    const pool = await ModelPoolModel.create({
+      organizationId: org.id,
+      input: {
+        name: "glm-5",
+        members: [
+          member(zai.id, "glm-5", 1),
+          member(bedrock.id, "zai.glm-5", 2),
+        ],
+      },
+    });
+
+    const plan = await planModelPool({
+      organizationId: org.id,
+      name: "zai.glm-5",
+      poolId: pool.id,
+      inbound: "openai-chat",
+      caller: { providerApiKeyIds: [] },
+    });
+    expect(plan?.poolId).toBe(pool.id);
+    expect(plan?.members).toHaveLength(2);
+  });
+
   test("moves a member that failed over behind the healthy ones", async ({
     makeOrganization,
     makeLlmProviderApiKey,

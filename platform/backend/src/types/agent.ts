@@ -386,6 +386,7 @@ export const ChatAgentRosterSchema = SelectAgentSchema.pick({
   runtime: true,
   modelId: true,
   llmApiKeyId: true,
+  modelPoolId: true,
 });
 export type ChatAgentRoster = z.infer<typeof ChatAgentRosterSchema>;
 

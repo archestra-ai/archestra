@@ -543,6 +543,22 @@ export function ChatPageContent({
   const initialRuntimeCandidate =
     internalAgents.find((agent) => agent.id === initialAgentId) ??
     initialAgentReference;
+  // The new chat's model pool, which the create request carries. Until the
+  // user picks a pool, a key or a model, it is the agent's own pool while the
+  // agent's model is in use.
+  const [initialModelPoolChoice, setInitialModelPoolChoice] = useState<
+    string | null | undefined
+  >(undefined);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new agent or chat starts from the agent's pool again
+  useEffect(() => {
+    setInitialModelPoolChoice(undefined);
+  }, [initialAgentId, routeConversationId]);
+  const initialModelPoolId =
+    initialModelPoolChoice !== undefined
+      ? initialModelPoolChoice
+      : initialModelSource === "agent"
+        ? (initialRuntimeCandidate?.modelPoolId ?? null)
+        : null;
   const initialRuntimeAgent =
     runtimeEnabled && initialRuntimeCandidate?.runtime
       ? initialRuntimeCandidate
@@ -1396,6 +1412,19 @@ export function ChatPageContent({
       }
     },
     [conversation, modelsByProvider],
+  );
+
+  // A pool stands in for the key and model; the server picks one of its
+  // members as the conversation's key and model. Null leaves the pool.
+  const handleConversationModelPoolChange = useCallback(
+    (modelPoolId: string | null) => {
+      if (!conversation) return;
+      updateConversationMutateRef.current({
+        id: conversation.id,
+        modelPoolId,
+      });
+    },
+    [conversation],
   );
 
   // Handle agent change in existing conversation
@@ -2616,6 +2645,7 @@ export function ChatPageContent({
         agentId: initialAgentId,
         modelId: initialModel,
         chatApiKeyId: initialApiKeyId,
+        modelPoolId: initialModelPoolId,
         title,
         projectId: searchParams.get("project"),
         thinkingEffort: initialThinkingEffort,
@@ -2656,6 +2686,7 @@ export function ChatPageContent({
       initialAgentId,
       initialModel,
       initialApiKeyId,
+      initialModelPoolId,
       isEncryptedChatDraft,
       initialThinkingEffort,
       isAgentSubscriptionMetadataPending,
@@ -3652,6 +3683,10 @@ export function ChatPageContent({
                               onThinkingEffortChange={
                                 handleThinkingEffortChange
                               }
+                              modelPoolId={conversation?.modelPoolId ?? null}
+                              onModelPoolChange={
+                                handleConversationModelPoolChange
+                              }
                               agentRequiresPerUserConnect={
                                 isApplyingAgentSelection ||
                                 isAgentSubscriptionMetadataPending ||
@@ -3836,13 +3871,19 @@ export function ChatPageContent({
                                   : "ready"
                               }
                               selectedModel={initialModel}
-                              onModelChange={handleInitialModelChange}
+                              onModelChange={(modelId) => {
+                                setInitialModelPoolChoice(null);
+                                handleInitialModelChange(modelId);
+                              }}
                               agentId={newChatAgentId}
                               currentProvider={initialProvider}
                               textareaRef={textareaRef}
                               initialApiKeyId={initialApiKeyId}
                               onApiKeyChange={setInitialApiKeyId}
-                              onProviderChange={handleInitialProviderChange}
+                              onProviderChange={(provider) => {
+                                setInitialModelPoolChoice(null);
+                                handleInitialProviderChange(provider);
+                              }}
                               allowFileUploads={
                                 organization?.allowChatFileUploads ?? false
                               }
@@ -3910,9 +3951,14 @@ export function ChatPageContent({
                                   : setIsEncryptedChatDraft
                               }
                               modelSource={initialModelSource}
-                              onResetModelOverride={handleResetModelOverride}
+                              onResetModelOverride={() => {
+                                setInitialModelPoolChoice(undefined);
+                                handleResetModelOverride();
+                              }}
                               thinkingEffort={initialThinkingEffort}
                               onThinkingEffortChange={setInitialThinkingEffort}
+                              modelPoolId={initialModelPoolId}
+                              onModelPoolChange={setInitialModelPoolChoice}
                               agentRequiresPerUserConnect={
                                 isAgentSubscriptionMetadataPending ||
                                 initialModelSource === "agent" ||

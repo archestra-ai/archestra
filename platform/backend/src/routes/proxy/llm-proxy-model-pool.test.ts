@@ -4,6 +4,10 @@
  * member is rate limited, the second answers.
  */
 
+import {
+  CHAT_API_KEY_ID_HEADER,
+  MODEL_POOL_ID_HEADER,
+} from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -11,6 +15,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { internalCallHeader } from "@/clients/internal-call";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { ModelModel, ModelPoolModel, VirtualApiKeyModel } from "@/models";
@@ -257,6 +262,62 @@ describe("Model pools - LLM Proxy", () => {
         cost: 0,
       },
     ]);
+  });
+
+  test("pools a platform call only when it names the pool", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const limited = await makeLlmProviderApiKey(
+      proxy.organizationId,
+      (await makeSecret({ secret: { apiKey: "sk-limited" } })).id,
+      { provider: "openai" },
+    );
+    const healthy = await makeLlmProviderApiKey(
+      proxy.organizationId,
+      (await makeSecret({ secret: { apiKey: "sk-healthy" } })).id,
+      { provider: "openai" },
+    );
+    const pool = await ModelPoolModel.create({
+      organizationId: proxy.organizationId,
+      input: {
+        name: "gpt-4o-mini",
+        members: [limited.id, healthy.id].map((providerApiKeyId, i) => ({
+          providerApiKeyId,
+          modelId: "gpt-4o-mini",
+          priority: i + 1,
+          weight: 1,
+          enabled: true,
+        })),
+      },
+    });
+    const post = (headers: Record<string, string> = {}) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/openai/${proxy.id}/chat/completions`,
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...internalCallHeader(),
+          "content-type": "application/json",
+          authorization: "Bearer sk-limited",
+          [CHAT_API_KEY_ID_HEADER]: limited.id,
+          ...headers,
+        },
+        payload: {
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: "hello" }],
+        },
+      });
+
+    // A chat on a member key and the pool's model runs on that key alone.
+    const direct = await post();
+    expect(direct.statusCode, direct.body).toBe(429);
+    expect(direct.headers["x-archestra-pool"]).toBeUndefined();
+
+    const pooled = await post({ [MODEL_POOL_ID_HEADER]: pool.id });
+    expect(pooled.statusCode, pooled.body).toBe(200);
+    expect(pooled.headers["x-archestra-pool"]).toBe("gpt-4o-mini");
+    expect(pooled.headers["x-archestra-provider-key"]).toBe(healthy.id);
   });
 
   test("records the provider key on a call no pool handles", async ({

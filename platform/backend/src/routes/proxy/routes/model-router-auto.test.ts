@@ -1044,6 +1044,7 @@ async function publishPlan(
         },
         long: { input: 0, cache_read: 0, cache_write: 0, output: 0 },
         timestamp_ms: i * 86_400_000,
+        weight: 1,
       })),
       tiers: fingerprint,
       budget: 10_000,

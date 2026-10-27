@@ -31,6 +31,8 @@ TIER_NEEDED = ((14, 4, 2), (10, 6, 4), (6, 8, 6), (4, 6, 10), (2, 4, 14), (8, 8,
 TIER_EFFECT = (0.8, -0.5)
 BASE_MIX = (0.05, 0.80, 0.08, 0.07)
 THRESHOLD = 100_000
+# inverse inclusion weights: observed sessions count once, sampled history for several
+WEIGHTS = (1.0, 1.0, 2.5)
 
 
 def prices(input_usd: float) -> dict[str, float]:
@@ -70,11 +72,14 @@ def history(rng: np.random.Generator) -> list[dict]:
             "long": split(rng, share * size),
             "timestamp_ms": int(ts),
         })
+    weights = np.random.default_rng(SEED + 1).choice(WEIGHTS, len(rows))
+    for row, weight in zip(rows, weights):
+        row["weight"] = float(weight)
     return rows
 
 
-def block_mix(blocks: list[dict]) -> list[float]:
-    sums = [sum(b[t] for b in blocks) for t in TOKEN_TYPES]
+def block_mix(blocks: list[dict], weights: np.ndarray) -> list[float]:
+    sums = [sum(w * b[t] for b, w in zip(blocks, weights)) for t in TOKEN_TYPES]
     return [s / sum(sums) for s in sums]
 
 
@@ -113,20 +118,21 @@ def main() -> None:
     long_total = np.array([sum(r["long"].values()) for r in rows], dtype=float)
     p_long = np.array([f["p_long"] for f in features])
     tier_needed = np.array([f["tier_needed"] for f in features])
+    w = np.array([r["weight"] for r in rows])
 
     others = sorted({f["source"] for f in features} - {BASELINE})
     x = np.column_stack(
         [*[[f["source"] == s for f in features] for s in others], p_long, tier_needed[:, 1], tier_needed[:, 2]]
     ).astype(float)
     glm = PoissonRegressor(alpha=1e-6, tol=1e-12, max_iter=10000, solver="newton-cholesky")
-    glm.fit(x, total / TOKEN_SCALE)
+    glm.fit(x, total / TOKEN_SCALE, sample_weight=w)
     size = glm.predict(x) * TOKEN_SCALE
 
     ls_x = np.log(size)[:, None]
-    ls = LinearRegression().fit(ls_x, long_total / total, sample_weight=total)
+    ls = LinearRegression().fit(ls_x, long_total / total, sample_weight=total * w)
     share = np.clip(ls.predict(ls_x), 0.0, 1.0)
 
-    mix_short, mix_long = block_mix([r["short"] for r in rows]), block_mix([r["long"] for r in rows])
+    mix_short, mix_long = block_mix([r["short"] for r in rows], w), block_mix([r["long"] for r in rows], w)
     short_pi = np.array([per_token(mix_short, t["short"]) for t in TIERS])
     long_pi = np.array([per_token(mix_long, t["long"] or t["short"]) for t in TIERS])
     pi = (1 - share)[:, None] * short_pi + share[:, None] * long_pi
@@ -138,8 +144,8 @@ def main() -> None:
 
     hulls = [hull(pi[i], adequacy(f["tier_needed"])) for i, f in enumerate(features)]
 
-    tokens_per_day = float(total.sum()) / DAYS
-    weight = tokens_per_day * size / size.sum()
+    tokens_per_day = float((w * total).sum()) / DAYS
+    weight = tokens_per_day * w * size / (w * size).sum()
     cheapest = float(sum(weight[i] * pi[i, v[0]] for i, (v, _) in enumerate(hulls)))
     best = float(sum(weight[i] * pi[i, v[-1]] for i, (v, _) in enumerate(hulls)))
     budget = cheapest + 0.2 * (best - cheapest)
@@ -179,7 +185,7 @@ def main() -> None:
             "history": rows,
             "tiers": {"tiers": TIERS, "long_context_threshold": THRESHOLD},
             "budget": budget,
-            "volume": {"kind": "flat", "sessions_per_day": SESSIONS / DAYS, "tokens_per_day": tokens_per_day},
+            "volume": {"kind": "flat", "sessions_per_day": float(w.sum()) / DAYS, "tokens_per_day": tokens_per_day},
             "baseline_source": BASELINE,
         },
         "expected": {

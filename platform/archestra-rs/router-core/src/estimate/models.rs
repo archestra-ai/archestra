@@ -128,7 +128,8 @@ pub(crate) fn fit_size(
         .iter()
         .map(|r| r.total_tokens() / TOKEN_SCALE)
         .collect();
-    let b = fit_poisson(&design, &y, max_iterations)?;
+    let w: Vec<f64> = rows.iter().map(HistoryRow::weight).collect();
+    let b = fit_poisson(&design, &y, &w, max_iterations)?;
     Ok(SizeModel::PoissonGlm {
         baseline: baseline.clone(),
         intercept: b[0],
@@ -146,11 +147,17 @@ pub(crate) fn fit_size(
     })
 }
 
-/// Newton with step halving on (1/(2n))·Σ deviance + (α/2)·‖b₁..‖² (intercept b₀ unpenalized).
-fn fit_poisson(x: &[Vec<f64>], y: &[f64], max_iterations: usize) -> Result<Vec<f64>, RouterError> {
-    let n = y.len() as f64;
+/// Newton with step halving on (1/(2n))·Σ wᵢ·devianceᵢ + (α/2)·‖b₁..‖² with n = Σ wᵢ (intercept
+/// b₀ unpenalized), as scikit-learn's PoissonRegressor weighs `sample_weight`.
+fn fit_poisson(
+    x: &[Vec<f64>],
+    y: &[f64],
+    w: &[f64],
+    max_iterations: usize,
+) -> Result<Vec<f64>, RouterError> {
+    let n: f64 = w.iter().sum();
     let width = x.first().map_or(0, Vec::len);
-    let mean_y = y.iter().sum::<f64>() / n;
+    let mean_y = y.iter().zip(w).map(|(yi, wi)| wi * yi).sum::<f64>() / n;
     if mean_y.is_nan() || mean_y <= 0.0 {
         return Err(RouterError::EmptyTokenHistory);
     }
@@ -160,9 +167,10 @@ fn fit_poisson(x: &[Vec<f64>], y: &[f64], max_iterations: usize) -> Result<Vec<f
     let objective = |b: &[f64]| {
         x.iter()
             .zip(y)
-            .map(|(row, yi)| {
+            .zip(w)
+            .map(|((row, yi), wi)| {
                 let eta = dot(row, b);
-                eta.exp() - yi * eta
+                wi * (eta.exp() - yi * eta)
             })
             .sum::<f64>()
             / n
@@ -173,19 +181,19 @@ fn fit_poisson(x: &[Vec<f64>], y: &[f64], max_iterations: usize) -> Result<Vec<f
     b[0] = mean_y.ln();
     let ridge = RIDGE_ALPHA.sqrt();
     for _ in 0..max_iterations {
-        // The Newton step solves H·s = −g as least squares on [√(μ/n)·X; √α·I₁..] with the
-        // residual [(y − μ)/√(nμ); −√α·b₁..], whose normal equations are exactly H and −g.
+        // The Newton step solves H·s = −g as least squares on [√(wμ/n)·X; √α·I₁..] with the
+        // residual [√w·(y − μ)/√(nμ); −√α·b₁..], whose normal equations are exactly H and −g.
         // μ is floored at f64::EPSILON (as R's glm does) so the residual stays finite; the
         // gradient stays exact and only the curvature of vanishing-mean rows moves.
         let mu: Vec<f64> = x.iter().map(|row| dot(row, &b).exp()).collect();
         let rows = x.len();
         let design = DMatrix::from_fn(rows + width - 1, width, |i, j| match i < rows {
-            true => (mu[i].max(f64::EPSILON) / n).sqrt() * x[i][j],
+            true => (w[i] * mu[i].max(f64::EPSILON) / n).sqrt() * x[i][j],
             false if j == i - rows + 1 => ridge,
             false => 0.0,
         });
         let residual = DVector::from_fn(rows + width - 1, |i, _| match i < rows {
-            true => (y[i] - mu[i]) / (n * mu[i].max(f64::EPSILON)).sqrt(),
+            true => w[i].sqrt() * (y[i] - mu[i]) / (n * mu[i].max(f64::EPSILON)).sqrt(),
             false => -ridge * b[i - rows + 1],
         });
         let step = least_squares(design, residual).ok_or(RouterError::SingularSizeModel)?;
@@ -226,8 +234,8 @@ impl LongShareModel {
     }
 }
 
-/// Token-weighted least squares of long share on [1, log E[size]], solved as ordinary least
-/// squares on √w-scaled rows. A (numerically) constant log size gets coefficient 0.
+/// Least squares of long share on [1, log E[size]] weighted by tokens times session weight,
+/// solved as ordinary least squares on √w-scaled rows. A (numerically) constant log size gets coefficient 0.
 pub(crate) fn fit_long_share(
     rows: &[HistoryRow],
     sizes: &[f64],
@@ -236,11 +244,11 @@ pub(crate) fn fit_long_share(
         .iter()
         .zip(sizes)
         .filter_map(|(r, &size)| {
-            let w = r.total_tokens();
-            (w > 0.0).then(|| {
-                let root = w.sqrt();
+            let tokens = r.total_tokens();
+            (tokens > 0.0).then(|| {
+                let root = (tokens * r.weight()).sqrt();
                 let x = [1.0, size.ln()];
-                (root, x, r.long.total() / w)
+                (root, x, r.long.total() / tokens)
             })
         })
         .collect();
@@ -267,10 +275,10 @@ impl TokenMixes {
     }
 }
 
-/// An empty block borrows the other block's mix.
+/// Session-weighted token shares; an empty block borrows the other block's mix.
 pub(crate) fn fit_mixes(rows: &[HistoryRow]) -> Result<TokenMixes, RouterError> {
-    let short = block_mix(rows.iter().map(|r| &r.short));
-    let long = block_mix(rows.iter().map(|r| &r.long));
+    let short = block_mix(rows.iter().map(|r| (&r.short, r.weight())));
+    let long = block_mix(rows.iter().map(|r| (&r.long, r.weight())));
     match (short, long) {
         (Some(short), Some(long)) => Ok(TokenMixes { short, long }),
         (Some(mix), None) | (None, Some(mix)) => Ok(TokenMixes {
@@ -281,11 +289,11 @@ pub(crate) fn fit_mixes(rows: &[HistoryRow]) -> Result<TokenMixes, RouterError> 
     }
 }
 
-fn block_mix<'a>(blocks: impl Iterator<Item = &'a TokenCounts>) -> Option<TokenMix> {
+fn block_mix<'a>(blocks: impl Iterator<Item = (&'a TokenCounts, f64)>) -> Option<TokenMix> {
     let mut sums = [0.0; 4];
-    for block in blocks {
+    for (block, weight) in blocks {
         for (sum, v) in sums.iter_mut().zip(block.values()) {
-            *sum += v as f64;
+            *sum += weight * v as f64;
         }
     }
     let total: f64 = sums.iter().sum();
@@ -295,7 +303,7 @@ fn block_mix<'a>(blocks: impl Iterator<Item = &'a TokenCounts>) -> Option<TokenM
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{Probability, TierNeeded};
+    use crate::domain::{Probability, SessionWeight, TierNeeded};
 
     fn row(source: &str, p_long: f64, short: u64, long: u64) -> HistoryRow {
         let counts = |n: u64| TokenCounts {
@@ -313,6 +321,7 @@ mod tests {
             short: counts(short),
             long: counts(long),
             timestamp_ms: 0,
+            weight: SessionWeight::new(1.0).unwrap(),
         }
     }
 

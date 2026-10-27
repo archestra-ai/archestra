@@ -29,6 +29,7 @@ const planInput = {
     },
     long: { input: 0, cache_read: 0, cache_write: 0, output: 0 },
     timestamp_ms: i * DAY_MS,
+    weight: 1,
   })),
   tiers: {
     tiers: [

@@ -130,6 +130,38 @@ impl From<PerDay> for f64 {
     }
 }
 
+/// How many sessions a history row stands for: 1 for an observed session, the inverse inclusion
+/// probability for a sampled one. Strictly positive and finite.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "f64", into = "f64")]
+pub struct SessionWeight(f64);
+
+impl SessionWeight {
+    pub fn new(value: f64) -> Result<Self, RouterError> {
+        match value.is_finite() && value > 0.0 {
+            true => Ok(Self(value)),
+            false => Err(RouterError::InvalidWeight(value)),
+        }
+    }
+
+    pub fn get(self) -> f64 {
+        self.0
+    }
+}
+
+impl TryFrom<f64> for SessionWeight {
+    type Error = RouterError;
+    fn try_from(value: f64) -> Result<Self, RouterError> {
+        Self::new(value)
+    }
+}
+
+impl From<SessionWeight> for f64 {
+    fn from(value: SessionWeight) -> Self {
+        value.0
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "f64", into = "f64")]
 pub struct Probability(f64);
@@ -246,11 +278,16 @@ pub struct HistoryRow {
     pub short: TokenCounts,
     pub long: TokenCounts,
     pub timestamp_ms: i64,
+    pub weight: SessionWeight,
 }
 
 impl HistoryRow {
     pub(crate) fn total_tokens(&self) -> f64 {
         self.short.total() + self.long.total()
+    }
+
+    pub(crate) fn weight(&self) -> f64 {
+        self.weight.get()
     }
 }
 

@@ -594,6 +594,7 @@ function planInput(
       short: tokenCounts(row.short),
       long: tokenCounts(row.long),
       timestamp_ms: row.createdAt.getTime(),
+      weight: 1,
     })),
     tiers,
     budget: Number(inputs.budgetUsdPerDay),

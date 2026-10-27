@@ -14,9 +14,9 @@ mod plan;
 
 pub use allocate::{Decision, Policy};
 pub use domain::{
-    HistoryRow, ModelId, PerDay, PlanInput, Probability, SessionFeatures, Source, TIER_COUNT,
-    TierNeeded, TierSet, TierSpec, TokenCounts, TokenMix, TokenPrices, TokenTypes, UsdPerDay,
-    UsdPerMTok, Volume,
+    HistoryRow, ModelId, PerDay, PlanInput, Probability, SessionFeatures, SessionWeight, Source,
+    TIER_COUNT, TierNeeded, TierSet, TierSpec, TokenCounts, TokenMix, TokenPrices, TokenTypes,
+    UsdPerDay, UsdPerMTok, Volume,
 };
 pub use estimate::{LongShareModel, SizeModel, SourceEffect, TokenMixes};
 pub use plan::{Diagnostics, Holdout, PLAN_FORMAT_VERSION, Plan, Summary, Versions};
@@ -38,6 +38,8 @@ pub enum RouterError {
     InvalidBudget(f64),
     #[error("volume must be finite and positive, got {0}")]
     InvalidVolume(f64),
+    #[error("session weight must be finite and positive, got {0}")]
+    InvalidWeight(f64),
     #[error("probability must be in [0, 1], got {0}")]
     InvalidProbability(f64),
     #[error("tier_needed must be non-negative and sum to 1 within 1e-6, got {0:?}")]
@@ -110,10 +112,16 @@ pub fn plan(input: PlanInput) -> Result<Plan, RouterError> {
         .iter()
         .map(|e| Hull::new(e.price, e.adequacy))
         .collect();
-    let total_size: f64 = estimates.iter().map(|e| e.size).sum();
+    let session_weights: Vec<f64> = history.iter().map(HistoryRow::weight).collect();
+    let total_size: f64 = estimates
+        .iter()
+        .zip(&session_weights)
+        .map(|(e, w)| w * e.size)
+        .sum();
     let weights: Vec<f64> = estimates
         .iter()
-        .map(|e| tokens_per_day * e.size / total_size)
+        .zip(&session_weights)
+        .map(|(e, w)| tokens_per_day * w * e.size / total_size)
         .collect();
     let weighted: Vec<WeightedSession> = estimates
         .iter()
@@ -129,6 +137,7 @@ pub fn plan(input: PlanInput) -> Result<Plan, RouterError> {
     let summary = summarize(
         &estimates,
         &hulls,
+        &session_weights,
         &weights,
         &policy,
         sessions_per_day,
@@ -248,6 +257,7 @@ mod tests {
                     output: 0,
                 },
                 timestamp_ms: i as i64 * DAY_MS,
+                weight: SessionWeight::new(1.0).unwrap(),
             })
             .collect();
         PlanInput {
@@ -385,6 +395,54 @@ mod tests {
                 decide(&plan, &plan.policy, &features("main"), u)
             );
         }
+    }
+
+    #[test]
+    fn a_weighted_session_counts_as_that_many_copies() {
+        let mut varied = input(4.0);
+        for (i, row) in varied.history.iter_mut().enumerate() {
+            row.features.p_long = Probability::new((i % 3) as f64 / 2.0).unwrap();
+            row.long.input = 3_000 * (i % 4) as u64;
+        }
+        let unit = plan(varied.clone()).unwrap();
+        let mut weighted = varied.clone();
+        let mut copied = varied;
+        let tripled = copied.history[..10].to_vec();
+        for row in &mut weighted.history[..10] {
+            row.weight = SessionWeight::new(3.0).unwrap();
+        }
+        copied.history.extend(tripled.iter().cloned());
+        copied.history.extend(tripled);
+        let (weighted, copied) = (plan(weighted).unwrap(), plan(copied).unwrap());
+        let close = |a: &[f64], b: &[f64]| {
+            a.iter()
+                .zip(b)
+                .all(|(x, y)| (x - y).abs() <= 1e-8 * y.abs().max(1.0))
+        };
+        assert!(close(
+            &weighted.size_model.coefficients(),
+            &copied.size_model.coefficients()
+        ));
+        assert!(close(
+            &weighted.long_share.coefficients(),
+            &copied.long_share.coefficients()
+        ));
+        assert!(close(
+            &weighted.token_mix.values(),
+            &copied.token_mix.values()
+        ));
+        assert!(close(
+            &[weighted.policy.lam_star, weighted.policy.q],
+            &[copied.policy.lam_star, copied.policy.q]
+        ));
+        assert!(close(
+            &weighted.summary.tier_session_share,
+            &copied.summary.tier_session_share
+        ));
+        assert!(!close(
+            &weighted.size_model.coefficients(),
+            &unit.size_model.coefficients()
+        ));
     }
 
     #[test]

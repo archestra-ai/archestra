@@ -39,6 +39,10 @@ post-run signals ┘   (later: calibration, learning)
 
 ### Estimate
 
+Every history row carries a session weight `v_i`: 1 for an observed session, the inverse
+inclusion probability for one scored from a sample of past traffic. Each fit, the token mix and
+the allocation below count a row as `v_i` copies of it.
+
 For each session `i` and tier `k`:
 
 - **Size** `s_i` (expected tokens): a Poisson GLM,
@@ -68,7 +72,7 @@ fitting them as a huge offsetting pair.
 
 The budget problem is a multiple-choice knapsack: each session gets exactly one tier, and the
 spend summed over a day must stay within `B`. We solve its LP relaxation exactly, over the
-history sessions reweighted to daily volume, with `w_i = T · s_i / Σ s` tokens per day for
+history sessions reweighted to daily volume, with `w_i = T · v_i s_i / Σ v s` tokens per day for
 `T = tokens_per_day`:
 
 ```text

@@ -38,6 +38,7 @@ impl From<RouterError> for BoundaryError {
             | RouterError::InvalidBudget(_)
             | RouterError::InvalidVolume(_)
             | RouterError::InvalidProbability(_)
+            | RouterError::InvalidWeight(_)
             | RouterError::InvalidTierNeeded(_)
             | RouterError::EmptyModelId
             | RouterError::LongContextThresholdMismatch => "ARCHESTRA_ROUTER_INVALID_INPUT",

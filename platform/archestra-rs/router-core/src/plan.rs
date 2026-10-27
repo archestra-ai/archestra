@@ -7,7 +7,7 @@ use crate::estimate::{
     LongShareModel, MAX_NEWTON_ITERATIONS, SessionEstimate, SizeModel, TokenMixes, fit_size,
 };
 
-pub const PLAN_FORMAT_VERSION: u32 = 3;
+pub const PLAN_FORMAT_VERSION: u32 = 4;
 const HOLDOUT_WINDOW_MS: i64 = 10 * 24 * 60 * 60 * 1000;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -93,13 +93,18 @@ impl Plan {
 pub(crate) fn summarize(
     sessions: &[SessionEstimate],
     hulls: &[Hull],
+    session_weights: &[f64],
     weights: &[f64],
     policy: &Policy,
     sessions_per_day: f64,
     tokens_per_day: f64,
 ) -> Summary {
-    let total_size: f64 = sessions.iter().map(|s| s.size).sum();
-    let n = sessions.len() as f64;
+    let total_size: f64 = sessions
+        .iter()
+        .zip(session_weights)
+        .map(|(s, sw)| sw * s.size)
+        .sum();
+    let n: f64 = session_weights.iter().sum();
     let mut summary = Summary {
         sessions_per_day,
         tokens_per_day,
@@ -109,7 +114,7 @@ pub(crate) fn summarize(
         tier_token_share: [0.0; TIER_COUNT],
         value_per_usd: policy.lam_star / tokens_per_day,
     };
-    for ((s, hull), w) in sessions.iter().zip(hulls).zip(weights) {
+    for (((s, hull), w), sw) in sessions.iter().zip(hulls).zip(weights).zip(session_weights) {
         let route = hull.route(policy);
         let outcomes = match route.tie {
             Some(tie) => [(route.base, 1.0 - policy.q), (tie, policy.q)],
@@ -117,9 +122,9 @@ pub(crate) fn summarize(
         };
         for (tier, p) in outcomes {
             summary.expected_spend += p * w * s.price[tier];
-            summary.value_size_weighted += p * s.size * s.adequacy[tier] / total_size;
-            summary.tier_session_share[tier] += p / n;
-            summary.tier_token_share[tier] += p * s.size / total_size;
+            summary.value_size_weighted += p * sw * s.size * s.adequacy[tier] / total_size;
+            summary.tier_session_share[tier] += p * sw / n;
+            summary.tier_token_share[tier] += p * sw * s.size / total_size;
         }
     }
     summary

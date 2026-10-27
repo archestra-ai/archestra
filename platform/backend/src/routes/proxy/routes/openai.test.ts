@@ -651,6 +651,26 @@ describe("OpenAI cost tracking", () => {
       inputTokens: 2,
       outputTokens: 0,
     });
+
+    // The OpenAI SDK asks for base64 vectors unless the caller picks a format.
+    const base64 = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/embeddings`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-openai-key",
+        "x-archestra-virtual-key": passthroughToken,
+      },
+      payload: {
+        model: "text-embedding-3-small",
+        input: ["first"],
+        encoding_format: "base64",
+      },
+    });
+    expect(base64.statusCode, base64.body).toBe(200);
+    const vector = Buffer.from(base64.json().data[0].embedding, "base64");
+    expect(vector).toHaveLength(12);
+    expect(vector.readFloatLE(0)).toBeCloseTo(0.1);
   });
 
   test("accepts LLM OAuth client credentials on provider-specific proxy routes", async ({

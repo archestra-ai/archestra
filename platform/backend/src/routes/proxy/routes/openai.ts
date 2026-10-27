@@ -22,6 +22,10 @@ import {
   openAiResponsesCompactAdapterFactory,
   openaiAdapterFactory,
 } from "../adapters";
+import {
+  EmbeddingWireResponseSchema,
+  withEmbeddingEncoding,
+} from "../adapters/embeddings-wire";
 import { openaiImagesAdapterFactory } from "../adapters/openai-images";
 import {
   CHAT_COMPLETIONS_SUFFIX,
@@ -123,7 +127,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["LLM Proxy"],
         body: OpenAi.API.EmbeddingRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+        response: constructResponseSchema(EmbeddingWireResponseSchema),
       },
     },
     async (request, reply) => {
@@ -135,7 +139,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.body as OpenAi.Types.EmbeddingRequest,
         request,
         reply,
-        openAiEmbeddingsAdapterFactory,
+        withEmbeddingEncoding(
+          openAiEmbeddingsAdapterFactory,
+          request.body.encoding_format,
+        ),
       );
     },
   );
@@ -153,7 +160,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         body: OpenAi.API.EmbeddingRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+        response: constructResponseSchema(EmbeddingWireResponseSchema),
       },
     },
     async (request, reply) => {
@@ -165,7 +172,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.body as OpenAi.Types.EmbeddingRequest,
         request,
         reply,
-        openAiEmbeddingsAdapterFactory,
+        withEmbeddingEncoding(
+          openAiEmbeddingsAdapterFactory,
+          request.body.encoding_format,
+        ),
       );
     },
   );

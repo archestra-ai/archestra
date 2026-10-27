@@ -48172,6 +48172,8 @@ export type GetDevFeedbackSetupResponses = {
     200: {
         configured: boolean;
         channelName: string | null;
+        agentId?: string | null;
+        agentName?: string | null;
     };
 };
 
@@ -48181,6 +48183,7 @@ export type SaveDevFeedbackSetupData = {
     body: {
         botId: string;
         channelId: string;
+        agentId?: string | null;
     };
     path?: never;
     query?: never;
@@ -48262,6 +48265,8 @@ export type SaveDevFeedbackSetupResponses = {
     200: {
         configured: boolean;
         channelName: string | null;
+        agentId?: string | null;
+        agentName?: string | null;
     };
 };
 
@@ -48539,6 +48544,11 @@ export type GetDevFeedbackCommentsResponses = {
         replyCount: number;
         permalink: string | null;
         createdAt: string;
+        dispatch?: {
+            status: 'started' | 'failed';
+            runId: string | null;
+            message: string | null;
+        };
     }>;
 };
 
@@ -48656,6 +48666,11 @@ export type CreateDevFeedbackCommentResponses = {
         replyCount: number;
         permalink: string | null;
         createdAt: string;
+        dispatch?: {
+            status: 'started' | 'failed';
+            runId: string | null;
+            message: string | null;
+        };
     };
 };
 

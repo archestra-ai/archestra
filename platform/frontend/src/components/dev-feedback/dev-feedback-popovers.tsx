@@ -5,6 +5,7 @@ import {
   type ReactNode,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -57,6 +58,10 @@ export function DraftPopover(props: {
   const [sending, setSending] = useState(false);
   const createComment = useCreateDevFeedbackComment();
   const willAttachClip = attachClip && props.clip !== null;
+  const framePreview = useMemo(
+    () => draft.frame?.toDataURL("image/jpeg") ?? null,
+    [draft.frame],
+  );
 
   const submit = async () => {
     if (!text.trim() || sending) return;
@@ -79,7 +84,7 @@ export function DraftPopover(props: {
           base64: await toBase64(props.clip.blob),
         };
       }
-      await createComment.mutateAsync({
+      const body: CreateDevFeedbackCommentBody = {
         route,
         url: window.location.href,
         selector: draft.selector,
@@ -92,7 +97,8 @@ export function DraftPopover(props: {
         text: text.trim(),
         screenshot: screenshot ?? undefined,
         clip,
-      });
+      };
+      await createComment.mutateAsync(body);
       onDone({ clipAttached: clip !== undefined });
     } catch {
       // The mutation already toasted; keep the draft so nothing is lost.
@@ -105,6 +111,13 @@ export function DraftPopover(props: {
       <p className="truncate text-muted-foreground text-xs">
         {route} › {draft.label}
       </p>
+      {framePreview && (
+        <img
+          src={framePreview}
+          alt="Screenshot to attach"
+          className="mt-2 max-h-32 w-full rounded-md object-contain"
+        />
+      )}
       <Textarea
         autoFocus
         rows={2}
@@ -193,7 +206,6 @@ export function CommentPopover(props: {
         </Button>
       </div>
       <p className="mt-2 whitespace-pre-wrap text-sm">{comment.text}</p>
-
       <div className="mt-3 max-h-48 space-y-2 overflow-y-auto border-t pt-2">
         {isLoading && (
           <p className="text-muted-foreground text-xs">Loading replies…</p>

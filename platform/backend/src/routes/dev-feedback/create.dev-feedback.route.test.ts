@@ -37,6 +37,7 @@ describe("POST /api/dev-feedback/comments", () => {
 
     expect(response.statusCode).toBe(200);
     const comment = response.json();
+    expect(comment.dispatch).toBeUndefined();
     const [posted] = slack.messages;
     const [screenshot, clip] = slack.uploads;
     expect(posted.metadata?.event_payload).toMatchObject({

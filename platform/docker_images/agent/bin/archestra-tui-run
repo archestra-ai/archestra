@@ -39,9 +39,10 @@ trap forward_signal INT TERM
 
 reset_terminal() {
   # Full-screen clients can leave origin mode, a restricted scroll region, or
-  # DECLRMM horizontal margins active. Spell out the reset for terminal
-  # players that do not implement RIS (ESC c) completely.
-  printf '\033[?1000l\033[?1002l\033[?1003l\033[?1006l\033[?69l\033[?6l\033[r\033[0m\033[2J\033[H'
+  # DECLRMM horizontal margins active. Clear focus reporting before the pane
+  # exits: tmux 3.3a can crash delivering focus-out to an exited pane.
+  # Spell out the reset for players that do not implement RIS completely.
+  printf '\033[?1000l\033[?1002l\033[?1003l\033[?1004l\033[?1006l\033[?69l\033[?6l\033[r\033[0m\033[2J\033[H'
 }
 
 watch_for_completion() {

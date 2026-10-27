@@ -33,8 +33,13 @@ const devFeedbackRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DevFeedbackSetupStatusSchema),
       },
     },
-    async (_request, reply) =>
-      reply.send(await devFeedbackService.getSetupStatus()),
+    async ({ user, organizationId }, reply) =>
+      reply.send(
+        await devFeedbackService.getSetupStatus({
+          userId: user.id,
+          organizationId,
+        }),
+      ),
   );
 
   fastify.get(
@@ -77,8 +82,13 @@ const devFeedbackRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DevFeedbackSetupStatusSchema),
       },
     },
-    async ({ body }, reply) =>
-      reply.send(await devFeedbackService.saveSetup(body)),
+    async ({ body, user, organizationId }, reply) =>
+      reply.send(
+        await devFeedbackService.saveSetup({
+          ...body,
+          actor: { userId: user.id, organizationId },
+        }),
+      ),
   );
 
   fastify.get(
@@ -110,11 +120,12 @@ const devFeedbackRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DevFeedbackCommentSchema),
       },
     },
-    async ({ body, user }, reply) =>
+    async ({ body, user, organizationId }, reply) =>
       reply.send(
         await devFeedbackService.createComment({
           body,
           authorName: user.name || user.email,
+          actor: { userId: user.id, organizationId },
         }),
       ),
   );

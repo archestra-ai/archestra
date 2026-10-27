@@ -3909,8 +3909,8 @@ const config = {
   /**
    * Internal UI feedback overlay for the team's own deployments: pin a comment
    * on an element and post it, with a screenshot and an optional screen clip,
-   * to a Slack channel. Slack is the only storage. It posts as a chatops
-   * Slack bot; which one, and the channel, are picked in the UI on first use.
+   * to a Slack channel, then optionally summon an agent in that thread. The
+   * posting bot, channel and reviewing agent are picked in the UI.
    */
   devFeedback: {
     enabled: process.env.ARCHESTRA_DEV_FEEDBACK_ENABLED === "true",

@@ -62,15 +62,29 @@ export default function CostExplorer() {
     (group !== "app" || canReadApps) &&
     (group !== "skill" || canReadSkills) &&
     (group !== "pool" || poolsEnabled);
-  const [q, setQ] = useState<PivotQuery>(SAVED_VIEWS[0].q);
+  const [query, setQ] = useState<PivotQuery>(SAVED_VIEWS[0].q);
   const [focus, setFocus] = useState<Set<string>>(new Set());
   const [view, setView] = useState<"summary" | "pivot">("summary");
   const [pivotCols, setPivotCols] = useState<"days" | "split">("days");
 
   const labelKeys = useProxyLabelKeys({
     timeframe,
-    enabled: enabled && q.group === "label",
+    enabled: enabled && query.group === "label",
   });
+  const labelKey = labelKeys.data?.includes(query.labelKey ?? "")
+    ? query.labelKey
+    : labelKeys.data?.[0];
+  const q = { ...query, labelKey };
+  useEffect(() => {
+    if (
+      query.group !== "label" ||
+      !labelKeys.isSuccess ||
+      query.labelKey === labelKey
+    )
+      return;
+    setQ((previous) => ({ ...previous, labelKey }));
+    setFocus(new Set());
+  }, [query.group, query.labelKey, labelKey, labelKeys.isSuccess]);
   const kpis = useKpis({ timeframe, enabled });
   const cube = usePivotCube(q, timeframe, enabled);
   const statistics = useCostStatistics({
@@ -80,7 +94,9 @@ export default function CostExplorer() {
 
   const contentRef = useRef<HTMLDivElement>(null);
   const [settledHeight, setSettledHeight] = useState<number>();
-  const isLoading = cube.isLoading || kpis.isCostPending;
+  const isLoadingLabels = q.group === "label" && labelKeys.isPending;
+  const labelKeysError = q.group === "label" && labelKeys.isError;
+  const isLoading = cube.isLoading || kpis.isCostPending || isLoadingLabels;
   // A range change replaces a potentially long table with a few skeletons.
   // Reserve its settled height until the response arrives so the browser does
   // not clamp the page's scroll offset to the shorter loading layout.
@@ -108,7 +124,7 @@ export default function CostExplorer() {
   const metric = METRICS[q.metric];
   const dim =
     q.group === "label"
-      ? { label: q.labelKey ?? "cost_center", plural: "label values" }
+      ? { label: q.labelKey ?? "Label", plural: "label values" }
       : DIMS[q.group];
   const splits = splitOptions(q.metric, q.group);
   const hasSplit = q.split !== "none";
@@ -283,14 +299,20 @@ export default function CostExplorer() {
             <SearchableSelect
               size="sm"
               ariaLabel="Label key"
-              value={q.labelKey ?? "cost_center"}
+              value={q.labelKey ?? ""}
               onValueChange={(labelKey) => update({ labelKey })}
               items={(labelKeys.data ?? []).map((key) => ({
                 value: key,
                 label: key,
               }))}
               placeholder={
-                labelKeys.isPending ? "Loading label keys…" : "Label key"
+                labelKeys.isPending
+                  ? "Loading label keys…"
+                  : labelKeys.isError
+                    ? "Label keys unavailable"
+                    : labelKeys.data?.length
+                      ? "Label key"
+                      : "No labels in this range"
               }
               disabled={labelKeys.isPending}
               searchPlaceholder="Search label keys…"
@@ -443,19 +465,28 @@ export default function CostExplorer() {
             }
           />
 
-          {Boolean(cube.error) && (
+          {Boolean(cube.error || labelKeysError) && (
             <QueryLoadError
               title="Could not load usage statistics"
               description="Check your access and connection, then retry."
-              onRetry={cube.retry}
+              onRetry={
+                labelKeysError ? () => void labelKeys.refetch() : cube.retry
+              }
             />
           )}
           {!cube.error &&
+            !labelKeysError &&
             q.chart !== "table" &&
-            (cube.isLoading ? (
+            (cube.isLoading || isLoadingLabels ? (
               <Skeleton className="h-[260px] w-full" />
             ) : cube.rows.length === 0 ? (
-              <Empty text={`No ${metric.label.toLowerCase()} in this range.`} />
+              <Empty
+                text={
+                  q.group === "label" && !q.labelKey
+                    ? "No labels captured on requests in this time range."
+                    : `No ${metric.label.toLowerCase()} in this range.`
+                }
+              />
             ) : (
               <PivotChart
                 cube={cube}

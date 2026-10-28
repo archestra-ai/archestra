@@ -1,8 +1,12 @@
 # Docs screenshots
 
-Run `pnpm docs:screenshots` from `platform/` against a seeded local stack. See [the screenshot workflow](../../.agents/skills/archestra-docs-writer/references/site-mechanics.md#screenshots) for setup and adding scenes.
+Run `pnpm docs:screenshots` from `platform/` against a seeded local stack. See [the screenshot workflow](../../../.agents/skills/archestra-docs-writer/references/site-mechanics.md#screenshots) for setup and adding scenes.
 
 Use an isolated fixture instance: the guardrails overview enables real enforcement through the API and verifies that it is active before capturing. It does not simulate deployment status in the browser.
+
+Keep only scenes embedded by a docs page. The site scales the embedded image at every screen width and switches only between its light and dark files; it does not select a mobile variant. Responsive product regression tests belong in `e2e-tests`, not this publication manifest.
+
+Run `pnpm --filter @archestra/docs-screenshots validate` without an app or browser to check the complete manifest, page embeds, and committed light/dark assets agree. Capture runs this check after rendering, including filtered captures. Remove a scene and both assets together when its last embed is removed.
 
 Keep scene choices explicit: pick a named agent, sort tied lists by name, and wait for the final UI state. The harness waits for the app's accessible loading status to clear; the approval scene also waits for setup-command generation. Usage scenes use `FIXTURE_TIME` with the usage SQL dataset and an exact statistics range, so request buckets and labels do not move with the calendar. Browser timers still run normally. Locale, timezone, fonts, reduced motion, and disabled screenshot animations are handled by the capture harness.
 

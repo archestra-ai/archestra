@@ -895,6 +895,27 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -6033,6 +6054,27 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -8511,6 +8553,27 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -10409,6 +10472,27 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -12314,6 +12398,27 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -14204,6 +14309,27 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -19764,6 +19890,27 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -21663,6 +21810,27 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -23037,6 +23205,27 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -23820,6 +24009,27 @@
                               "items": {
                                 "type": "object",
                                 "properties": {
+                                  "cache_control": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "ephemeral"
+                                        ]
+                                      },
+                                      "ttl": {
+                                        "type": "string",
+                                        "enum": [
+                                          "5m",
+                                          "1h"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ]
+                                  },
                                   "type": {
                                     "type": "string",
                                     "enum": [
@@ -25676,6 +25886,27 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ]
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -27999,6 +28230,28 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -33341,6 +33594,28 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -35935,6 +36210,28 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -37921,6 +38218,28 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -39914,6 +40233,28 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -41892,6 +42233,28 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -47674,6 +48037,28 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -49660,6 +50045,28 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -51094,6 +51501,28 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -51917,6 +52346,28 @@
                               "items": {
                                 "type": "object",
                                 "properties": {
+                                  "cache_control": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "ephemeral"
+                                        ]
+                                      },
+                                      "ttl": {
+                                        "type": "string",
+                                        "enum": [
+                                          "5m",
+                                          "1h"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": false
+                                  },
                                   "type": {
                                     "type": "string",
                                     "enum": [
@@ -53864,6 +54315,28 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false
+                              },
                               "type": {
                                 "type": "string",
                                 "enum": [
@@ -123682,6 +124155,27 @@
                                   "items": {
                                     "type": "object",
                                     "properties": {
+                                      "cache_control": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "enum": [
+                                              "ephemeral"
+                                            ]
+                                          },
+                                          "ttl": {
+                                            "type": "string",
+                                            "enum": [
+                                              "5m",
+                                              "1h"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ]
+                                      },
                                       "type": {
                                         "type": "string",
                                         "enum": [
@@ -125880,6 +126374,27 @@
                                   "items": {
                                     "type": "object",
                                     "properties": {
+                                      "cache_control": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "enum": [
+                                              "ephemeral"
+                                            ]
+                                          },
+                                          "ttl": {
+                                            "type": "string",
+                                            "enum": [
+                                              "5m",
+                                              "1h"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ]
+                                      },
                                       "type": {
                                         "type": "string",
                                         "enum": [
@@ -204866,6 +205381,27 @@
                                   "items": {
                                     "type": "object",
                                     "properties": {
+                                      "cache_control": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "enum": [
+                                              "ephemeral"
+                                            ]
+                                          },
+                                          "ttl": {
+                                            "type": "string",
+                                            "enum": [
+                                              "5m",
+                                              "1h"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ]
+                                      },
                                       "type": {
                                         "type": "string",
                                         "enum": [
@@ -207045,6 +207581,27 @@
                                   "items": {
                                     "type": "object",
                                     "properties": {
+                                      "cache_control": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "enum": [
+                                              "ephemeral"
+                                            ]
+                                          },
+                                          "ttl": {
+                                            "type": "string",
+                                            "enum": [
+                                              "5m",
+                                              "1h"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ]
+                                      },
                                       "type": {
                                         "type": "string",
                                         "enum": [
@@ -237307,6 +237864,28 @@
                                                       "items": {
                                                         "type": "object",
                                                         "properties": {
+                                                          "cache_control": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "ephemeral"
+                                                                ]
+                                                              },
+                                                              "ttl": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "5m",
+                                                                  "1h"
+                                                                ]
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type"
+                                                            ],
+                                                            "additionalProperties": false
+                                                          },
                                                           "type": {
                                                             "type": "string",
                                                             "enum": [
@@ -239064,6 +239643,28 @@
                                                       "items": {
                                                         "type": "object",
                                                         "properties": {
+                                                          "cache_control": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "ephemeral"
+                                                                ]
+                                                              },
+                                                              "ttl": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "5m",
+                                                                  "1h"
+                                                                ]
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type"
+                                                            ],
+                                                            "additionalProperties": false
+                                                          },
                                                           "type": {
                                                             "type": "string",
                                                             "enum": [
@@ -241632,6 +242233,28 @@
                                                       "items": {
                                                         "type": "object",
                                                         "properties": {
+                                                          "cache_control": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "ephemeral"
+                                                                ]
+                                                              },
+                                                              "ttl": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "5m",
+                                                                  "1h"
+                                                                ]
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type"
+                                                            ],
+                                                            "additionalProperties": false
+                                                          },
                                                           "type": {
                                                             "type": "string",
                                                             "enum": [
@@ -243389,6 +244012,28 @@
                                                       "items": {
                                                         "type": "object",
                                                         "properties": {
+                                                          "cache_control": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "ephemeral"
+                                                                ]
+                                                              },
+                                                              "ttl": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "5m",
+                                                                  "1h"
+                                                                ]
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type"
+                                                            ],
+                                                            "additionalProperties": false
+                                                          },
                                                           "type": {
                                                             "type": "string",
                                                             "enum": [
@@ -245957,6 +246602,28 @@
                                                       "items": {
                                                         "type": "object",
                                                         "properties": {
+                                                          "cache_control": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "ephemeral"
+                                                                ]
+                                                              },
+                                                              "ttl": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "5m",
+                                                                  "1h"
+                                                                ]
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type"
+                                                            ],
+                                                            "additionalProperties": false
+                                                          },
                                                           "type": {
                                                             "type": "string",
                                                             "enum": [
@@ -247714,6 +248381,28 @@
                                                       "items": {
                                                         "type": "object",
                                                         "properties": {
+                                                          "cache_control": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "ephemeral"
+                                                                ]
+                                                              },
+                                                              "ttl": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "5m",
+                                                                  "1h"
+                                                                ]
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type"
+                                                            ],
+                                                            "additionalProperties": false
+                                                          },
                                                           "type": {
                                                             "type": "string",
                                                             "enum": [
@@ -250277,6 +250966,28 @@
                                                       "items": {
                                                         "type": "object",
                                                         "properties": {
+                                                          "cache_control": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "ephemeral"
+                                                                ]
+                                                              },
+                                                              "ttl": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "5m",
+                                                                  "1h"
+                                                                ]
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type"
+                                                            ],
+                                                            "additionalProperties": false
+                                                          },
                                                           "type": {
                                                             "type": "string",
                                                             "enum": [
@@ -252034,6 +252745,28 @@
                                                       "items": {
                                                         "type": "object",
                                                         "properties": {
+                                                          "cache_control": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "ephemeral"
+                                                                ]
+                                                              },
+                                                              "ttl": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "5m",
+                                                                  "1h"
+                                                                ]
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type"
+                                                            ],
+                                                            "additionalProperties": false
+                                                          },
                                                           "type": {
                                                             "type": "string",
                                                             "enum": [
@@ -256037,6 +256770,28 @@
                                                       "items": {
                                                         "type": "object",
                                                         "properties": {
+                                                          "cache_control": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "ephemeral"
+                                                                ]
+                                                              },
+                                                              "ttl": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "5m",
+                                                                  "1h"
+                                                                ]
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type"
+                                                            ],
+                                                            "additionalProperties": false
+                                                          },
                                                           "type": {
                                                             "type": "string",
                                                             "enum": [
@@ -257799,6 +258554,28 @@
                                                       "items": {
                                                         "type": "object",
                                                         "properties": {
+                                                          "cache_control": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "ephemeral"
+                                                                ]
+                                                              },
+                                                              "ttl": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "5m",
+                                                                  "1h"
+                                                                ]
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type"
+                                                            ],
+                                                            "additionalProperties": false
+                                                          },
                                                           "type": {
                                                             "type": "string",
                                                             "enum": [
@@ -288198,6 +288975,28 @@
                                                 "items": {
                                                   "type": "object",
                                                   "properties": {
+                                                    "cache_control": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "ephemeral"
+                                                          ]
+                                                        },
+                                                        "ttl": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "5m",
+                                                            "1h"
+                                                          ]
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type"
+                                                      ],
+                                                      "additionalProperties": false
+                                                    },
                                                     "type": {
                                                       "type": "string",
                                                       "enum": [
@@ -289955,6 +290754,28 @@
                                                 "items": {
                                                   "type": "object",
                                                   "properties": {
+                                                    "cache_control": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "ephemeral"
+                                                          ]
+                                                        },
+                                                        "ttl": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "5m",
+                                                            "1h"
+                                                          ]
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type"
+                                                      ],
+                                                      "additionalProperties": false
+                                                    },
                                                     "type": {
                                                       "type": "string",
                                                       "enum": [
@@ -292523,6 +293344,28 @@
                                                 "items": {
                                                   "type": "object",
                                                   "properties": {
+                                                    "cache_control": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "ephemeral"
+                                                          ]
+                                                        },
+                                                        "ttl": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "5m",
+                                                            "1h"
+                                                          ]
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type"
+                                                      ],
+                                                      "additionalProperties": false
+                                                    },
                                                     "type": {
                                                       "type": "string",
                                                       "enum": [
@@ -294280,6 +295123,28 @@
                                                 "items": {
                                                   "type": "object",
                                                   "properties": {
+                                                    "cache_control": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "ephemeral"
+                                                          ]
+                                                        },
+                                                        "ttl": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "5m",
+                                                            "1h"
+                                                          ]
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type"
+                                                      ],
+                                                      "additionalProperties": false
+                                                    },
                                                     "type": {
                                                       "type": "string",
                                                       "enum": [
@@ -296848,6 +297713,28 @@
                                                 "items": {
                                                   "type": "object",
                                                   "properties": {
+                                                    "cache_control": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "ephemeral"
+                                                          ]
+                                                        },
+                                                        "ttl": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "5m",
+                                                            "1h"
+                                                          ]
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type"
+                                                      ],
+                                                      "additionalProperties": false
+                                                    },
                                                     "type": {
                                                       "type": "string",
                                                       "enum": [
@@ -298605,6 +299492,28 @@
                                                 "items": {
                                                   "type": "object",
                                                   "properties": {
+                                                    "cache_control": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "ephemeral"
+                                                          ]
+                                                        },
+                                                        "ttl": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "5m",
+                                                            "1h"
+                                                          ]
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type"
+                                                      ],
+                                                      "additionalProperties": false
+                                                    },
                                                     "type": {
                                                       "type": "string",
                                                       "enum": [
@@ -301168,6 +302077,28 @@
                                                 "items": {
                                                   "type": "object",
                                                   "properties": {
+                                                    "cache_control": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "ephemeral"
+                                                          ]
+                                                        },
+                                                        "ttl": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "5m",
+                                                            "1h"
+                                                          ]
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type"
+                                                      ],
+                                                      "additionalProperties": false
+                                                    },
                                                     "type": {
                                                       "type": "string",
                                                       "enum": [
@@ -302925,6 +303856,28 @@
                                                 "items": {
                                                   "type": "object",
                                                   "properties": {
+                                                    "cache_control": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "ephemeral"
+                                                          ]
+                                                        },
+                                                        "ttl": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "5m",
+                                                            "1h"
+                                                          ]
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type"
+                                                      ],
+                                                      "additionalProperties": false
+                                                    },
                                                     "type": {
                                                       "type": "string",
                                                       "enum": [
@@ -306928,6 +307881,28 @@
                                                 "items": {
                                                   "type": "object",
                                                   "properties": {
+                                                    "cache_control": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "ephemeral"
+                                                          ]
+                                                        },
+                                                        "ttl": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "5m",
+                                                            "1h"
+                                                          ]
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type"
+                                                      ],
+                                                      "additionalProperties": false
+                                                    },
                                                     "type": {
                                                       "type": "string",
                                                       "enum": [
@@ -308690,6 +309665,28 @@
                                                 "items": {
                                                   "type": "object",
                                                   "properties": {
+                                                    "cache_control": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "ephemeral"
+                                                          ]
+                                                        },
+                                                        "ttl": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "5m",
+                                                            "1h"
+                                                          ]
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type"
+                                                      ],
+                                                      "additionalProperties": false
+                                                    },
                                                     "type": {
                                                       "type": "string",
                                                       "enum": [
@@ -333018,6 +334015,27 @@
                                   "items": {
                                     "type": "object",
                                     "properties": {
+                                      "cache_control": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "enum": [
+                                              "ephemeral"
+                                            ]
+                                          },
+                                          "ttl": {
+                                            "type": "string",
+                                            "enum": [
+                                              "5m",
+                                              "1h"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ]
+                                      },
                                       "type": {
                                         "type": "string",
                                         "enum": [
@@ -335202,6 +336220,27 @@
                                   "items": {
                                     "type": "object",
                                     "properties": {
+                                      "cache_control": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "enum": [
+                                              "ephemeral"
+                                            ]
+                                          },
+                                          "ttl": {
+                                            "type": "string",
+                                            "enum": [
+                                              "5m",
+                                              "1h"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ]
+                                      },
                                       "type": {
                                         "type": "string",
                                         "enum": [
@@ -337396,6 +338435,27 @@
                                   "items": {
                                     "type": "object",
                                     "properties": {
+                                      "cache_control": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "enum": [
+                                              "ephemeral"
+                                            ]
+                                          },
+                                          "ttl": {
+                                            "type": "string",
+                                            "enum": [
+                                              "5m",
+                                              "1h"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ]
+                                      },
                                       "type": {
                                         "type": "string",
                                         "enum": [
@@ -339580,6 +340640,27 @@
                                   "items": {
                                     "type": "object",
                                     "properties": {
+                                      "cache_control": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "enum": [
+                                              "ephemeral"
+                                            ]
+                                          },
+                                          "ttl": {
+                                            "type": "string",
+                                            "enum": [
+                                              "5m",
+                                              "1h"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ]
+                                      },
                                       "type": {
                                         "type": "string",
                                         "enum": [
@@ -400206,6 +401287,27 @@
                                   "items": {
                                     "type": "object",
                                     "properties": {
+                                      "cache_control": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "enum": [
+                                              "ephemeral"
+                                            ]
+                                          },
+                                          "ttl": {
+                                            "type": "string",
+                                            "enum": [
+                                              "5m",
+                                              "1h"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ]
+                                      },
                                       "type": {
                                         "type": "string",
                                         "enum": [
@@ -402390,6 +403492,27 @@
                                   "items": {
                                     "type": "object",
                                     "properties": {
+                                      "cache_control": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "enum": [
+                                              "ephemeral"
+                                            ]
+                                          },
+                                          "ttl": {
+                                            "type": "string",
+                                            "enum": [
+                                              "5m",
+                                              "1h"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ]
+                                      },
                                       "type": {
                                         "type": "string",
                                         "enum": [
@@ -411545,6 +412668,27 @@
                                   "items": {
                                     "type": "object",
                                     "properties": {
+                                      "cache_control": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "enum": [
+                                              "ephemeral"
+                                            ]
+                                          },
+                                          "ttl": {
+                                            "type": "string",
+                                            "enum": [
+                                              "5m",
+                                              "1h"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ]
+                                      },
                                       "type": {
                                         "type": "string",
                                         "enum": [
@@ -413747,6 +414891,27 @@
                                   "items": {
                                     "type": "object",
                                     "properties": {
+                                      "cache_control": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "enum": [
+                                              "ephemeral"
+                                            ]
+                                          },
+                                          "ttl": {
+                                            "type": "string",
+                                            "enum": [
+                                              "5m",
+                                              "1h"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ]
+                                      },
                                       "type": {
                                         "type": "string",
                                         "enum": [

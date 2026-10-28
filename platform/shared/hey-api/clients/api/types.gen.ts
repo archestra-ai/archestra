@@ -169,6 +169,10 @@ export type OpenAiChatCompletionRequestInput = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -1882,6 +1886,10 @@ export type CerebrasChatCompletionRequestInput = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -2519,6 +2527,10 @@ export type MistralChatCompletionRequestInput = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -3036,6 +3048,10 @@ export type PerplexityChatCompletionRequestInput = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -3554,6 +3570,10 @@ export type GroqChatCompletionRequestInput = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -4068,6 +4088,10 @@ export type OpenrouterChatCompletionRequestInput = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -5619,6 +5643,10 @@ export type DeepSeekChatCompletionRequestInput = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -6137,6 +6165,10 @@ export type ArchestraChatCompletionRequestInput = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -6549,6 +6581,10 @@ export type MinimaxChatCompletionRequestInput = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -6712,6 +6748,10 @@ export type MinimaxChatCompletionRequestInput = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -7214,6 +7254,10 @@ export type XaiChatCompletionRequestInput = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -7800,6 +7844,10 @@ export type OpenAiChatCompletionRequest = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -9513,6 +9561,10 @@ export type CerebrasChatCompletionRequest = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -10150,6 +10202,10 @@ export type MistralChatCompletionRequest = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -10667,6 +10723,10 @@ export type PerplexityChatCompletionRequest = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -11185,6 +11245,10 @@ export type GroqChatCompletionRequest = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -11699,6 +11763,10 @@ export type OpenrouterChatCompletionRequest = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -13250,6 +13318,10 @@ export type DeepSeekChatCompletionRequest = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -13768,6 +13840,10 @@ export type ArchestraChatCompletionRequest = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -14180,6 +14256,10 @@ export type MinimaxChatCompletionRequest = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -14343,6 +14423,10 @@ export type MinimaxChatCompletionRequest = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -14845,6 +14929,10 @@ export type XaiChatCompletionRequest = {
                 mode: 'explicit';
             };
         }> | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'refusal';
             refusal: string;
         }> | null;
@@ -33813,6 +33901,10 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
                     mode: 'explicit';
                 };
             }> | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'refusal';
                 refusal: string;
             }> | null;
@@ -34428,6 +34520,10 @@ export type AzureRealtimeTurnWithAgentData = {
                     mode: 'explicit';
                 };
             }> | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'refusal';
                 refusal: string;
             }> | null;
@@ -55469,6 +55565,10 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                     mode: 'explicit';
                 };
             }> | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'refusal';
                 refusal: string;
             }> | null;
@@ -56077,6 +56177,10 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                     mode: 'explicit';
                 };
             }> | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'refusal';
                 refusal: string;
             }> | null;
@@ -62661,6 +62765,10 @@ export type GetInteractionsResponses = {
                             mode: 'explicit';
                         };
                     }> | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'refusal';
                         refusal: string;
                     }> | null;
@@ -63110,6 +63218,10 @@ export type GetInteractionsResponses = {
                             mode: 'explicit';
                         };
                     }> | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'refusal';
                         refusal: string;
                     }> | null;
@@ -63712,6 +63824,10 @@ export type GetInteractionsResponses = {
                             mode: 'explicit';
                         };
                     }> | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'refusal';
                         refusal: string;
                     }> | null;
@@ -64161,6 +64277,10 @@ export type GetInteractionsResponses = {
                             mode: 'explicit';
                         };
                     }> | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'refusal';
                         refusal: string;
                     }> | null;
@@ -64763,6 +64883,10 @@ export type GetInteractionsResponses = {
                             mode: 'explicit';
                         };
                     }> | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'refusal';
                         refusal: string;
                     }> | null;
@@ -65212,6 +65336,10 @@ export type GetInteractionsResponses = {
                             mode: 'explicit';
                         };
                     }> | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'refusal';
                         refusal: string;
                     }> | null;
@@ -65814,6 +65942,10 @@ export type GetInteractionsResponses = {
                             mode: 'explicit';
                         };
                     }> | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'refusal';
                         refusal: string;
                     }> | null;
@@ -66263,6 +66395,10 @@ export type GetInteractionsResponses = {
                             mode: 'explicit';
                         };
                     }> | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'refusal';
                         refusal: string;
                     }> | null;
@@ -67115,6 +67251,10 @@ export type GetInteractionsResponses = {
                             mode: 'explicit';
                         };
                     }> | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'refusal';
                         refusal: string;
                     }> | null;
@@ -67564,6 +67704,10 @@ export type GetInteractionsResponses = {
                             mode: 'explicit';
                         };
                     }> | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'refusal';
                         refusal: string;
                     }> | null;
@@ -73147,6 +73291,10 @@ export type GetInteractionResponses = {
                         mode: 'explicit';
                     };
                 }> | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'refusal';
                     refusal: string;
                 }> | null;
@@ -73596,6 +73744,10 @@ export type GetInteractionResponses = {
                         mode: 'explicit';
                     };
                 }> | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'refusal';
                     refusal: string;
                 }> | null;
@@ -74198,6 +74350,10 @@ export type GetInteractionResponses = {
                         mode: 'explicit';
                     };
                 }> | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'refusal';
                     refusal: string;
                 }> | null;
@@ -74647,6 +74803,10 @@ export type GetInteractionResponses = {
                         mode: 'explicit';
                     };
                 }> | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'refusal';
                     refusal: string;
                 }> | null;
@@ -75249,6 +75409,10 @@ export type GetInteractionResponses = {
                         mode: 'explicit';
                     };
                 }> | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'refusal';
                     refusal: string;
                 }> | null;
@@ -75698,6 +75862,10 @@ export type GetInteractionResponses = {
                         mode: 'explicit';
                     };
                 }> | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'refusal';
                     refusal: string;
                 }> | null;
@@ -76300,6 +76468,10 @@ export type GetInteractionResponses = {
                         mode: 'explicit';
                     };
                 }> | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'refusal';
                     refusal: string;
                 }> | null;
@@ -76749,6 +76921,10 @@ export type GetInteractionResponses = {
                         mode: 'explicit';
                     };
                 }> | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'refusal';
                     refusal: string;
                 }> | null;
@@ -77601,6 +77777,10 @@ export type GetInteractionResponses = {
                         mode: 'explicit';
                     };
                 }> | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'refusal';
                     refusal: string;
                 }> | null;
@@ -78050,6 +78230,10 @@ export type GetInteractionResponses = {
                         mode: 'explicit';
                     };
                 }> | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'refusal';
                     refusal: string;
                 }> | null;
@@ -83875,6 +84059,10 @@ export type KimiCodeChatCompletionsWithDefaultAgentData = {
                     mode: 'explicit';
                 };
             }> | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'refusal';
                 refusal: string;
             }> | null;
@@ -84483,6 +84671,10 @@ export type KimiCodeChatCompletionsWithAgentData = {
                     mode: 'explicit';
                 };
             }> | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'refusal';
                 refusal: string;
             }> | null;
@@ -85093,6 +85285,10 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                     mode: 'explicit';
                 };
             }> | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'refusal';
                 refusal: string;
             }> | null;
@@ -85701,6 +85897,10 @@ export type KimiChatCompletionsWithAgentData = {
                     mode: 'explicit';
                 };
             }> | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'refusal';
                 refusal: string;
             }> | null;
@@ -101681,6 +101881,10 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                     mode: 'explicit';
                 };
             }> | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'refusal';
                 refusal: string;
             }> | null;
@@ -102289,6 +102493,10 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                     mode: 'explicit';
                 };
             }> | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'refusal';
                 refusal: string;
             }> | null;
@@ -104944,6 +105152,10 @@ export type ModelRouterChatCompletionsWithDefaultAgentData = {
                     mode: 'explicit';
                 };
             }> | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'refusal';
                 refusal: string;
             }> | null;
@@ -105556,6 +105768,10 @@ export type ModelRouterChatCompletionsWithAgentData = {
                     mode: 'explicit';
                 };
             }> | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'refusal';
                 refusal: string;
             }> | null;

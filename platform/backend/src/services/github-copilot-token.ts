@@ -502,11 +502,6 @@ function githubMessageOf(text: string): string {
 }
 
 /**
- * The App could not mint an installation token. GitHub refusing the App (it
- * was uninstalled or its private key revoked) needs new App credentials and
- * answers 401; a GitHub outage stays a 502 and changes nothing.
- */
-/**
  * Why the App could not sign in: GitHub definitively refused it (the plan is
  * flagged), the stored value is no plan reference (refused, not flagged), or
  * GitHub or the credential store failed for now (a transient error, not

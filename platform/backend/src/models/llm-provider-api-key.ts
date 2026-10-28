@@ -1172,11 +1172,6 @@ class LlmProviderApiKeyModel {
   // SPDX-SnippetEnd
 
   /**
-   * The acting user's own personal key for a provider (prefer isPrimary, then
-   * oldest). Self-contained so the per-user-credential guard can call it before
-   * the rest of getCurrentApiKey runs.
-   */
-  /**
    * For GitHub Copilot keys: whether each served requests as an organization
    * subscription (with its GitHub organization) or a personal sign-in. Keys
    * that no longer exist are left out.
@@ -1229,7 +1224,6 @@ class LlmProviderApiKeyModel {
     return sources;
   }
 
-  /** True when the key stores an organization's GitHub App credential. */
   /**
    * The organization's GitHub Copilot plan keys (GitHub App keys) with their
    * stored values, in one query. Personal sign-in tokens are never read.
@@ -1271,6 +1265,7 @@ class LlmProviderApiKeyModel {
     );
   }
 
+  /** True when the key stores an organization's GitHub App credential. */
   static async isGithubAppKey(id: string | null | undefined): Promise<boolean> {
     if (!id) return false;
     return (
@@ -1278,6 +1273,11 @@ class LlmProviderApiKeyModel {
     );
   }
 
+  /**
+   * The acting user's own personal key for a provider (prefer isPrimary, then
+   * oldest). Self-contained so the per-user-credential guard can call it before
+   * the rest of getCurrentApiKey runs.
+   */
   private static async findPersonalKey({
     organizationId,
     userId,

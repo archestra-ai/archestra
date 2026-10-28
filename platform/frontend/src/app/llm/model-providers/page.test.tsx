@@ -460,6 +460,20 @@ describe("ApiKeysPage", () => {
     expect(personalCards().getAllByText("Connect")).toHaveLength(3);
   });
 
+  it("offers no enterprise plan when the organization turned GitHub Copilot off", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { modelProviderOverrides: { "github-copilot": { hidden: true } } },
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    render(<ApiKeysPage />);
+
+    expect(screen.queryByText("Enterprise plans")).toBeNull();
+  });
+
   it("keeps a turned-off provider's connected subscription key in the table", () => {
     // The card is withdrawn with the provider, so the key it stood for has to
     // fall back to a table row — otherwise an admin can no longer see or

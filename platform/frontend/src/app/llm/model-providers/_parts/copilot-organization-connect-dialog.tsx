@@ -143,6 +143,8 @@ export function CopilotOrganizationConnectDialog({
   const account = readGithubAccountFields({
     githubUrl,
     organization: organizationInput,
+    // The plan setup reads GitHub from the server: https only.
+    httpsOnly: true,
   });
   // An App lives on one GitHub; only those on the organization's can serve it.
   const host = account.account;

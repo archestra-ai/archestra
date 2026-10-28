@@ -182,7 +182,11 @@ const githubCopilotAppRoutes: FastifyPluginAsyncZod = async (app) => {
       // Reads GitHub only; nothing is stored.
       request.auditSkip = true;
       return reply.send(
-        await copilotGithubAppSetup.checkOrganization(request.body),
+        await copilotGithubAppSetup.checkOrganization({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          ...request.body,
+        }),
       );
     },
   );

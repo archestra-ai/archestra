@@ -343,8 +343,14 @@ type PendingGithubAppDetails = Omit<StoredPendingApp, "secret"> & {
 export function parseAccount(input: string) {
   const account = parseGithubAccountInput(input);
   if (!account) throw new ApiError(400, GITHUB_ACCOUNT_INPUT_INVALID);
+  // The setup reads GitHub from the server: only a GitHub over https.
+  if (!account.web.startsWith("https://"))
+    throw new ApiError(400, GITHUB_HTTPS_REQUIRED);
   return account;
 }
+
+/** What to say when a GitHub address is not https. */
+const GITHUB_HTTPS_REQUIRED = "Use an https:// address for GitHub.";
 
 /** The GitHub account behind a login, from GitHub's public profile. */
 export async function lookupAccount(params: { api: string; login: string }) {

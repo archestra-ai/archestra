@@ -69,6 +69,23 @@ describe("GithubAccountFields", () => {
     });
   });
 
+  it("refuses a plain http GitHub only where https is required", () => {
+    const fields = {
+      githubUrl: "http://git.example.com",
+      organization: "acme",
+    };
+    expect(
+      readGithubAccountFields({ ...fields, httpsOnly: true }),
+    ).toMatchObject({
+      account: null,
+      urlError: "Use an https:// address for GitHub.",
+    });
+    expect(readGithubAccountFields(fields)).toMatchObject({
+      account: { login: "acme" },
+      urlError: null,
+    });
+  });
+
   it("puts each field's error in place of its hint", () => {
     renderFields({ githubUrl: "not a url", organization: "-bad-" });
 

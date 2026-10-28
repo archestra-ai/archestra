@@ -40,6 +40,7 @@ import {
   lookupAccount,
   parseAccount,
 } from "@/services/github-app-manifest-setup";
+import { assertModelProviderAllowed } from "@/services/integration-overrides";
 import { modelSyncService } from "@/services/model-sync";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError } from "@/types";
@@ -58,7 +59,8 @@ import { createGithubCopilotFetch } from "./github-copilot-token";
  */
 class CopilotGithubAppSetup {
   /** Start registering a new App on the organization. */
-  start(params: Owner & { organization: string }) {
+  async start(params: Owner & { organization: string }) {
+    await assertCopilotAllowed(params);
     return githubAppManifestSetup.start({ ...params, flow: "copilot" });
   }
 
@@ -84,6 +86,7 @@ class CopilotGithubAppSetup {
       name?: string;
     },
   ) {
+    await assertCopilotAllowed(params);
     const found = await githubAppManifestSetup.installation({
       ...params,
       flow: "copilot",
@@ -136,7 +139,9 @@ class CopilotGithubAppSetup {
    * Check that what a person typed names a GitHub organization, before a step
    * uses it: the same parsing and account check as `start`.
    */
-  async checkOrganization(params: { organization: string }) {
+  async checkOrganization(params: Owner & { organization: string }) {
+    await assertCopilotAllowed(params);
+    await authorize(params);
     const { api, login } = parseAccount(params.organization);
     const account = await lookupAccount({ api, login });
     if (account.type !== "Organization")
@@ -158,6 +163,7 @@ class CopilotGithubAppSetup {
       name?: string;
     },
   ) {
+    await assertCopilotAllowed(params);
     const definition = await RuntimeCredentialDefinitionModel.findById({
       id: params.credentialId,
       organizationId: params.organizationId,
@@ -251,6 +257,7 @@ class CopilotGithubAppSetup {
       replaceKeyId?: string;
     },
   ) {
+    await assertCopilotAllowed(params);
     const { appId, privateKey, fingerprint } =
       validateGithubAppPrivateKey(params);
     const { web, api, login } = parseAccount(
@@ -289,6 +296,7 @@ class CopilotGithubAppSetup {
       name?: string;
     },
   ) {
+    await assertCopilotAllowed(params);
     await authorize(params);
     const checked = await this.validateExisting(params);
     // Check Copilot answers the App before anything is saved.
@@ -711,6 +719,17 @@ githubAppManifestSetup.register("copilot", {
     default_events: [],
   }),
 });
+
+/**
+ * Admins can turn GitHub Copilot off for the organization: then no plan is
+ * set up, connected or reconnected.
+ */
+async function assertCopilotAllowed(owner: Owner) {
+  await assertModelProviderAllowed({
+    organizationId: owner.organizationId,
+    provider: "github-copilot",
+  });
+}
 
 /** Saving a GitHub App credential and a shared key both need permission. */
 async function authorize(owner: Owner) {

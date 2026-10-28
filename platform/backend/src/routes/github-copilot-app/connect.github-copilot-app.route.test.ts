@@ -8,6 +8,7 @@ import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   LlmProviderApiKeyModel,
+  OrganizationModel,
   RuntimeCredentialConnectionModel,
   RuntimeCredentialDefinitionModel,
 } from "@/models";
@@ -940,6 +941,70 @@ describe("GitHub Copilot organization subscription setup", () => {
     expect(values.map((value) => value.id)).toEqual([keyId]);
     expect(JSON.stringify(values)).not.toContain("gho_mine");
     expect(values.map((value) => value.id)).not.toContain(personal.id);
+  });
+
+  test("refuses every setup step, a reconnect included, once GitHub Copilot is turned off", async () => {
+    const { keyId, reference } = await connectedApp();
+    await OrganizationModel.patch(organizationId, {
+      modelProviderOverrides: { "github-copilot": { hidden: true } },
+    });
+
+    for (const [url, payload] of [
+      ["/api/github-copilot-app/manifest", { organization: "my-org" }],
+      [
+        "/api/github-copilot-app/organization/check",
+        { organization: "my-org" },
+      ],
+      [
+        "/api/github-copilot-app/existing/validate",
+        { appId, organization: "my-org", privateKey },
+      ],
+      [
+        "/api/github-copilot-app/existing",
+        { appId, privateKey, replaceKeyId: keyId },
+      ],
+      [
+        "/api/github-copilot-app/credential",
+        { credentialId: reference?.ref.credentialId, replaceKeyId: keyId },
+      ],
+      ["/api/github-copilot-app/install", { replaceKeyId: keyId }],
+    ] as const) {
+      const response = await post(url, payload);
+      expect(response.statusCode, url).toBe(400);
+      expect(response.json().error.message, url).toContain("turned off");
+    }
+  });
+
+  test("takes only a GitHub over https", async () => {
+    for (const url of [
+      "/api/github-copilot-app/organization/check",
+      "/api/github-copilot-app/manifest",
+    ]) {
+      const response = await post(url, {
+        organization: "http://git.example.com/my-org",
+      });
+      expect(response.statusCode, url).toBe(400);
+      expect(response.json().error.message, url).toBe(
+        "Use an https:// address for GitHub.",
+      );
+    }
+  });
+
+  test("checking an organization needs permission to create credentials", async ({
+    makeCustomRole,
+    makeMember,
+    makeUser,
+  }) => {
+    const role = await makeCustomRole(organizationId, {
+      permission: { llmProviderApiKey: ["create"] },
+    });
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: role.role });
+
+    const response = await post("/api/github-copilot-app/organization/check", {
+      organization: "my-org",
+    });
+    expect(response.statusCode).toBe(403);
   });
 
   test("removes the credential it made when connecting fails afterwards", async () => {

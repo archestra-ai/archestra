@@ -71,8 +71,12 @@ export function GithubAccountFields({
 export function readGithubAccountFields(fields: {
   githubUrl: string;
   organization: string;
+  /** Refuse a GitHub reached over plain http. */
+  httpsOnly?: boolean;
 }) {
-  const host = parseGithubUrl(fields.githubUrl);
+  const parsed = parseGithubUrl(fields.githubUrl);
+  const insecure = !!parsed && fields.httpsOnly === true && !parsed.https;
+  const host = insecure ? null : parsed;
   const login = ownerFromInput(fields.organization);
   const loginValid = OWNER_PATTERN.test(login);
   const input = host
@@ -83,7 +87,7 @@ export function readGithubAccountFields(fields: {
   return {
     account: host && loginValid ? parseGithubAccountInput(input) : null,
     input,
-    urlError: host ? null : URL_INVALID,
+    urlError: insecure ? URL_NOT_HTTPS : host ? null : URL_INVALID,
     organizationError:
       fields.organization.trim() && !loginValid ? ORGANIZATION_INVALID : null,
   };
@@ -92,6 +96,7 @@ export function readGithubAccountFields(fields: {
 // ===== Internal helpers =====
 
 const URL_INVALID = "Enter a web address, like https://github.com.";
+const URL_NOT_HTTPS = "Use an https:// address for GitHub.";
 const ORGANIZATION_INVALID = "Enter the organization's name on GitHub.";
 const OWNER_PATTERN = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;
 
@@ -146,7 +151,11 @@ function parseGithubUrl(value: string) {
     !url.hostname.includes(".")
   )
     return null;
-  return { dotCom: url.hostname === "github.com", web: url.origin };
+  return {
+    dotCom: url.hostname === "github.com",
+    web: url.origin,
+    https: url.protocol === "https:",
+  };
 }
 
 /** A pasted profile or repository URL names its owner: github.com/acme/repo is acme. */

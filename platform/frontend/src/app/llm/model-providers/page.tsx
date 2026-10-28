@@ -715,31 +715,34 @@ export default function ApiKeysPage() {
           }}
         />
 
-        <OrganizationSubscriptionCards
-          credentials={organizationSubscriptions}
-          isLoading={
-            permissionsPending || (apiKeyQueriesEnabled && allApiKeysPending)
-          }
-          onConnect={() => setCopilotConnect({ manage: null })}
-          onReconnect={(credential) =>
-            setCopilotConnect({
-              manage: {
-                id: credential.id,
-                name: credential.name,
-                organization: credential.githubOrganization ?? null,
-                reconnect: true,
-              },
-            })
-          }
-          onManage={openEditDialog}
-          onDisconnect={openDeleteDialog}
-          disconnectBlockedReason={(credential) => {
-            const usage = getKeyUsage(credential.id);
-            return usage
-              ? `${usage}. Remove it from Settings > Knowledge before disconnecting.`
-              : null;
-          }}
-        />
+        {/* Turned off by an admin: no enterprise plan is offered either. */}
+        {providerCatalog.isHidden("github-copilot") ? null : (
+          <OrganizationSubscriptionCards
+            credentials={organizationSubscriptions}
+            isLoading={
+              permissionsPending || (apiKeyQueriesEnabled && allApiKeysPending)
+            }
+            onConnect={() => setCopilotConnect({ manage: null })}
+            onReconnect={(credential) =>
+              setCopilotConnect({
+                manage: {
+                  id: credential.id,
+                  name: credential.name,
+                  organization: credential.githubOrganization ?? null,
+                  reconnect: true,
+                },
+              })
+            }
+            onManage={openEditDialog}
+            onDisconnect={openDeleteDialog}
+            disconnectBlockedReason={(credential) => {
+              const usage = getKeyUsage(credential.id);
+              return usage
+                ? `${usage}. Remove it from Settings > Knowledge before disconnecting.`
+                : null;
+            }}
+          />
+        )}
         {copilotConnect !== null && (
           <CopilotOrganizationConnectDialog
             open

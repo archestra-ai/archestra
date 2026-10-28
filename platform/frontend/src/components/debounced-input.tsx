@@ -85,7 +85,7 @@ export const DebouncedInput = forwardRef<HTMLInputElement, DebouncedInputProps>(
       setIsPending(newValue !== committedValueRef.current);
 
       clearTimeoutRef(timeoutRef);
-      timeoutRef.current = setTimeout(() => {
+      const commit = () => {
         isTypingRef.current = false;
         onChange(newValue);
         if (newValue === committedValueRef.current) {
@@ -98,7 +98,12 @@ export const DebouncedInput = forwardRef<HTMLInputElement, DebouncedInputProps>(
           () => setIsPending(false),
           PENDING_HANDOFF_MS,
         );
-      }, debounceMs);
+      };
+      if (debounceMs === 0) {
+        commit();
+      } else {
+        timeoutRef.current = setTimeout(commit, debounceMs);
+      }
     };
 
     return <Input ref={ref} value={value} onChange={handleChange} {...props} />;

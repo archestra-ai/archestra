@@ -108,43 +108,27 @@ def main():
                     run_prompt(task, session_id, home, config, entries)
                 finally:
                     atomic(artifact, json.dumps({"version": 1, "provider": "copilot", "entries": entries}))
-                # A steer is newline-delimited plain text, consumed after the
-                # current prompt. Multiple messages retain their order.
-                if steer is not None:
-                    while select.select([steer], [], [], 0)[0]:
-                        pending += os.read(steer, 65536)
-                    if b"\n" in pending:
-                        lines = pending.split(b"\n")
-                        pending = lines.pop()
-                        task = "\n".join(line.decode("utf-8", errors="replace") for line in lines)
-                        if task:
-                            continue
-            if mode == "one_shot":
-                return
-            attention("set", "Ready for a follow-up")
-            print("\nCopilot CLI — enter a follow-up, or /exit", flush=True)
-            idle = int(env.get("ARCHESTRA_AGENT_RUNTIME_IDLE_TIMEOUT_SECONDS", "3600"))
-            ready = select.select([sys.stdin] + ([steer] if steer is not None else []), [], [], idle)[0]
-            if not ready:
-                return
-            if steer is not None and steer in ready:
-                pending += os.read(steer, 65536)
-                lines = pending.split(b"\n")
-                pending = lines.pop()
-                task = "\n".join(line.decode("utf-8", errors="replace") for line in lines)
-                continue
-            task = sys.stdin.readline()
-            if not task or task.strip() == "/exit":
+            # Catalog Agents use tmux_keys, including delegated runs. Drain
+            # complete terminal lines as well as optional pipe steering after
+            # each prompt; delegated work exits once no queued steer remains.
+            for source in [sys.stdin.fileno()] + ([steer] if steer is not None else []):
+                while select.select([source], [], [], 0)[0]:
+                    chunk = os.read(source, 65536)
+                    if not chunk:
+                        break
+                    pending += chunk
+            lines = pending.split(b"\n")
+            pending = lines.pop()
+            task = "\n".join(line.decode("utf-8", errors="replace") for line in lines).strip()
+            if not task or task == "/exit":
                 return
     finally:
         if steer is not None:
             os.close(steer)
 
 
-def run_prompt(task, session_id, home, config, entries):
+def client_environment(home, gate):
     env = {key: value for key, value in os.environ.items() if not key.startswith("COPILOT_")}
-    gate = ModelGate()
-    threading.Thread(target=gate.serve_forever, daemon=True).start()
     env.update(COPILOT_HOME=str(home), COPILOT_OFFLINE="true", COPILOT_AUTO_UPDATE="false",
                COPILOT_PROVIDER_BASE_URL=f"http://127.0.0.1:{gate.server_port}/v1",
                COPILOT_PROVIDER_TYPE="openai", COPILOT_PROVIDER_API_KEY=os.environ["ARCHESTRA_VIRTUAL_KEY"],
@@ -153,16 +137,27 @@ def run_prompt(task, session_id, home, config, entries):
         value = os.environ.get("ARCHESTRA_AGENT_RUNTIME_" + source, "")
         if value.isdigit() and int(value) > 0:
             env["COPILOT_PROVIDER_" + target] = value
+    return env
+
+
+def client_args(session_id, descriptor):
+    return ["copilot", "--session-id", session_id, "--allow-all",
+            "--disable-builtin-mcps", "--no-auto-update", "--disable-client-telemetry",
+            "--no-remote-export", "--additional-mcp-config", f"@/dev/fd/{descriptor.fileno()}",
+            "--secret-env-vars", "ARCHESTRA_VIRTUAL_KEY,ARCHESTRA_MCP_GATEWAY_TOKEN,ARCHESTRA_AGENT_RUNTIME_BINDING,COPILOT_PROVIDER_API_KEY"]
+
+
+def run_prompt(task, session_id, home, config, entries):
+    gate = ModelGate()
+    threading.Thread(target=gate.serve_forever, daemon=True).start()
+    env = client_environment(home, gate)
     # An unlinked, private descriptor lets the native CLI read its gateway
     # configuration without persisting the bearer token on the workspace PVC.
     with tempfile.TemporaryFile() as descriptor:
         descriptor.write(json.dumps(config).encode())
         descriptor.seek(0)
-        args = ["copilot", "--session-id", session_id, "--prompt", task,
-                "--output-format", "json", "--stream", "on", "--allow-all",
-                "--no-ask-user", "--disable-builtin-mcps", "--no-auto-update",
-                "--disable-client-telemetry", "--no-remote-export", "--no-color",
-                "--additional-mcp-config", f"@/dev/fd/{descriptor.fileno()}"]
+        args = client_args(session_id, descriptor) + ["--prompt", task,
+                "--output-format", "json", "--stream", "on", "--no-ask-user", "--no-color"]
         result = None
         failure = False
         last_answer = ""
@@ -191,7 +186,7 @@ def run_prompt(task, session_id, home, config, entries):
                     gate.ready = data.get("toolCount", 0) > 0
                     if not gate.ready:
                         gate.failed = True
-                elif kind == "session.mcp_server_status_changed" and data.get("serverName") == "archestra" and data.get("status") in ("failed", "error", "disconnected"):
+                elif kind == "session.mcp_server_status_changed" and not gate.ready and data.get("serverName") == "archestra" and data.get("status") in ("failed", "error", "disconnected"):
                     gate.failed = True
                 elif kind == "session.mcp_servers_loaded" and not gate.ready:
                     gate.failed = True
@@ -250,15 +245,7 @@ def run_terminal(task, session_id, home, config, entries, artifact):
     # Read reporting events from disk instead of replacing the UI with JSON.
     gate = ModelGate(validate_catalog=True)
     threading.Thread(target=gate.serve_forever, daemon=True).start()
-    env = {key: value for key, value in os.environ.items() if not key.startswith("COPILOT_")}
-    env.update(COPILOT_HOME=str(home), COPILOT_OFFLINE="true", COPILOT_AUTO_UPDATE="false",
-               COPILOT_PROVIDER_BASE_URL=f"http://127.0.0.1:{gate.server_port}/v1",
-               COPILOT_PROVIDER_TYPE="openai", COPILOT_PROVIDER_API_KEY=os.environ["ARCHESTRA_VIRTUAL_KEY"],
-               COPILOT_MODEL=os.environ["ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL"])
-    for source, target in (("MODEL_CONTEXT_LENGTH", "MAX_PROMPT_TOKENS"), ("MODEL_OUTPUT_LENGTH", "MAX_OUTPUT_TOKENS")):
-        value = os.environ.get("ARCHESTRA_AGENT_RUNTIME_" + source, "")
-        if value.isdigit() and int(value) > 0:
-            env["COPILOT_PROVIDER_" + target] = value
+    env = client_environment(home, gate)
     config["mcpServers"]["archestra"]["url"] = f"http://127.0.0.1:{gate.server_port}/mcp"
     events = home / "session-state" / session_id / "events.jsonl"
     offset = events.stat().st_size if events.exists() else 0
@@ -268,10 +255,7 @@ def run_terminal(task, session_id, home, config, entries, artifact):
         with tempfile.TemporaryFile() as descriptor:
             descriptor.write(json.dumps(config).encode())
             descriptor.seek(0)
-            args = ["copilot", "--session-id", session_id, "--allow-all",
-                    "--disable-builtin-mcps", "--no-auto-update", "--disable-client-telemetry",
-                    "--no-remote-export", "--banner", "--additional-mcp-config", f"@/dev/fd/{descriptor.fileno()}"]
-            args.extend(["--secret-env-vars", "ARCHESTRA_VIRTUAL_KEY,ARCHESTRA_MCP_GATEWAY_TOKEN,ARCHESTRA_AGENT_RUNTIME_BINDING,COPILOT_PROVIDER_API_KEY"])
+            args = client_args(session_id, descriptor) + ["--banner"]
             if task:
                 args.extend(["--interactive", task])
             child = subprocess.Popen(args, env=env, pass_fds=(descriptor.fileno(),))
@@ -369,6 +353,7 @@ class ModelHandler(BaseHTTPRequestHandler):
         target = urllib.parse.urlsplit(os.environ["OPENAI_BASE_URL"])
         connection_type = http.client.HTTPSConnection if target.scheme == "https" else http.client.HTTPConnection
         connection = connection_type(target.hostname, target.port, timeout=600)
+        response_started = False
         try:
             payload = self.rfile.read(int(self.headers.get("Content-Length", "0")))
             if self.server.validate_catalog:
@@ -379,7 +364,6 @@ class ModelHandler(BaseHTTPRequestHandler):
                 if not all(any(function.get("name") == "archestra-" + tool["name"] and
                                tool.get("description", "") in function.get("description", "")
                                for function in tools) for tool in self.server.catalog):
-                    self.server.failed = True
                     self.send_error(503, "Native MCP catalog is missing from inference")
                     return
             headers = {**runtime_headers(), "Content-Type": "application/json",
@@ -390,11 +374,17 @@ class ModelHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", response.getheader("Content-Type", "application/json"))
             self.send_header("Connection", "close")
             self.end_headers()
+            response_started = True
             while chunk := response.read1(65536):
                 self.wfile.write(chunk)
                 self.wfile.flush()
         except (OSError, http.client.HTTPException):
-            self.server.failed = True
+            # Esc closes a native streaming request. A client disconnect or
+            # upstream outage must not turn successful discovery into a fatal
+            # session error. Unforwarded/partial requests remain failed.
+            if not response_started:
+                with contextlib.suppress(OSError):
+                    self.send_error(502, "Model upstream request failed")
         finally:
             connection.close()
             self.close_connection = True
@@ -405,9 +395,11 @@ class ModelHandler(BaseHTTPRequestHandler):
         target = urllib.parse.urlsplit(os.environ["ARCHESTRA_MCP_GATEWAY_URL"])
         connection_type = http.client.HTTPSConnection if target.scheme == "https" else http.client.HTTPConnection
         connection = connection_type(target.hostname, target.port, timeout=600)
+        method = None
         try:
             body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
             request = json.loads(body)
+            method = request.get("method")
             headers = {**runtime_headers(), "Authorization": "Bearer " + os.environ["ARCHESTRA_MCP_GATEWAY_TOKEN"],
                        "Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
             for name in ("Mcp-Session-Id", "MCP-Protocol-Version"):
@@ -432,8 +424,10 @@ class ModelHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(content)
         except (OSError, ValueError, http.client.HTTPException):
-            self.server.failed = True
-            self.send_error(503, "MCP gateway discovery failed")
+            if not self.server.ready or method in ("initialize", "tools/list"):
+                self.server.failed = True
+            with contextlib.suppress(OSError):
+                self.send_error(503, "MCP gateway request failed")
         finally:
             connection.close()
 

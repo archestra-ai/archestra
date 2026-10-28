@@ -222,8 +222,8 @@ environment, and CLI flags; the daily update workflow opens reviewable PRs for
 stable CLI releases at least seven days old and refreshes both architecture
 checksums.
 
-Delegated runs use prompt-mode JSON events and consume pipe steering between
-completed prompts. Both modes export readable transcripts and preserve native
+Delegated runs use prompt-mode JSON events and consume queued terminal or pipe
+steering between completed prompts. Both modes export readable transcripts and preserve native
 sessions; missing native state fails without starting a replacement session.
 Detached work is outside the assignment completion contract.
 

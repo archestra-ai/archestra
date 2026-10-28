@@ -71,10 +71,17 @@ try {
     }
     // An interrupted concurrent index build leaves an invalid index that the
     // rerun would keep. Dropping it concurrently waits for older transactions
-    // but blocks no one, so it gets the same lock_timeout as the build.
-    await client.query("SET lock_timeout = '5min'");
+    // but blocks no one, so it gets the same lock_timeout as the build. It
+    // runs on its own connection: the wait can outlast the lease, which this
+    // connection must keep renewing meanwhile.
+    const maintenance = new pg.Client({
+      connectionString: databaseUrl,
+      connectionTimeoutMillis: 10_000,
+    });
+    await maintenance.connect();
     try {
-      for (const name of await dropInvalidConcurrentIndexes(client, {
+      await maintenance.query("SET lock_timeout = '5min'");
+      for (const name of await dropInvalidConcurrentIndexes(maintenance, {
         migrationsDir,
       })) {
         console.log(
@@ -82,8 +89,10 @@ try {
         );
       }
     } finally {
-      await client.query("RESET lock_timeout");
+      await maintenance.end();
     }
+    // Without the lease, another process may already be migrating.
+    if (heartbeatError) throw heartbeatError;
     child = spawn("./node_modules/.bin/drizzle-kit", ["migrate"], {
       cwd: process.cwd(),
       env: process.env,

@@ -21,6 +21,7 @@
     "test": "vitest",
     "benchmark:queries": "vitest run --config vitest.queries.config.ts",
     "test:migration-upgrades": "node --test scripts/migration-upgrades.test.mjs scripts/migration-tag-upgrades.test.mjs scripts/create-statistics-index.test.mjs scripts/concurrent-index-leftovers.test.mjs",
+    "test:migration-lock:postgres": "node --test scripts/migrate-with-lock.postgres.test.mjs",
     "test:permission-upgrade": "TSX_TSCONFIG_PATH=standalone-scripts.tsconfig.json node --import tsx --test scripts/resource-permissions-upgrade.test.mjs",
     "test:llm-limits:postgres": "tsx --tsconfig standalone-scripts.tsconfig.json src/test/llm-limits/postgres.integration.ts",
     "test:agent-transcripts:postgres": "tsx --tsconfig standalone-scripts.tsconfig.json --test src/test/agent-transcripts.postgres.ts",

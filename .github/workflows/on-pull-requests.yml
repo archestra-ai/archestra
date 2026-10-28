@@ -619,6 +619,15 @@ jobs:
           ARCHESTRA_DATABASE_URL: postgresql://archestra:archestra_ci_password@localhost:5432/archestra_openappa_test
         run: pnpm --dir backend db:migrate
 
+      # Recovering an interrupted concurrent index build can wait longer than
+      # the migration lease lasts; the lease must stay renewed meanwhile. The
+      # test creates and drops its own database on this server.
+      - name: Migration lease tests on real PostgreSQL
+        working-directory: ./platform/backend
+        env:
+          ARCHESTRA_MIGRATION_TEST_DATABASE_URL: postgresql://archestra:archestra_ci_password@localhost:5432/archestra_openappa_test
+        run: pnpm test:migration-lock:postgres
+
       - name: Real PostgreSQL recording replacement tests
         working-directory: ./platform/backend
         env:

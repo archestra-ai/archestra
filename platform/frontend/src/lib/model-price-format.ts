@@ -1,3 +1,5 @@
+import { normalizeModelPrice } from "@archestra/shared/model-price";
+
 /**
  * Render a per-million token price for display.
  *
@@ -11,12 +13,17 @@
  * incoming string, which arrives in exponential form for the smallest prices.
  */
 export function formatPricePerMillion(price: string): string {
+  const stored = normalizeModelPrice(price);
+  if (stored !== null) {
+    const [whole, fraction] = stored.split(".");
+    return `${whole}.${fraction.replace(/0+$/, "").padEnd(2, "0")}`;
+  }
   const parsed = Number(price);
   // `Number("")` is 0, which would render a missing price as free.
   if (price.trim() === "" || !Number.isFinite(parsed)) {
     return price;
   }
-  // 8 decimals matches the precision the API formats to, so nothing is lost.
+  // Provider-published rates outside the custom-price range keep their formatting.
   const significant = parsed.toFixed(8).replace(/0+$/, "");
   const decimals = significant.split(".")[1]?.length ?? 0;
   return parsed.toFixed(Math.max(2, decimals));

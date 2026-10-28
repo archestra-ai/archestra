@@ -29,9 +29,9 @@ import {
   useModelCostBackfillPreview,
   useStartModelCostBackfill,
 } from "@/lib/model-cost-backfill.query";
-import { formatCurrency } from "@/lib/utils/format-currency";
 import { cn } from "@/lib/utils/tailwind";
 import { type ChartDay, CostChart, presetDate } from "./model-cost-chart";
+import { formatModelCost } from "./model-cost-format";
 
 /**
  * "Apply new prices to" on the Pricing page: recompute the recorded cost of
@@ -304,7 +304,7 @@ function formatUsdShort(n: number): string {
       maximumFractionDigits: 0,
     });
   }
-  return formatCurrency(n);
+  return formatModelCost(n);
 }
 
 function OptionCard({
@@ -428,7 +428,7 @@ function StatStrip({
       >
         <span
           className="flex min-w-0 items-center gap-1 text-sm"
-          title={`${formatCurrency(impact.recordedCost)} recorded, ${formatCurrency(impact.recomputedCost)} with the prices above (${deltaLabel})`}
+          title={`${formatModelCost(impact.recordedCost)} recorded, ${formatModelCost(impact.recomputedCost)} with the prices above (${deltaLabel})`}
         >
           <span className="truncate text-muted-foreground">
             {formatUsdShort(impact.recordedCost)}

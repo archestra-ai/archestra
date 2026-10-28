@@ -8,7 +8,10 @@ import {
   OUTPUT_MODALITY_OPTIONS,
   SUPPORTED_EMBEDDING_DIMENSIONS,
 } from "@archestra/shared";
-import { isValidModelPrice } from "@archestra/shared/model-price";
+import {
+  isValidModelPrice,
+  normalizeModelPrice,
+} from "@archestra/shared/model-price";
 import { AlertCircle, Boxes, RotateCcw } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -1084,15 +1087,12 @@ function toBackfillPrices(
       prices[key] = null;
       continue;
     }
-    if (!isValidModelPrice(value)) return null;
-    // The form also accepts "1.", ".5" or "1e2"; the preview takes plain
-    // decimals. Ten places keep the digit that decides the stored rounding.
-    prices[key] = PLAIN_DECIMAL.test(value) ? value : Number(value).toFixed(10);
+    const normalized = normalizeModelPrice(value);
+    if (normalized === null) return null;
+    prices[key] = normalized;
   }
   return prices;
 }
-
-const PLAIN_DECIMAL = /^\d+(\.\d+)?$/;
 
 /**
  * Placeholder for a limit input: the provider's own figure, or a note that it

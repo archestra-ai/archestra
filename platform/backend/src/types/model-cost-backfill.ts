@@ -1,4 +1,5 @@
 import { SupportedProvidersSchema } from "@archestra/shared";
+import { isValidModelPrice } from "@archestra/shared/model-price";
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -112,7 +113,10 @@ export type CostBackfillAvailability = z.infer<
 
 const PriceInputSchema = z
   .string()
-  .regex(/^\d+(\.\d+)?$/, "Must be a non-negative decimal number")
+  .refine(
+    isValidModelPrice,
+    "Prices must be decimal numbers between 0 and 99999999.99",
+  )
   .nullable();
 
 /** Custom prices per million tokens, as typed in the edit form (unsaved). */

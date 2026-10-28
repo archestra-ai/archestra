@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { cn } from "@/lib/utils/tailwind";
 import { TerminalRecordingBlock } from "./terminal-recording-block";
 import { prepareTerminalRecording } from "./terminal-recording-geometry";
@@ -212,6 +219,8 @@ export function TerminalPlayback({
   // while the reader is at the end. A reader who has scrolled up keeps their
   // place through later output and seeks.
   const viewportRef = useRef<HTMLDivElement>(null);
+  const glyphProbeRef = useRef<HTMLSpanElement>(null);
+  const cell = useCellSize(glyphProbeRef);
   const openedAtEnd = useRef(false);
   const atEnd = useRef(true);
   useEffect(() => {
@@ -249,17 +258,26 @@ export function TerminalPlayback({
         data-testid="terminal-playback"
         data-recorded-cols={snapshot?.cols}
         data-recorded-rows={snapshot?.rows}
-        style={
-          wrapLines
-            ? undefined
-            : { minWidth: snapshot ? `max(100%, ${snapshot.cols}ch)` : "100%" }
-        }
+        style={{
+          ...(cell ? { lineHeight: cell.rowHeight } : {}),
+          ...(wrapLines
+            ? {}
+            : {
+                minWidth: snapshot
+                  ? `max(100%, ${cell ? `${snapshot.cols * cell.width}px` : `${snapshot.cols}ch`})`
+                  : "100%",
+              }),
+        }}
       >
+        <span aria-hidden className="pointer-events-none invisible absolute">
+          <span ref={glyphProbeRef}>M</span>
+        </span>
         {blocks.map((block) => (
           <TerminalRecordingBlock
             key={block[0].row}
             lines={block}
             wrapLines={wrapLines}
+            cell={cell}
             virtualize={virtualize}
           />
         ))}
@@ -277,3 +295,48 @@ const MAX_REPLAY_RETRIES = 2;
 const FOLLOW_END_SLACK_PX = 10;
 
 type TerminalRecording = ReturnType<typeof prepareTerminalRecording>;
+
+/**
+ * The cell of xterm's own renderer: the font's glyph box and advance, in px,
+ * and the box as a line height relative to the font. The document's 1.2 line
+ * height is taller than that box, and an inline background or a
+ * line-drawing character covers only the box, so a highlighted block showed
+ * dark seams between its rows and borders and dividers broke into dashes. The
+ * advance is the browser's own, already a whole number of its layout units,
+ * so a run sized in whole cells ends on the same grid however its row is
+ * split. The probe is observed, so a player shown after it mounts is
+ * measured; browser zoom changes the layout units and fires a resize. Null
+ * until measured.
+ */
+function useCellSize(
+  glyphProbeRef: RefObject<HTMLSpanElement | null>,
+): { width: number; height: number; rowHeight: string } | null {
+  const [cell, setCell] = useState<{
+    width: number;
+    height: number;
+    rowHeight: string;
+  } | null>(null);
+  useLayoutEffect(() => {
+    const probe = glyphProbeRef.current;
+    if (!probe) return;
+    const measure = () => {
+      const { height, width } = probe.getBoundingClientRect();
+      const fontSize = Number.parseFloat(getComputedStyle(probe).fontSize);
+      if (height <= 0 || width <= 0 || !(fontSize > 0)) return;
+      setCell((previous) =>
+        previous?.width === width && previous.height === height
+          ? previous
+          : { width, height, rowHeight: `${height / fontSize}em` },
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(probe);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [glyphProbeRef]);
+  return cell;
+}

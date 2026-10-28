@@ -27,6 +27,14 @@ describe("recording geometry", () => {
     );
   });
 
+  it("erases to the line's end on a captured screen's rows only", () => {
+    const screen = `\x1b[2J\x1b[H${size(8, 2)}\x1b[48;5;235mab\ncd\n`;
+    const after = "next turn\nmore\n";
+    expect(prepareTerminalRecording(screen + after).content).toBe(
+      `\x1b[2J\x1b[H${size(8, 2)}\x1b[48;5;235mab\x1b[K\ncd\x1b[K\n${after}`,
+    );
+  });
+
   it("uses the supervisor grid for ordinary text without reliable geometry", () => {
     const content = "A long log line\r\n\x1b[115GRight edge";
     expect(prepareTerminalRecording(content)).toEqual({

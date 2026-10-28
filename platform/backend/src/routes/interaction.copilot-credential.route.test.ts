@@ -1,17 +1,11 @@
-import { generateKeyPairSync } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import InteractionModel from "@/models/interaction";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
-import { encodeGithubAppCredential } from "@/services/github-app-copilot-token";
+import { encodeGithubAppReference } from "@/services/github-app-copilot-token";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-
-const { privateKey } = generateKeyPairSync("rsa", {
-  modulusLength: 2048,
-  privateKeyEncoding: { type: "pkcs1", format: "pem" },
-  publicKeyEncoding: { type: "spki", format: "pem" },
-});
 
 describe("GitHub Copilot credential source in the logs", () => {
   let app: FastifyInstanceWithZod;
@@ -39,12 +33,12 @@ describe("GitHub Copilot credential source in the logs", () => {
     makeSecret,
   }) => {
     const agent = await makeAgent({ organizationId });
-    const appValue = encodeGithubAppCredential({
-      appId: "1",
+    // A plan key stores a reference to its GitHub App credential.
+    const appValue = encodeGithubAppReference({
+      ref: { organizationId, credentialId: randomUUID() },
       installationId: "2",
-      privateKey,
-      githubUrl: "https://github.com",
       organization: "my-org",
+      githubUrl: "https://github.com",
     });
     const appKey = await LlmProviderApiKeyModel.create(
       {

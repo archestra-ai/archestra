@@ -119,6 +119,7 @@ If you restrict the backend's outbound traffic, allow HTTPS (port 443) to these 
 | `auth.openai.com` | Sign-in and token refresh | [`ARCHESTRA_OPENAI_CODEX_ISSUER`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAI_CODEX_ISSUER) |
 | `chatgpt.com` | Chat requests and model lists, at `/backend-api/codex` | [`ARCHESTRA_OPENAI_CODEX_API_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAI_CODEX_API_BASE_URL) |
 
+- Allow them by hostname, not IP address. Both are served from a CDN, so their addresses are shared and can change.
 - If you change either setting, allow the host and port it points to instead.
 - People who sign in also need browser access to the sign-in host to enter the code.
 

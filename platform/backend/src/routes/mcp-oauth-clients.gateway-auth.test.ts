@@ -499,9 +499,16 @@ describe("MCP OAuth client gateway authorization", () => {
       organizationId: org.id,
       name: "key",
     });
-    expect(
-      await new A2AManager().resolveActorByMCPGatewayToken(gateway.id, token),
-    ).toEqual(
+    const oauthActor = await new A2AManager().resolveActorByMCPGatewayToken(
+      gateway.id,
+      token,
+    );
+    const { oauthExecution, ...owner } = oauthActor;
+    expect(oauthExecution).toMatchObject({
+      clientId: oauthClient.clientId,
+      serviceAccountId: account.id,
+    });
+    expect(owner).toEqual(
       await new A2AManager().resolveActorByMCPGatewayToken(
         gateway.id,
         accountToken.token,

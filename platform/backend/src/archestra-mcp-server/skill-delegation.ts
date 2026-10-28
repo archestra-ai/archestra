@@ -248,6 +248,7 @@ export async function handleSkillDelegation(
     const result = await executeA2AMessage({
       agentId: target.id,
       message: delegatedMessage,
+      oauthExecution: tokenAuth?.oauthExecution,
       organizationId,
       userId,
       sessionId,

@@ -22,6 +22,7 @@ import {
   type streamText,
   type ToolSet,
 } from "ai";
+import { authorizeA2AModel } from "@/agents/a2a/oauth-model";
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
 import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
@@ -60,6 +61,10 @@ import { usesStepPromptCache } from "@/routes/chat/normalization/apply-prompt-ca
 import { prepareMessagesForProvider } from "@/routes/chat/normalization/prepare-for-provider";
 import { buildOllamaNativeProviderOptions } from "@/routes/chat/ollama-native-params";
 import { createToolCallRepair } from "@/routes/chat/tool-call-repair";
+import {
+  type A2AOAuthExecution,
+  authorizeA2AOAuthExecution,
+} from "@/routes/mcp-gateway/utils";
 import { assertCallerMayStartTurn } from "@/services/agent-credential-readiness";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
@@ -141,6 +146,7 @@ interface A2AExecuteParamsBase {
 
   organizationId: string;
   userId: string;
+  oauthExecution?: A2AOAuthExecution;
   /** Session ID to group related LLM requests together in logs */
   sessionId?: string;
   /** Interaction source for tracking request origin in logs */
@@ -299,6 +305,16 @@ export async function executeA2AMessage(
   }
 
   // Fetch the internal agent
+  const authorizeOAuthExecution = async () => {
+    if (params.oauthExecution) {
+      await authorizeA2AOAuthExecution({
+        agentId,
+        organizationId,
+        execution: params.oauthExecution,
+      });
+    }
+  };
+  await authorizeOAuthExecution();
   const agent = await AgentModel.findById(agentId);
   if (!agent) {
     throw new Error(`Agent ${agentId} not found`);
@@ -373,6 +389,7 @@ export async function executeA2AMessage(
     // Fetch MCP tools for the agent (including delegation tools)
     // Pass sessionId, delegationChain, and isolationKey for browser tab isolation
     const mcpTools = await getChatMcpTools({
+      oauthExecution: params.oauthExecution,
       agentName: agent.name,
       agentId: agent.id,
       userId,
@@ -428,20 +445,31 @@ export async function executeA2AMessage(
     // Pass sessionId to group A2A requests with the calling session
     // Pass delegationChain as externalAgentId so agent names appear in logs
     // Pass the resolved key so it can be used without user access check
-    const { model, anthropicNativeEndpoint, chatApiKeyId } =
-      await createLLMModelForAgent({
+    const {
+      model: providerModel,
+      anthropicNativeEndpoint,
+      chatApiKeyId,
+    } = await createLLMModelForAgent({
+      organizationId,
+      userId,
+      agentId: agent.id,
+      model: selectedModel,
+      provider,
+      sessionId,
+      source,
+      externalAgentId: delegationChain,
+      agentLlmApiKeyId: llmApiKeyId,
+      modelPoolId,
+      appaSubagentToken: params.appaSubagent?.token,
+    });
+    const authorizeModel = (model: typeof providerModel) =>
+      authorizeA2AModel({
+        model,
+        agentId,
         organizationId,
-        userId,
-        agentId: agent.id,
-        model: selectedModel,
-        provider,
-        sessionId,
-        source,
-        externalAgentId: delegationChain,
-        agentLlmApiKeyId: llmApiKeyId,
-        modelPoolId,
-        appaSubagentToken: params.appaSubagent?.token,
+        execution: params.oauthExecution,
       });
+    const model = authorizeModel(providerModel);
 
     // Which attachment mime types this model can read. A missing model row
     // (lookup failure or unknown model) falls back to the safe default set
@@ -561,6 +589,22 @@ export async function executeA2AMessage(
         openAiReasoningSummaryKey,
       ));
 
+    const stepContextGuard = createStepContextGuard({
+      model,
+      contextLength: modelRow
+        ? ModelModel.resolveEffectiveContextLength(modelRow)
+        : null,
+      systemPrompt,
+      abortSignal,
+      logContext: { agentId: agent.id, sessionId },
+      ...(usesStepPromptCache({ provider, anthropicNativeEndpoint }) && {
+        promptCache: {
+          provider,
+          model: selectedModel,
+          anthropicNativeEndpoint,
+        },
+      }),
+    });
     const baseConfig = {
       model,
       system: systemPrompt,
@@ -585,22 +629,26 @@ export async function executeA2AMessage(
         ...(abortSignal && { abortSignal }),
         // Its own interaction source, so a re-ask stays distinguishable from
         // the turn that provoked it.
-        createRepairModel: async () =>
-          (
-            await createLLMModelForAgent({
-              organizationId,
-              userId,
-              agentId: agent.id,
-              model: selectedModel,
-              provider,
-              sessionId,
-              source: "a2a:tool_call_repair",
-              externalAgentId: delegationChain,
-              agentLlmApiKeyId: llmApiKeyId,
-              modelPoolId,
-              appaSubagentToken: params.appaSubagent?.token,
-            })
-          ).model,
+        createRepairModel: async () => {
+          await authorizeOAuthExecution();
+          return authorizeModel(
+            (
+              await createLLMModelForAgent({
+                organizationId,
+                userId,
+                agentId: agent.id,
+                model: selectedModel,
+                provider,
+                sessionId,
+                source: "a2a:tool_call_repair",
+                externalAgentId: delegationChain,
+                agentLlmApiKeyId: llmApiKeyId,
+                modelPoolId,
+                appaSubagentToken: params.appaSubagent?.token,
+              })
+            ).model,
+          );
+        },
       }),
       // Per-transport shape for the output budget resolved above.
       // - Native Ollama discards the top-level `maxOutputTokens` and reads the
@@ -649,26 +697,12 @@ export async function executeA2AMessage(
       // the older prefix into an LLM summary when it overflows. Overrides only
       // what each step sends to the model — the loop's own state (and the
       // persisted/streamed UIMessage) keeps the full tool outputs.
-      prepareStep: createStepContextGuard({
-        model,
-        contextLength: modelRow
-          ? ModelModel.resolveEffectiveContextLength(modelRow)
-          : null,
-        systemPrompt,
-        abortSignal,
-        logContext: { agentId: agent.id, sessionId },
-        // runAgentStream marks only the initial messages. Without a breakpoint
-        // that moves with the tool loop, every later step pays the full input
-        // price for all earlier tool calls and results. Same providers as the
-        // chat route.
-        ...(usesStepPromptCache({ provider, anthropicNativeEndpoint }) && {
-          promptCache: {
-            provider,
-            model: selectedModel,
-            anthropicNativeEndpoint,
-          },
-        }),
-      }),
+      prepareStep: async (step: { messages: ModelMessage[] }) => {
+        await authorizeOAuthExecution();
+        const prepared = await stepContextGuard(step);
+        await authorizeOAuthExecution();
+        return prepared;
+      },
     };
     const currentTurn: { role: "user"; content: UserContent } | null =
       userContent !== null

@@ -4,7 +4,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { internalCallProvenance } from "@/clients/internal-call";
+import { a2aOAuthExecutionReference } from "@/clients/a2a-oauth-execution";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -61,7 +61,7 @@ export const createFastifyInstance = () => {
     .setSerializerCompiler(serializerCompiler)
     .addHook("onRequest", (request, _reply, done) => {
       prepareAzureProxyIngress(request);
-      internalCallProvenance(request);
+      a2aOAuthExecutionReference(request);
       incomingRequestAbortTracker.observe(request.raw);
       done();
     })

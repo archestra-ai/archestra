@@ -1,7 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { render, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   ChatProvider,
@@ -167,6 +167,11 @@ describe("phantom assistant messages", () => {
     }, [session]);
     return null;
   }
+
+  beforeAll(async () => {
+    // Load the real lazy SDK hook before timing the stream behavior.
+    await import("./chat-session-hook");
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();

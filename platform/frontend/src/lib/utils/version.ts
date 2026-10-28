@@ -1,11 +1,5 @@
+import { normalizeVersion } from "@archestra/shared/version";
 import semver from "semver";
-
-/**
- * Cleans a version string by stripping common prefixes like "platform-" and "v".
- */
-function cleanVersionString(version: string): string {
-  return version.replace(/^platform-/, "").replace(/^v/, "");
-}
 
 /**
  * Determines whether a newer version is available by comparing the current version
@@ -17,8 +11,8 @@ export function hasNewerVersion(
   currentVersion: string,
   latestTagName: string,
 ): boolean {
-  const current = cleanVersionString(currentVersion);
-  const latest = cleanVersionString(latestTagName);
+  const current = normalizeVersion(currentVersion);
+  const latest = normalizeVersion(latestTagName);
 
   const parsedCurrent = semver.valid(current);
   const parsedLatest = semver.valid(semver.coerce(latest));

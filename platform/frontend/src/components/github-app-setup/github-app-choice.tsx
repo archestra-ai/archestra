@@ -1,8 +1,11 @@
 "use client";
 
 import { KeyRound, Plus } from "lucide-react";
-import { ChoiceTile, TileIcon } from "@/components/git/git-setup-chrome";
-import { cn } from "@/lib/utils/tailwind";
+import {
+  ChoiceTile,
+  ChoiceTiles,
+  TileIcon,
+} from "@/components/git/git-setup-chrome";
 import { AppIconStack } from "./app-icon-stack";
 
 /**
@@ -27,12 +30,7 @@ export function GithubAppChoice({
   onConnectByKey?: () => void;
 }) {
   return (
-    <div
-      className={cn(
-        "grid gap-3",
-        onConnectByKey ? "sm:grid-cols-3" : "sm:grid-cols-2",
-      )}
-    >
+    <ChoiceTiles columns={onConnectByKey ? 3 : 2}>
       <ChoiceTile
         disabled={icons.length === 0}
         onClick={onUseExisting}
@@ -44,9 +42,9 @@ export function GithubAppChoice({
         onClick={onCreate}
         disabled={!canCreate}
         visual={
-          <span className="flex size-9 items-center justify-center rounded-lg border border-dashed">
+          <TileIcon dashed>
             <Plus className="size-4 text-muted-foreground" />
-          </span>
+          </TileIcon>
         }
         title="Create a new GitHub App"
         body={
@@ -67,6 +65,6 @@ export function GithubAppChoice({
           body={`For an App that isn't connected to ${appName} yet.`}
         />
       ) : null}
-    </div>
+    </ChoiceTiles>
   );
 }

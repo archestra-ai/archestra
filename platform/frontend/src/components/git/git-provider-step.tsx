@@ -1,7 +1,12 @@
 "use client";
 
 import type { GitProvider } from "@archestra/shared";
-import { ChoiceTile, GitProviderLogo, TileIcon } from "./git-setup-chrome";
+import {
+  ChoiceTile,
+  ChoiceTiles,
+  GitProviderLogo,
+  TileIcon,
+} from "./git-setup-chrome";
 
 /** First step of every Git setup: where the repository lives. */
 export function GitProviderStep({
@@ -10,7 +15,7 @@ export function GitProviderStep({
   onPick: (provider: GitProvider) => void;
 }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <ChoiceTiles>
       <ChoiceTile
         onClick={() => onPick("github")}
         visual={
@@ -31,6 +36,6 @@ export function GitProviderStep({
         title="GitLab"
         body="gitlab.com or self-managed GitLab."
       />
-    </div>
+    </ChoiceTiles>
   );
 }

@@ -23,7 +23,11 @@ import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { GitAccessStep } from "@/components/git/git-access-step";
 import { GitProviderStep } from "@/components/git/git-provider-step";
-import { ChoiceTile, SetupStepper } from "@/components/git/git-setup-chrome";
+import {
+  ChoiceTile,
+  ChoiceTiles,
+  SetupStepper,
+} from "@/components/git/git-setup-chrome";
 import { AccessSummary } from "@/components/github-app-setup/access-summary";
 import { AccountChip } from "@/components/github-app-setup/account-chip";
 import { GithubAppChoice } from "@/components/github-app-setup/github-app-choice";
@@ -605,7 +609,7 @@ export function GithubSyncSetupDialog({
       ) : null}
 
       {step === "start" && !origin ? (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <ChoiceTiles>
           <ChoiceTile
             disabled={!ready}
             onClick={() => setOrigin("fresh")}
@@ -635,7 +639,7 @@ export function GithubSyncSetupDialog({
             title="Use an existing repository"
             body="One that already holds an OpenAPPA policy."
           />
-        </div>
+        </ChoiceTiles>
       ) : null}
 
       {step === "start" && origin === "fresh" ? (

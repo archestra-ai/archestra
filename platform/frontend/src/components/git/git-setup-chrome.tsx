@@ -20,7 +20,35 @@ import { cn } from "@/lib/utils/tailwind";
  * thin stepper, choice tiles, and a closed-by-default "Advanced" fold.
  */
 
-/** A big clickable choice. Clicking it moves the setup on. */
+/**
+ * A row of choice tiles: two or three side by side from sm up, stacked below.
+ * Each tile spans three shared rows (visual, title, body), so icons, titles
+ * and bodies line up across tiles even when one title wraps.
+ */
+export function ChoiceTiles({
+  columns = 2,
+  children,
+}: {
+  columns?: 2 | 3;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "grid gap-3",
+        columns === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * A big clickable choice. Clicking it moves the setup on. Place it in
+ * `ChoiceTiles`; its visual sits in a fixed 36px slot, empty when there is
+ * nothing to show.
+ */
 export function ChoiceTile({
   onClick,
   disabled = false,
@@ -40,14 +68,12 @@ export function ChoiceTile({
       disabled={disabled}
       className={cn(
         radioCardClass(),
-        "group flex flex-col items-start gap-6 rounded-lg p-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60",
+        "group row-span-3 grid grid-rows-subgrid items-start gap-0 rounded-lg p-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60",
       )}
     >
-      {visual}
-      <span className="space-y-1">
-        <span className="block text-sm font-medium">{title}</span>
-        <span className="block text-xs text-muted-foreground">{body}</span>
-      </span>
+      <span className="mb-6 flex h-9 items-center">{visual}</span>
+      <span className="mb-1 block text-sm font-medium">{title}</span>
+      <span className="block text-xs text-muted-foreground">{body}</span>
     </UnstyledButton>
   );
 }

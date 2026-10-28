@@ -15,7 +15,11 @@ import { MANAGED_INSTRUCTIONS_REFRESH_WINDOWS } from "../payloads/managed-instru
 import { OPENCODE_HANDOFF_PLUGIN } from "../payloads/opencode-handoff";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
 import { psq } from "../steps/quoting";
-import type { StartupGuardClient, StartupGuardContext } from "./startup-guard";
+import {
+  type StartupGuardClient,
+  type StartupGuardContext,
+  startupGuardUnreachableWarning,
+} from "./startup-guard";
 
 /**
  * PowerShell counterpart of the client-agnostic POSIX startup guard renderer in
@@ -260,6 +264,11 @@ function Write-Arch([string]$Text, [string]$Color, [switch]$NoNewline) {
 # the body lands in $Script:HealthBody for per-resource markers.
 $Script:HealthBody = ''
 $Script:HealthState = ''  # 'ok' | 'down' | '' (no health URL)
+function Write-ArchUnreachableWarning {
+  if ($Script:HealthState -eq 'down' -and -not $Script:GuardUninstalled) {
+    [Console]::Error.WriteLine((ConvertTo-ArchConsole ${psq(startupGuardUnreachableWarning(ctx, client))}))
+  }
+}
 function Invoke-ArchHealthFetch {
   try {
     $resp = Invoke-WebRequest -Uri $HealthUrl -Method Get -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
@@ -307,6 +316,7 @@ if (-not $Interactive -and -not $ArchDisconnectAll) {
   if ($HealthUrl) {
     if (-not (Invoke-ArchHealthFetch)) { $Script:HealthState = 'down' }
   }
+  Write-ArchUnreachableWarning
   foreach ($r in $ActiveRemotes) {
     if (Test-ArchResourceDown $r) {
       [Console]::Error.WriteLine((ConvertTo-ArchConsole ('archestra: failed to connect to ' + $r.FailName + ' — ${client.binary} is configured to use it and may fail. Disconnect it from the ' + $AppName + ' /connection page, or run ${client.binary} interactively to be offered a disconnect.')))
@@ -869,14 +879,14 @@ function Wait-ArchHealth {
 }
 
 # The whole pre-loader draws on the terminal's alternate screen — the same
-# way claude itself does — so nothing lingers in the scrollback after claude
-# exits. When the launch needed attention, the outcome is held briefly
-# before the alternate screen closes over it.
+# way claude itself does. Keep unreachable-instance diagnostics after restoring
+# the normal screen, alongside any later client connection error.
 $Script:AltScreen = $UseVt
 $Script:Dwell = $false
 function Exit-ArchGuard {
   if ($Script:Dwell) { Start-Sleep -Milliseconds 1200 }
   if ($Script:AltScreen) { Write-Host -NoNewline ("$Esc[?1049l") }
+  Write-ArchUnreachableWarning
 }
 if ($Script:AltScreen) { Write-Host -NoNewline ("$Esc[?1049h$Esc[H$Esc[2J") }
 else { try { Clear-Host } catch { } }

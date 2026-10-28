@@ -27,6 +27,7 @@ jobs:
       contents: read # Required to checkout scan policy and image sources.
     outputs:
       scan: ${{ steps.policy.outputs.scan }}
+      matrix: ${{ steps.policy.outputs.matrix }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,30 +42,14 @@ jobs:
     name: Scan release candidate (${{ matrix.image }})
     needs: [classify]
     if: ${{ needs.classify.outputs.scan == 'true' }}
-    runs-on: ubuntu-latest
+    # Build every amd64 candidate on a native Blacksmith runner in parallel.
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     timeout-minutes: 45
     permissions:
       contents: read # Required to checkout scan policy and image sources.
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - image: platform
-            context: ./platform
-            dockerfile: ./platform/Dockerfile
-            target: ""
-          - image: platform-slim
-            context: ./platform
-            dockerfile: ./platform/Dockerfile
-            target: unified-slim
-          - image: mcp-server-base
-            context: ./platform/mcp_server_docker_image
-            dockerfile: ./platform/mcp_server_docker_image/Dockerfile
-            target: ""
-          - image: p4-shim
-            context: ./platform/p4_shim_docker_image
-            dockerfile: ./platform/p4_shim_docker_image/Dockerfile
-            target: ""
+      matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}
     steps:
       - name: Reclaim disk space (background)
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
@@ -134,7 +119,7 @@ jobs:
   required-contexts:
     name: Docker Image Scanning (${{ matrix.name }})
     needs: [release-image-security]
-    if: ${{ always() && github.event_name != 'merge_group' }}
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -150,7 +135,7 @@ jobs:
   legacy-required-context:
     name: ${{ format('Docker Image Scanning ({0}{1}{1} matrix.name {2}{2})', '$', '{', '}') }} # zizmor: ignore[obfuscation] literal legacy required context contains Actions delimiters
     needs: [release-image-security]
-    if: ${{ always() && github.event_name != 'merge_group' }}
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
       - name: Require release image security decision
@@ -178,42 +163,3 @@ jobs:
           image-sha: ${{ inputs.image-sha }}
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
-  # E2E has no p4 image to reuse, so this small scan still builds locally on
-  # merge_group. Platform and MCP are deliberately absent from this job: their
-  # required checks are emitted by platform-e2e-tests.yml after the exact
-  # tested images are available.
-  merge-queue-p4-image-scanning:
-    name: Docker Image Scanning (p4 Shim)
-    if: ${{ github.event_name == 'merge_group' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - name: Reclaim disk space (background)
-        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
-
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Build p4 Shim image
-        uses: ./.github/actions/build-docker-image
-        with:
-          context: ./platform/p4_shim_docker_image
-          dockerfile: ./platform/p4_shim_docker_image/Dockerfile
-          platforms: linux/amd64
-          push: "false"
-          load: "true"
-          tags: p4-shim:${{ github.sha }}
-          cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:buildcache-amd64
-
-      - name: Scan image for CVEs
-        uses: ./.github/actions/scan-docker-image
-        with:
-          image: p4-shim:${{ github.sha }}
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
-          exit-code: "true"

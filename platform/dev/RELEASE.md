@@ -8,9 +8,21 @@ Archestra uses two release pipelines:
 
 ## Image CVE Gate
 
-Release Please PRs scan the exact candidate Platform full/slim, MCP and p4 images before queue entry. Release publication additionally scans every immutable architecture digest for all image families before assigning version tags. Scan, classification, build, API or digest-provenance errors block publication. The existing fixable critical/high threshold remains unchanged.
+Release Please PR updates on `main` and `release/X.Y` must pass image scanning before queue entry. Every update builds the Platform full/slim, MCP Server Base, and p4 Shim candidates from that event's synthetic merge commit. A successful scan applies only to that PR head, base, and merge candidate; a changed revision requires a new run. An API error, build error, scanner error, cancellation, or missing result blocks the gate. The policy remains fixable critical/high CVEs.
 
-The 1.3 merge queue retains its existing Platform, MCP and p4 image scans. Compatibility check names are emitted by only one owner on each event, so a skipped or passing duplicate cannot mask a failed scan. Stable artifacts still require independent qualification and environment approval.
+Ordinary PRs and merge groups report an explicit no-scan decision. Source/dependency security checks, builds, tests, and E2E checks still run under their existing policies. For an ad hoc byte scan, use **Docker Image Scanning** workflow dispatch with the exact E2E image SHA; the former `run-docker-scan` label does not trigger scans.
+
+Release builds independently scan the exact immutable per-architecture digests before assigning version tags. This includes all published Platform, MCP, p4, Sandbox Base, and Agent Catalog images on both release tracks. Digest artifacts must come from the same workflow run and source revision and contain the complete expected architecture set. Release builds do not reuse previously tagged images or prior scan results. A failure prevents that image's version tag and blocks GitHub release publication; successful sibling builds and the prerelease chart may already exist, so use the existing same-run recovery procedure. Stable publication still requires separate artifact qualification and environment approval. Untagged build digests are uploaded before scanning so Scout can inspect them.
+
+### Roll Out Required Checks
+
+The workflow preserves `Docker Image Scanning (Platform)`, `Docker Image Scanning (MCP Server Base)`, `Docker Image Scanning (p4 Shim)`, and the historical literal `Docker Image Scanning (${{ matrix.name }})` contexts. Each depends on the always-running **Release Image Security** gate. A release scan skipped after a failed prerequisite cannot satisfy these contexts. No repository protection change is required to adopt this compatibility bridge.
+
+1. Merge the workflow change through the current protections. Backport the release tooling to each supported stable branch through its normal protected PR process; changing `main` alone does not update an existing stable branch's workflows.
+2. Verify the contexts on an ordinary PR, a Release Please PR update, and a merge group on each track. A release PR must perform real scans; a scan or classification failure must leave the gate and compatibility contexts failed.
+3. In a separately approved settings change, replace only the legacy Docker scan contexts with **Release Image Security**, using the existing GitHub Actions integration. Preserve every unrelated required check and queue setting. Keep the compatibility jobs until all applicable rulesets have been read back and verified; remove them in a subsequent PR.
+
+These workflow changes do not fix or suppress current vulnerabilities. Diagnose and repair any blocked release in a separate dependency or image PR.
 
 ## Release A Beta
 

@@ -38,9 +38,9 @@ Production apps that need persistent browser storage require a sandbox domain. W
 
 Allowed embedding origins follow [`ARCHESTRA_FRONTEND_URL`](/docs/admin/deployment/configuration#ARCHESTRA_FRONTEND_URL) and [`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS). Local instances use `localhost` and `127.0.0.1` without a sandbox domain.
 
-## Backend Egress
+## Allow Backend Egress
 
-If you restrict the backend's outbound traffic, allow the endpoint of each model provider you use. A ChatGPT subscription needs [its own hosts](/docs/llm-proxy/providers#chatgpt-egress-hosts).
+If you restrict the backend's outbound traffic, allow each model provider's endpoint, listed under [LLM Provider Configuration](/docs/admin/deployment/configuration#llm-providers). A ChatGPT subscription needs [its own hosts](/docs/llm-proxy/providers#chatgpt-subscription-egress).
 
 ## Enforce Workload Egress
 

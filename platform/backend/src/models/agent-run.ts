@@ -5,7 +5,6 @@ import {
   desc,
   eq,
   getTableColumns,
-  gte,
   ilike,
   inArray,
   isNotNull,
@@ -621,7 +620,8 @@ class AgentRunModel {
           params.failedSince
             ? and(
                 eq(schema.a2aTasksTable.state, "TASK_STATE_FAILED"),
-                gte(schema.a2aTasksTable.stateChangedAt, params.failedSince),
+                // Bind UTC wall time explicitly for the timezone-less column.
+                sql`${schema.a2aTasksTable.stateChangedAt} >= ${params.failedSince.toISOString()}`,
               )
             : undefined,
           // Alert correlation needs historical failed turns; normal lists keep

@@ -33,11 +33,7 @@ import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
-import {
-  decodeGithubAppCredential,
-  decodeGithubAppReference,
-  githubAppOrganization,
-} from "@/services/github-app-copilot-token";
+import { decodeGithubAppReference } from "@/services/github-app-copilot-token";
 import type {
   InsertLlmProviderApiKey,
   LlmProviderApiKey,
@@ -1950,8 +1946,8 @@ export default LlmProviderApiKeyModel;
 
 /**
  * The GitHub organization a GitHub App key is installed on, read from its
- * credential (or looked up once for keys stored before it was recorded). Null
- * for every other key; the credential itself never leaves this function.
+ * stored reference. Null for every other key; the credential itself never
+ * leaves this function.
  */
 async function githubOrganizationOf(key: {
   secretId: string | null;
@@ -1964,10 +1960,9 @@ async function githubOrganizationOf(key: {
     const value = key.secretIsVault
       ? await getSecretValueForLlmProviderApiKey(key.secretId)
       : readApiKeyValue(key.secret);
-    const reference = decodeGithubAppReference(value as string | null);
-    if (reference) return reference.organization;
-    const credential = decodeGithubAppCredential(value as string | null);
-    return credential ? await githubAppOrganization(credential) : null;
+    return (
+      decodeGithubAppReference(value as string | null)?.organization ?? null
+    );
   } catch {
     return null;
   }

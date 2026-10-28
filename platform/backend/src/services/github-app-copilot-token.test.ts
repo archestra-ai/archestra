@@ -5,7 +5,6 @@ import {
   encodeGithubAppCredential,
   type GithubAppCredential,
   githubAppKeyFingerprint,
-  githubAppOrganization,
   validateGithubAppPrivateKey,
 } from "@/services/github-app-copilot-token";
 import { createGithubCopilotFetch } from "@/services/github-copilot-token";
@@ -58,7 +57,7 @@ describe("GitHub App credential marker", () => {
     expect(decodeGithubAppCredential(encoded)).toEqual(credential);
   });
 
-  test("still decodes a preview key without address or organization", () => {
+  test("decodes an embedded App without address or organization", () => {
     const legacy = `github-app:${Buffer.from(
       JSON.stringify({ appId: "1", installationId: "2", privateKey }),
     ).toString("base64url")}`;
@@ -101,23 +100,6 @@ describe("githubAppKeyFingerprint", () => {
       expect((error as ApiError).statusCode).toBe(400);
       expect((error as Error).message).not.toContain("secret-not-a-pem");
     }
-  });
-});
-
-describe("githubAppOrganization", () => {
-  test("looks up a preview key's organization from its installation", async () => {
-    const credential = uniqueCredential({ organization: undefined });
-    const fetchMock = vi.fn(async (_input: unknown) =>
-      Response.json({ account: { login: "my-org" } }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    expect(await githubAppOrganization(credential)).toBe("my-org");
-    expect(await githubAppOrganization(credential)).toBe("my-org");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-      `https://api.github.com/app/installations/${credential.installationId}`,
-    );
   });
 });
 

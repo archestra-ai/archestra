@@ -19,15 +19,12 @@ import {
 } from "@/secrets-manager";
 import { setRuntimeCredentialConnection } from "@/services/agent-runtime/runtime-credentials";
 import {
-  decodeGithubAppCredential,
   decodeGithubAppReference,
   encodeGithubAppCredential,
   encodeGithubAppReference,
   forgetGithubAppReference,
-  type GithubAppCredential,
   githubAppApiBase,
   githubAppKeyFingerprint,
-  githubAppOrganization,
   githubWebFromApi,
   resolveGithubAppCredential,
   validateGithubAppPrivateKey,
@@ -339,17 +336,15 @@ class CopilotGithubAppSetup {
     const stored = await this.storedValue(params, "read");
     const reference = decodeGithubAppReference(stored.value);
     const credential = await resolveGithubAppCredential(stored.value);
-    if (!credential)
+    if (!reference || !credential)
       throw new ApiError(
         400,
         "The stored GitHub App credential is unreadable.",
       );
-    const definition = reference
-      ? await RuntimeCredentialDefinitionModel.findById({
-          id: reference.ref.credentialId,
-          organizationId: reference.ref.organizationId,
-        })
-      : null;
+    const definition = await RuntimeCredentialDefinitionModel.findById({
+      id: reference.ref.credentialId,
+      organizationId: reference.ref.organizationId,
+    });
     // GitHub's page for the App; the stored credential holds no link to it.
     const app = await fetchAsGithubApp<{ name?: string; html_url?: string }>({
       githubUrl: githubAppApiBase(credential),
@@ -358,7 +353,7 @@ class CopilotGithubAppSetup {
       path: "/app",
     }).catch(() => null);
     return {
-      organization: await githubAppOrganization(credential),
+      organization: reference.organization,
       appId: credential.appId,
       appName: definition?.name ?? app?.name ?? null,
       appIcon: definition?.icon ?? null,
@@ -369,27 +364,19 @@ class CopilotGithubAppSetup {
   }
 
   /**
-   * Replace the App's private key. A key that references a GitHub App
-   * credential updates that credential, so every use of the App gets it;
-   * a preview key that embeds the App is rewritten.
+   * Replace the App's private key in the GitHub App credential the key uses,
+   * so every use of the App gets it.
    */
   async replacePrivateKey(
     params: Owner & { keyId: string; privateKey: string },
   ) {
     const stored = await this.storedValue(params, "update");
     const reference = decodeGithubAppReference(stored.value);
-    if (!reference) {
-      const embedded = decodeGithubAppCredential(stored.value);
-      if (!embedded)
-        throw new ApiError(
-          400,
-          "The stored GitHub App credential is unreadable.",
-        );
-      return this.connectByKeyEmbedded({
-        ...params,
-        credential: embedded,
-      });
-    }
+    if (!reference)
+      throw new ApiError(
+        400,
+        "The stored GitHub App credential is unreadable.",
+      );
     const definition = await RuntimeCredentialDefinitionModel.findById({
       id: reference.ref.credentialId,
       organizationId: params.organizationId,
@@ -447,47 +434,6 @@ class CopilotGithubAppSetup {
       ...params,
       apiKey: encodeGithubAppReference(params.reference),
       organization: params.reference.organization,
-    });
-  }
-
-  /** A preview key that embeds its App, given a new private key. */
-  private async connectByKeyEmbedded(
-    params: Owner & {
-      keyId: string;
-      privateKey: string;
-      credential: GithubAppCredential;
-    },
-  ) {
-    const { privateKey } = validateGithubAppPrivateKey({
-      appId: params.credential.appId,
-      privateKey: params.privateKey,
-    });
-    const organization =
-      (await githubAppOrganization(params.credential)) ??
-      params.credential.organization;
-    if (!organization)
-      throw new ApiError(
-        400,
-        "The App's organization is unknown. Use Reconnect to choose an App.",
-      );
-    const installation = await findInstallation({
-      api: githubAppApiBase(params.credential),
-      appId: params.credential.appId,
-      privateKey,
-      login: organization,
-      appName: `App ${params.credential.appId}`,
-    });
-    assertCopilotRequests(installation, organization);
-    return this.storeKey({
-      ...params,
-      replaceKeyId: params.keyId,
-      organization,
-      apiKey: encodeGithubAppCredential({
-        ...params.credential,
-        privateKey,
-        installationId: String(installation.id),
-        organization,
-      }),
     });
   }
 
@@ -622,7 +568,7 @@ class CopilotGithubAppSetup {
     return key;
   }
 
-  /** The key's stored value (a reference, or a preview key's embedded App). */
+  /** The key's stored value: a reference to its GitHub App credential. */
   private async storedValue(
     params: Owner & { keyId: string },
     action: "read" | "update",
@@ -657,17 +603,12 @@ class CopilotGithubAppSetup {
       "update",
     );
     const reference = decodeGithubAppReference(value);
-    if (reference) return `${reference.githubUrl}/${reference.organization}`;
-    const embedded = decodeGithubAppCredential(value);
-    const organization = embedded
-      ? (embedded.organization ?? (await githubAppOrganization(embedded)))
-      : null;
-    if (!embedded || !organization)
+    if (!reference)
       throw new ApiError(
         400,
-        "The App's organization is unknown. Disconnect it and connect it again.",
+        "The stored GitHub App credential is unreadable.",
       );
-    return `${embedded.githubUrl ?? "https://github.com"}/${organization}`;
+    return `${reference.githubUrl}/${reference.organization}`;
   }
 }
 

@@ -3,12 +3,11 @@
  *
  * An organization can let a GitHub App (organization permission "Copilot
  * Requests") call Copilot on its behalf, billed to the organization. The key
- * stores a marker-encoded value that references the App's GitHub App
- * credential (the organization's runtime credentials), with the installation on the
- * organization. Keys from the preview embed the App's private key instead and
- * keep working. Installation tokens (`ghs_…`)
- * come from the shared GitHub App helpers and are sent to Copilot as a Bearer
- * with the Copilot runtime's integration id.
+ * stores a marker-encoded reference to the App's GitHub App credential (one
+ * of the organization's runtime credentials) and its installation on the
+ * organization. Installation tokens (`ghs_…`) come from the shared GitHub App
+ * helpers and are sent to Copilot as a Bearer with the Copilot runtime's
+ * integration id.
  */
 import { createHash, createPrivateKey, createPublicKey } from "node:crypto";
 import {
@@ -29,7 +28,7 @@ export interface GithubAppCredential {
   appId: string;
   installationId: string;
   privateKey: string;
-  /** GitHub web address. Absent on preview keys: https://github.com. */
+  /** GitHub web address. Absent means https://github.com. */
   githubUrl?: string;
   /** Login of the organization the App is installed on. */
   organization?: string;
@@ -91,8 +90,9 @@ export function decodeGithubAppReference(
 }
 
 /**
- * The App a key's value signs in as: embedded in the value (preview keys), or
- * read from the referenced GitHub App credential. Null for a value that is no
+ * The App a key's value signs in as: read from the referenced GitHub App
+ * credential, or embedded in the value (the in-memory form used to read a new
+ * App's models before it is saved). Null for a value that is no
  * GitHub App marker. Throws a 400 when the referenced credential or its
  * connection is gone, which the fetch path turns into a reconnect.
  */
@@ -162,6 +162,7 @@ export function encodeGithubAppCredential(
   return `${GITHUB_APP_CREDENTIAL_MARKER}${Buffer.from(json, "utf8").toString("base64url")}`;
 }
 
+/** @public — exercised directly by unit tests (the marker format) */
 export function decodeGithubAppCredential(
   value: string | null | undefined,
 ): GithubAppCredential | null {
@@ -277,38 +278,6 @@ export function copilotAppIntegrationId(): string {
 }
 
 /**
- * The organization the App is installed on: from the credential, else looked
- * up once from GitHub (keys made before the organization was stored).
- */
-export async function githubAppOrganization(
-  credential: GithubAppCredential,
-): Promise<string | null> {
-  if (credential.organization) return credential.organization;
-  const cacheKey = `${credential.githubUrl ?? DEFAULT_GITHUB_URL}:${credential.appId}:${credential.installationId}`;
-  const cached = organizationCache.get(cacheKey);
-  if (cached !== undefined) return cached;
-  try {
-    const installation = await fetchAsGithubApp<{
-      account: { login: string } | null;
-    }>({
-      githubUrl: githubAppApiBase(credential),
-      appId: credential.appId,
-      privateKey: credential.privateKey,
-      path: `/app/installations/${encodeURIComponent(credential.installationId)}`,
-    });
-    const login = installation.account?.login ?? null;
-    organizationCache.set(cacheKey, login);
-    return login;
-  } catch (error) {
-    logger.info(
-      { appId: credential.appId, error: (error as Error).message },
-      "[GithubAppCopilot] could not look up the App's organization",
-    );
-    return null;
-  }
-}
-
-/**
  * Turn Copilot's rejection of an installation token into a message that says
  * what to fix, quoting GitHub's own words.
  */
@@ -333,11 +302,6 @@ export function copilotAppErrorMessage(params: {
 
 /** Re-mint an installation token this long before its expiry. */
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
-
-const organizationCache = new LRUCacheManager<string | null>({
-  maxSize: 200,
-  defaultTtl: 60 * 60 * 1000,
-});
 
 /**
  * Resolved references, briefly: a request does not read the credential store

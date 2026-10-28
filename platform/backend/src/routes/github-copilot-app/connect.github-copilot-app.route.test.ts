@@ -702,7 +702,7 @@ describe("GitHub Copilot organization subscription setup", () => {
     ).toBe(false);
   });
 
-  test("keeps a preview key that embeds its App working", async () => {
+  test("reads models with the in-memory App value used before the App is saved", async () => {
     vi.stubGlobal("fetch", githubFake({ appId }));
     const response = await createGithubCopilotFetch({
       githubToken: encodeGithubAppCredential({

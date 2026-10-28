@@ -2900,8 +2900,8 @@ const config = {
         process.env.ARCHESTRA_GITHUB_COPILOT_CLIENT_ID ||
         "Iv1.b507a08c87ecfe98",
       /**
-       * Copilot-Integration-Id to send with GitHub App installation tokens,
-       * tried before the built-in candidates. Unset: auto-detect.
+       * Copilot-Integration-Id sent with GitHub App installation tokens.
+       * Unset: copilot-developer-cli, the Copilot runtime's own id.
        */
       appIntegrationId:
         process.env.ARCHESTRA_GITHUB_COPILOT_APP_INTEGRATION_ID || undefined,

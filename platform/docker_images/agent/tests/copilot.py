@@ -60,6 +60,23 @@ class CopilotTest(unittest.TestCase):
                     time.sleep(0.1)
                 self.fail(label + "\n" + frame())
 
+            def send_line(text):
+                tmux("send-keys", "-t", "native", "-l", text)
+                wait_for(lambda: text in frame(), "Native input was not rendered")
+                # Match Agent Runtime's tmux_keys steering: the native client
+                # distinguishes a paste burst from a later submit key.
+                time.sleep(1)
+                tmux("send-keys", "-t", "native", "Enter")
+
+            def completed_turns():
+                events = [json.loads(line)
+                          for path in (runtime / "copilot" / "session-state").glob("*/events.jsonl")
+                          for line in path.read_text().splitlines(keepends=True) if line.endswith("\n")]
+                # A turn may contain several tool-calling assistant steps.
+                return sum(event.get("type") == "assistant.message" and
+                           event.get("data", {}).get("content") == "STARTUP_OK"
+                           for event in events)
+
             def launch():
                 result = tmux("new-session", "-d", "-s", "native", "-x", "130", "-y", "40", "-c", str(root), str(BIN / "archestra-copilot"))
                 self.assertEqual(result.returncode, 0, result.stderr)
@@ -87,13 +104,13 @@ class CopilotTest(unittest.TestCase):
                 self.assertEqual(server.calls, startup.TOOLS)
                 self.assertTrue(all(request["catalog_sent"] for request in server.inference()))
                 self.assertTrue(set(server.issued_call_ids).issubset(server.returned_call_ids))
-                tmux("send-keys", "-t", "native", "-l", "FOLLOWUP_NATIVE confirm STARTUP_OK again")
-                tmux("send-keys", "-t", "native", "Enter")
+                wait_for(lambda: completed_turns() == 1, "Native first turn did not become idle")
+                send_line("FOLLOWUP_NATIVE confirm STARTUP_OK again")
                 wait_for(lambda: any("FOLLOWUP_NATIVE" in prompt for prompt in server.prompts), "Native follow-up was not submitted")
-                wait_for(lambda: frame().count("STARTUP_OK") >= 3, "Native follow-up was not rendered")
-                tmux("send-keys", "-t", "native", "-l", "/exit")
-                tmux("send-keys", "-t", "native", "Enter")
-                wait_for(lambda: tmux("display-message", "-p", "-t", "native", "#{pane_dead}").stdout.strip() == "1", "Native exit did not stop the session")
+                wait_for(lambda: completed_turns() == 2, "Native follow-up did not finish")
+                wait_for(lambda: frame().count("STARTUP_OK") >= 4, "Native follow-up was not rendered")
+                send_line("/exit")
+                wait_for(lambda: tmux("display-message", "-p", "-t", "native", "#{pane_dead_status}").stdout.strip() == "0", "Native exit did not stop the session cleanly")
                 self.assertEqual(tmux("display-message", "-p", "-t", "native", "#{pane_dead_status}").stdout.strip(), "0")
                 tmux("kill-server")
                 env["ARCHESTRA_AGENT_RUNTIME_CONTINUE"] = "1"

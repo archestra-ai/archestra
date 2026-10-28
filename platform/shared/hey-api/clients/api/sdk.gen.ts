@@ -5070,7 +5070,7 @@ export const connectExistingCopilotGithubApp = <ThrowOnError extends boolean = f
 });
 
 /**
- * The organization, App, key fingerprint and model count of an organization's GitHub Copilot subscription
+ * The organization, App (name, icon, GitHub page) and key fingerprint of an organization's GitHub Copilot subscription
  *
  * Authentication:
  *

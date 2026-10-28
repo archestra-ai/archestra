@@ -51776,6 +51776,7 @@ export type InstallCopilotGithubAppData = {
             };
             actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
+        replaceKeyId?: string;
     };
     path?: never;
     query?: never;
@@ -52362,8 +52363,9 @@ export type GetCopilotGithubAppKeySummaryResponses = {
         organization: string | null;
         appId: string;
         appName: string | null;
+        appIcon: string | null;
+        appUrl: string | null;
         fingerprint: string;
-        modelCount: number;
     };
 };
 

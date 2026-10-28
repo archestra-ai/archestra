@@ -35,6 +35,8 @@ export const ConnectCopilotGithubAppCredentialSchema = z.object({
 
 export const InstallCopilotGithubAppSchema = z.object({
   grants: GrantsSchema,
+  /** Reconnect this key with the new App instead of adding a key. */
+  replaceKeyId: z.string().uuid().optional(),
 });
 
 export const CopilotGithubAppConnectedSchema = z.object({
@@ -89,9 +91,12 @@ export const CopilotGithubAppKeySummarySchema = z.object({
   organization: z.string().nullable(),
   appId: z.string(),
   appName: z.string().nullable(),
+  /** The App's icon in the credential store, when it has one. */
+  appIcon: z.string().nullable(),
+  /** The App's page on GitHub, when GitHub could be reached. */
+  appUrl: z.string().nullable(),
   /** The private key's fingerprint, as GitHub shows it on the App page. */
   fingerprint: z.string(),
-  modelCount: z.number().int(),
 });
 
 export const ReplaceCopilotGithubAppPrivateKeySchema = z.object({

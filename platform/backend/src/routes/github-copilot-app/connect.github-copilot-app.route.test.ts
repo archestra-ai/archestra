@@ -86,6 +86,7 @@ function githubFake(options: {
         id: options.appId,
         name: "My Org Copilot",
         slug: "my-org-copilot",
+        html_url: "https://github.com/apps/my-org-copilot",
         owner: { login: "my-org", type: "Organization" },
       });
     if (url.endsWith("api.githubcopilot.com/models"))
@@ -232,6 +233,35 @@ describe("GitHub Copilot organization subscription setup", () => {
     const audited = JSON.stringify(rows[0]);
     expect(audited).not.toContain("PRIVATE KEY");
     expect(audited).not.toContain("github-app:");
+  });
+
+  test("a new App made while reconnecting replaces the key's App instead of adding a key", async () => {
+    vi.stubGlobal("fetch", githubFake({ appId }));
+    const connected = await post("/api/github-copilot-app/existing", {
+      appId,
+      organization: "my-org",
+      privateKey,
+    });
+    expect(connected.statusCode, connected.body).toBe(200);
+    const keyId = connected.json().id;
+
+    await createAppFromManifest();
+    const installed = await post("/api/github-copilot-app/install", {
+      replaceKeyId: keyId,
+    });
+    expect(installed.statusCode, installed.body).toBe(200);
+    expect(installed.json()).toMatchObject({ status: "installed", id: keyId });
+
+    const keys = await db
+      .select({ id: schema.llmProviderApiKeysTable.id })
+      .from(schema.llmProviderApiKeysTable)
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+          eq(schema.llmProviderApiKeysTable.provider, "github-copilot"),
+        ),
+      );
+    expect(keys).toEqual([{ id: keyId }]);
   });
 
   test("takes the organization's address instead of its name", async () => {
@@ -444,8 +474,9 @@ describe("GitHub Copilot organization subscription setup", () => {
       organization: "my-org",
       appId,
       appName: "My Org Copilot",
+      appIcon: "logo:github",
+      appUrl: "https://github.com/apps/my-org-copilot",
       fingerprint: expect.stringMatching(/^SHA256:/),
-      modelCount: expect.any(Number),
     });
     expect(summary.body).not.toContain("PRIVATE KEY");
 

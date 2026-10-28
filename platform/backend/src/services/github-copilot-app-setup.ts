@@ -70,7 +70,13 @@ class CopilotGithubAppSetup {
   }
 
   /** Once the new App is installed: save it as a credential, then the key. */
-  async install(params: Owner & { grants?: ResourcePermissionGrant[] }) {
+  async install(
+    params: Owner & {
+      grants?: ResourcePermissionGrant[];
+      /** Put the new App on this key instead of adding a key. */
+      replaceKeyId?: string;
+    },
+  ) {
     const found = await githubAppManifestSetup.installation({
       ...params,
       flow: "copilot",
@@ -79,6 +85,14 @@ class CopilotGithubAppSetup {
     const { app, installation } = found;
     // Check Copilot answers the App before anything is saved.
     assertCopilotRequests(installation, app.account);
+    if (params.replaceKeyId) {
+      const { login } = parseAccount(await this.organizationInput(params));
+      if (login.toLowerCase() !== app.account.toLowerCase())
+        throw new ApiError(
+          400,
+          `This subscription is for ${login}, but the new App is installed on ${app.account}.`,
+        );
+    }
     const models = await fetchCopilotModelIds(
       encodeGithubAppCredential({
         appId: app.appId,
@@ -328,23 +342,20 @@ class CopilotGithubAppSetup {
           organizationId: reference.ref.organizationId,
         })
       : null;
-    const app = definition
-      ? { name: definition.name }
-      : await fetchAsGithubApp<{ name?: string }>({
-          githubUrl: githubAppApiBase(credential),
-          appId: credential.appId,
-          privateKey: credential.privateKey,
-          path: "/app",
-        }).catch(() => null);
-    const models = await LlmProviderApiKeyModelLinkModel.getModelsForApiKey(
-      params.keyId,
-    );
+    // GitHub's page for the App; the stored credential holds no link to it.
+    const app = await fetchAsGithubApp<{ name?: string; html_url?: string }>({
+      githubUrl: githubAppApiBase(credential),
+      appId: credential.appId,
+      privateKey: credential.privateKey,
+      path: "/app",
+    }).catch(() => null);
     return {
       organization: await githubAppOrganization(credential),
       appId: credential.appId,
-      appName: app?.name ?? null,
+      appName: definition?.name ?? app?.name ?? null,
+      appIcon: definition?.icon ?? null,
+      appUrl: app?.html_url ?? null,
       fingerprint: githubAppKeyFingerprint(credential.privateKey),
-      modelCount: models.length,
     };
   }
 

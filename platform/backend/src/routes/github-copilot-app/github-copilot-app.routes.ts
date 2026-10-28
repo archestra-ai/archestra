@@ -108,9 +108,10 @@ const githubCopilotAppRoutes: FastifyPluginAsyncZod = async (app) => {
         organizationId: request.organizationId,
         userId: request.user.id,
         grants: request.body.grants,
+        replaceKeyId: request.body.replaceKeyId,
       });
       if (result.status === "waiting") request.auditSkip = true;
-      else request.auditBefore = null;
+      else if (!request.body.replaceKeyId) request.auditBefore = null;
       return reply.send(result);
     },
   );
@@ -212,7 +213,7 @@ const githubCopilotAppRoutes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetCopilotGithubAppKeySummary,
         description:
-          "The organization, App, key fingerprint and model count of an organization's GitHub Copilot subscription",
+          "The organization, App (name, icon, GitHub page) and key fingerprint of an organization's GitHub Copilot subscription",
         tags: ["LLM Provider API Keys"],
         params: z.object({ id: z.string().uuid() }),
         response: constructResponseSchema(CopilotGithubAppKeySummarySchema),

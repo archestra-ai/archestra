@@ -187074,6 +187074,11 @@
                         "actions"
                       ]
                     }
+                  },
+                  "replaceKeyId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   }
                 }
               }
@@ -188918,7 +188923,7 @@
         "tags": [
           "LLM Provider API Keys"
         ],
-        "description": "The organization, App, key fingerprint and model count of an organization's GitHub Copilot subscription\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "The organization, App (name, icon, GitHub page) and key fingerprint of an organization's GitHub Copilot subscription\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -188950,21 +188955,25 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "fingerprint": {
+                    "appIcon": {
+                      "nullable": true,
                       "type": "string"
                     },
-                    "modelCount": {
-                      "type": "integer",
-                      "minimum": -9007199254740991,
-                      "maximum": 9007199254740991
+                    "appUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "fingerprint": {
+                      "type": "string"
                     }
                   },
                   "required": [
                     "organization",
                     "appId",
                     "appName",
-                    "fingerprint",
-                    "modelCount"
+                    "appIcon",
+                    "appUrl",
+                    "fingerprint"
                   ],
                   "additionalProperties": false
                 }

@@ -249,19 +249,10 @@ const NavPrimary = ({
           {item.dotKey && (
             <OnboardingDot
               visible={unseenDotKeys.has(item.dotKey)}
-              // Steps aside for a count badge, which is a `SidebarMenuAction`
-              // pinned to the same corner. Keyed off the action actually being
-              // in the DOM, not off the item declaring one: a badge that has
-              // nothing to report renders nothing, and the dot keeps the
-              // corner to itself.
-              //
-              // Centred on the row rather than pinned to its top: `top-1` put
-              // a 6px dot 4px down a 32px row, which read as floating above
-              // the label instead of belonging to it. Centring is `inset-y-0`
-              // plus `my-auto` rather than `top-1/2 -translate-y-1/2` because
-              // the dot's enter/exit animation keyframes set `transform`
-              // themselves and would drop the centring translate mid-play.
-              className="absolute inset-y-0 my-auto h-1.5 right-1 group-has-data-[sidebar=menu-action]/menu-item:right-8"
+              // Expanded rows align with their label and clear count badges.
+              // Collapsed rows pin the nudge to the icon's upper-right corner;
+              // inset positioning keeps it stable during the scale animation.
+              className="absolute inset-y-0 right-2 my-auto group-has-data-[sidebar=menu-action]/menu-item:right-8 group-data-[collapsible=icon]:inset-y-auto group-data-[collapsible=icon]:right-1 group-data-[collapsible=icon]:top-1 group-data-[collapsible=icon]:my-0 group-data-[collapsible=icon]:ring-2 group-data-[collapsible=icon]:ring-sidebar"
             />
           )}
         </SidebarPrefetchLink>

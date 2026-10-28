@@ -200,7 +200,7 @@ def main() -> None:
             "routes": routes,
         },
     }
-    Path(__file__).with_name("parity.json").write_text(json.dumps(fixture, indent=1) + "\n")
+    Path(__file__).with_name("parity.json").write_text(json.dumps(fixture, separators=(",", ":")) + "\n")
 
 
 if __name__ == "__main__":

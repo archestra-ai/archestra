@@ -46,6 +46,7 @@ export default function AutoRoutingOverviewPage() {
       <AutoRoutingSettingsForm settings={settings} canUpdate={canUpdate} />
       <PlanStatus settings={settings} />
       <PastSessions
+        routingEnabled={settings.enabled}
         required={settings.status.coldStart.required}
         hasActivePlan={settings.status.activePlan !== null}
         canUpdate={canUpdate}

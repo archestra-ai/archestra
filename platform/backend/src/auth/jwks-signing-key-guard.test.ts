@@ -1,9 +1,10 @@
-import { symmetricEncrypt } from "better-auth/crypto";
+import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import {
   createJwk,
   generateExportedKeyPair,
   signJWT,
 } from "better-auth/plugins/jwt";
+import { createLocalJWKSet, importJWK, jwtVerify, SignJWT } from "jose";
 import { describe, expect, test } from "vitest";
 import db, { schema } from "@/database";
 import JwksModel from "@/models/jwks";
@@ -74,11 +75,44 @@ describe("verifyJwksSigningKey", () => {
 
   test("keeps the retired key published so already-issued tokens still verify", async () => {
     const stale = await storeJwkEncryptedWith(PREVIOUS_SECRET);
+    const privateKey = await importJWK(
+      JSON.parse(
+        await symmetricDecrypt({
+          key: PREVIOUS_SECRET,
+          data: JSON.parse(stale.privateKey),
+        }),
+      ),
+      "RS256",
+    );
+    const token = await new SignJWT({ sub: "previous-user" })
+      .setProtectedHeader({ alg: "RS256", kid: stale.id })
+      .setExpirationTime("1h")
+      .sign(privateKey);
 
     await verifyJwksSigningKey();
 
     const rows = await db.select().from(schema.jwksTable);
     expect(rows.map((row) => row.id)).toContain(stale.id);
+    const response = await auth.handler(
+      new Request("http://localhost:3000/api/auth/jwks"),
+    );
+    expect(response.status).toBe(200);
+    const verified = await jwtVerify(
+      token,
+      createLocalJWKSet(await response.json()),
+      { algorithms: ["RS256"] },
+    );
+    expect(verified.payload.sub).toBe("previous-user");
+  });
+
+  test("rejects other algorithms before writing keys without algorithm metadata", async () => {
+    await expect(
+      createJwk(await jwtPluginContext<Parameters<typeof createJwk>[0]>(), {
+        ...JWT_PLUGIN_OPTIONS,
+        jwks: { keyPairConfig: { alg: "ES256" } },
+      }),
+    ).rejects.toThrow("Only RS256 signing keys are supported");
+    expect(await JwksModel.getLatest()).toBeNull();
   });
 
   test("leaves a key the current secret can decrypt alone", async () => {

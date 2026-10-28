@@ -85,21 +85,23 @@ class RoutingHistoryModel {
     cutoff: Date;
   }): Promise<string[]> {
     const agents = schema.agentsTable;
-    const rows = await db
-      .select({ id: agents.id })
-      .from(agents)
-      .where(
-        and(
-          eq(agents.organizationId, params.organizationId),
-          sql`exists (
+    const rows = await withStatementTimeout((tx) =>
+      tx
+        .select({ id: agents.id })
+        .from(agents)
+        .where(
+          and(
+            eq(agents.organizationId, params.organizationId),
+            sql`exists (
             select 1 from interactions i
             where i.profile_id = ${agents.id}
               and i.created_at >= ${utc(params.windowStart)}::timestamp
               and i.created_at < ${utc(params.cutoff)}::timestamp
           )`,
-        ),
-      )
-      .orderBy(asc(agents.id));
+          ),
+        )
+        .orderBy(asc(agents.id)),
+    );
     return rows.map((row) => row.id);
   }
 

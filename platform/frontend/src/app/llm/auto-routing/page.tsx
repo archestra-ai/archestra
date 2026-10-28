@@ -45,14 +45,13 @@ export default function AutoRoutingOverviewPage() {
     <div className="space-y-6">
       <AutoRoutingSettingsForm settings={settings} canUpdate={canUpdate} />
       <PlanStatus settings={settings} />
-      {settings.enabled && (
-        <PastSessions
-          required={settings.status.coldStart.required}
-          hasActivePlan={settings.status.activePlan !== null}
-          canUpdate={canUpdate}
-          scorer={settings.status.scorer}
-        />
-      )}
+      <PastSessions
+        routingEnabled={settings.enabled}
+        required={settings.status.coldStart.required}
+        hasActivePlan={settings.status.activePlan !== null}
+        canUpdate={canUpdate}
+        scorer={settings.status.scorer}
+      />
       <ActivePlanSummary settings={settings} />
       <TryPrompt canUpdate={canUpdate} scorer={settings.status.scorer} />
     </div>

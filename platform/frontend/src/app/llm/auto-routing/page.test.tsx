@@ -852,6 +852,56 @@ describe("past sessions", () => {
     return scores;
   }
 
+  it("scans past traffic before routing is enabled", async () => {
+    settings = makeSettings({ enabled: false, budgetUsdPerDay: null });
+    let scans = 0;
+    server.use(
+      http.post(`${API_ORIGIN}/api/auto-routing/backfill/scan`, () => {
+        scans++;
+        return HttpResponse.json({
+          backfill: scanned({ status: "running" }),
+          scoreOffer: null,
+        } satisfies AutoRoutingBackfillState);
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Scan past sessions" }),
+    );
+
+    await waitFor(() => expect(scans).toBe(1));
+  });
+
+  it("drops the routing-off notice once enabling refits", async () => {
+    settings = makeSettings({ enabled: false });
+    serveBackfill(
+      {
+        backfill: scanned({
+          status: "done",
+          fitBlockedReason: "Auto routing is off.",
+        }),
+        scoreOffer: null,
+      },
+      { backfill: scanned({ status: "done" }), scoreOffer: null },
+    );
+    const user = userEvent.setup();
+    renderPage();
+    expect(
+      await screen.findByText("No plan is fitted on these sessions"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("switch", { name: "Disabled" }));
+    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText("No plan is fitted on these sessions"),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
   it("lists what a scan found by request shape and client", async () => {
     serveBackfill({ backfill: scanned(), scoreOffer: offer });
     renderPage();

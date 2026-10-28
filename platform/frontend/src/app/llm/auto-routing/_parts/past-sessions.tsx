@@ -47,11 +47,13 @@ const API_SHAPES: Record<Backfill["breakdown"][number]["apiShape"], string> = {
  * session scorer. Beside an active plan it folds into one line until opened.
  */
 export function PastSessions({
+  routingEnabled,
   required,
   hasActivePlan,
   canUpdate,
   scorer,
 }: {
+  routingEnabled: boolean;
   required: number;
   hasActivePlan: boolean;
   canUpdate: boolean;
@@ -135,6 +137,11 @@ export function PastSessions({
           </Button>
         )}
       </div>
+      {!routingEnabled && (
+        <p className="text-sm text-muted-foreground">
+          Scored sessions are fitted into a plan once auto routing is turned on.
+        </p>
+      )}
       {backfill ? (
         <BackfillStatus backfill={backfill} required={required} />
       ) : (

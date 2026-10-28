@@ -174,7 +174,7 @@ describe("AgentRuntimePicker", () => {
     });
   });
 
-  it("selects Copilot CLI with queued follow-ups and its supported model protocol", async () => {
+  it("selects Copilot CLI with native terminal input and its supported model protocol", async () => {
     const user = userEvent.setup();
     await renderPicker("codex");
     await user.click(screen.getByRole("radio", { name: "GitHub Copilot CLI" }));
@@ -184,7 +184,7 @@ describe("AgentRuntimePicker", () => {
     expect(savedRuntime()).toMatchObject({
       command: ["archestra-copilot"],
       inferenceProtocol: "openai_chat",
-      steerMode: "pipe",
+      steerMode: "tmux_keys",
     });
   });
 

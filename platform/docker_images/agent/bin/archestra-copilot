@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Run the unmodified Copilot CLI through the Agent proxy and MCP gateway.
 
-Prompt-mode JSON events give both delegated and terminal sessions the same
-completion contract. Follow-ups resume an explicit native session; pipe
-steering is consumed between completed prompts, never as shell input.
+Interactive sessions expose the native terminal unchanged. Delegated work uses
+JSON events and consumes pipe steering only between completed prompts.
 """
 
 import contextlib
@@ -58,6 +57,20 @@ def main():
     # The additional configuration must augment an empty managed catalog,
     # rather than a previous session's user-added MCP servers.
     atomic(home / "mcp-config.json", '{"mcpServers": {}}')
+    # These permissions apply inside the isolated runtime pod. Gateway policy,
+    # egress controls, and the runtime's review gates remain platform-owned.
+    settings_file = home / "settings.json"
+    settings = managed_json(settings_file)
+    settings.pop("trustedFolders", None)
+    settings.update(autoUpdate=False, defaultPermissionMode="allow-all",
+                    disableAllHooks=True,
+                    notifications=False, terminalNotifications=False, terminalProgress=False)
+    settings["ide"] = {"autoConnect": False, "openDiffOnEdit": False}
+    atomic(settings_file, json.dumps(settings))
+    state_file = home / "config.json"
+    state = managed_json(state_file)
+    state["trustedFolders"] = [str(Path.cwd().resolve())]
+    atomic(state_file, json.dumps(state))
     machine = Path("/etc/archestra/agent-environment.md")
     atomic(home / "copilot-instructions.md", env.get("ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT", "") +
            ("\n\n" + machine.read_text() if machine.is_file() else ""))
@@ -82,6 +95,11 @@ def main():
     task = env.get("ARCHESTRA_AGENT_RUNTIME_TASK", "")
     if not task and mode == "one_shot":
         fail("task", "Copilot CLI requires a task for delegated work.")
+    if mode == "interactive":
+        if steer is not None:
+            os.close(steer)
+        run_terminal(task, session_id, home, config, entries, artifact)
+        return
     try:
         while True:
             if task:
@@ -141,7 +159,7 @@ def run_prompt(task, session_id, home, config, entries):
         descriptor.write(json.dumps(config).encode())
         descriptor.seek(0)
         args = ["copilot", "--session-id", session_id, "--prompt", task,
-                "--output-format", "json", "--stream", "on", "--allow-all-tools",
+                "--output-format", "json", "--stream", "on", "--allow-all",
                 "--no-ask-user", "--disable-builtin-mcps", "--no-auto-update",
                 "--disable-client-telemetry", "--no-remote-export", "--no-color",
                 "--additional-mcp-config", f"@/dev/fd/{descriptor.fileno()}"]
@@ -227,13 +245,106 @@ def run_prompt(task, session_id, home, config, entries):
         print(flush=True)
 
 
+def run_terminal(task, session_id, home, config, entries, artifact):
+    # Inherit the actual tmux PTY, including its geometry and native input.
+    # Read reporting events from disk instead of replacing the UI with JSON.
+    gate = ModelGate(validate_catalog=True)
+    threading.Thread(target=gate.serve_forever, daemon=True).start()
+    env = {key: value for key, value in os.environ.items() if not key.startswith("COPILOT_")}
+    env.update(COPILOT_HOME=str(home), COPILOT_OFFLINE="true", COPILOT_AUTO_UPDATE="false",
+               COPILOT_PROVIDER_BASE_URL=f"http://127.0.0.1:{gate.server_port}/v1",
+               COPILOT_PROVIDER_TYPE="openai", COPILOT_PROVIDER_API_KEY=os.environ["ARCHESTRA_VIRTUAL_KEY"],
+               COPILOT_MODEL=os.environ["ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL"])
+    for source, target in (("MODEL_CONTEXT_LENGTH", "MAX_PROMPT_TOKENS"), ("MODEL_OUTPUT_LENGTH", "MAX_OUTPUT_TOKENS")):
+        value = os.environ.get("ARCHESTRA_AGENT_RUNTIME_" + source, "")
+        if value.isdigit() and int(value) > 0:
+            env["COPILOT_PROVIDER_" + target] = value
+    config["mcpServers"]["archestra"]["url"] = f"http://127.0.0.1:{gate.server_port}/mcp"
+    events = home / "session-state" / session_id / "events.jsonl"
+    offset = events.stat().st_size if events.exists() else 0
+    child = None
+    signals = {number: signal.getsignal(number) for number in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        with tempfile.TemporaryFile() as descriptor:
+            descriptor.write(json.dumps(config).encode())
+            descriptor.seek(0)
+            args = ["copilot", "--session-id", session_id, "--allow-all",
+                    "--disable-builtin-mcps", "--no-auto-update", "--disable-client-telemetry",
+                    "--no-remote-export", "--banner", "--additional-mcp-config", f"@/dev/fd/{descriptor.fileno()}"]
+            args.extend(["--secret-env-vars", "ARCHESTRA_VIRTUAL_KEY,ARCHESTRA_MCP_GATEWAY_TOKEN,ARCHESTRA_AGENT_RUNTIME_BINDING,COPILOT_PROVIDER_API_KEY"])
+            if task:
+                args.extend(["--interactive", task])
+            child = subprocess.Popen(args, env=env, pass_fds=(descriptor.fileno(),))
+            for number in signals:
+                signal.signal(number, lambda number, _frame: child.send_signal(number))
+            while child.poll() is None:
+                if gate.discovery_started and not gate.ready and time.monotonic() - gate.discovery_started > 30:
+                    gate.failed = True
+                if gate.failed:
+                    child.terminate()
+                if events.exists():
+                    with events.open("rb") as stream:
+                        stream.seek(offset)
+                        while True:
+                            line = stream.readline()
+                            if not line.endswith(b"\n"):
+                                break
+                            offset = stream.tell()
+                            try:
+                                event = json.loads(line)
+                            except (ValueError, UnicodeDecodeError):
+                                continue
+                            data = event.get("data") or {}
+                            kind = event.get("type")
+                            if kind in ("user.message", "assistant.message") and data.get("content"):
+                                entries.append({"type": "message", "role": "user" if kind == "user.message" else "assistant",
+                                                "text": redact(data["content"]), "timestamp": event.get("timestamp")})
+                                if kind == "assistant.message" and not data.get("toolRequests"):
+                                    atomic(artifact.with_name("final-answer.txt"), redact(data["content"]))
+                            if kind == "assistant.message":
+                                for tool in data.get("toolRequests", []):
+                                    entries.append({"type": "tool_call", "name": tool.get("name", "tool"),
+                                                    "input": redact(json.dumps(tool.get("arguments", {}))), "toolCallId": tool.get("toolCallId")})
+                            elif kind == "tool.execution_complete":
+                                entries.append({"type": "tool_result", "toolCallId": data.get("toolCallId"),
+                                                "text": redact(json.dumps(data.get("result", {}))), "isError": not data.get("success", True)})
+                            atomic(artifact, json.dumps({"version": 1, "provider": "copilot", "entries": entries}))
+                            if kind in ("user.message", "assistant.turn_start"):
+                                attention("clear")
+                            elif kind == "assistant.turn_end":
+                                attention("set", "Ready for a follow-up")
+                            elif kind == "session.error":
+                                attention("set", "API error: check terminal")
+                time.sleep(0.1)
+            status = child.wait()
+    finally:
+        for number, handler in signals.items():
+            signal.signal(number, handler)
+        gate.shutdown()
+        gate.server_close()
+        if child and child.poll() is None:
+            child.terminate()
+            try:
+                child.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait()
+    if gate.failed:
+        fail("gateway", "The Agent could not load its MCP gateway tools. Check gateway availability and access, then retry.")
+    if status:
+        fail("turn", "Copilot CLI exited unexpectedly. Check the native terminal and retry.")
+
+
 class ModelGate(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self):
+    def __init__(self, validate_catalog=False):
         super().__init__(("127.0.0.1", 0), ModelHandler)
         self.ready = False
         self.failed = False
+        self.validate_catalog = validate_catalog
+        self.catalog = []
+        self.discovery_started = None
 
 
 class ModelHandler(BaseHTTPRequestHandler):
@@ -241,6 +352,8 @@ class ModelHandler(BaseHTTPRequestHandler):
         pass
 
     def do_POST(self):
+        if self.path == "/mcp" and self.server.validate_catalog:
+            return self.gateway()
         # Copilot logs discovery failures and otherwise proceeds without MCP.
         # Gate its actual inference request on its own completed catalog event.
         deadline = time.monotonic() + 30
@@ -258,6 +371,17 @@ class ModelHandler(BaseHTTPRequestHandler):
         connection = connection_type(target.hostname, target.port, timeout=600)
         try:
             payload = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            if self.server.validate_catalog:
+                # Native TUI discovery events are not written to events.jsonl.
+                # Require its actual inference payload to carry the nonempty
+                # catalog returned to that same CLI by the gateway relay.
+                tools = [tool.get("function", {}) for tool in json.loads(payload).get("tools", [])]
+                if not all(any(function.get("name") == "archestra-" + tool["name"] and
+                               tool.get("description", "") in function.get("description", "")
+                               for function in tools) for tool in self.server.catalog):
+                    self.server.failed = True
+                    self.send_error(503, "Native MCP catalog is missing from inference")
+                    return
             headers = {**runtime_headers(), "Content-Type": "application/json",
                        "Authorization": "Bearer " + os.environ["ARCHESTRA_VIRTUAL_KEY"]}
             connection.request("POST", target.path.rstrip("/") + "/chat/completions", payload, headers)
@@ -274,6 +398,44 @@ class ModelHandler(BaseHTTPRequestHandler):
         finally:
             connection.close()
             self.close_connection = True
+
+    def gateway(self):
+        if self.server.discovery_started is None:
+            self.server.discovery_started = time.monotonic()
+        target = urllib.parse.urlsplit(os.environ["ARCHESTRA_MCP_GATEWAY_URL"])
+        connection_type = http.client.HTTPSConnection if target.scheme == "https" else http.client.HTTPConnection
+        connection = connection_type(target.hostname, target.port, timeout=600)
+        try:
+            body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            request = json.loads(body)
+            headers = {**runtime_headers(), "Authorization": "Bearer " + os.environ["ARCHESTRA_MCP_GATEWAY_TOKEN"],
+                       "Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+            for name in ("Mcp-Session-Id", "MCP-Protocol-Version"):
+                if self.headers.get(name):
+                    headers[name] = self.headers[name]
+            connection.request("POST", target.path, body, headers)
+            response = connection.getresponse()
+            content = response.read()
+            if request.get("method") == "tools/list":
+                messages = [line[5:].strip() for line in content.splitlines() if line.startswith(b"data:")]
+                result = json.loads(messages[-1] if messages else content)
+                self.server.catalog = result.get("result", {}).get("tools", [])
+                self.server.ready = response.status == 200 and bool(self.server.catalog)
+                self.server.failed = not self.server.ready
+            elif request.get("method") == "initialize" and response.status >= 400:
+                self.server.failed = True
+            self.send_response(response.status)
+            self.send_header("Content-Type", response.getheader("Content-Type", "application/json"))
+            if response.getheader("Mcp-Session-Id"):
+                self.send_header("Mcp-Session-Id", response.getheader("Mcp-Session-Id"))
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+        except (OSError, ValueError, http.client.HTTPException):
+            self.server.failed = True
+            self.send_error(503, "MCP gateway discovery failed")
+        finally:
+            connection.close()
 
 
 def runtime_headers():
@@ -313,6 +475,16 @@ def atomic(path, content):
     with open(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as file:
         file.write(content)
     os.replace(temporary, path)
+
+
+def managed_json(path):
+    with contextlib.suppress(OSError, ValueError):
+        # Copilot's generated config.json begins with two // comment lines.
+        value = json.loads("\n".join(line for line in path.read_text().splitlines()
+                                     if not line.lstrip().startswith("//")))
+        if isinstance(value, dict):
+            return value
+    return {}
 
 
 def attention(action, label=""):

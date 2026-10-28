@@ -211,23 +211,36 @@ connections retain their configured access and billing rules.
 Other configured providers use their normal credentials and billing. The image
 does not start GitHub sign-in or consume a separate CLI subscription token.
 
-The wrapper runs the unmodified CLI in prompt mode and translates its JSON
-events into terminal output and a readable transcript. In interactive runs,
-enter a follow-up at the prompt, or `/exit` to leave. This terminal is a prompt
-loop, rather than Copilot's full-screen TUI. Pipe steering queues messages until
-the current prompt completes. Saved follow-ups resume an explicit native
-session; missing native state fails without starting a replacement session.
+Interactive runs attach the unmodified CLI directly to the live terminal. Copilot
+owns its native banner, slash commands, input editor, permission dialogs, and
+follow-ups. The pod workspace is pre-trusted and local tool, path, and URL
+permissions use Copilot's `--allow-all` mode, matching the other unattended coding
+runtimes. Saved sessions reopen by their explicit native UUID without submitting
+an extra prompt. Terminal steering uses tmux input, like the other maintained
+interactive clients. In-pod updates are disabled in settings,
+environment, and CLI flags; the daily update workflow opens reviewable PRs for
+stable CLI releases at least seven days old and refreshes both architecture
+checksums.
+
+Delegated runs use prompt-mode JSON events and consume pipe steering between
+completed prompts. Both modes export readable transcripts and preserve native
+sessions; missing native state fails without starting a replacement session.
+Detached work is outside the assignment completion contract.
 
 The CLI otherwise continues without gateway tools after discovery errors. A
-loopback inference relay waits for the native client's completed gateway catalog
-before forwarding any model request; a missing, empty, failed, or timed-out
-catalog fails the run. The relay preserves run/session identity and runtime
-binding headers. Copilot's automatic updates, telemetry, built-in MCP servers,
-and GitHub-hosted remote control/export are disabled. Repository configuration
-is not automatically trusted. Local tools receive the same unattended execution
-permission as the other maintained images; gateway policy and review gates
-remain authoritative for remote tools. Detached work is outside the assignment
-completion contract.
+loopback inference relay waits for gateway discovery before forwarding model
+requests. For the native UI, a caller-scoped gateway relay observes the CLI's
+own catalog response, and the inference relay verifies that its actual model
+request carries those tool names and attested descriptions. A missing, empty,
+failed, or timed-out catalog fails the run. Run/session identity and runtime
+binding headers are preserved on both paths. Copilot's automatic updates,
+telemetry, repository/user hooks, automatic IDE connections, desktop
+notifications, and GitHub-hosted remote control/export are disabled. Built-in
+MCP servers remain disabled; remote tools use the caller-scoped gateway.
+Managed proxy credentials are removed from native shell environments
+and redacted by the CLI. Local tools receive the same unattended execution
+permissions as the other maintained images; gateway policy and review gates
+remain authoritative for remote tools.
 
 The native Linux packages, `@github/copilot-linux-{x64,arm64}`, are pinned in
 the Dockerfile with SHA-512 verification. The complete

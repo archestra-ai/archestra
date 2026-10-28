@@ -98,8 +98,7 @@ export function buildAgentCatalogRuntime(params: {
     command: [`archestra-${params.id}`],
     inferenceProtocol,
     backend: "kubernetes" as const,
-    steerMode:
-      params.id === "copilot" ? ("pipe" as const) : ("tmux_keys" as const),
+    steerMode: "tmux_keys" as const,
     privileged: false,
     resources: null,
     environment: null,

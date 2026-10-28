@@ -188963,6 +188963,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "githubUrl": {
+                      "type": "string"
+                    },
                     "fingerprint": {
                       "type": "string"
                     }
@@ -188973,6 +188976,7 @@
                     "appName",
                     "appIcon",
                     "appUrl",
+                    "githubUrl",
                     "fingerprint"
                   ],
                   "additionalProperties": false

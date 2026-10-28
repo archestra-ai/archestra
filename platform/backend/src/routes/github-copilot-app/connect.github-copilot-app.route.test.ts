@@ -476,6 +476,7 @@ describe("GitHub Copilot organization subscription setup", () => {
       appName: "My Org Copilot",
       appIcon: "logo:github",
       appUrl: "https://github.com/apps/my-org-copilot",
+      githubUrl: "https://github.com",
       fingerprint: expect.stringMatching(/^SHA256:/),
     });
     expect(summary.body).not.toContain("PRIVATE KEY");

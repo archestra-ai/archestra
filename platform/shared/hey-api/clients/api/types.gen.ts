@@ -52365,6 +52365,7 @@ export type GetCopilotGithubAppKeySummaryResponses = {
         appName: string | null;
         appIcon: string | null;
         appUrl: string | null;
+        githubUrl: string;
         fingerprint: string;
     };
 };

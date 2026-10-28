@@ -2,49 +2,89 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AccessSummary } from "./access-summary";
+import {
+  GithubAccountFields,
+  readGithubAccountFields,
+} from "./github-account-fields";
 import { GithubAppChoice } from "./github-app-choice";
 import { GithubAppPicker } from "./github-app-picker";
-import { GithubOrganizationField } from "./github-organization-field";
 import { ManifestRow } from "./manifest-row";
 
 afterEach(() => {
   cleanup();
 });
 
-describe("GithubOrganizationField", () => {
-  it("shows the help line, and an error in its place", () => {
-    const { rerender } = render(
-      <GithubOrganizationField
-        id="org"
-        value=""
-        onChange={vi.fn()}
-        error={null}
+describe("GithubAccountFields", () => {
+  function renderFields(fields: { githubUrl: string; organization: string }) {
+    const read = readGithubAccountFields(fields);
+    render(
+      <GithubAccountFields
+        idPrefix="t"
+        {...fields}
+        onGithubUrlChange={vi.fn()}
+        onOrganizationChange={vi.fn()}
+        organizationHelp="The GitHub organization with the Copilot plan."
+        urlError={read.urlError}
+        organizationError={read.organizationError}
       />,
     );
-    const field = screen.getByLabelText("GitHub organization");
-    expect(field).toHaveAttribute(
-      "placeholder",
-      "acme or https://github.com/acme",
+    return read;
+  }
+
+  it("asks for the GitHub and the organization, each with its hint", () => {
+    renderFields({ githubUrl: "https://github.com", organization: "" });
+
+    const url = screen.getByLabelText("GitHub URL");
+    expect(url).toHaveAttribute("placeholder", "https://github.com");
+    expect(url).toHaveAccessibleDescription(
+      "Using GitHub Enterprise Server? Put its address here.",
     );
-    expect(field).toHaveAccessibleDescription(
-      "Organization's GitHub handle or URL",
+    const organization = screen.getByLabelText("Organization");
+    expect(organization).toHaveAttribute("placeholder", "acme");
+    expect(organization).toHaveAccessibleDescription(
+      "The GitHub organization with the Copilot plan.",
     );
     expect(screen.queryByRole("alert")).toBeNull();
+  });
 
-    rerender(
-      <GithubOrganizationField
-        id="org"
-        value="nope"
-        onChange={vi.fn()}
-        error="Enter an organization name or its GitHub address."
-      />,
+  it("names the account as the backend takes it, on github.com or Enterprise Server", () => {
+    expect(
+      readGithubAccountFields({
+        githubUrl: "https://github.com",
+        organization: "acme",
+      }),
+    ).toMatchObject({
+      input: "acme",
+      account: { login: "acme", dotCom: true },
+    });
+    expect(
+      readGithubAccountFields({
+        githubUrl: "https://git.example.com/some/path",
+        organization: "https://git.example.com/acme/repo",
+      }),
+    ).toMatchObject({
+      input: "https://git.example.com/acme",
+      account: { login: "acme", api: "https://git.example.com/api/v3" },
+    });
+  });
+
+  it("puts each field's error in place of its hint", () => {
+    renderFields({ githubUrl: "not a url", organization: "-bad-" });
+
+    expect(screen.getByLabelText("GitHub URL")).toHaveAccessibleDescription(
+      "Enter the address of your GitHub, like https://github.com.",
     );
-    expect(field).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Enter an organization name or its GitHub address.",
+    expect(screen.getByLabelText("GitHub URL")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(screen.getByLabelText("Organization")).toHaveAccessibleDescription(
+      "Enter the organization's name on GitHub.",
     );
     expect(
-      screen.queryByText("Organization's GitHub handle or URL"),
+      screen.queryByText(
+        "Using GitHub Enterprise Server? Put its address here.",
+      ),
     ).toBeNull();
   });
 });

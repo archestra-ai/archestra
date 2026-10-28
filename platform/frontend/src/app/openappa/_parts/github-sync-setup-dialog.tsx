@@ -2,10 +2,8 @@
 
 import {
   DocsPage,
-  GITHUB_ACCOUNT_INPUT_INVALID,
   type GitProvider,
   gitChangeRequestNoun,
-  parseGithubAccountInput,
 } from "@archestra/shared";
 import {
   AlertTriangle,
@@ -30,6 +28,11 @@ import {
 } from "@/components/git/git-setup-chrome";
 import { AccessSummary } from "@/components/github-app-setup/access-summary";
 import { AccountChip } from "@/components/github-app-setup/account-chip";
+import {
+  GITHUB_DOT_COM_WEB,
+  GithubAccountFields,
+  readGithubAccountFields,
+} from "@/components/github-app-setup/github-account-fields";
 import { GithubAppChoice } from "@/components/github-app-setup/github-app-choice";
 import { GithubAppPicker } from "@/components/github-app-setup/github-app-picker";
 import {
@@ -37,7 +40,6 @@ import {
   openGithubWindow,
   postManifest,
 } from "@/components/github-app-setup/github-app-window";
-import { GithubOrganizationField } from "@/components/github-app-setup/github-organization-field";
 import { ManifestRow } from "@/components/github-app-setup/manifest-row";
 import { GitHubConnectButton } from "@/components/github-connect-button";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
@@ -125,14 +127,17 @@ export function GithubSyncSetupDialog({
     editing?.provider ?? null,
   );
   const gitlab = provider === "gitlab";
-  // One field names the account and its GitHub: a login (github.com) or the
-  // account's address on any GitHub host. A personal account works too.
-  const [ownerInput, setOwnerInput] = useState(
-    editing?.provider === "github"
-      ? accountInput(editing.webUrl, editing.repo.split("/")[0])
-      : "",
+  const [githubUrl, setGithubUrl] = useState(
+    editing?.provider === "github" ? editing.webUrl : GITHUB_DOT_COM_WEB,
   );
-  const github = parseGithubAccountInput(ownerInput);
+  const [ownerInput, setOwnerInput] = useState(
+    editing?.repo.split("/")[0] ?? "",
+  );
+  const accountFields = readGithubAccountFields({
+    githubUrl,
+    organization: ownerInput,
+  });
+  const github = accountFields.account;
   const owner = github?.login ?? "";
   const ready = !!github;
   // An App lives on one GitHub; only those on the same one can serve it.
@@ -306,7 +311,8 @@ export function GithubSyncSetupDialog({
   // Resume a setup whose App exists on an account.
   useEffect(() => {
     if (!createdApp) return;
-    setOwnerInput(createdApp.accountUrl);
+    setGithubUrl(new URL(createdApp.accountUrl).origin);
+    setOwnerInput(createdApp.account);
   }, [createdApp]);
 
   // The callback tab reports back once GitHub finishes each step.
@@ -566,11 +572,7 @@ export function GithubSyncSetupDialog({
             // the old repository means nothing there.
             const sameHost = editing?.provider === picked;
             setRepo(sameHost ? editing.repo : "");
-            setOwnerInput(
-              sameHost
-                ? accountInput(editing.webUrl, editing.repo.split("/")[0])
-                : "",
-            );
+            setOwnerInput(sameHost ? editing.repo.split("/")[0] : "");
             setRef(sameHost ? (editing.ref ?? "") : "");
             setOrigin(sameHost ? "existing" : null);
             setProjectMode(sameHost ? "existing" : "create");
@@ -596,15 +598,15 @@ export function GithubSyncSetupDialog({
       ) : null}
 
       {step === "start" && !origin ? (
-        <GithubOrganizationField
-          id="github-sync-owner"
-          label="GitHub organization or user"
-          help="The account for the policy repository: its GitHub handle or URL"
-          value={ownerInput}
-          onChange={setOwnerInput}
-          error={
-            ownerInput.trim() && !github ? GITHUB_ACCOUNT_INPUT_INVALID : null
-          }
+        <GithubAccountFields
+          idPrefix="github-sync"
+          githubUrl={githubUrl}
+          onGithubUrlChange={setGithubUrl}
+          organization={ownerInput}
+          onOrganizationChange={setOwnerInput}
+          organizationHelp="The GitHub organization for the policy repository."
+          urlError={accountFields.urlError}
+          organizationError={accountFields.organizationError}
         />
       ) : null}
 
@@ -1695,10 +1697,3 @@ const DIRECTORY_PATH = /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/;
 const POLICY_PATH = /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*\.toml$/;
 
 const APP_LOGO_PATH = "/openappa/github-app-logo.png";
-
-/** The one-field form of an account on a GitHub: a login on github.com, else its address. */
-function accountInput(webUrl: string, login: string) {
-  return webUrl.replace(/\/+$/, "") === "https://github.com"
-    ? login
-    : `${webUrl.replace(/\/+$/, "")}/${login}`;
-}

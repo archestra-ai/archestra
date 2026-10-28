@@ -95,6 +95,8 @@ export const CopilotGithubAppKeySummarySchema = z.object({
   appIcon: z.string().nullable(),
   /** The App's page on GitHub, when GitHub could be reached. */
   appUrl: z.string().nullable(),
+  /** The web address of the GitHub the organization is on. */
+  githubUrl: z.string(),
   /** The private key's fingerprint, as GitHub shows it on the App page. */
   fingerprint: z.string(),
 });

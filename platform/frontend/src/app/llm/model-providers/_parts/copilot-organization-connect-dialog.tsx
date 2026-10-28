@@ -1,6 +1,5 @@
 "use client";
 
-import { parseGithubAccountInput } from "@archestra/shared";
 import { ArrowLeft, CircleAlert, ExternalLink } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AdvancedFold, SetupStepper } from "@/components/git/git-setup-chrome";
@@ -9,6 +8,11 @@ import {
   type AppKeyFields,
   ConnectAppByKey,
 } from "@/components/github-app-setup/connect-app-by-key";
+import {
+  GITHUB_DOT_COM_WEB,
+  GithubAccountFields,
+  readGithubAccountFields,
+} from "@/components/github-app-setup/github-account-fields";
 import { GithubAppChoice } from "@/components/github-app-setup/github-app-choice";
 import { GithubAppPicker } from "@/components/github-app-setup/github-app-picker";
 import {
@@ -16,7 +20,6 @@ import {
   openGithubWindow,
   postManifest,
 } from "@/components/github-app-setup/github-app-window";
-import { GithubOrganizationField } from "@/components/github-app-setup/github-organization-field";
 import { ManifestRow } from "@/components/github-app-setup/manifest-row";
 import type { PrivateKeyStatus } from "@/components/github-app-setup/private-key-drop";
 import { GitHubConnectButton } from "@/components/github-connect-button";
@@ -96,6 +99,7 @@ export function CopilotOrganizationConnectDialog({
     manage?.reconnect ? "app" : "organization",
   );
   const [mode, setMode] = useState<AppMode>("choose");
+  const [githubUrl, setGithubUrl] = useState(GITHUB_DOT_COM_WEB);
   const [organizationInput, setOrganizationInput] = useState(
     manage?.organization ?? "",
   );
@@ -129,8 +133,14 @@ export function CopilotOrganizationConnectDialog({
   );
   const keyName = keyDetail.data?.name ?? manage?.name ?? "";
 
+  // The two fields as the backend takes them: a login on github.com, else
+  // the organization's address on its GitHub.
+  const account = readGithubAccountFields({
+    githubUrl,
+    organization: organizationInput,
+  });
   // An App lives on one GitHub; only those on the organization's can serve it.
-  const host = parseGithubAccountInput(organizationInput);
+  const host = account.account;
   const apps =
     credentials.data?.filter(
       (credential) =>
@@ -146,11 +156,18 @@ export function CopilotOrganizationConnectDialog({
         !(currentApp && credential.appId === currentApp.appId),
     ) ?? [];
 
+  // A managed plan's organization is on the GitHub its App is on.
+  const managedGithubUrl = manage ? currentApp?.githubUrl : undefined;
+  useEffect(() => {
+    if (managedGithubUrl) setGithubUrl(managedGithubUrl);
+  }, [managedGithubUrl]);
+
   // An App created earlier still awaits installation: pick up where setup stopped.
   useEffect(() => {
     if (!createdApp || replaceKeyId) return;
     setOrganization(createdApp.account);
-    setOrganizationInput(createdApp.accountUrl);
+    setGithubUrl(new URL(createdApp.accountUrl).origin);
+    setOrganizationInput(createdApp.account);
     setMode("create");
     setStep((current) => (current === "organization" ? "app" : current));
   }, [createdApp, replaceKeyId]);
@@ -173,6 +190,7 @@ export function CopilotOrganizationConnectDialog({
   function connected(value: { id: string; organization: string }) {
     setConnectedKeyId(value.id);
     setOrganization(value.organization);
+    setOrganizationInput(value.organization);
     setWaiting(null);
     setStep("access");
   }
@@ -184,7 +202,7 @@ export function CopilotOrganizationConnectDialog({
       return;
     }
     check.mutate(
-      { organization: organizationInput },
+      { organization: account.input },
       {
         onSuccess: (checked) => {
           if (!checked) return;
@@ -200,7 +218,7 @@ export function CopilotOrganizationConnectDialog({
     const tab = openGithubWindow("about:blank");
     setWaiting("create");
     start.mutate(
-      { organization: organizationInput || organization },
+      { organization: account.input },
       {
         onSuccess: (manifest) => {
           if (manifest) postManifest(manifest);
@@ -237,7 +255,7 @@ export function CopilotOrganizationConnectDialog({
     fromCredential.mutate(
       replaceKeyId
         ? { credentialId: pickedId, replaceKeyId }
-        : { credentialId: pickedId, organization: organizationInput },
+        : { credentialId: pickedId, organization: account.input },
       {
         onSuccess: (answer) => {
           if (answer?.status === "installed") connected(answer);
@@ -286,7 +304,7 @@ export function CopilotOrganizationConnectDialog({
       : null;
   const keyTarget = replaceKeyId
     ? { replaceKeyId }
-    : { organization: organizationInput };
+    : { organization: account.input };
   const keyStatus: PrivateKeyStatus = byKey.error
     ? { kind: "error", message: byKey.error.message }
     : validate.isPending
@@ -348,9 +366,7 @@ export function CopilotOrganizationConnectDialog({
           {step === "organization" ? (
             <Button
               type="button"
-              disabled={
-                !replaceKeyId && (!organizationInput.trim() || check.isPending)
-              }
+              disabled={!replaceKeyId && (!account.account || check.isPending)}
               onClick={continueFromOrganization}
             >
               <span>Continue</span>
@@ -402,16 +418,27 @@ export function CopilotOrganizationConnectDialog({
       />
 
       {step === "organization" ? (
-        <GithubOrganizationField
-          id="copilot-org-login"
-          // A connected plan keeps its organization: shown, not editable.
-          value={replaceKeyId ? organization : organizationInput}
-          disabled={!!replaceKeyId}
-          onChange={(value) => {
+        <GithubAccountFields
+          idPrefix="copilot-org"
+          githubUrl={githubUrl}
+          onGithubUrlChange={(value) => {
+            check.reset();
+            setGithubUrl(value);
+          }}
+          organization={organizationInput}
+          onOrganizationChange={(value) => {
             check.reset();
             setOrganizationInput(value);
           }}
-          error={check.error?.message ?? null}
+          organizationHelp="The GitHub organization with the Copilot plan."
+          // A connected plan keeps its account: shown, not editable.
+          disabled={!!replaceKeyId}
+          urlError={replaceKeyId ? null : account.urlError}
+          organizationError={
+            replaceKeyId
+              ? null
+              : (account.organizationError ?? check.error?.message ?? null)
+          }
         />
       ) : null}
 

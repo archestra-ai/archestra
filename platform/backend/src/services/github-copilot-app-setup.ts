@@ -355,6 +355,7 @@ class CopilotGithubAppSetup {
       appName: definition?.name ?? app?.name ?? null,
       appIcon: definition?.icon ?? null,
       appUrl: app?.html_url ?? null,
+      githubUrl: credential.githubUrl ?? "https://github.com",
       fingerprint: githubAppKeyFingerprint(credential.privateKey),
     };
   }

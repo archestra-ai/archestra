@@ -1,4 +1,10 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -85,6 +91,7 @@ const keyApp = {
   appName: "My Org Copilot",
   appIcon: null,
   appUrl: "https://github.com/apps/my-org-copilot",
+  githubUrl: "https://github.com",
   fingerprint: "SHA256:current=",
 };
 
@@ -146,24 +153,27 @@ afterEach(() => {
 async function continueWithOrganization(value = "my-org") {
   const user = userEvent.setup();
   render(<CopilotOrganizationConnectDialog open onOpenChange={vi.fn()} />);
-  await user.type(screen.getByLabelText("GitHub organization"), value);
+  await user.type(screen.getByLabelText("Organization"), value);
   await user.click(screen.getByRole("button", { name: "Continue" }));
   return user;
 }
 
 describe("CopilotOrganizationConnectDialog", () => {
-  it("asks for the organization in one field, in the Guardrails stepper", async () => {
+  it("asks for the GitHub and the organization as Guardrails does, in its stepper", async () => {
     render(<CopilotOrganizationConnectDialog open onOpenChange={vi.fn()} />);
 
-    for (const label of ["Organization", "GitHub App", "Access"])
-      expect(screen.getByText(label)).toBeInTheDocument();
-    const field = screen.getByLabelText("GitHub organization");
-    expect(field).toHaveAttribute(
-      "placeholder",
-      "acme or https://github.com/acme",
+    const stepper = within(
+      screen.getByRole("list", { name: "Setup progress" }),
     );
+    for (const label of ["Organization", "GitHub App", "Access"])
+      expect(stepper.getByText(label)).toBeInTheDocument();
+    expect(screen.getByLabelText("GitHub URL")).toHaveValue(
+      "https://github.com",
+    );
+    const field = screen.getByLabelText("Organization");
+    expect(field).toHaveAttribute("placeholder", "acme");
     expect(field).toHaveAccessibleDescription(
-      "Organization's GitHub handle or URL",
+      "The GitHub organization with the Copilot plan.",
     );
     // The step holds only the field; what the App may do comes with the App.
     expect(screen.queryByText("What this allows")).toBeNull();
@@ -264,7 +274,28 @@ describe("CopilotOrganizationConnectDialog", () => {
     expect(screen.getByText("Install it on my-org")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create App" }));
     expect(start.mutate).toHaveBeenCalledWith(
-      { organization: "https://github.com/my-org" },
+      { organization: "my-org" },
+      expect.anything(),
+    );
+  });
+
+  it("checks an organization on GitHub Enterprise Server by its address", async () => {
+    const check = mutation({ organization: "acme" });
+    vi.mocked(useCheckCopilotGithubOrganization).mockReturnValue(
+      check as never,
+    );
+    const user = userEvent.setup();
+    render(<CopilotOrganizationConnectDialog open onOpenChange={vi.fn()} />);
+    await user.clear(screen.getByLabelText("GitHub URL"));
+    await user.type(
+      screen.getByLabelText("GitHub URL"),
+      "https://git.example.com",
+    );
+    await user.type(screen.getByLabelText("Organization"), "acme");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(check.mutate).toHaveBeenCalledWith(
+      { organization: "https://git.example.com/acme" },
       expect.anything(),
     );
   });
@@ -363,8 +394,8 @@ describe("CopilotOrganizationConnectDialog", () => {
 
     // App step, choose: back to the organization, still editable.
     await user.click(screen.getByRole("button", { name: "Back" }));
-    expect(screen.getByLabelText("GitHub organization")).toHaveValue("my-org");
-    expect(screen.getByLabelText("GitHub organization")).toBeEnabled();
+    expect(screen.getByLabelText("Organization")).toHaveValue("my-org");
+    expect(screen.getByLabelText("Organization")).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
     // Each way to get an App goes back to the choice.
@@ -400,8 +431,9 @@ describe("CopilotOrganizationConnectDialog", () => {
     // Its organization is fixed now.
     await user.click(screen.getByRole("button", { name: "Back" }));
     await user.click(screen.getByRole("button", { name: "Back" }));
-    expect(screen.getByLabelText("GitHub organization")).toBeDisabled();
-    expect(screen.getByLabelText("GitHub organization")).toHaveValue("my-org");
+    expect(screen.getByLabelText("Organization")).toBeDisabled();
+    expect(screen.getByLabelText("Organization")).toHaveValue("my-org");
+    expect(screen.getByLabelText("GitHub URL")).toBeDisabled();
   });
 
   it("installs a new App made from Access onto the connected key", async () => {
@@ -468,13 +500,14 @@ describe("CopilotOrganizationConnectDialog", () => {
     );
 
     expect(screen.getByText("Reconnect GitHub Copilot")).toBeInTheDocument();
-    expect(screen.queryByLabelText("GitHub organization")).toBeNull();
+    expect(screen.queryByLabelText("Organization")).toBeNull();
 
     // Back shows the plan's organization, fixed; Continue needs no check.
     await user.click(screen.getByRole("button", { name: "Back" }));
-    const field = screen.getByLabelText("GitHub organization");
+    const field = screen.getByLabelText("Organization");
     expect(field).toBeDisabled();
     expect(field).toHaveValue("other-org");
+    expect(screen.getByLabelText("GitHub URL")).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(
       vi.mocked(useCheckCopilotGithubOrganization).mock.results[0]?.value
@@ -554,11 +587,19 @@ describe("CopilotOrganizationConnectDialog managing a plan", () => {
     expect(
       screen.getByText("Your enterprise GitHub Copilot plan. Can be shared."),
     ).toBeInTheDocument();
+    const stepper = within(
+      screen.getByRole("list", { name: "Setup progress" }),
+    );
     for (const label of ["Organization", "GitHub App", "Access"])
-      expect(screen.getByText(label)).toBeInTheDocument();
-    const field = screen.getByLabelText("GitHub organization");
+      expect(stepper.getByText(label)).toBeInTheDocument();
+    const field = screen.getByLabelText("Organization");
     expect(field).toBeDisabled();
     expect(field).toHaveValue("my-org");
+    // The key's GitHub, from its App.
+    expect(screen.getByLabelText("GitHub URL")).toHaveValue(
+      "https://github.com",
+    );
+    expect(screen.getByLabelText("GitHub URL")).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(

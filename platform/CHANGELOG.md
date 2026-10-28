@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.4.8](https://github.com/archestra-ai/archestra/compare/platform-v1.4.7...platform-v1.4.8) (2026-10-28)
+
+
+### Features
+
+* **agent-runtime:** run and ship a project from the public agent image (backport release/1.4) ([#9480](https://github.com/archestra-ai/archestra/issues/9480)) ([dd6e64b](https://github.com/archestra-ai/archestra/commit/dd6e64bd25b13cb3896df4681994bf37767f0818))
+* **openappa:** backport scheduled run diagnostics to release/1.4 ([#9757](https://github.com/archestra-ai/archestra/issues/9757)) ([e36d267](https://github.com/archestra-ai/archestra/commit/e36d2670d3b7444fe31983d38733ac34fedfd053))
+
+
+### Bug Fixes
+
+* **agent-image:** stop a failed turn's whole client process group (backport release/1.4) ([#9727](https://github.com/archestra-ai/archestra/issues/9727)) ([a69d480](https://github.com/archestra-ai/archestra/commit/a69d480c1e04f9b9eadabf4df251d50539811dcf))
+* **chat:** keep context window circle indicator and tooltip/breakdown in sync (backport release/1.4) ([#9748](https://github.com/archestra-ai/archestra/issues/9748)) ([5933b53](https://github.com/archestra-ai/archestra/commit/5933b53a62895b50cf66ca31e4bd5d729ec00b88))
+* **chat:** let the Azure proxy select the upstream API version (backport release/1.4) ([#9675](https://github.com/archestra-ai/archestra/issues/9675)) ([ac1928d](https://github.com/archestra-ai/archestra/commit/ac1928dd779ce4fe8a295f95db4272718089d8f1))
+* **chat:** route gpt-6 models to the Responses API (backport release/1.4) ([#9725](https://github.com/archestra-ai/archestra/issues/9725)) ([0a637c2](https://github.com/archestra-ai/archestra/commit/0a637c2ce5bd606797cbe519b320e9e6e3bd9b9e))
+* **ci:** backport registry migration to release/1.4 ([#9754](https://github.com/archestra-ai/archestra/issues/9754)) ([7d8ef56](https://github.com/archestra-ai/archestra/commit/7d8ef567af80d482e205ac7f9b72c636cc05847b))
+* **connect:** backport Windows BOM handling and launcher diagnostics to release/1.4 ([#9682](https://github.com/archestra-ai/archestra/issues/9682)) ([903e82d](https://github.com/archestra-ai/archestra/commit/903e82d0911ccbe9711561b3a9421af79ca75a48))
+* **connections:** register skills under the marketplace name the user cloned (backport release/1.4) ([#9707](https://github.com/archestra-ai/archestra/issues/9707)) ([9ed9674](https://github.com/archestra-ai/archestra/commit/9ed9674ec10d047614036fddc68801de0d8f4122))
+* **connect:** restore Azure and Copilot models in OpenCode (backport release/1.4) ([#9740](https://github.com/archestra-ai/archestra/issues/9740)) ([60770e0](https://github.com/archestra-ai/archestra/commit/60770e0157e67ad100e27bac473df4feb0aad4b0))
+* **connect:** show the connected card only for the agent that connected (backport release/1.4) ([#9703](https://github.com/archestra-ai/archestra/issues/9703)) ([f372fed](https://github.com/archestra-ai/archestra/commit/f372fed2bf28313cfb90e551036abfb0fbb3d4ac))
+* **connect:** stack guardrails and last connected icons in tile corner (backport release/1.4) ([#9730](https://github.com/archestra-ai/archestra/issues/9730)) ([cc310b6](https://github.com/archestra-ai/archestra/commit/cc310b6d8d206101930d8dee134ebb2a9e7992af))
+* **costs:** restore cache metrics and savings in usage explorers (backport release/1.4) ([#9738](https://github.com/archestra-ai/archestra/issues/9738)) ([ee2cb67](https://github.com/archestra-ai/archestra/commit/ee2cb67c1ea22e416327ae4dc96e410f71e42fec))
+* **docker:** patch npm HTTP client in agent catalog images (backport release/1.4) ([#9677](https://github.com/archestra-ai/archestra/issues/9677)) ([a3c1e6e](https://github.com/archestra-ai/archestra/commit/a3c1e6e2692627597f7b92442aa9926ca9278c2f))
+* **limits:** backport readable budget 402 details to 1.4 ([#9771](https://github.com/archestra-ai/archestra/issues/9771)) ([36a8eef](https://github.com/archestra-ai/archestra/commit/36a8eefb0a66a5748318c82e6dc839579f9d25fe))
+* **llm-proxy:** preserve native prompt caching (backport release/1.4) ([#9766](https://github.com/archestra-ai/archestra/issues/9766)) ([2979569](https://github.com/archestra-ai/archestra/commit/297956942db8eaf024011ec1e175bd480f10668a))
+* **model-router:** preserve prompt caching (backport release/1.4) ([#9768](https://github.com/archestra-ai/archestra/issues/9768)) ([0f2ccb4](https://github.com/archestra-ai/archestra/commit/0f2ccb4ae153746e8dfe2c16465ea6ccb91d23af))
+* **opencode:** backport Windows UTF-8 runtime transport to release/1.4 ([#9688](https://github.com/archestra-ai/archestra/issues/9688)) ([ae329ad](https://github.com/archestra-ai/archestra/commit/ae329adc542fa079d4ea90b9db0c505f133cedcb))
+* **runs:** draw recorded terminal screens without seams, gaps or clipped glyp (backport release/1.4) ([#9773](https://github.com/archestra-ai/archestra/issues/9773)) ([f855b61](https://github.com/archestra-ai/archestra/commit/f855b61b4a94a41d9b28f2b1b6931548cfb3b72d))
+* **runs:** replay a recording's resizes as tmux resized the pane (backport release/1.4) ([#9670](https://github.com/archestra-ai/archestra/issues/9670)) ([63c995a](https://github.com/archestra-ai/archestra/commit/63c995a6f3976edee41d12b06fe380a0953b6e17))
+* **security:** backport compatible auth and Go JOSE patches to 1.4 ([#9769](https://github.com/archestra-ai/archestra/issues/9769)) ([b554c3d](https://github.com/archestra-ai/archestra/commit/b554c3d6f06583f76ad0a46f668e338dd4f2af49))
+
 ## [1.4.7](https://github.com/archestra-ai/archestra/compare/platform-v1.4.6...platform-v1.4.7) (2026-10-26)
 
 

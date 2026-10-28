@@ -91,8 +91,7 @@ export function readGithubAccountFields(fields: {
 
 // ===== Internal helpers =====
 
-const URL_INVALID =
-  "Enter the address of your GitHub, like https://github.com.";
+const URL_INVALID = "Enter a web address, like https://github.com.";
 const ORGANIZATION_INVALID = "Enter the organization's name on GitHub.";
 const OWNER_PATTERN = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;
 

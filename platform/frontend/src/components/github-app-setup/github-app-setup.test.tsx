@@ -72,7 +72,7 @@ describe("GithubAccountFields", () => {
     renderFields({ githubUrl: "not a url", organization: "-bad-" });
 
     expect(screen.getByLabelText("GitHub URL")).toHaveAccessibleDescription(
-      "Enter the address of your GitHub, like https://github.com.",
+      "Enter a web address, like https://github.com.",
     );
     expect(screen.getByLabelText("GitHub URL")).toHaveAttribute(
       "aria-invalid",

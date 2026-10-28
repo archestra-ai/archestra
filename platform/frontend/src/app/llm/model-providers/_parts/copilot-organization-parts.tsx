@@ -10,11 +10,11 @@ import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 
 /**
  * The wizard's one box, for Connect, Manage and Reconnect: the medium width
- * and a fixed height that fits its tallest step with room for a two-line
- * error, so it never resizes between steps. The body scrolls inside; the
- * footer stays pinned.
+ * and a fixed height, so it never resizes between steps. 39rem fits the
+ * tallest step (Manage's key form, with the App in use above it) and a
+ * two-line error. The body scrolls inside; the footer stays pinned.
  */
-export const COPILOT_DIALOG_CLASS = "h-[min(37rem,85vh)]";
+export const COPILOT_DIALOG_CLASS = "h-[min(39rem,85vh)]";
 
 /** The organization a GitHub Copilot plan bills. */
 export function OrganizationRow({ organization }: { organization: string }) {

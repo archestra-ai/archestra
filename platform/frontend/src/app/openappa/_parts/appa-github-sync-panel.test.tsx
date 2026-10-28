@@ -727,7 +727,7 @@ test("asks for the GitHub and the organization, each error in place of its hint"
   fireEvent.change(url, { target: { value: "not a url" } });
   fireEvent.change(organization, { target: { value: "-bad-" } });
   expect(url).toHaveAccessibleDescription(
-    "Enter the address of your GitHub, like https://github.com.",
+    "Enter a web address, like https://github.com.",
   );
   expect(organization).toHaveAccessibleDescription(
     "Enter the organization's name on GitHub.",

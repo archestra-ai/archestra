@@ -31,7 +31,8 @@ export function GithubAppPicker({
     <RadioGroup
       value={value}
       onValueChange={onChange}
-      className="gap-2"
+      // About three Apps show; more scroll inside the list.
+      className="max-h-[9.5rem] gap-2 overflow-y-auto p-px"
       aria-label="GitHub App"
     >
       {apps.map((app) => (

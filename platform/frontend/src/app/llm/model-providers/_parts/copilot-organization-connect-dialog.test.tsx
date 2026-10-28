@@ -217,7 +217,11 @@ describe("CopilotOrganizationConnectDialog", () => {
     await user.click(screen.getByRole("button", { name: "Use this App" }));
 
     expect(fromCredential.mutate).toHaveBeenCalledWith(
-      { credentialId: "cred-1", organization: "my-org" },
+      {
+        credentialId: "cred-1",
+        organization: "my-org",
+        name: "GitHub Copilot (my-org)",
+      },
       expect.anything(),
     );
     expect(
@@ -264,13 +268,8 @@ describe("CopilotOrganizationConnectDialog", () => {
     );
 
     expect(screen.getByText("Create the App on GitHub")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "The App only needs Copilot requests, nothing else in the organization. Requests are paid from my-org's AI credits.",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Copilot requests")).toBeInTheDocument();
-    expect(screen.getByText("Read-only")).toBeInTheDocument();
+    // What the App may do is said once, with the ways to get it.
+    expect(screen.queryByText(/can only make Copilot requests/)).toBeNull();
     expect(screen.getByText("Install it on my-org")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create App" }));
     expect(start.mutate).toHaveBeenCalledWith(
@@ -318,11 +317,7 @@ describe("CopilotOrganizationConnectDialog", () => {
         name: /Connect an App by its ID and private key/,
       }),
     );
-    expect(
-      screen.getByText(
-        "The App only needs Copilot requests, nothing else in the organization. Requests are paid from my-org's AI credits.",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/can only make Copilot requests/)).toBeNull();
     expect(screen.queryByRole("button", { name: /Check App/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
 
@@ -344,7 +339,12 @@ describe("CopilotOrganizationConnectDialog", () => {
     await user.click(screen.getByRole("button", { name: "Connect" }));
 
     expect(byKey.mutate).toHaveBeenCalledWith(
-      { appId: "42", privateKey: pem, organization: "my-org" },
+      {
+        appId: "42",
+        privateKey: pem,
+        organization: "my-org",
+        name: "GitHub Copilot (my-org)",
+      },
       expect.anything(),
     );
     expect(screen.getByText("Access picker")).toBeInTheDocument();
@@ -541,6 +541,69 @@ describe("CopilotOrganizationConnectDialog", () => {
       screen.getByRole("button", { name: "Continue" }),
     ).toBeInTheDocument();
   });
+
+  it("takes an optional name, the default named after the organization", async () => {
+    const fromCredential = mutation(installed);
+    vi.mocked(useConnectCopilotGithubAppCredential).mockReturnValue(
+      fromCredential as never,
+    );
+    const user = userEvent.setup();
+    render(<CopilotOrganizationConnectDialog open onOpenChange={vi.fn()} />);
+    const name = screen.getByLabelText(/Name/);
+    await user.type(screen.getByLabelText("Organization"), "my-org");
+    expect(name).toHaveValue("");
+    expect(name).toHaveAttribute("placeholder", "GitHub Copilot (my-org)");
+
+    // Left empty, the plan gets the default.
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(
+      screen.getByRole("button", { name: /Use an App I already have/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Use this App" }));
+    expect(fromCredential.mutate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ name: "GitHub Copilot (my-org)" }),
+      expect.anything(),
+    );
+  });
+
+  it("creates the plan with a name that was typed", async () => {
+    const fromCredential = mutation(installed);
+    vi.mocked(useConnectCopilotGithubAppCredential).mockReturnValue(
+      fromCredential as never,
+    );
+    const user = userEvent.setup();
+    render(<CopilotOrganizationConnectDialog open onOpenChange={vi.fn()} />);
+    await user.type(screen.getByLabelText("Organization"), "my-org");
+    await user.type(screen.getByLabelText(/Name/), "Copilot");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(
+      screen.getByRole("button", { name: /Use an App I already have/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Use this App" }));
+    expect(fromCredential.mutate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ name: "Copilot" }),
+      expect.anything(),
+    );
+  });
+
+  it("says what the App may do in one line under the three ways to get it", async () => {
+    const user = await continueWithOrganization();
+
+    expect(
+      screen.getByText(
+        /The App can only make Copilot requests, billed to my-org/,
+      ),
+    ).toHaveTextContent(
+      "The App can only make Copilot requests, billed to my-org. Set a spending cap in Costs & Limits.",
+    );
+    expect(
+      screen.getByRole("link", { name: "Costs & Limits" }),
+    ).toHaveAttribute("href", "/llm/costs");
+    await user.click(
+      screen.getByRole("button", { name: /Use an App I already have/ }),
+    );
+    expect(screen.queryByText(/can only make Copilot requests/)).toBeNull();
+  });
 });
 
 describe("CopilotOrganizationConnectDialog managing a plan", () => {
@@ -726,26 +789,31 @@ describe("CopilotOrganizationConnectDialog managing a plan", () => {
     );
   });
 
-  it("saves a changed name on Done, and only closes when it is unchanged", async () => {
+  it("keeps the name on the Organization step, editable, and saves a change on Done", async () => {
     const update = mutation({});
     vi.mocked(useUpdateLlmProviderApiKey).mockReturnValue(update as never);
     const onOpenChange = vi.fn();
     const user = renderManage(onOpenChange);
-    await user.click(screen.getByRole("button", { name: "Continue" }));
-    await user.click(screen.getByRole("button", { name: "Continue" }));
 
-    // Advanced is folded; the name sits in it, filled in.
-    expect(screen.queryByLabelText("Name")).toBeNull();
-    await user.click(screen.getByRole("button", { name: /Advanced/ }));
-    expect(screen.getByLabelText("Name")).toHaveValue(
-      "GitHub Copilot (my-org)",
-    );
+    const name = screen.getByLabelText(/Name/);
+    expect(name).toHaveValue("GitHub Copilot (my-org)");
+    expect(name).toHaveAttribute("placeholder", "GitHub Copilot (my-org)");
+    expect(name).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    // Access is only who can use it.
+    expect(screen.queryByRole("button", { name: /Advanced/ })).toBeNull();
+    expect(screen.queryByText(/GitHub can't limit/)).toBeNull();
     await user.click(screen.getByRole("button", { name: "Done" }));
     expect(update.mutate).not.toHaveBeenCalled();
     expect(onOpenChange).toHaveBeenLastCalledWith(false);
 
-    await user.clear(screen.getByLabelText("Name"));
-    await user.type(screen.getByLabelText("Name"), "Copilot for my-org");
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.clear(screen.getByLabelText(/Name/));
+    await user.type(screen.getByLabelText(/Name/), "Copilot for my-org");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(screen.getByRole("button", { name: "Continue" }));
     await user.click(screen.getByRole("button", { name: "Done" }));
     expect(update.mutate).toHaveBeenCalledWith(
       { id: "key-1", data: { name: "Copilot for my-org" } },

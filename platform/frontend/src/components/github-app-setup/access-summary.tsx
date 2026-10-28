@@ -1,6 +1,7 @@
 "use client";
 
 import { ShieldCheck } from "lucide-react";
+import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 
 /** What a GitHub App setup's App may do: a line, then one badge per permission. */
@@ -32,5 +33,15 @@ export function AccessSummary({
         </div>
       </div>
     </div>
+  );
+}
+
+/** The compact form: one muted line under the ways to get the App. */
+export function AccessNote({ children }: { children: ReactNode }) {
+  return (
+    <p className="flex items-start gap-2 text-xs text-muted-foreground">
+      <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden />
+      <span>{children}</span>
+    </p>
   );
 }

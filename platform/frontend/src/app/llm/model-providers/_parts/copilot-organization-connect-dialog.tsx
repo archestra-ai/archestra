@@ -1,9 +1,10 @@
 "use client";
 
 import { ArrowLeft, CircleAlert, ExternalLink } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { AdvancedFold, SetupStepper } from "@/components/git/git-setup-chrome";
-import { AccessSummary } from "@/components/github-app-setup/access-summary";
+import { SetupStepper } from "@/components/git/git-setup-chrome";
+import { AccessNote } from "@/components/github-app-setup/access-summary";
 import {
   type AppKeyFields,
   ConnectAppByKey,
@@ -23,6 +24,7 @@ import {
 import { ManifestRow } from "@/components/github-app-setup/manifest-row";
 import type { PrivateKeyStatus } from "@/components/github-app-setup/private-key-drop";
 import { GitHubConnectButton } from "@/components/github-connect-button";
+import { ResourceAccessSection } from "@/components/resource-access-section";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,7 +54,6 @@ import {
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import {
   COPILOT_DIALOG_CLASS,
-  CopilotAccess,
   GithubAppRow,
   OrganizationRow,
 } from "./copilot-organization-parts";
@@ -109,9 +110,8 @@ export function CopilotOrganizationConnectDialog({
   // The key this session connected; going back from Access reconnects it.
   const [connectedKeyId, setConnectedKeyId] = useState<string | null>(null);
   const [keyFields, setKeyFields] = useState<AppKeyFields | null>(null);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  // The name as typed on Access; null until edited.
-  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  // Optional, as on any provider key: empty means the default name.
+  const [nameDraft, setNameDraft] = useState(manage?.name ?? "");
 
   const check = useCheckCopilotGithubOrganization();
   const pending = usePendingCopilotGithubApp(open && !!canCreateCredentials);
@@ -141,6 +141,14 @@ export function CopilotOrganizationConnectDialog({
   });
   // An App lives on one GitHub; only those on the organization's can serve it.
   const host = account.account;
+  const defaultLogin = replaceKeyId
+    ? organization
+    : account.account?.login || organizationInput.trim();
+  const defaultName = defaultLogin
+    ? `GitHub Copilot (${defaultLogin})`
+    : "GitHub Copilot";
+  // Empty falls back to the default.
+  const name = nameDraft.trim() || defaultName;
   const apps =
     credentials.data?.filter(
       (credential) =>
@@ -242,7 +250,7 @@ export function CopilotOrganizationConnectDialog({
   function checkInstall() {
     // The return tab can report the install twice; one check is enough.
     if (install.isPending) return;
-    install.mutate(replaceKeyId ? { replaceKeyId } : {}, {
+    install.mutate(replaceKeyId ? { replaceKeyId } : { name }, {
       onSuccess: (installed) => {
         if (installed?.status === "installed") connected(installed);
       },
@@ -255,7 +263,7 @@ export function CopilotOrganizationConnectDialog({
     fromCredential.mutate(
       replaceKeyId
         ? { credentialId: pickedId, replaceKeyId }
-        : { credentialId: pickedId, organization: account.input },
+        : { credentialId: pickedId, organization: account.input, name },
       {
         onSuccess: (answer) => {
           if (answer?.status === "installed") connected(answer);
@@ -282,8 +290,7 @@ export function CopilotOrganizationConnectDialog({
   }
 
   function done() {
-    const name = nameDraft?.trim();
-    if (!replaceKeyId || !name || name === keyName) return onOpenChange(false);
+    if (!replaceKeyId || name === keyName) return onOpenChange(false);
     update.mutate(
       { id: replaceKeyId, data: { name } },
       { onSuccess: () => onOpenChange(false) },
@@ -293,7 +300,7 @@ export function CopilotOrganizationConnectDialog({
   function connectByKey() {
     if (!keyFields) return;
     byKey.mutate(
-      { ...keyFields, ...keyTarget },
+      { ...keyFields, ...connectTarget },
       { onSuccess: (answer) => answer && connected(answer) },
     );
   }
@@ -305,6 +312,8 @@ export function CopilotOrganizationConnectDialog({
   const keyTarget = replaceKeyId
     ? { replaceKeyId }
     : { organization: account.input };
+  // A new key is created with the name from the Organization step.
+  const connectTarget = replaceKeyId ? keyTarget : { ...keyTarget, name };
   const keyStatus: PrivateKeyStatus = byKey.error
     ? { kind: "error", message: byKey.error.message }
     : validate.isPending
@@ -441,6 +450,25 @@ export function CopilotOrganizationConnectDialog({
           }
         />
       ) : null}
+      {step === "organization" ? (
+        <div className="space-y-2">
+          <Label htmlFor="copilot-key-name">
+            Name{" "}
+            <span className="text-muted-foreground font-normal">
+              (optional)
+            </span>
+          </Label>
+          <Input
+            id="copilot-key-name"
+            value={nameDraft}
+            placeholder={defaultName}
+            autoComplete="off"
+            data-1p-ignore
+            data-lpignore="true"
+            onChange={(event) => setNameDraft(event.target.value)}
+          />
+        </div>
+      ) : null}
 
       {step === "app" && (organization || currentApp) ? (
         <div className="space-y-2">
@@ -471,6 +499,16 @@ export function CopilotOrganizationConnectDialog({
             onConnectByKey={() => setMode("key")}
             others={!!currentApp}
           />
+          <AccessNote>
+            {`The App can only make Copilot requests, billed to ${organization}. Set a spending cap in `}
+            <Link
+              href="/llm/costs"
+              className="underline underline-offset-4 hover:text-foreground"
+            >
+              Costs & Limits
+            </Link>
+            .
+          </AccessNote>
         </div>
       ) : null}
 
@@ -600,7 +638,6 @@ export function CopilotOrganizationConnectDialog({
               }
             />
           </ol>
-          <CopilotAccessSummary organization={organization} />
         </div>
       ) : null}
 
@@ -618,24 +655,11 @@ export function CopilotOrganizationConnectDialog({
             }}
             onCheck={(fields) => validate.mutate({ ...fields, ...keyTarget })}
           />
-          <CopilotAccessSummary organization={organization} />
         </div>
       ) : null}
 
       {step === "access" && replaceKeyId ? (
-        <>
-          <CopilotAccess keyId={replaceKeyId} />
-          <AdvancedFold open={advancedOpen} onOpenChange={setAdvancedOpen}>
-            <div className="space-y-2">
-              <Label htmlFor="copilot-key-name">Name</Label>
-              <Input
-                id="copilot-key-name"
-                value={nameDraft ?? keyName}
-                onChange={(event) => setNameDraft(event.target.value)}
-              />
-            </div>
-          </AdvancedFold>
-        </>
+        <ResourceAccessSection resource="llmProviderApiKey" id={replaceKeyId} />
       ) : null}
     </StandardDialog>
   );
@@ -646,16 +670,6 @@ const STEPS: { id: Step; label: string }[] = [
   { id: "app", label: "GitHub App" },
   { id: "access", label: "Access" },
 ];
-
-/** Where Guardrails shows its App's access: under the ways to get the App. */
-function CopilotAccessSummary({ organization }: { organization: string }) {
-  return (
-    <AccessSummary
-      intro={`The App only needs Copilot requests, nothing else in the organization. Requests are paid from ${organization}'s AI credits.`}
-      permissions={[{ name: "Copilot requests", access: "Read-only" }]}
-    />
-  );
-}
 
 function ErrorNotice({ message }: { message: string }) {
   return (

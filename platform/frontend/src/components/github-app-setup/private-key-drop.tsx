@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 
-/** What the line under the drop zone says about the key. */
+/** What the line under the key fields says about the key. */
 export type PrivateKeyStatus =
   | { kind: "idle" }
   | { kind: "checking" }
@@ -14,19 +14,17 @@ export type PrivateKeyStatus =
   | { kind: "error"; message: string };
 
 /**
- * A GitHub App's private key: a .pem dropped or chosen from disk. One status
- * line under it says where the key stands; a check result or error takes the
- * line's place, so nothing below moves. The key is handed up, never rendered.
+ * A GitHub App's private key: a .pem dropped on, or chosen from, an
+ * input-high target. The key is handed up, never rendered.
  */
 export function PrivateKeyDrop({
   id,
-  label = "Private key",
-  status,
+  describedBy,
   onKey,
 }: {
   id: string;
-  label?: string;
-  status: PrivateKeyStatus;
+  /** The status line that speaks for the key. */
+  describedBy: string;
   onKey: (privateKey: string) => void;
 }) {
   const [fileName, setFileName] = useState<string | null>(null);
@@ -40,11 +38,11 @@ export function PrivateKeyDrop({
   }
 
   return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
+    <div className="min-w-0 space-y-2">
+      <Label htmlFor={id}>Private key</Label>
       <UnstyledButton
         className={cn(
-          "flex w-full flex-col items-center gap-1 rounded-md border border-dashed px-4 py-6 text-sm text-muted-foreground",
+          "flex h-9 w-full min-w-0 items-center gap-2 rounded-md border border-dashed px-3 text-sm text-muted-foreground",
           dragging && "border-primary bg-muted/40",
         )}
         onClick={() => fileInput.current?.click()}
@@ -59,11 +57,9 @@ export function PrivateKeyDrop({
           void readFile(event.dataTransfer.files[0]);
         }}
       >
-        <Upload className="size-4" />
-        <span>
-          {fileName
-            ? `${fileName} added`
-            : "Drop the .pem file from the App settings, or choose it"}
+        <Upload className="size-4 shrink-0" />
+        <span className="truncate">
+          {fileName ?? "Choose or drop the .pem file"}
         </span>
       </UnstyledButton>
       <input
@@ -72,28 +68,44 @@ export function PrivateKeyDrop({
         type="file"
         accept=".pem,application/x-pem-file"
         className="sr-only"
-        aria-describedby={`${id}-status`}
+        aria-describedby={describedBy}
         onChange={(event) => void readFile(event.target.files?.[0])}
       />
-      <p
-        id={`${id}-status`}
-        className={cn(
-          "min-h-4 text-xs",
-          status.kind === "error"
-            ? "text-destructive"
-            : "text-muted-foreground",
-        )}
-        role={status.kind === "error" ? "alert" : undefined}
-      >
-        {status.kind === "checking" ? <span>Checking the key...</span> : null}
-        {status.kind === "fingerprint" ? (
-          <span>
-            <span>Key fingerprint: </span>
-            <code className="break-all">{status.fingerprint}</code>
-          </span>
-        ) : null}
-        {status.kind === "error" ? <span>{status.message}</span> : null}
-      </p>
     </div>
+  );
+}
+
+/**
+ * One line about the key: checking, its fingerprint, or what is wrong. Each
+ * takes the line's place, so nothing below moves.
+ */
+export function PrivateKeyStatusLine({
+  id,
+  status,
+  className,
+}: {
+  id: string;
+  status: PrivateKeyStatus;
+  className?: string;
+}) {
+  return (
+    <p
+      id={id}
+      className={cn(
+        "min-h-4 text-xs",
+        status.kind === "error" ? "text-destructive" : "text-muted-foreground",
+        className,
+      )}
+      role={status.kind === "error" ? "alert" : undefined}
+    >
+      {status.kind === "checking" ? <span>Checking the key...</span> : null}
+      {status.kind === "fingerprint" ? (
+        <span>
+          <span>Key fingerprint: </span>
+          <code className="break-all">{status.fingerprint}</code>
+        </span>
+      ) : null}
+      {status.kind === "error" ? <span>{status.message}</span> : null}
+    </p>
   );
 }

@@ -1,20 +1,17 @@
 "use client";
 
-import { Info } from "lucide-react";
 import type { ReactNode } from "react";
 import { AccountChip } from "@/components/github-app-setup/account-chip";
-import { ResourceAccessSection } from "@/components/resource-access-section";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { Badge } from "@/components/ui/badge";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 
 /**
  * The wizard's one box, for Connect, Manage and Reconnect: the medium width
- * and a fixed height, so it never resizes between steps. 39rem fits the
- * tallest step (Manage's key form, with the App in use above it) and a
- * two-line error. The body scrolls inside; the footer stays pinned.
+ * and a fixed height, so it never resizes between steps. 31rem fits every
+ * step on the usual path (the tallest: the App step with the App in use);
+ * a rare long error or list scrolls inside the body, the footer pinned.
  */
-export const COPILOT_DIALOG_CLASS = "h-[min(39rem,85vh)]";
+export const COPILOT_DIALOG_CLASS = "h-[min(31rem,85vh)]";
 
 /** The organization a GitHub Copilot plan bills. */
 export function OrganizationRow({ organization }: { organization: string }) {
@@ -60,22 +57,6 @@ export function GithubAppRow({
         chip
       )}
     </PlanRow>
-  );
-}
-
-/** Who may use the plan, and how to cap what it costs. */
-export function CopilotAccess({ keyId }: { keyId: string }) {
-  return (
-    <div className="space-y-4">
-      <ResourceAccessSection resource="llmProviderApiKey" id={keyId} />
-      <InlineNotice variant="info">
-        <Info aria-hidden />
-        <InlineNoticeText>
-          GitHub can't limit a single App. Set a cap in Costs & Limits, or turn
-          on Stop usage when budget limit is reached in GitHub billing.
-        </InlineNoticeText>
-      </InlineNotice>
-    </div>
   );
 }
 

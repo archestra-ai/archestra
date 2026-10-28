@@ -3,7 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PrivateKeyDrop, type PrivateKeyStatus } from "./private-key-drop";
+import {
+  PrivateKeyDrop,
+  type PrivateKeyStatus,
+  PrivateKeyStatusLine,
+} from "./private-key-drop";
 
 export interface AppKeyFields {
   appId: string;
@@ -54,14 +58,15 @@ export function ConnectAppByKey({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
+    <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
+      <div className="min-w-0 space-y-2">
         <Label htmlFor="github-app-key-app-id">App ID</Label>
         <Input
           id="github-app-key-app-id"
           inputMode="numeric"
           autoComplete="off"
           value={appId}
+          aria-describedby={STATUS_ID}
           onChange={(event) => {
             setAppId(event.target.value);
             const fields = change({ appId: event.target.value, privateKey });
@@ -75,16 +80,23 @@ export function ConnectAppByKey({
       </div>
       <PrivateKeyDrop
         id="github-app-key-pem"
-        status={status}
+        describedBy={STATUS_ID}
         onKey={(key) => {
           setPrivateKey(key);
           const fields = change({ appId, privateKey: key });
           if (fields) onCheck(fields);
         }}
       />
+      <PrivateKeyStatusLine
+        id={STATUS_ID}
+        status={status}
+        className="sm:col-span-2"
+      />
     </div>
   );
 }
+
+const STATUS_ID = "github-app-key-status";
 
 /** How long typing in the App ID pauses before the key is checked. */
 const CHECK_DELAY_MS = 500;

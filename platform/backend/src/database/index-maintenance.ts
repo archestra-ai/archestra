@@ -65,17 +65,19 @@ export async function dropLegacyPayloadTrgmIndexes(
 }
 
 /**
- * Build the two partial indexes behind "which agents use this MCP server"
- * (`AgentToolModel.getAssignedAgentDetailsForMcpServers`), the reads behind
- * the MCP server pages and the uninstall confirmation. Without them, both
- * halves of that read scan the whole agent_tools table:
+ * Build assignment lookup indexes for MCP server pages, uninstall
+ * confirmations and the tools review. Without them these reads scan the
+ * whole agent_tools table:
  *
  * - Pinned assignments, `(mcp_server_id, agent_id)`. This index also serves
  *   the ON DELETE SET NULL lookup when an MCP server is removed.
  * - Unpinned (dynamic) assignments, `(tool_id, agent_id)`. The read reaches
  *   them through the tools of the server's catalog.
+ * - All assignments, `(tool_id, agent_id)` without a predicate. The tools
+ *   review counts and lists both pinned and unpinned assignments by tool;
+ *   neither partial index can serve that read.
  *
- * agent_id is in both keys so each DISTINCT read is an index-only scan.
+ * agent_id is in each key so counts and DISTINCT reads can be index-only scans.
  *
  * Built here rather than in a Drizzle migration for the same reason as the
  * drops above: a migration can only use the blocking CREATE INDEX.
@@ -89,7 +91,7 @@ export async function dropLegacyPayloadTrgmIndexes(
  * An index with one of our names is checked, not trusted. A valid one with the
  * expected definition is left as is. An invalid one (an interrupted build) is
  * dropped and built again. Any other definition is logged and left alone.
- * Each index is handled on its own, so one failure does not stop the other.
+ * Each index is handled on its own, so one failure does not stop the others.
  * Failures are logged and retried on the next boot.
  */
 export async function createAgentToolsIndexes(
@@ -244,6 +246,12 @@ interface MaintainedIndex {
 }
 
 const AGENT_TOOLS_INDEXES: readonly MaintainedIndex[] = [
+  {
+    table: "agent_tools",
+    name: "agent_tools_tool_id_all_agent_id_idx",
+    columns: ["tool_id", "agent_id"],
+    predicate: null,
+  },
   {
     table: "agent_tools",
     name: "agent_tools_mcp_server_id_agent_id_idx",

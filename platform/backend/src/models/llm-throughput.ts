@@ -56,7 +56,11 @@ class LlmThroughputModel {
       params.rules ?? (await LlmThroughputModel.findRules(params.entities));
     if (!rules.some((rule) => matchesModel(rule, params.model)))
       return { reservation: null };
-    const observations: Array<{ rule: Limit; exceeded: boolean }> = [];
+    const observations: Array<{
+      rule: Limit;
+      exceeded: boolean;
+      usage: number;
+    }> = [];
     const result = await CacheEntryModel.withLocks<ThroughputAdmission>(
       rules.map((rule) => `llm-throughput:${rule.id}`),
       async (entries, tx) => {
@@ -86,7 +90,7 @@ class LlmThroughputModel {
           const amount = actualOnly ? 0 : 1;
           const shortage = counters[index].count + amount - rule.limitValue;
           const exceeded = actualOnly ? shortage >= 0 : shortage > 0;
-          observations.push({ rule, exceeded });
+          observations.push({ rule, exceeded, usage: counters[index].count });
           if (!exceeded || rule.behavior === "soft") return [];
           return [
             {
@@ -154,8 +158,8 @@ class LlmThroughputModel {
         return { reservation };
       },
     );
-    for (const { rule, exceeded } of observations)
-      observeLimitCheck(rule, exceeded);
+    for (const { rule, exceeded, usage } of observations)
+      observeLimitCheck(rule, exceeded, false, usage);
     return result;
   }
 

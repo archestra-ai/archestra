@@ -47,7 +47,25 @@ describe("soft limits", () => {
     expect(exposition).toContain(
       'llm_limit_checks_total{entity_type="organization",limit_kind="requests",behavior="soft",outcome="exceeded"}',
     );
-    expect(exposition).not.toContain(rule.id);
+    expect(JSON.stringify(await checks())).not.toContain(rule.id);
+    const detail = await client.register
+      .getSingleMetric("llm_limit_last_exceeded_usage")
+      ?.get();
+    expect(detail?.values).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          labels: expect.objectContaining({
+            limit_id: rule.id,
+            entity_id: org.id,
+            entity_type: "organization",
+            behavior: "soft",
+            cleanup_interval: "calendar_day",
+            source: "explicit",
+          }),
+          value: 2,
+        }),
+      ]),
+    );
     expect(
       (await LlmThroughputModel.usage([rule])).get(rule.id)?.currentUsage,
     ).toBe(3);

@@ -2211,7 +2211,12 @@ export class LimitValidationService {
 
       const exceeded = comparisonValue >= limit.limitValue;
       if (
-        observeLimitCheck(limit, exceeded, !Number.isFinite(comparisonValue))
+        observeLimitCheck(
+          limit,
+          exceeded,
+          !Number.isFinite(comparisonValue),
+          comparisonValue,
+        )
       ) {
         logger.info(
           `[LimitValidation] LIMIT EXCEEDED for ${entityType} ${entityId}: ${comparisonValue} ${limitDescription} >= ${limit.limitValue}`,
@@ -2293,10 +2298,17 @@ export class LimitValidationService {
       if (
         !observeLimitCheck(
           {
-            entityType: environmentId ? "environment" : "user",
+            id: defaultLimit.id,
+            entityType: "user",
+            entityId: params.userId,
             limitType: "token_cost",
+            limitValue: defaultLimit.limitValue,
+            cleanupInterval: defaultLimit.cleanupInterval,
+            source: "default_user",
           },
           usage.cost >= defaultLimit.limitValue,
+          !Number.isFinite(usage.cost),
+          usage.cost,
         )
       )
         return null;

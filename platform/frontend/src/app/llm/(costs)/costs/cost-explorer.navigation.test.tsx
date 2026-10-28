@@ -131,7 +131,7 @@ it("shows no selected label when the window contains no captured labels", async 
       HttpResponse.json({ labelKeys: [] }),
     ),
   );
-  renderExplorer();
+  const { client } = renderExplorer();
   fireEvent.keyDown(
     screen.getByRole("button", { name: "View Spend by model" }),
     {
@@ -139,6 +139,7 @@ it("shows no selected label when the window contains no captured labels", async 
     },
   );
   fireEvent.click(screen.getByRole("menuitem", { name: "Spend by label" }));
+  await waitFor(() => expect(client.isFetching()).toBe(0));
   await waitFor(() =>
     expect(
       screen.queryByRole("combobox", { name: "Label key" }),
@@ -160,7 +161,7 @@ it("selects only keys returned for the window and resets invalid selections on r
       return HttpResponse.json({ labelKeys });
     }),
   );
-  const { rerenderExplorer } = renderExplorer();
+  const { rerenderExplorer, client } = renderExplorer();
   fireEvent.keyDown(
     screen.getByRole("button", { name: "View Spend by model" }),
     {
@@ -168,30 +169,31 @@ it("selects only keys returned for the window and resets invalid selections on r
     },
   );
   fireEvent.click(screen.getByRole("menuitem", { name: "Spend by label" }));
-  const select = screen.getByRole("combobox", { name: "Label key" });
-  await waitFor(() => expect(select).toHaveTextContent("application"));
-  fireEvent.click(select);
+  await screen.findByRole("combobox", { name: "Label key" });
+  const select = () => screen.getByRole("combobox", { name: "Label key" });
+  await waitFor(() => expect(select()).toHaveTextContent("application"));
+  fireEvent.click(select());
   expect(
     screen.getAllByRole("option").map((option) => option.textContent),
   ).toEqual(["application", "department"]);
   fireEvent.click(screen.getByRole("option", { name: "department" }));
-  expect(select).toHaveTextContent("department");
+  expect(select()).toHaveTextContent("department");
 
   vi.mocked(useCostsTimeRange).mockReturnValue({
     timeframe: "90d",
     enabled: true,
   });
   rerenderExplorer();
-  await waitFor(() => expect(select).toHaveTextContent("department"));
+  await waitFor(() => expect(select()).toHaveTextContent("department"));
 
   vi.mocked(useCostsTimeRange).mockReturnValue({
     timeframe: "7d",
     enabled: true,
   });
   rerenderExplorer();
-  expect(select).not.toHaveTextContent("department");
-  await waitFor(() => expect(select).toHaveTextContent("project"));
-  fireEvent.click(select);
+  expect(screen.queryByText("department")).not.toBeInTheDocument();
+  await waitFor(() => expect(select()).toHaveTextContent("project"));
+  fireEvent.click(select());
   expect(
     screen.getAllByRole("option").map((option) => option.textContent),
   ).toEqual(["project"]);
@@ -202,6 +204,7 @@ it("selects only keys returned for the window and resets invalid selections on r
     enabled: true,
   });
   rerenderExplorer();
+  await waitFor(() => expect(client.isFetching()).toBe(0));
   await waitFor(() =>
     expect(
       screen.queryByRole("combobox", { name: "Label key" }),
@@ -278,5 +281,5 @@ function renderExplorer() {
     </QueryClientProvider>
   );
   const { rerender } = render(content());
-  return { rerenderExplorer: () => rerender(content()) };
+  return { client, rerenderExplorer: () => rerender(content()) };
 }

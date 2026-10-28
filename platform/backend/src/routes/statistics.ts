@@ -14,6 +14,7 @@ import {
   AppAccessModel,
   SkillTeamModel,
   StatisticsModel,
+  TeamModel,
   UsageStatisticsModel,
 } from "@/models";
 import { callerIsAppAdmin } from "@/services/apps/app-authorization";
@@ -131,15 +132,42 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Get usage statistics for every team in the active organization.",
         tags: ["Statistics"],
-        querystring: StatisticsQuerySchema,
+        querystring: StatisticsQuerySchema.extend({
+          teamId: z.string().uuid().optional(),
+        }),
         response: constructResponseSchema(z.array(TeamStatisticsSchema)),
       },
     },
-    async ({ query: { timeframe }, organizationId }, reply) => {
+    async (request, reply) => {
+      const {
+        query: { timeframe, teamId },
+        organizationId,
+      } = request;
+      const { success: canReadOrganizationCosts } = await hasPermission(
+        { llmCost: ["read"] },
+        request.headers,
+        request.serviceAccount,
+      );
+      if (!canReadOrganizationCosts) {
+        if (
+          !teamId ||
+          request.authMethod !== "session" ||
+          !(await TeamModel.isUserTeamAdmin(teamId, request.user.id))
+        ) {
+          throw new ApiError(403, "You cannot view these team costs");
+        }
+        const team = await TeamModel.findById(teamId, {
+          includeMembers: false,
+        });
+        if (!team || team.organizationId !== organizationId) {
+          throw new ApiError(404, "Team not found");
+        }
+      }
       return reply.send(
         await StatisticsModel.getTeamStatistics({
           timeframe,
           organizationId,
+          teamId,
         }),
       );
     },

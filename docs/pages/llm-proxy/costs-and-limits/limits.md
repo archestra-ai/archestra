@@ -2,12 +2,12 @@
 title: Limits
 description: Cap spend, tokens, and requests across your organization, teams, virtual keys, users, agents, OAuth clients, and environments
 order: 2
-lastUpdated: 2026-10-26
+lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Set budgets and rate limits in **Costs & Limits → Limits** so a busy key, runaway agent loop, or shared credential stops when it hits its allowance instead of running up your provider bill. Viewing limits requires [`llmLimit:read`](/docs/reference/permissions#llmLimit:read); creating, editing, or deleting limits requires [`llmLimit:create`](/docs/reference/permissions#llmLimit:create), [`llmLimit:update`](/docs/reference/permissions#llmLimit:update), or [`llmLimit:delete`](/docs/reference/permissions#llmLimit:delete).
+Set budgets and rate limits in **Costs & Limits → Limits** so a busy key, runaway agent loop, or shared credential stops when it hits its allowance instead of running up your provider bill. Organization-wide access to limits requires [`llmLimit:read`](/docs/reference/permissions#llmLimit:read); creating, editing, or deleting them requires [`llmLimit:create`](/docs/reference/permissions#llmLimit:create), [`llmLimit:update`](/docs/reference/permissions#llmLimit:update), or [`llmLimit:delete`](/docs/reference/permissions#llmLimit:delete). Team admins can also manage their own team's limits through **Settings → Teams**.
 
 ![Costs & Limits → Limits listing active spend, token, and request limits](/docs/automated_screenshots/llm-proxy_limits.webp)
 
@@ -37,6 +37,14 @@ When more than one rule matches a call, every matching rule is checked:
 - **Every matching scope must allow the request.** A virtual key with remaining allowance is still blocked if its billing team or the organization has reached its cap.
 - **Model-specific and all-models rules both apply.** A call to `claude-sonnet-4-6` checks both any rule targeting `claude-sonnet-4-6` and any rule set to **All models** on the same scope.
 - **Multi-model rules share one pool.** Selecting multiple models on a single rule caps their combined spend, tokens, or requests together.
+
+<span id="team-limits-and-spend"></span>
+
+### Team Limits and Spend
+
+Open **Settings → Teams**, select a team you administer, and open **Budgets** to see its spend and manage its spend, token, and request limits. This access covers only that team; team members have no automatic budget access. See [team member and admin roles](/docs/admin/access-control#team-roles).
+
+Limits for organization, users, virtual keys, OAuth clients, agents, and environments still require the organization `llmLimit` permissions above. Organization-wide spend requires [`llmCost:read`](/docs/reference/permissions#llmCost:read).
 
 ## Reset Intervals
 

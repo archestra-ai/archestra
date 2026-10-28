@@ -2,7 +2,7 @@
 title: Access Control
 description: Share resources and assign organization roles
 order: 2
-lastUpdated: 2026-10-22
+lastUpdated: 2026-10-27
 ---
 
 Give people **Can use** on an agent to let them run it without changing it. Give them **Can update** when they need to edit it.
@@ -89,15 +89,19 @@ See the [exact permission matrix](/docs/reference/permissions#predefined-roles).
 
 <span id="no-privilege-escalation"></span>
 
-<span id="team-roles"></span>
-
 ## Create a Custom Role
 
 1. With [`ac:create`](/docs/reference/permissions#ac:create), open **Settings → Roles** and create a role.
 2. Select only the [permissions](/docs/reference/permissions#available-permissions) the job needs.
 3. Assign it to a member, team, or service account.
 
-Accounts combine their direct roles with roles from their teams and ancestor teams. A team admin manages that team's members and settings; team admin status does not pass to descendant teams.
+Accounts combine their direct organization roles with organization roles assigned to their teams and ancestor teams.
+
+<span id="team-roles"></span>
+
+## Team Member and Admin Roles
+
+Within each team, a person is a **member** or an **admin**. Members receive the team's grants but cannot manage its budgets or view its spend just by being members. Admins manage that team's members and settings, can manage its [limits](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend), and can view its spend. Team admin status does not pass to descendant teams.
 
 <span id="delegation-and-concurrent-edits"></span>
 

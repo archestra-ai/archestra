@@ -8,7 +8,7 @@ import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared/archestra-mcp-server
 import type * as k8s from "@kubernetes/client-node";
 import { eq } from "drizzle-orm";
 import { beforeEach } from "vitest";
-import { getAppVersion } from "@/app-version";
+import { getAppSourceRef } from "@/app-version";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
@@ -49,7 +49,9 @@ import {
   SRE_AGENT_TOOL_NAMES,
   SRE_CATALOG_ID,
   SRE_ENVIRONMENT_ID,
+  SRE_LEGACY_SOURCE_CLONE,
   SRE_SERVER_NAME,
+  SRE_SOURCE_CLONE,
 } from "./definition";
 import { sreAgentService } from "./index";
 
@@ -643,8 +645,61 @@ describe("sreAgentService", () => {
       user: { name: "", email: "", role: "", teams: [] },
     });
     expect(rendered).not.toContain("{{");
-    expect(rendered?.includes(`--branch platform-v${getAppVersion()} `)).toBe(
-      sandbox,
+    expect(rendered?.includes(` origin ${getAppSourceRef()} `)).toBe(sandbox);
+  });
+
+  test("an early install's source clone is upgraded, keeping the admin's other edits", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    await seedSreAgent({ makeOrganization, makeUser, makeMember });
+    await AgentModel.update(SRE_AGENT_ID, {
+      systemPrompt: `Admin intro.\n${SRE_LEGACY_SOURCE_CLONE}\nAdmin outro.`,
+    });
+
+    await sreAgentService.seed();
+
+    expect((await SreRuntimeModel.findAgent(SRE_AGENT_ID))?.systemPrompt).toBe(
+      `Admin intro.\n${SRE_SOURCE_CLONE}\nAdmin outro.`,
+    );
+  });
+
+  test("upgrading the source clone of an agent an interrupted run left without tools still lets it get them", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const {
+      organizationId,
+      admin,
+      ensureAgent: ensure,
+    } = await seedSreInstall({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    await discoverTools(SRE_AGENT_TOOL_NAMES);
+    await AgentModel.create(
+      {
+        id: SRE_AGENT_ID,
+        organizationId,
+        name: "SRE",
+        agentType: "agent",
+        systemPrompt: SRE_LEGACY_SOURCE_CLONE,
+      },
+      admin.id,
+      { skipCreationDefaultTools: true, deferInitialVersionFork: true },
+    );
+
+    await sreAgentService.seed();
+    await ensure();
+
+    expect((await SreRuntimeModel.findAgent(SRE_AGENT_ID))?.systemPrompt).toBe(
+      SRE_SOURCE_CLONE,
+    );
+    expect(await AgentToolModel.findToolIdsByAgent(SRE_AGENT_ID)).toHaveLength(
+      SRE_AGENT_TOOL_NAMES.length,
     );
   });
 

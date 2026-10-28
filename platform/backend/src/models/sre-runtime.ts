@@ -42,12 +42,14 @@ class SreRuntimeModel {
     id: string;
     deletedAt: Date | null;
     latestVersion: number;
+    systemPrompt: string | null;
   } | null> {
     const [row] = await db
       .select({
         id: schema.agentsTable.id,
         deletedAt: schema.agentsTable.deletedAt,
         latestVersion: schema.agentsTable.latestVersion,
+        systemPrompt: schema.agentsTable.systemPrompt,
       })
       .from(schema.agentsTable)
       .where(eq(schema.agentsTable.id, id))

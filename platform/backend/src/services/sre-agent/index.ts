@@ -30,8 +30,10 @@ import {
   SRE_CATALOG_ID,
   SRE_ENVIRONMENT_ID,
   SRE_ENVIRONMENT_NAME,
+  SRE_LEGACY_SOURCE_CLONE,
   SRE_OPENAPPA_BATTERY,
   SRE_SERVER_NAME,
+  SRE_SOURCE_CLONE,
   sreAgentSystemPrompt,
   sreLocalConfig,
 } from "./definition";
@@ -67,6 +69,7 @@ class SreAgentService {
         return;
       }
       await this.seedResources(serviceAccount);
+      await this.upgradeSourceClone();
     } catch (error) {
       logger.error({ err: error }, "Failed to seed the SRE agent");
     }
@@ -368,6 +371,28 @@ class SreAgentService {
       { organizationId: organization.id },
       "Seeded the SRE MCP server",
     );
+  }
+
+  /**
+   * Early installs seeded a clone of a tag only release builds have.
+   * Rewriting just that line keeps an admin's other prompt edits.
+   */
+  private async upgradeSourceClone(): Promise<void> {
+    const agent = await SreRuntimeModel.findAgent(SRE_AGENT_ID);
+    if (agent?.deletedAt !== null) return;
+    if (!agent.systemPrompt?.includes(SRE_LEGACY_SOURCE_CLONE)) return;
+    await AgentModel.update(
+      SRE_AGENT_ID,
+      {
+        systemPrompt: agent.systemPrompt.replace(
+          SRE_LEGACY_SOURCE_CLONE,
+          SRE_SOURCE_CLONE,
+        ),
+      },
+      // Version 1 marks setup complete; `ensureAgent` forks it after the tools.
+      { deferVersionFork: agent.latestVersion === 0 },
+    );
+    logger.info({ agentId: SRE_AGENT_ID }, "Upgraded the SRE source clone");
   }
 }
 

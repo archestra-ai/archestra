@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  ARCHESTRA_SOURCE_REF_EXPRESSION,
   evaluateRoleMappingTemplate,
   extractGroupsWithTemplate,
   promptNeedsRendering,
@@ -345,6 +346,26 @@ describe("renderSystemPrompt", () => {
       expect(
         renderSystemPrompt("Version {{archestraVersion}}", baseContext),
       ).toBe("Version 9.8.7");
+    } finally {
+      if (previous === undefined) delete process.env.ARCHESTRA_VERSION;
+      else process.env.ARCHESTRA_VERSION = previous;
+    }
+  });
+
+  test.for([
+    ["1.4.7", "platform-v1.4.7"],
+    ["1.5.0-rc.11", "platform-v1.5.0-rc.11"],
+    [
+      "cb870124c941e42bdc5f84532bd37c8321dc8f3b",
+      "cb870124c941e42bdc5f84532bd37c8321dc8f3b",
+    ],
+  ])("renders the source ref of version %s as %s", ([version, ref]) => {
+    const previous = process.env.ARCHESTRA_VERSION;
+    process.env.ARCHESTRA_VERSION = version;
+    try {
+      expect(
+        renderSystemPrompt(ARCHESTRA_SOURCE_REF_EXPRESSION, baseContext),
+      ).toBe(ref);
     } finally {
       if (previous === undefined) delete process.env.ARCHESTRA_VERSION;
       else process.env.ARCHESTRA_VERSION = previous;

@@ -18,6 +18,7 @@ const headerNameSchema = z
 
 const additionalHeaderSchema = z.object({
   fieldName: z.string().optional(),
+  sourceAuthFieldName: z.string().optional(),
   headerName: headerNameSchema,
   credentialId: z.string().min(1).max(128).optional(),
   credentialScope: z.enum(["personal", "organization"]).optional(),
@@ -206,6 +207,7 @@ const activeAuthFormSchema = z
     // Carried from an existing entry so a save keeps it; choosing "None"
     // clears it.
     requiresAuth: z.boolean().optional(),
+    managesAuthFields: z.boolean().optional(),
     authMethod: z.enum([
       "none",
       "bearer",

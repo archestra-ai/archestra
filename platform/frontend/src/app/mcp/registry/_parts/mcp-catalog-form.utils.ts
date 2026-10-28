@@ -52,6 +52,7 @@ export function emptyOauthFormConfig(): NonNullable<
 // Transform function to convert form values to API format
 export function transformFormToApiData(
   values: McpCatalogFormValues,
+  originalAuthFields?: McpCatalogApiData["authFields"],
 ): McpCatalogApiData {
   const data: McpCatalogApiData = {
     ...(values.initialGrants !== undefined && {
@@ -70,6 +71,24 @@ export function transformFormToApiData(
       requiresAuth: values.requiresAuth,
     }),
   };
+
+  // Keep imported declarations in sync with the editable header rows. Otherwise
+  // a renamed or deleted header would be imported again on the next load.
+  if (values.managesAuthFields) {
+    data.authFields = [
+      ...(originalAuthFields ?? []).filter(
+        (field) => field.type.toLowerCase() !== "header",
+      ),
+      ...(values.additionalHeaders ?? [])
+        .filter((header) => header.sourceAuthFieldName)
+        .map((header) => ({
+          name: header.headerName,
+          label: header.description || header.headerName,
+          type: "header",
+          required: header.required,
+        })),
+    ];
+  }
 
   if (values.serverUrl) {
     data.serverUrl = values.serverUrl;
@@ -308,10 +327,18 @@ export function transformCatalogItemToFormValues(
   // declare their credentials as `requiresAuth` plus header `authFields`
   // instead of header-mapped userConfig. Until a save writes them into
   // userConfig, the form shows them as the install-time headers they describe.
-  const authFieldHeaders =
-    Object.keys(staticHeaderFields).length === 0
-      ? getAuthFieldHeaders(item)
-      : [];
+  const configuredHeaderNames = new Set(
+    Object.values(staticHeaderFields).map((field) =>
+      field.headerName.trim().toLowerCase(),
+    ),
+  );
+  const importedAuthHeaders = getAuthFieldHeaders(item);
+  const managedAuthFieldNames = importedAuthHeaders.map((field) =>
+    field.headerName.toLowerCase(),
+  );
+  const authFieldHeaders = importedAuthHeaders.filter(
+    (field) => !configuredHeaderNames.has(field.headerName.toLowerCase()),
+  );
 
   // Determine auth method
   let authMethod: McpCatalogFormValues["authMethod"] = "none";
@@ -332,9 +359,17 @@ export function transformCatalogItemToFormValues(
   } else if (item.userConfig?.access_token) {
     authMethod = "bearer";
   } else if (
+    item.requiresAuth &&
+    (authFieldHeaders.length > 0 ||
+      Object.values(staticHeaderFields).some(
+        (config) => config.promptOnInstallation !== false,
+      ))
+  ) {
+    authMethod = "auth_header";
+  } else if (
     // Special case: GitHub server uses Bearer Token but external catalog doesn't define userConfig
-    item.name.includes("githubcopilot") ||
-    item.name.includes("github")
+    item.requiresAuth !== false &&
+    (item.name.includes("githubcopilot") || item.name.includes("github"))
   ) {
     authMethod = "bearer";
   } else if (
@@ -345,14 +380,6 @@ export function transformCatalogItemToFormValues(
         (config as { valuePrefix?: string } | undefined)?.valuePrefix ===
           "Bearer ",
     )
-  ) {
-    authMethod = "auth_header";
-  } else if (
-    item.requiresAuth &&
-    (authFieldHeaders.length > 0 ||
-      Object.values(staticHeaderFields).some(
-        (config) => config.promptOnInstallation !== false,
-      ))
   ) {
     authMethod = "auth_header";
   }
@@ -526,6 +553,11 @@ export function transformCatalogItemToFormValues(
     .map(([fieldName, config]) => ({
       fieldName,
       headerName: config.headerName,
+      sourceAuthFieldName: managedAuthFieldNames.includes(
+        config.headerName.trim().toLowerCase(),
+      )
+        ? config.headerName.trim().toLowerCase()
+        : undefined,
       promptOnInstallation: config.promptOnInstallation ?? true,
       required: config.required ?? false,
       value: typeof config.default === "string" ? config.default : undefined,
@@ -543,6 +575,7 @@ export function transformCatalogItemToFormValues(
     multitenant: item.serverType === "local" && Boolean(item.multitenant),
     serverUrl: item.serverUrl || "",
     requiresAuth: item.requiresAuth,
+    managesAuthFields: managedAuthFieldNames.length > 0,
     authMethod,
     includeBearerPrefix,
     authHeaderName:
@@ -996,10 +1029,9 @@ function getAuthFieldHeaders(
     .map((field) => ({
       fieldName: undefined,
       headerName: field.name.trim(),
+      sourceAuthFieldName: field.name.trim().toLowerCase(),
       promptOnInstallation: true,
-      // The entry requires auth, and `required` defaults to false whenever a
-      // caller omits it, so it says nothing about this field.
-      required: true,
+      required: field.required,
       value: undefined,
       description: field.description || field.label,
       includeBearerPrefix: false,

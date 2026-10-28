@@ -754,6 +754,20 @@ describe("transformFormToApiData", () => {
       labels: [],
     };
 
+    it("uses explicit auth settings before the GitHub name fallback", () => {
+      const item = { ...authFieldsItem, name: "github-internal" };
+      expect(transformCatalogItemToFormValues(item as never).authMethod).toBe(
+        "auth_header",
+      );
+      expect(
+        transformCatalogItemToFormValues({
+          ...item,
+          requiresAuth: false,
+          authFields: [],
+        } as never).authMethod,
+      ).toBe("none");
+    });
+
     it("hydrates header auth fields as a prompted token header", () => {
       const values = transformCatalogItemToFormValues(authFieldsItem as never);
 
@@ -763,8 +777,9 @@ describe("transformFormToApiData", () => {
         {
           fieldName: undefined,
           headerName: "X-API-Key",
+          sourceAuthFieldName: "x-api-key",
           promptOnInstallation: true,
-          required: true,
+          required: false,
           value: undefined,
           description: "API key",
           includeBearerPrefix: false,
@@ -776,22 +791,30 @@ describe("transformFormToApiData", () => {
     it("keeps the token header mode and its headers after a save", () => {
       const saved = transformFormToApiData(
         transformCatalogItemToFormValues(authFieldsItem as never),
+        authFieldsItem.authFields,
       );
 
       expect(saved.requiresAuth).toBe(true);
-      expect(saved.authFields).toBeUndefined();
+      expect(saved.authFields).toEqual([
+        authFieldsItem.authFields[1],
+        expect.objectContaining({
+          name: "X-API-Key",
+          type: "header",
+          required: false,
+        }),
+      ]);
       expect(saved.userConfig).toEqual({
         header_x_api_key: expect.objectContaining({
           headerName: "X-API-Key",
           promptOnInstallation: true,
-          required: true,
+          required: false,
           sensitive: true,
         }),
       });
 
       const reloaded = transformCatalogItemToFormValues({
         ...authFieldsItem,
-        userConfig: saved.userConfig,
+        ...saved,
       } as never);
       expect(reloaded.authMethod).toBe("auth_header");
       expect(reloaded.additionalHeaders).toEqual([
@@ -799,10 +822,59 @@ describe("transformFormToApiData", () => {
           fieldName: "header_x_api_key",
           headerName: "X-API-Key",
           promptOnInstallation: true,
-          required: true,
+          required: false,
           sensitive: true,
         }),
       ]);
+    });
+
+    it.each([
+      "rename",
+      "delete",
+    ])("does not resurrect an imported header after %s and reload", (action) => {
+      const values = transformCatalogItemToFormValues(authFieldsItem as never);
+      values.additionalHeaders =
+        action === "delete"
+          ? []
+          : values.additionalHeaders?.map((header) => ({
+              ...header,
+              headerName: "X-Renamed-Key",
+            }));
+      const saved = transformFormToApiData(values, authFieldsItem.authFields);
+      const reloaded = transformCatalogItemToFormValues({
+        ...authFieldsItem,
+        ...saved,
+      } as never);
+      expect(
+        reloaded.additionalHeaders?.map((header) => header.headerName),
+      ).toEqual(action === "delete" ? [] : ["X-Renamed-Key"]);
+      expect(saved.authFields).toContainEqual(authFieldsItem.authFields[1]);
+      expect(
+        saved.authFields?.some((field) => field.name === "X-API-Key"),
+      ).toBe(false);
+    });
+
+    it("preserves required and optional auth fields independently", () => {
+      const values = transformCatalogItemToFormValues({
+        ...authFieldsItem,
+        authFields: [
+          {
+            name: "X-API-Key",
+            label: "API key",
+            type: "header",
+            required: true,
+          },
+          {
+            name: "X-Tenant",
+            label: "Optional tenant",
+            type: "header",
+            required: false,
+          },
+        ],
+      } as never);
+      expect(values.additionalHeaders?.map(({ required }) => required)).toEqual(
+        [true, false],
+      );
     });
 
     it("shows no auth once the entry no longer requires it", () => {
@@ -813,6 +885,49 @@ describe("transformFormToApiData", () => {
 
       expect(values.authMethod).toBe("none");
       expect(values.additionalHeaders).toEqual([]);
+    });
+
+    it("adds missing auth headers alongside static headers and preserves matching configuration", () => {
+      const item = {
+        ...authFieldsItem,
+        userConfig: {
+          tenant: {
+            type: "string",
+            headerName: "X-Tenant-ID",
+            default: "local-control",
+            promptOnInstallation: false,
+            required: false,
+            sensitive: false,
+          },
+        },
+      };
+      const values = transformCatalogItemToFormValues(item as never);
+      expect(values.authMethod).toBe("auth_header");
+      expect(
+        values.additionalHeaders?.map(({ headerName }) => headerName),
+      ).toEqual(["X-Tenant-ID", "X-API-Key"]);
+      const reloaded = transformCatalogItemToFormValues({
+        ...item,
+        userConfig: {
+          ...item.userConfig,
+          apiKey: {
+            type: "string",
+            headerName: "x-api-key",
+            promptOnInstallation: true,
+            required: false,
+            sensitive: false,
+            description: "Existing configuration",
+          },
+        },
+      } as never);
+      expect(reloaded.additionalHeaders).toHaveLength(2);
+      expect(reloaded.additionalHeaders?.[1]).toMatchObject({
+        fieldName: "apiKey",
+        headerName: "x-api-key",
+        required: false,
+        sensitive: false,
+        description: "Existing configuration",
+      });
     });
   });
 

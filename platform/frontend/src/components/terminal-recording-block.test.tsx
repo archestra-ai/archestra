@@ -61,6 +61,44 @@ test("keeps a measured placeholder when a wrapped block leaves the scroll viewpo
   expect(block.style.height).toBe("144px");
 });
 
+test("an unmeasured placeholder reserves the measured row height", async () => {
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  const terminal = new Terminal();
+  await new Promise<void>((resolve) =>
+    terminal.write("one\r\ntwo\r\nthree", resolve),
+  );
+  const lines = snapshotTerminalRecording(terminal).lines.map((line) => ({
+    ...line,
+    runs: line.runs.map((run) => ({
+      ...run,
+      key: `${line.row}:${run.column}`,
+    })),
+  }));
+  terminal.dispose();
+  const { container } = render(
+    <div data-testid="terminal-playback-viewport">
+      <TerminalRecordingBlock
+        lines={lines}
+        wrapLines={false}
+        cell={{ width: 7, height: 15 }}
+        virtualize
+      />
+    </div>,
+  );
+  const block = container.querySelector(
+    "[data-recording-block]",
+  ) as HTMLElement;
+  expect(screen.queryByText("one")).not.toBeInTheDocument();
+  expect(block.style.height).toBe("45px");
+});
+
 test("reserves xterm's cell width for emoji and CJK in original layout", async () => {
   const terminal = new Terminal();
   await new Promise<void>((resolve) => terminal.write("A😀B界C", resolve));
@@ -104,7 +142,7 @@ test("a column starts at the same offset however its row is split into runs", as
     <TerminalRecordingBlock
       lines={lines}
       wrapLines={false}
-      cellWidth={7.1875}
+      cell={{ width: 7.1875, height: 14 }}
       virtualize={false}
     />,
   );

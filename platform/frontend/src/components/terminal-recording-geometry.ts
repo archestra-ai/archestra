@@ -24,7 +24,12 @@ export function prepareTerminalRecording(content: string): {
 } {
   content = content
     .replace(FENCED_ANSWER_BEFORE_CAPTURE, "")
-    .replace(CAPTURED_SCREEN, (screen) => screen.replace(/\r?\n/g, "\x1b[K$&"));
+    .replace(CAPTURED_SCREEN, (screen, rows: string) => {
+      let remaining = Number(rows);
+      return screen.replace(/\r?\n/g, (newline) =>
+        remaining-- > 0 ? `\x1b[K${newline}` : newline,
+      );
+    });
   const tokens = Array.from(content.matchAll(TERMINAL_TOKENS));
   const exact = tokens.find((token) => sizeFromToken(token[0]));
   const legacyEnd = exact?.index ?? content.length;
@@ -96,10 +101,11 @@ const FENCED_ANSWER_BEFORE_CAPTURE =
 // attribute in effect at the line's end, so a background that reached the
 // edge (a client's side panel) stopped at the last character. Erasing to each
 // line's end in that attribute restores it; on a line already full, or in the
-// default background, the erase changes nothing.
+// default background, the erase changes nothing. Only the screen's own rows
+// are erased: plain output can follow it in the same match.
 const CAPTURED_SCREEN =
   // biome-ignore lint/suspicious/noControlCharactersInRegex: the clear, size event and attributes are terminal controls
-  /\x1b\[2J\x1b\[H\x1b\]777;archestra-terminal-size=\d+x\d+\x07[^\x1b]*(?:(?:\x1b\[[0-9;:]*m|\x1b\]8;[^\x07\x1b]*(?:\x07|\x1b\\))[^\x1b]*)*/g;
+  /\x1b\[2J\x1b\[H\x1b\]777;archestra-terminal-size=\d+x(\d+)\x07[^\x1b]*(?:(?:\x1b\[[0-9;:]*m|\x1b\]8;[^\x07\x1b]*(?:\x07|\x1b\\))[^\x1b]*)*/g;
 
 // Consume OSC payloads as whole tokens, so titles/links cannot look like grids.
 const TERMINAL_TOKENS =

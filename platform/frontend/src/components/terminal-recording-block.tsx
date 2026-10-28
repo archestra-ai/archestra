@@ -13,13 +13,13 @@ type DisplayLine = Omit<SnapshotLine, "runs"> & {
 export function TerminalRecordingBlock({
   lines,
   wrapLines,
-  cellWidth = null,
+  cell = null,
   virtualize,
 }: {
   lines: DisplayLine[];
   wrapLines: boolean;
-  /** The measured cell width in px; null until measured. */
-  cellWidth?: number | null;
+  /** The measured cell in px; null until measured. */
+  cell?: { width: number; height: number } | null;
   virtualize: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null);
@@ -92,7 +92,7 @@ export function TerminalRecordingBlock({
               1,
               Math.ceil(
                 line.runs.reduce((cells, run) => cells + run.cells, 0) /
-                  Math.max(1, width / 7.2),
+                  Math.max(1, width / (cell?.width ?? FALLBACK_CELL.width)),
               ),
             ),
           0,
@@ -102,7 +102,13 @@ export function TerminalRecordingBlock({
       ref={root}
       data-recording-block={lines[0].row}
       style={
-        visible ? undefined : { height: measuredHeight ?? estimatedRows * 14.4 }
+        visible
+          ? undefined
+          : {
+              height:
+                measuredHeight ??
+                estimatedRows * (cell?.height ?? FALLBACK_CELL.height),
+            }
       }
     >
       {visible &&
@@ -126,8 +132,8 @@ export function TerminalRecordingBlock({
               // browser rounded each run's width, and a row split into more
               // runs moved a divider's edge by a device pixel.
               const joins = joinsAdjacentCells(run.text);
-              const width = cellWidth
-                ? `${run.cells * cellWidth}px`
+              const runWidth = cell
+                ? `${run.cells * cell.width}px`
                 : run.fixedWidth
                   ? `${run.cells}ch`
                   : undefined;
@@ -137,7 +143,7 @@ export function TerminalRecordingBlock({
                   ? {
                       display: "inline-block",
                       verticalAlign: "top",
-                      ...(width ? { width } : {}),
+                      ...(runWidth ? { width: runWidth } : {}),
                     }
                   : {}),
                 ...(joins ? JOINING_CELL_STYLE : {}),
@@ -180,6 +186,9 @@ export function TerminalRecordingBlock({
 }
 
 // ===================== internals =====================
+
+/** A 12px monospace cell, for estimates before the font is measured. */
+const FALLBACK_CELL = { width: 7.2, height: 14.4 };
 
 /**
  * Fonts draw box-drawing and block characters to their own metrics, which the

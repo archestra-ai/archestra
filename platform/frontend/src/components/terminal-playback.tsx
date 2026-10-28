@@ -270,16 +270,14 @@ export function TerminalPlayback({
         }}
       >
         <span aria-hidden className="pointer-events-none invisible absolute">
-          <span ref={glyphProbeRef} style={{ fontSize: BASE_FONT_PX }}>
-            M
-          </span>
+          <span ref={glyphProbeRef}>M</span>
         </span>
         {blocks.map((block) => (
           <TerminalRecordingBlock
             key={block[0].row}
             lines={block}
             wrapLines={wrapLines}
-            cellWidth={cell?.width ?? null}
+            cell={cell}
             virtualize={virtualize}
           />
         ))}
@@ -295,44 +293,50 @@ const RETAINED_SCROLLBACK_LINES = 1_000_000;
 const MAX_REPLAY_RETRIES = 2;
 /** How close to the end still counts as "at the end" for following output. */
 const FOLLOW_END_SLACK_PX = 10;
-/** The document's `text-xs`. */
-const BASE_FONT_PX = 12;
 
 type TerminalRecording = ReturnType<typeof prepareTerminalRecording>;
 
 /**
- * The cell of xterm's own renderer: the font's glyph box and advance. The
- * document's 1.2 line height is taller than that box, and an inline
- * background or a line-drawing character covers only the box, so a
- * highlighted block showed dark seams between its rows and borders and
- * dividers broke into dashes. The advance is the browser's own, already a
- * whole number of its layout units, so a run sized in whole cells ends on the
- * same grid however its row is split. Browser zoom changes those units, and
- * fires a resize. Null until measured.
+ * The cell of xterm's own renderer: the font's glyph box and advance, in px,
+ * and the box as a line height relative to the font. The document's 1.2 line
+ * height is taller than that box, and an inline background or a
+ * line-drawing character covers only the box, so a highlighted block showed
+ * dark seams between its rows and borders and dividers broke into dashes. The
+ * advance is the browser's own, already a whole number of its layout units,
+ * so a run sized in whole cells ends on the same grid however its row is
+ * split. The probe is observed, so a player shown after it mounts is
+ * measured; browser zoom changes the layout units and fires a resize. Null
+ * until measured.
  */
 function useCellSize(
   glyphProbeRef: RefObject<HTMLSpanElement | null>,
-): { rowHeight: string; width: number } | null {
+): { width: number; height: number; rowHeight: string } | null {
   const [cell, setCell] = useState<{
-    rowHeight: string;
     width: number;
+    height: number;
+    rowHeight: string;
   } | null>(null);
   useLayoutEffect(() => {
+    const probe = glyphProbeRef.current;
+    if (!probe) return;
     const measure = () => {
-      const probe = glyphProbeRef.current;
-      if (!probe) return;
       const { height, width } = probe.getBoundingClientRect();
-      if (height <= 0 || width <= 0) return;
-      const rowHeight = `${height / BASE_FONT_PX}em`;
+      const fontSize = Number.parseFloat(getComputedStyle(probe).fontSize);
+      if (height <= 0 || width <= 0 || !(fontSize > 0)) return;
       setCell((previous) =>
-        previous?.rowHeight === rowHeight && previous.width === width
+        previous?.width === width && previous.height === height
           ? previous
-          : { rowHeight, width },
+          : { width, height, rowHeight: `${height / fontSize}em` },
       );
     };
     measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(probe);
     window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
   }, [glyphProbeRef]);
   return cell;
 }

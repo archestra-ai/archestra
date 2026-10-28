@@ -276,7 +276,7 @@ def run_terminal(task, session_id, home, config, entries, artifact):
                 args.extend(["--interactive", task])
             child = subprocess.Popen(args, env=env, pass_fds=(descriptor.fileno(),))
             for number in signals:
-                signal.signal(number, lambda number, _frame: child.send_signal(number))
+                signal.signal(number, lambda signum, _frame: child.send_signal(signum))
             while child.poll() is None:
                 if gate.discovery_started and not gate.ready and time.monotonic() - gate.discovery_started > 30:
                     gate.failed = True

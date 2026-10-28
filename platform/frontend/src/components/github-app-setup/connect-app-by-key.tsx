@@ -1,13 +1,9 @@
 "use client";
 
-import { CircleAlert, Upload } from "lucide-react";
-import { useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { cn } from "@/lib/utils/tailwind";
+import { PrivateKeyDrop, type PrivateKeyStatus } from "./private-key-drop";
 
 export interface AppKeyFields {
   appId: string;
@@ -15,44 +11,43 @@ export interface AppKeyFields {
 }
 
 /**
- * Connect a GitHub App that is not connected yet, by its ID and private key.
- * Checks the key first (showing GitHub's fingerprint of it), then connects.
- * The key is held for the requests and never rendered.
+ * The fields to connect a GitHub App by its ID and private key. Once both are
+ * filled the key is checked: right away when a key is dropped, after a pause
+ * when the App ID is typed. The dialog's footer connects.
  */
 export function ConnectAppByKey({
-  fingerprint,
-  checking,
-  connecting,
-  error,
+  status,
+  onFieldsChange,
   onCheck,
-  onConnect,
-  onChange,
-  connectLabel = "Connect",
 }: {
-  /** GitHub's fingerprint of the checked key, once checked. */
-  fingerprint: string | null;
-  checking: boolean;
-  connecting: boolean;
-  error: string | null;
+  status: PrivateKeyStatus;
+  /** Every edit, with both fields or null; an earlier check no longer holds. */
+  onFieldsChange: (fields: AppKeyFields | null) => void;
   onCheck: (fields: AppKeyFields) => void;
-  onConnect: (fields: AppKeyFields) => void;
-  /** The fields changed: an earlier check no longer holds. */
-  onChange?: () => void;
-  connectLabel?: string;
 }) {
   const [appId, setAppId] = useState("");
   const [privateKey, setPrivateKey] = useState<string | null>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const fields =
-    appId.trim() && privateKey ? { appId: appId.trim(), privateKey } : null;
+  const pendingCheck = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (pendingCheck.current) clearTimeout(pendingCheck.current);
+    },
+    [],
+  );
 
-  async function readFile(file: File | undefined) {
-    if (!file) return;
-    onChange?.();
-    setFileName(file.name);
-    setPrivateKey(await file.text());
+  function clearPendingCheck() {
+    if (pendingCheck.current) clearTimeout(pendingCheck.current);
+    pendingCheck.current = null;
+  }
+
+  function change(next: { appId: string; privateKey: string | null }) {
+    clearPendingCheck();
+    const fields =
+      next.appId.trim() && next.privateKey
+        ? { appId: next.appId.trim(), privateKey: next.privateKey }
+        : null;
+    onFieldsChange(fields);
+    return fields;
   }
 
   return (
@@ -62,81 +57,31 @@ export function ConnectAppByKey({
         <Input
           id="github-app-key-app-id"
           inputMode="numeric"
+          autoComplete="off"
           value={appId}
           onChange={(event) => {
-            onChange?.();
             setAppId(event.target.value);
+            const fields = change({ appId: event.target.value, privateKey });
+            if (fields)
+              pendingCheck.current = setTimeout(
+                () => onCheck(fields),
+                CHECK_DELAY_MS,
+              );
           }}
         />
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="github-app-key-pem">Private key</Label>
-        <UnstyledButton
-          className={cn(
-            "flex w-full flex-col items-center gap-1 rounded-md border border-dashed px-4 py-6 text-sm text-muted-foreground",
-            dragging && "border-primary bg-muted/40",
-          )}
-          onClick={() => fileInput.current?.click()}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(event) => {
-            event.preventDefault();
-            setDragging(false);
-            void readFile(event.dataTransfer.files[0]);
-          }}
-        >
-          <Upload className="h-4 w-4" />
-          <span>
-            {fileName
-              ? `${fileName} added`
-              : "Drop the .pem file from the App settings, or choose it"}
-          </span>
-        </UnstyledButton>
-        <input
-          ref={fileInput}
-          id="github-app-key-pem"
-          type="file"
-          accept=".pem,application/x-pem-file"
-          className="sr-only"
-          onChange={(event) => void readFile(event.target.files?.[0])}
-        />
-        {fingerprint && (
-          <p className="text-sm text-muted-foreground">
-            <span>Key fingerprint: </span>
-            <code className="break-all">{fingerprint}</code>
-          </p>
-        )}
-      </div>
-      {error && (
-        <InlineNotice variant="error">
-          <CircleAlert aria-hidden />
-          <InlineNoticeText>{error}</InlineNoticeText>
-        </InlineNotice>
-      )}
-      <div className="flex flex-wrap items-center gap-2">
-        {fingerprint ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!fields || connecting}
-            onClick={() => fields && onConnect(fields)}
-          >
-            <span>{connecting ? "Connecting..." : connectLabel}</span>
-          </Button>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!fields || checking}
-            onClick={() => fields && onCheck(fields)}
-          >
-            <span>{checking ? "Checking..." : "Check App"}</span>
-          </Button>
-        )}
-      </div>
+      <PrivateKeyDrop
+        id="github-app-key-pem"
+        status={status}
+        onKey={(key) => {
+          setPrivateKey(key);
+          const fields = change({ appId, privateKey: key });
+          if (fields) onCheck(fields);
+        }}
+      />
     </div>
   );
 }
+
+/** How long typing in the App ID pauses before the key is checked. */
+const CHECK_DELAY_MS = 500;

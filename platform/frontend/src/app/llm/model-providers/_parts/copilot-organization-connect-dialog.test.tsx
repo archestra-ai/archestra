@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -15,10 +15,7 @@ import {
 } from "@/lib/github-copilot-app.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
-import {
-  CopilotOrganizationConnectDialog,
-  hasClaudeOrGemini,
-} from "./copilot-organization-connect-dialog";
+import { CopilotOrganizationConnectDialog } from "./copilot-organization-connect-dialog";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
@@ -70,6 +67,13 @@ const installed = {
   organization: "my-org",
   modelIds: ["gpt-4o", "gpt-4.1"],
 };
+
+const checkedKey = {
+  fingerprint: "SHA256:abc=",
+  installationId: "5",
+  organization: "my-org",
+};
+const pem = "-----BEGIN RSA PRIVATE KEY-----secret";
 
 beforeEach(() => {
   vi.mocked(useAppName).mockReturnValue("My App");
@@ -192,7 +196,7 @@ describe("CopilotOrganizationConnectDialog", () => {
     expect(fromCredential.mutate).toHaveBeenCalledTimes(2);
   });
 
-  it("goes to Access once a picked App connects", async () => {
+  it("goes to Access once a picked App connects, with only who may use it", async () => {
     vi.mocked(useConnectCopilotGithubAppCredential).mockReturnValue(
       mutation(installed) as never,
     );
@@ -202,13 +206,12 @@ describe("CopilotOrganizationConnectDialog", () => {
     );
     await user.click(screen.getByRole("button", { name: "Use this App" }));
 
-    expect(screen.getByText("Connected. 2 models:")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "No Claude or Gemini models. my-org's Copilot model policy may have them switched off.",
-      ),
-    ).toBeInTheDocument();
     expect(screen.getByText("Access picker")).toBeInTheDocument();
+    expect(screen.queryByText(/models/)).toBeNull();
+    expect(screen.queryByText(/Claude or Gemini/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
   });
 
   it("registers a new App with the shared manifest rows", async () => {
@@ -236,15 +239,10 @@ describe("CopilotOrganizationConnectDialog", () => {
     );
   });
 
-  it("connects an App by its ID and private key without rendering the key", async () => {
+  it("checks the key once both fields are filled and connects from the footer", async () => {
+    const validate = mutation(undefined, { data: checkedKey });
     vi.mocked(useValidateExistingCopilotGithubApp).mockReturnValue(
-      mutation(undefined, {
-        data: {
-          fingerprint: "SHA256:abc=",
-          installationId: "5",
-          organization: "my-org",
-        },
-      }) as never,
+      validate as never,
     );
     const byKey = mutation(installed);
     vi.mocked(useConnectExistingCopilotGithubApp).mockReturnValue(
@@ -264,24 +262,160 @@ describe("CopilotOrganizationConnectDialog", () => {
         "The App only needs Copilot requests, nothing else in the organization. Requests are paid from my-org's AI credits.",
       ),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Check App/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+
     await user.type(screen.getByLabelText("App ID"), "42");
     await user.upload(
       screen.getByLabelText("Private key"),
-      new File(["-----BEGIN RSA PRIVATE KEY-----secret"], "app.pem"),
+      new File([pem], "app.pem"),
     );
+    // A dropped key is checked right away.
+    expect(validate.mutate).toHaveBeenCalledWith({
+      appId: "42",
+      privateKey: pem,
+      organization: "my-org",
+    });
     expect(screen.queryByText(/BEGIN RSA PRIVATE KEY/)).not.toBeInTheDocument();
-    expect(screen.getByText("SHA256:abc=")).toBeInTheDocument();
+    expect(screen.getByLabelText("Private key")).toHaveAccessibleDescription(
+      /Key fingerprint:\s?SHA256:abc=/,
+    );
     await user.click(screen.getByRole("button", { name: "Connect" }));
 
     expect(byKey.mutate).toHaveBeenCalledWith(
-      {
-        appId: "42",
-        privateKey: "-----BEGIN RSA PRIVATE KEY-----secret",
-        organization: "my-org",
-      },
+      { appId: "42", privateKey: pem, organization: "my-org" },
       expect.anything(),
     );
-    expect(screen.getByText("Connected. 2 models:")).toBeInTheDocument();
+    expect(screen.getByText("Access picker")).toBeInTheDocument();
+  });
+
+  it("waits for a passing check before Connect, and checks again after the App ID changes", async () => {
+    const validate = mutation(undefined, {
+      error: new Error("GitHub doesn't know App 43."),
+    });
+    vi.mocked(useValidateExistingCopilotGithubApp).mockReturnValue(
+      validate as never,
+    );
+    const user = await continueWithOrganization();
+    await user.click(
+      screen.getByRole("button", {
+        name: /Connect an App by its ID and private key/,
+      }),
+    );
+    await user.upload(
+      screen.getByLabelText("Private key"),
+      new File([pem], "app.pem"),
+    );
+    // Only the key so far: nothing to check yet.
+    expect(validate.mutate).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText("App ID"), "43");
+    await waitFor(() =>
+      expect(validate.mutate).toHaveBeenLastCalledWith({
+        appId: "43",
+        privateKey: pem,
+        organization: "my-org",
+      }),
+    );
+    // Typing pauses before a check: one check for "43", not one per digit.
+    expect(validate.mutate).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "GitHub doesn't know App 43.",
+    );
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+  });
+
+  it("goes back from every step, and back from Access works on the connected key", async () => {
+    const fromCredential = mutation(installed);
+    vi.mocked(useConnectCopilotGithubAppCredential).mockReturnValue(
+      fromCredential as never,
+    );
+    const user = await continueWithOrganization();
+
+    // App step, choose: back to the organization, still editable.
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByLabelText("GitHub organization")).toHaveValue("my-org");
+    expect(screen.getByLabelText("GitHub organization")).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+
+    // Each way to get an App goes back to the choice.
+    for (const tile of [
+      /Use an App I already have/,
+      /Create a new GitHub App/,
+      /Connect an App by its ID and private key/,
+    ]) {
+      await user.click(screen.getByRole("button", { name: tile }));
+      await user.click(screen.getByRole("button", { name: "Back" }));
+      expect(
+        screen.getByRole("button", { name: /Create a new GitHub App/ }),
+      ).toBeInTheDocument();
+    }
+
+    await user.click(
+      screen.getByRole("button", { name: /Use an App I already have/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Use this App" }));
+    expect(screen.getByText("Access picker")).toBeInTheDocument();
+
+    // Back from Access: the App step now replaces the connected key's App.
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.click(
+      screen.getByRole("button", { name: /Use an App I already have/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Use this App" }));
+    expect(fromCredential.mutate).toHaveBeenLastCalledWith(
+      { credentialId: "cred-1", replaceKeyId: "key-1" },
+      expect.anything(),
+    );
+
+    // Its organization is fixed now.
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByLabelText("GitHub organization")).toBeDisabled();
+    expect(screen.getByLabelText("GitHub organization")).toHaveValue("my-org");
+  });
+
+  it("installs a new App made from Access onto the connected key", async () => {
+    vi.mocked(useConnectCopilotGithubAppCredential).mockReturnValue(
+      mutation(installed) as never,
+    );
+    vi.mocked(usePendingCopilotGithubApp).mockReturnValue({
+      data: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof usePendingCopilotGithubApp>);
+    const install = mutation({ status: "waiting" });
+    vi.mocked(useInstallCopilotGithubApp).mockReturnValue(install as never);
+    const user = await continueWithOrganization();
+    await user.click(
+      screen.getByRole("button", { name: /Use an App I already have/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Use this App" }));
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.click(
+      screen.getByRole("button", { name: /Create a new GitHub App/ }),
+    );
+    // The install row's Check again asks the backend to finish the install.
+    vi.mocked(usePendingCopilotGithubApp).mockReturnValue({
+      data: {
+        account: "my-org",
+        accountUrl: "https://github.com/my-org",
+        name: "My Org Copilot 2",
+        htmlUrl: "https://github.com/apps/my-org-copilot-2",
+        installUrl:
+          "https://github.com/apps/my-org-copilot-2/installations/new",
+      },
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof usePendingCopilotGithubApp>);
+    vi.spyOn(window, "open").mockReturnValue(null);
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.click(
+      screen.getByRole("button", { name: /Create a new GitHub App/ }),
+    );
+    await user.click(screen.getByRole("button", { name: /Install on GitHub/ }));
+    await user.click(screen.getByRole("button", { name: /Check again/ }));
+    expect(install.mutate).toHaveBeenCalledWith(
+      { replaceKeyId: "key-1" },
+      expect.anything(),
+    );
   });
 
   it("reconnects at the App step with the key's own organization", async () => {
@@ -300,6 +434,18 @@ describe("CopilotOrganizationConnectDialog", () => {
 
     expect(screen.getByText("Reconnect GitHub Copilot")).toBeInTheDocument();
     expect(screen.queryByLabelText("GitHub organization")).toBeNull();
+
+    // Back shows the plan's organization, fixed; Continue needs no check.
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    const field = screen.getByLabelText("GitHub organization");
+    expect(field).toBeDisabled();
+    expect(field).toHaveValue("other-org");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(
+      vi.mocked(useCheckCopilotGithubOrganization).mock.results[0]?.value
+        .mutate,
+    ).not.toHaveBeenCalled();
+
     await user.click(
       screen.getByRole("button", { name: /Use an App I already have/ }),
     );
@@ -308,13 +454,5 @@ describe("CopilotOrganizationConnectDialog", () => {
       { credentialId: "cred-1", replaceKeyId: "key-1" },
       expect.anything(),
     );
-  });
-});
-
-describe("hasClaudeOrGemini", () => {
-  it("recognizes Claude or Gemini model ids", () => {
-    expect(hasClaudeOrGemini(["gpt-4o", "claude-sonnet-4"])).toBe(true);
-    expect(hasClaudeOrGemini(["gemini-2.5-pro"])).toBe(true);
-    expect(hasClaudeOrGemini(["gpt-4o"])).toBe(false);
   });
 });

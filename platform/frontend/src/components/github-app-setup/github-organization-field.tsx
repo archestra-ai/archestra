@@ -16,6 +16,7 @@ export function GithubOrganizationField({
   error,
   label = "GitHub organization",
   help = "Organization's GitHub handle or URL",
+  disabled = false,
 }: {
   id: string;
   value: string;
@@ -23,6 +24,8 @@ export function GithubOrganizationField({
   error: string | null;
   label?: string;
   help?: string;
+  /** Shown but fixed, e.g. reconnecting a plan whose organization is set. */
+  disabled?: boolean;
 }) {
   return (
     <div className="space-y-2">
@@ -31,6 +34,7 @@ export function GithubOrganizationField({
         id={id}
         placeholder="acme or https://github.com/acme"
         value={value}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         autoComplete="off"
         data-1p-ignore

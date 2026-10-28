@@ -7,6 +7,7 @@ import {
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { RateLimiterRes } from "rate-limiter-flexible";
 import { z } from "zod";
 import { betterAuth } from "@/auth";
 import { ensureCimdClientRegistered, isCimdClientId } from "@/auth/cimd";
@@ -46,6 +47,7 @@ import {
   shieldRefreshTokenGrant,
   shieldRevocationRequest,
 } from "@/services/oauth-refresh-replay";
+import { oauthRevocationRateLimiter } from "@/services/oauth-revocation-rate-limit";
 import { oauthTokenRateLimiter } from "@/services/oauth-token-rate-limit";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
@@ -753,34 +755,41 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: {
       tags: ["Auth"],
     },
-    async onRequest(request, reply) {
-      if (config.authRateLimitDisabled) return;
+    onRequest(request, reply, done) {
+      if (config.authRateLimitDisabled) {
+        done();
+        return;
+      }
       // Use Fastify's trustProxy policy, never an unchecked forwarding header.
       // All grants share an IP budget so rotating client IDs cannot bypass it.
-      try {
-        const limit = await oauthTokenRateLimiter.consume(request.ip);
-        if (limit.allowed) return;
-        return reply
-          .header("Retry-After", limit.retryAfter)
-          .header("Cache-Control", "no-store")
-          .code(429)
-          .send({
+      void oauthRevocationRateLimiter.consume(request.ip).then(
+        () => done(),
+        (error: unknown) => {
+          if (error instanceof RateLimiterRes) {
+            return reply
+              .header(
+                "Retry-After",
+                Math.max(1, Math.ceil(error.msBeforeNext / 1000)),
+              )
+              .header("Cache-Control", "no-store")
+              .code(429)
+              .send({
+                error: "temporarily_unavailable",
+                error_description:
+                  "Too many OAuth requests. Retry after the indicated delay.",
+              });
+          }
+          logger.error(
+            { err: error },
+            "OAuth revocation rate-limit storage unavailable",
+          );
+          return reply.header("Cache-Control", "no-store").code(503).send({
             error: "temporarily_unavailable",
-            error_description:
-              "Too many OAuth requests. Retry after the indicated delay.",
+            error_description: "Token revocation is temporarily unavailable.",
           });
-      } catch (error) {
-        logger.error(
-          { err: error },
-          "OAuth revocation rate-limit storage unavailable",
-        );
-        return reply.header("Cache-Control", "no-store").code(503).send({
-          error: "temporarily_unavailable",
-          error_description: "Token revocation is temporarily unavailable.",
-        });
-      }
+        },
+      );
     },
-    // codeql[js/missing-rate-limiting] The onRequest hook enforces the shared atomic trusted-IP OAuth budget before password verification.
     async handler(request, reply) {
       const body = request.body as Record<string, unknown> | undefined;
 

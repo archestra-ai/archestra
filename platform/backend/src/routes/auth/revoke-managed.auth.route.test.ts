@@ -1,6 +1,7 @@
 import formbody from "@fastify/formbody";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, vi } from "vitest";
+import { cacheManager } from "@/cache-manager";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
@@ -33,16 +34,94 @@ describe("managed OAuth access-token revocation", () => {
     path: string,
     body: Record<string, string>,
     authorization?: string,
+    remoteAddress?: string,
   ) =>
     app.inject({
       method: "POST",
       url: `/api/auth/oauth2/${path}`,
+      remoteAddress,
       headers: {
         "content-type": "application/x-www-form-urlencoded",
         ...(authorization ? { authorization } : {}),
       },
       payload: new URLSearchParams(body).toString(),
     });
+
+  const unknownClient = {
+    client_id: "unknown-rate-limit-client",
+    client_secret: "wrong",
+    token: "unknown-token",
+    grant_type: "client_credentials",
+  };
+
+  test("shares a single budget for mixed issuance/revocation without charging twice", async () => {
+    config.authRateLimitDisabled = false;
+    for (let i = 0; i < 100; i++) {
+      const endpoint = i % 2 === 0 ? "token" : "revoke";
+      expect((await post(endpoint, unknownClient)).statusCode).toBe(
+        endpoint === "token" ? 401 : 200,
+      );
+    }
+    for (const endpoint of ["token", "revoke"]) {
+      const response = await post(endpoint, unknownClient);
+      expect(response.statusCode).toBe(429);
+      expect(response.headers["cache-control"]).toBe("no-store");
+      expect(response.json().error).toBe("temporarily_unavailable");
+    }
+  });
+
+  test("revocation exhaustion blocks issuance, preserves exact IPv6 keys and leaves sibling routes unaffected", async () => {
+    app.get("/unlimited-sibling", async () => ({ ok: true }));
+    config.authRateLimitDisabled = false;
+    const exhaustedIp = "2001:db8::1";
+    for (let i = 0; i < 100; i++)
+      expect(
+        (await post("revoke", unknownClient, undefined, exhaustedIp))
+          .statusCode,
+      ).toBe(200);
+    expect(
+      (await post("token", unknownClient, undefined, exhaustedIp)).statusCode,
+    ).toBe(429);
+    expect(
+      (await post("revoke", unknownClient, undefined, exhaustedIp)).statusCode,
+    ).toBe(429);
+    expect(
+      (await post("token", unknownClient, undefined, "2001:db8::2")).statusCode,
+    ).toBe(401);
+    expect(
+      (await post("revoke", unknownClient, undefined, "2001:db8::2"))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          url: "/unlimited-sibling",
+          remoteAddress: exhaustedIp,
+        })
+      ).json(),
+    ).toEqual({ ok: true });
+    config.authRateLimitDisabled = true;
+    expect(
+      (await post("revoke", unknownClient, undefined, exhaustedIp)).statusCode,
+    ).toBe(200);
+  });
+
+  test("fails closed before credential verification when the shared cache is unavailable", async () => {
+    config.authRateLimitDisabled = false;
+    cacheManager.shutdown();
+    const verify = vi.spyOn(
+      ManagedOauthClientModel,
+      "findClientForCredentials",
+    );
+    const response = await post("revoke", unknownClient);
+    expect(response.statusCode).toBe(503);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.json()).toEqual({
+      error: "temporarily_unavailable",
+      error_description: "Token revocation is temporarily unavailable.",
+    });
+    expect(verify).not.toHaveBeenCalled();
+  });
 
   test("shares the trusted-IP token budget and throttles before password verification without deleting tokens", async ({
     makeOrganization,

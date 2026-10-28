@@ -65,7 +65,7 @@ describe("explicit Bedrock caller caching", () => {
           { preserveContentParts: true },
         ).chatBody,
       ),
-    ).toThrow(/Bedrock/);
+    ).toThrow(/cache_control/);
   });
 
   test.each([

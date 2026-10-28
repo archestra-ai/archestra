@@ -74,6 +74,24 @@ describe("toOtelLogRecord", () => {
     expect(record.body).toBe("upstream details");
   });
 
+  test("accounts for Loki's escaped HTML and line separators in arrays", () => {
+    const details = [{ detail: "<>&\u2028\u2029".repeat(100) }];
+    const fields = Object.fromEntries(
+      Array.from({ length: 60 }, (_, index) => [`field${index}`, details]),
+    );
+    const record = toOtelLogRecord(
+      captureRecord((logger) => logger.error(fields, "upstream HTML details")),
+    );
+    const retainedFields = Object.keys(record.attributes ?? {}).filter((key) =>
+      key.startsWith("field"),
+    );
+    // Loki's Go JSON encoder writes each of these 500 characters as a
+    // six-byte Unicode escape, before adding the JSON syntax and key bytes.
+    expect(retainedFields.length * 3_000).toBeLessThanOrEqual(32 * 1024);
+    expect(record.attributes?.field0).toEqual(details);
+    expect(record.body).toBe("upstream HTML details");
+  });
+
   test("preserves arrays containing diagnostic properties named toString", () => {
     const details = [{ toString: "upstream diagnostic" }];
     const record = toOtelLogRecord(

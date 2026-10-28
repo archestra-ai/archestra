@@ -158,9 +158,18 @@ function boundValue({
       : typeof value === "object" && value !== null
         ? boundJson(value)
         : value;
-  const cost =
-    keyBytes +
-    byteLength(typeof leaf === "string" ? leaf : (JSON.stringify(leaf) ?? ""));
+  const serialized =
+    typeof leaf === "string" ? leaf : (JSON.stringify(leaf) ?? "");
+  // Loki stringifies arrays with Go's JSON encoder, which additionally
+  // escapes HTML characters and line separators. Charge those actual bytes.
+  const metadataValue = Array.isArray(leaf)
+    ? serialized.replace(
+        /[<>&\u2028\u2029]/g,
+        (character) =>
+          `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+      )
+    : serialized;
+  const cost = keyBytes + byteLength(metadataValue);
   if (
     budget.entries + 1 > MAX_ATTRIBUTE_ENTRIES ||
     budget.bytes + cost > MAX_ATTRIBUTE_BYTES

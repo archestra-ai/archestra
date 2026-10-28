@@ -120,7 +120,7 @@ const resourceDescriptions: Record<ScopedResource, Descriptions> = {
   serviceAccount: {
     view: "View the service account's details, permissions, and token metadata. Existing token values are not revealed.",
     use: "View the service account and select it as an integration identity, such as a Jira bot's fallback actor. Existing tokens are not revealed or issued.",
-    edit: "Update the service account and create or revoke its tokens, within your delegation permissions.",
+    edit: "Use the service account as an integration identity, update its settings, and create or revoke its tokens within your delegation permissions.",
   },
   credential: {
     view: "View the saved credential's details without revealing or binding its secret value.",

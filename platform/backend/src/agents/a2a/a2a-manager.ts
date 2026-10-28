@@ -337,6 +337,18 @@ export class A2AManager {
         throw new A2AError(A2AErrorKind.AgentNotFound);
       }
 
+      if (
+        fullTaskMode &&
+        actor.oauthExecution &&
+        resolveAgentRuntime(agent) &&
+        (params.taskRun?.createTask || request.message.taskId)
+      ) {
+        throw new A2AError(
+          A2AErrorKind.UnsupportedOperation,
+          "OAuth applications cannot use Agent Runtime; use an in-process agent instead.",
+        );
+      }
+
       const contextAccessOptions = {
         trustedActorAccess: Boolean(this.config.trustedContextAccess),
       };
@@ -517,6 +529,7 @@ export class A2AManager {
       // the model-window threshold) before building the request.
       if (!this.config.stateless && context && contextDbMessages.length > 0) {
         const compactionResult = await applyA2AContextCompaction({
+          oauthExecution: actor.oauthExecution,
           contextId: context.id,
           messages: contextDbMessages,
           agent: {
@@ -712,6 +725,7 @@ export class A2AManager {
               messages: requestMessages,
               organizationId: actor.organizationId,
               userId: a2aActorUserId(actor),
+              oauthExecution: actor.oauthExecution,
               sessionId,
               source: systemParams?.source,
               // A chat posts a paused review to the requester (see ChatOps).
@@ -1805,12 +1819,20 @@ export class A2AManager {
     }
 
     const organizationId = tokenAuth.organizationId;
+    const oauthExecution = tokenAuth.oauthClientId
+      ? {
+          tokenId: tokenAuth.tokenId,
+          clientId: tokenAuth.oauthClientId,
+          serviceAccountId: tokenAuth.serviceAccountId,
+        }
+      : undefined;
 
     if (tokenAuth.serviceAccountId) {
       return {
         id: tokenAuth.serviceAccountId,
         kind: "serviceAccount",
         organizationId,
+        oauthExecution,
       };
     }
 
@@ -1834,6 +1856,7 @@ export class A2AManager {
         id: tokenAuth.oauthClientId,
         kind: "oauthClient",
         organizationId,
+        oauthExecution,
       };
     }
 

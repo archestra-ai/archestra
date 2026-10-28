@@ -4,10 +4,17 @@ const WINDOW_MS = 60_000;
 const MAX_REQUESTS = 100;
 
 class TokenEndpointRateLimiter {
+  readonly max = MAX_REQUESTS;
+
   constructor(private readonly prefix: CacheKeyPrefix) {}
 
   /** One budget per trusted client IP, shared by every web replica. */
-  async consume(ip: string): Promise<{ allowed: boolean; retryAfter: number }> {
+  async consume(ip: string): Promise<{
+    allowed: boolean;
+    retryAfter: number;
+    current: number;
+    ttl: number;
+  }> {
     const key = `${this.prefix}-${ip}` as const;
     return cacheManager.withLock(key, async (cache) => {
       const now = Date.now();
@@ -22,13 +29,16 @@ class TokenEndpointRateLimiter {
         1,
         Math.ceil((window.windowEndsAt - now) / 1000),
       );
-      if (window.count >= MAX_REQUESTS) return { allowed: false, retryAfter };
+      const current = window.count + 1;
+      const ttl = Math.max(1, window.windowEndsAt - now);
+      if (window.count >= MAX_REQUESTS)
+        return { allowed: false, retryAfter, current, ttl };
       await cache.set(
         key,
         { count: window.count + 1, windowEndsAt: window.windowEndsAt },
         window.windowEndsAt - now,
       );
-      return { allowed: true, retryAfter };
+      return { allowed: true, retryAfter, current, ttl };
     });
   }
 }

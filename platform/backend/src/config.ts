@@ -38,6 +38,7 @@ import {
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
+import { normalizeVersion } from "@archestra/shared/version";
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
 import { getAppVersion } from "@/app-version";
@@ -2254,7 +2255,7 @@ const config = {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
     port: getPortFromUrl(),
     name: DEFAULT_APP_NAME,
-    version: appVersion,
+    version: normalizeVersion(appVersion),
     corsOrigins: getCorsOrigins(),
     apiKeyAuthorizationHeaderName: "Authorization",
     /**
@@ -3502,6 +3503,20 @@ const config = {
     streamKeepAliveIntervalMs: parseNonNegativeInt(
       process.env.ARCHESTRA_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS,
       DEFAULT_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS,
+    ),
+  },
+  autoRouting: {
+    /** ALPHA gate for the Model Router's "auto" model; off by default, follows ARCHESTRA_BETA when blank. */
+    enabled: betaFeatureEnabled(process.env.ARCHESTRA_AUTO_ROUTING_ENABLED),
+    /** Budget (ms) for one session-scoring call before the router falls back. */
+    scorerTimeoutMs: parsePositiveInt(
+      process.env.ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS,
+      2000,
+    ),
+    /** Idle sessions (live, plus scored past ones) a fit needs before it publishes a plan; fewer keep the organization in cold start. */
+    minSessions: parsePositiveInt(
+      process.env.ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS,
+      1000,
     ),
   },
   kb: {

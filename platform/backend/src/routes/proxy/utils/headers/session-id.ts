@@ -53,6 +53,8 @@ export type SessionSource =
   | OpenCodeFamilySessionSource
   | typeof CLAUDE_CODE_HEADER_SESSION_SOURCE
   | "openai_user"
+  /** The auto model's sticky routing key, for a request that named no session. */
+  | "auto_routing"
   | null;
 
 export interface SessionInfo {

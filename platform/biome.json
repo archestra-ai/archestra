@@ -32,7 +32,8 @@
       "!**/*.generated.ts",
       "!**/sandbox-rs/index.d.ts",
       "!**/app-runtime-rs/index.d.ts",
-      "!**/openappa-rs/index.d.ts"
+      "!**/openappa-rs/index.d.ts",
+      "!**/router-rs/index.d.ts"
     ]
   },
   "formatter": {

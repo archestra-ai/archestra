@@ -30,12 +30,8 @@ export type ModelCostBackfillPhase = z.infer<
   typeof ModelCostBackfillPhaseSchema
 >;
 
-/**
- * The prices a backfill recomputes with, frozen when it starts so a later edit
- * cannot change a running job. Same shape as `ModelModel.getEffectivePricing`.
- */
-export const ModelCostBackfillPricingSchema = z.object({
-  provider: SupportedProvidersSchema,
+/** One resolved price set; same shape as `ModelModel.getEffectivePricing`. */
+const CostBackfillPriceSetSchema = z.object({
   pricePerMillionInput: z.string().nullable(),
   pricePerMillionOutput: z.string().nullable(),
   pricePerMillionCacheRead: z.string().nullable(),
@@ -43,6 +39,25 @@ export const ModelCostBackfillPricingSchema = z.object({
   source: PriceSourceSchema,
   cacheSource: PriceSourceSchema.nullable(),
 });
+
+/**
+ * The prices a backfill recomputes with, frozen when it starts so a later edit
+ * cannot change a running job: the base prices, plus the model's long-context
+ * tier for requests whose prompt exceeds its threshold. Backfills started
+ * before long-context pricing have no tier.
+ */
+export const ModelCostBackfillPricingSchema = CostBackfillPriceSetSchema.extend(
+  {
+    provider: SupportedProvidersSchema,
+    longContext: z
+      .object({
+        threshold: z.number().int().positive(),
+        prices: CostBackfillPriceSetSchema,
+      })
+      .nullable()
+      .optional(),
+  },
+);
 export type ModelCostBackfillPricing = z.infer<
   typeof ModelCostBackfillPricingSchema
 >;

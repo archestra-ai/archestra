@@ -85,6 +85,7 @@ archestra-rs/sandbox-rs/index.js
 archestra-rs/app-runtime-rs/index.js
 archestra-rs/image-rs/index.js
 archestra-rs/openappa-rs/index.js
+archestra-rs/router-rs/index.js
 
 # Playwright
 /playwright/

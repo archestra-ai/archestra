@@ -34,7 +34,11 @@ import type {
   SupportedProvider,
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
-import type { BillingUsage, PricedBillingUsage } from "@/utils/billable-usage";
+import type {
+  BillingUsage,
+  PricedBillingUsage,
+  PricingQuote,
+} from "@/utils/billable-usage";
 
 import type { GatewayAgent } from "./agent";
 
@@ -713,10 +717,8 @@ export interface UsageView {
   billingUsage?: BillingUsage;
   /** Internal quote attached to this normalized request snapshot, never forwarded. */
   billingQuote?: {
-    providerApiKeyId?: string;
-    model: string;
-    provider: SupportedProvider;
-    priced: PricedBillingUsage;
+    pricing: PricingQuote;
+    priced?: PricedBillingUsage;
   };
   /** Missing provider counts; persist null instead of inventing zero usage. */
   usageUnavailable?: boolean;

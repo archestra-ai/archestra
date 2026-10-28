@@ -2,9 +2,11 @@
 
 import {
   type archestraApiTypes,
+  DEFAULT_CREDENTIAL_GRANTS,
   E2eTestId,
   formatSecretStorageType,
   isProviderApiKeyOptional,
+  isSupportedProvider,
   SUBSCRIPTION_CREDENTIALS,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -189,6 +191,24 @@ export default function ApiKeysPage() {
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  // `?create=<provider>&access=organization` opens the create dialog shared org-wide, which background callers (the auto-routing scorer) need.
+  const createProvider = searchParams.get("create");
+  const createShared = searchParams.get("access") === "organization";
+  const linkedCreate = useMemo(
+    (): Partial<LlmProviderApiKeyFormValues> | undefined =>
+      isSupportedProvider(createProvider)
+        ? {
+            provider: createProvider,
+            initialGrants: createShared
+              ? DEFAULT_CREDENTIAL_GRANTS.map((grant) => ({
+                  ...grant,
+                  name: "Everyone in the organization",
+                }))
+              : [],
+          }
+        : undefined,
+    [createProvider, createShared],
+  );
   const [subscriptionToConnect, setSubscriptionToConnect] =
     useState<SubscriptionOffer | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -801,8 +821,12 @@ export default function ApiKeysPage() {
 
         {/* Create Dialog */}
         <CreateLlmProviderApiKeyDialog
-          open={isCreateDialogOpen}
-          onOpenChange={setIsCreateDialogOpen}
+          open={isCreateDialogOpen || linkedCreate !== undefined}
+          onOpenChange={(open) => {
+            setIsCreateDialogOpen(open);
+            if (!open) updateQueryParams({ create: null, access: null });
+          }}
+          defaultValues={linkedCreate}
           title="Add API Key"
           description="Add a new LLM provider API key for use in Chat and LLM Proxy"
         />

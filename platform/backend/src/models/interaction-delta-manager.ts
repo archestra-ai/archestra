@@ -903,7 +903,7 @@ function longestExactPrefixLen(a: unknown[], b: unknown[]): number {
 }
 
 /** Stable (key-sorted) sha256 so equal messages hash equal regardless of key order. */
-function hashMessage(message: unknown): string {
+export function hashMessage(message: unknown): string {
   return createHash("sha256")
     .update(stableStringify(normalizeMessageForHash(message)))
     .digest("hex");

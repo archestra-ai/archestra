@@ -64,6 +64,11 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
   // read, so this tick is what keeps the catalog current.
   { taskType: "llm_model_sync", intervalSeconds: 60, payload: {} },
   { taskType: "audit_log_cleanup", intervalSeconds: 86400, payload: {} },
+  // Enqueues an auto-routing plan fit per organization whose settings changed
+  // since its last fit, or whose last fit is a day old, and purges routing
+  // history past retention once a day. The minute tick bounds how long a
+  // settings change or a lost publication race waits for its re-plan.
+  { taskType: "auto_routing_dispatch", intervalSeconds: 60, payload: {} },
   // Rebuilds the portable BM25 corpus statistics (document frequency, chunk
   // count, mean chunk length) the keyword ranker scores from. A read-only
   // scan of kb_chunks, and a long interval is safe: stale statistics shift

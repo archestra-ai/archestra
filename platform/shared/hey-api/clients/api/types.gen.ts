@@ -32478,6 +32478,1495 @@ export type PostApiAuthBy__Responses = {
     200: unknown;
 };
 
+export type GetAutoRoutingSettingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/settings';
+};
+
+export type GetAutoRoutingSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAutoRoutingSettingsError = GetAutoRoutingSettingsErrors[keyof GetAutoRoutingSettingsErrors];
+
+export type GetAutoRoutingSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+        budgetUsdPerDay: number | null;
+        tiers: {
+            fast: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            } | null;
+            normal: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            } | null;
+            smart: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            } | null;
+        };
+        generation: number;
+        plannedGeneration: number;
+        status: {
+            activePlan: {
+                id: string;
+                createdAt: string;
+            } | null;
+            coldStart: {
+                scorerVersionId: string;
+                sessions: number;
+                required: number;
+            };
+            lastFitError: string | null;
+            scorer: 'ready' | 'no_jev_key';
+        };
+    };
+};
+
+export type GetAutoRoutingSettingsResponse = GetAutoRoutingSettingsResponses[keyof GetAutoRoutingSettingsResponses];
+
+export type UpdateAutoRoutingSettingsData = {
+    body: {
+        enabled?: boolean;
+        budgetUsdPerDay?: number;
+        fastModelId?: string;
+        normalModelId?: string;
+        smartModelId?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/settings';
+};
+
+export type UpdateAutoRoutingSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateAutoRoutingSettingsError = UpdateAutoRoutingSettingsErrors[keyof UpdateAutoRoutingSettingsErrors];
+
+export type UpdateAutoRoutingSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+        budgetUsdPerDay: number | null;
+        tiers: {
+            fast: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            } | null;
+            normal: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            } | null;
+            smart: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            } | null;
+        };
+        generation: number;
+        plannedGeneration: number;
+        status: {
+            activePlan: {
+                id: string;
+                createdAt: string;
+            } | null;
+            coldStart: {
+                scorerVersionId: string;
+                sessions: number;
+                required: number;
+            };
+            lastFitError: string | null;
+            scorer: 'ready' | 'no_jev_key';
+        };
+        fit: {
+            status: 'active';
+            planId: string;
+        } | {
+            status: 'unchanged';
+            planId: string;
+        } | {
+            status: 'cold_start';
+            planId: string | null;
+        } | {
+            status: 'failed';
+            planId: string | null;
+            error: string;
+        } | null;
+    };
+};
+
+export type UpdateAutoRoutingSettingsResponse = UpdateAutoRoutingSettingsResponses[keyof UpdateAutoRoutingSettingsResponses];
+
+export type GetAutoRoutingPlansData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+    };
+    url: '/api/auto-routing/plans';
+};
+
+export type GetAutoRoutingPlansErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAutoRoutingPlansError = GetAutoRoutingPlansErrors[keyof GetAutoRoutingPlansErrors];
+
+export type GetAutoRoutingPlansResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        createdAt: string;
+        trigger: 'initial' | 'nightly' | 'settings' | 'manual' | 'scorer_change' | 'backfill';
+        status: 'active' | 'superseded' | 'failed' | 'cold_start' | 'rejected';
+        generation: number;
+        inputWatermark: string;
+        budgetUsdPerDay: number;
+        scorerVersion: {
+            id: string;
+            name: string;
+            model: string;
+            specHash: string;
+        };
+        coreVersion: string;
+        planFormatVersion: number;
+        summary: {
+            [key: string]: unknown;
+        } | null;
+        diagnostics: {
+            [key: string]: unknown;
+        } | null;
+        error: string | null;
+        decisionCount: number;
+    }>;
+};
+
+export type GetAutoRoutingPlansResponse = GetAutoRoutingPlansResponses[keyof GetAutoRoutingPlansResponses];
+
+export type GetAutoRoutingPlanData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/auto-routing/plans/{id}';
+};
+
+export type GetAutoRoutingPlanErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAutoRoutingPlanError = GetAutoRoutingPlanErrors[keyof GetAutoRoutingPlanErrors];
+
+export type GetAutoRoutingPlanResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        createdAt: string;
+        trigger: 'initial' | 'nightly' | 'settings' | 'manual' | 'scorer_change' | 'backfill';
+        status: 'active' | 'superseded' | 'failed' | 'cold_start' | 'rejected';
+        generation: number;
+        inputWatermark: string;
+        budgetUsdPerDay: number;
+        scorerVersion: {
+            id: string;
+            name: string;
+            model: string;
+            specHash: string;
+        };
+        coreVersion: string;
+        planFormatVersion: number;
+        summary: {
+            [key: string]: unknown;
+        } | null;
+        diagnostics: {
+            [key: string]: unknown;
+        } | null;
+        error: string | null;
+        decisionCount: number;
+        tiersFingerprint: {
+            [key: string]: unknown;
+        };
+        plan: {
+            [key: string]: unknown;
+        } | null;
+    };
+};
+
+export type GetAutoRoutingPlanResponse = GetAutoRoutingPlanResponses[keyof GetAutoRoutingPlanResponses];
+
+export type ReplanAutoRoutingData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/replan';
+};
+
+export type ReplanAutoRoutingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ReplanAutoRoutingError = ReplanAutoRoutingErrors[keyof ReplanAutoRoutingErrors];
+
+export type ReplanAutoRoutingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+        budgetUsdPerDay: number | null;
+        tiers: {
+            fast: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            } | null;
+            normal: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            } | null;
+            smart: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            } | null;
+        };
+        generation: number;
+        plannedGeneration: number;
+        status: {
+            activePlan: {
+                id: string;
+                createdAt: string;
+            } | null;
+            coldStart: {
+                scorerVersionId: string;
+                sessions: number;
+                required: number;
+            };
+            lastFitError: string | null;
+            scorer: 'ready' | 'no_jev_key';
+        };
+        fit: {
+            status: 'active';
+            planId: string;
+        } | {
+            status: 'unchanged';
+            planId: string;
+        } | {
+            status: 'cold_start';
+            planId: string | null;
+        } | {
+            status: 'failed';
+            planId: string | null;
+            error: string;
+        } | null;
+    };
+};
+
+export type ReplanAutoRoutingResponse = ReplanAutoRoutingResponses[keyof ReplanAutoRoutingResponses];
+
+export type PreviewAutoRoutingData = {
+    body: {
+        text: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/preview';
+};
+
+export type PreviewAutoRoutingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PreviewAutoRoutingError = PreviewAutoRoutingErrors[keyof PreviewAutoRoutingErrors];
+
+export type PreviewAutoRoutingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        tierNeeded: [
+            number,
+            number,
+            number
+        ];
+        pLong: number;
+        reason: 'planned' | 'cold_start' | 'plan_stale';
+        planId: string | null;
+        chosen: {
+            tier: 'fast' | 'normal' | 'smart';
+            model: {
+                id: string;
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'kimi-code' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                modelId: string;
+            };
+        };
+        propensity: number;
+        expectedCostUsd: number | null;
+        scorerCostUsd: number | null;
+    };
+};
+
+export type PreviewAutoRoutingResponse = PreviewAutoRoutingResponses[keyof PreviewAutoRoutingResponses];
+
+export type SimulateAutoRoutingData = {
+    body: {
+        budgetUsdPerDay: number;
+        volumeMultiplier: number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/simulate';
+};
+
+export type SimulateAutoRoutingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: 'api_rate_limit_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SimulateAutoRoutingError = SimulateAutoRoutingErrors[keyof SimulateAutoRoutingErrors];
+
+export type SimulateAutoRoutingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'feasible';
+        summary: {
+            [key: string]: unknown;
+        };
+        tiersFingerprint: {
+            [key: string]: unknown;
+        };
+        baseline: {
+            sessionsPerDay: number;
+            tokensPerDay: number;
+        };
+    } | {
+        status: 'infeasible';
+        minBudgetUsdPerDay: number;
+        baseline: {
+            sessionsPerDay: number;
+            tokensPerDay: number;
+        };
+    } | {
+        status: 'cold_start';
+        sessions: number;
+        required: number;
+    };
+};
+
+export type SimulateAutoRoutingResponse = SimulateAutoRoutingResponses[keyof SimulateAutoRoutingResponses];
+
+export type GetAutoRoutingDiagnosticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        budgetUsdPerDay?: number;
+    };
+    url: '/api/auto-routing/diagnostics';
+};
+
+export type GetAutoRoutingDiagnosticsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: 'api_rate_limit_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAutoRoutingDiagnosticsError = GetAutoRoutingDiagnosticsErrors[keyof GetAutoRoutingDiagnosticsErrors];
+
+export type GetAutoRoutingDiagnosticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'ready';
+        budgetUsdPerDay: number;
+        savedBudgetUsdPerDay: number;
+        lamStar: number;
+        q: number;
+        tierSessionShare: [
+            number,
+            number,
+            number
+        ];
+        sizeFit: {
+            status: 'ok';
+            testSessions: number;
+            plotted: number;
+            excluded: number;
+            spearman: number | null;
+            medianRealizedOverPredicted: number | null;
+        } | {
+            status: 'no_holdout';
+        } | {
+            status: 'failed';
+        };
+        sessions: Array<{
+            tierNeeded: [
+                number,
+                number,
+                number
+            ];
+            pLong: number;
+            realizedTokens: number;
+            predictedTokens: number | null;
+            usdPerToken: [
+                number,
+                number,
+                number
+            ];
+            tier: 'fast' | 'normal' | 'smart';
+        }>;
+    } | {
+        status: 'infeasible';
+        budgetUsdPerDay: number;
+        savedBudgetUsdPerDay: number;
+        minBudgetUsdPerDay: number;
+    } | {
+        status: 'cold_start';
+    };
+};
+
+export type GetAutoRoutingDiagnosticsResponse = GetAutoRoutingDiagnosticsResponses[keyof GetAutoRoutingDiagnosticsResponses];
+
+export type CancelAutoRoutingBackfillData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/backfill';
+};
+
+export type CancelAutoRoutingBackfillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CancelAutoRoutingBackfillError = CancelAutoRoutingBackfillErrors[keyof CancelAutoRoutingBackfillErrors];
+
+export type CancelAutoRoutingBackfillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        backfill: {
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            windowStart: string;
+            cutoff: string;
+            eligibleSessions: number;
+            eligibleTokens: number;
+            breakdown: Array<{
+                apiShape: 'chat_completions' | 'responses' | 'messages';
+                client: string;
+                sessions: number;
+            }>;
+            scorerCurrent: boolean | null;
+            maxSessions: number | null;
+            maxCostUsd: number | null;
+            spentCostUsd: number;
+            progress: {
+                sample: number;
+                scored: number;
+                noText: number;
+                failed: number;
+            } | null;
+            error: string | null;
+            completedAt: string | null;
+            awaitingFit: boolean;
+            fitBlockedReason: string | null;
+        } | null;
+        scoreOffer: {
+            backfillId: string;
+            scorerVersionId: string;
+            windowStart: string;
+            cutoff: string;
+            sessions: number;
+            remaining: number;
+            estimatedCostUsd: number;
+            suggestedMaxCostUsd: number;
+            rescore: boolean;
+        } | null;
+    };
+};
+
+export type CancelAutoRoutingBackfillResponse = CancelAutoRoutingBackfillResponses[keyof CancelAutoRoutingBackfillResponses];
+
+export type GetAutoRoutingBackfillData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/backfill';
+};
+
+export type GetAutoRoutingBackfillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAutoRoutingBackfillError = GetAutoRoutingBackfillErrors[keyof GetAutoRoutingBackfillErrors];
+
+export type GetAutoRoutingBackfillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        backfill: {
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            windowStart: string;
+            cutoff: string;
+            eligibleSessions: number;
+            eligibleTokens: number;
+            breakdown: Array<{
+                apiShape: 'chat_completions' | 'responses' | 'messages';
+                client: string;
+                sessions: number;
+            }>;
+            scorerCurrent: boolean | null;
+            maxSessions: number | null;
+            maxCostUsd: number | null;
+            spentCostUsd: number;
+            progress: {
+                sample: number;
+                scored: number;
+                noText: number;
+                failed: number;
+            } | null;
+            error: string | null;
+            completedAt: string | null;
+            awaitingFit: boolean;
+            fitBlockedReason: string | null;
+        } | null;
+        scoreOffer: {
+            backfillId: string;
+            scorerVersionId: string;
+            windowStart: string;
+            cutoff: string;
+            sessions: number;
+            remaining: number;
+            estimatedCostUsd: number;
+            suggestedMaxCostUsd: number;
+            rescore: boolean;
+        } | null;
+    };
+};
+
+export type GetAutoRoutingBackfillResponse = GetAutoRoutingBackfillResponses[keyof GetAutoRoutingBackfillResponses];
+
+export type ScanAutoRoutingBackfillData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/backfill/scan';
+};
+
+export type ScanAutoRoutingBackfillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ScanAutoRoutingBackfillError = ScanAutoRoutingBackfillErrors[keyof ScanAutoRoutingBackfillErrors];
+
+export type ScanAutoRoutingBackfillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        backfill: {
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            windowStart: string;
+            cutoff: string;
+            eligibleSessions: number;
+            eligibleTokens: number;
+            breakdown: Array<{
+                apiShape: 'chat_completions' | 'responses' | 'messages';
+                client: string;
+                sessions: number;
+            }>;
+            scorerCurrent: boolean | null;
+            maxSessions: number | null;
+            maxCostUsd: number | null;
+            spentCostUsd: number;
+            progress: {
+                sample: number;
+                scored: number;
+                noText: number;
+                failed: number;
+            } | null;
+            error: string | null;
+            completedAt: string | null;
+            awaitingFit: boolean;
+            fitBlockedReason: string | null;
+        } | null;
+        scoreOffer: {
+            backfillId: string;
+            scorerVersionId: string;
+            windowStart: string;
+            cutoff: string;
+            sessions: number;
+            remaining: number;
+            estimatedCostUsd: number;
+            suggestedMaxCostUsd: number;
+            rescore: boolean;
+        } | null;
+    };
+};
+
+export type ScanAutoRoutingBackfillResponse = ScanAutoRoutingBackfillResponses[keyof ScanAutoRoutingBackfillResponses];
+
+export type ScoreAutoRoutingBackfillData = {
+    body: {
+        backfillId: string;
+        scorerVersionId: string;
+        maxSessions?: number;
+        /**
+         * Spending limit for the scorer calls in USD; may be exceeded by at most 4 × the per-call cost of the calls in flight
+         */
+        maxCostUsd: number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/auto-routing/backfill/score';
+};
+
+export type ScoreAutoRoutingBackfillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ScoreAutoRoutingBackfillError = ScoreAutoRoutingBackfillErrors[keyof ScoreAutoRoutingBackfillErrors];
+
+export type ScoreAutoRoutingBackfillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        backfill: {
+            id: string;
+            status: 'running' | 'scanned' | 'done' | 'failed' | 'cancelled' | 'superseded';
+            phase: 'scan' | 'score';
+            windowStart: string;
+            cutoff: string;
+            eligibleSessions: number;
+            eligibleTokens: number;
+            breakdown: Array<{
+                apiShape: 'chat_completions' | 'responses' | 'messages';
+                client: string;
+                sessions: number;
+            }>;
+            scorerCurrent: boolean | null;
+            maxSessions: number | null;
+            maxCostUsd: number | null;
+            spentCostUsd: number;
+            progress: {
+                sample: number;
+                scored: number;
+                noText: number;
+                failed: number;
+            } | null;
+            error: string | null;
+            completedAt: string | null;
+            awaitingFit: boolean;
+            fitBlockedReason: string | null;
+        } | null;
+        scoreOffer: {
+            backfillId: string;
+            scorerVersionId: string;
+            windowStart: string;
+            cutoff: string;
+            sessions: number;
+            remaining: number;
+            estimatedCostUsd: number;
+            suggestedMaxCostUsd: number;
+            rescore: boolean;
+        } | null;
+    };
+};
+
+export type ScoreAutoRoutingBackfillResponse = ScoreAutoRoutingBackfillResponses[keyof ScoreAutoRoutingBackfillResponses];
+
 export type AzureListFilesData = {
     body?: never;
     path?: never;
@@ -39803,6 +41292,7 @@ export type GetBootstrapResponses = {
                 };
                 mcpGatewaySkillsEnabled: boolean;
                 devFeedbackEnabled: boolean;
+                autoRoutingEnabled: boolean;
             };
             providerBaseUrls: {
                 [key: string]: string | null;
@@ -49499,6 +50989,7 @@ export type GetConfigResponses = {
             };
             mcpGatewaySkillsEnabled: boolean;
             devFeedbackEnabled: boolean;
+            autoRoutingEnabled: boolean;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -94813,6 +96304,11 @@ export type GetModelsWithApiKeysResponses = {
         customPricePerMillionOutput: string | null;
         customPricePerMillionCacheRead: string | null;
         customPricePerMillionCacheWrite: string | null;
+        longContextThreshold: number | null;
+        longContextPricePerMillionInput: string | null;
+        longContextPricePerMillionOutput: string | null;
+        longContextPricePerMillionCacheRead: string | null;
+        longContextPricePerMillionCacheWrite: string | null;
         ignored: boolean;
         embeddingDimensions: EmbeddingDimensions | null;
         defaultParameters: {
@@ -95161,6 +96657,11 @@ export type UpdateModelData = {
         customPricePerMillionOutput?: string | null;
         customPricePerMillionCacheRead?: string | null;
         customPricePerMillionCacheWrite?: string | null;
+        longContextThreshold?: number | null;
+        longContextPricePerMillionInput?: string | null;
+        longContextPricePerMillionOutput?: string | null;
+        longContextPricePerMillionCacheRead?: string | null;
+        longContextPricePerMillionCacheWrite?: string | null;
         customContextLength?: number | null;
         customOutputLength?: number | null;
         ignored?: boolean;
@@ -95290,6 +96791,11 @@ export type UpdateModelResponses = {
         customPricePerMillionOutput: string | null;
         customPricePerMillionCacheRead: string | null;
         customPricePerMillionCacheWrite: string | null;
+        longContextThreshold: number | null;
+        longContextPricePerMillionInput: string | null;
+        longContextPricePerMillionOutput: string | null;
+        longContextPricePerMillionCacheRead: string | null;
+        longContextPricePerMillionCacheWrite: string | null;
         ignored: boolean;
         embeddingDimensions: EmbeddingDimensions | null;
         defaultParameters: {

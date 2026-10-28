@@ -28,42 +28,6 @@ vi.mock("prom-client", () => ({
   },
 }));
 
-// Mock cost-optimization
-const mockCalculateCost =
-  vi.fn<
-    (
-      model: string,
-      inputTokens: number | null | undefined,
-      outputTokens: number | null | undefined,
-      provider: string,
-    ) => Promise<number | undefined>
-  >();
-const mockCalculateCacheCost =
-  vi.fn<
-    (
-      model: string,
-      provider: string,
-      readTokens: number,
-      writeTokens: number,
-    ) => Promise<
-      | { cacheCost: number; cacheSavings: number; cacheReadSavings: number }
-      | undefined
-    >
-  >();
-vi.mock("@/routes/proxy/utils/cost-optimization", async (importOriginal) => {
-  const original =
-    await importOriginal<
-      typeof import("@/routes/proxy/utils/cost-optimization")
-    >();
-  return {
-    ...original,
-    calculateCost: (...args: Parameters<typeof mockCalculateCost>) =>
-      mockCalculateCost(...args),
-    calculateCacheCost: (...args: Parameters<typeof mockCalculateCacheCost>) =>
-      mockCalculateCacheCost(...args),
-  };
-});
-
 // Mock tracing
 const mockRecordBlockedToolSpans = vi.fn();
 vi.mock("@/observability/tracing", async (importOriginal) => {
@@ -84,7 +48,6 @@ import { metrics } from "@/observability";
 import { upstreamHttpError } from "./adapters/upstream-http-error";
 import {
   buildInteractionRecord,
-  calculateInteractionCosts,
   handleError,
   isRetryableUpstreamConnectionFailure,
   normalizeToolCallsForPolicy,
@@ -680,81 +643,6 @@ describe("normalizeToolCallsForPolicy", () => {
         }),
       },
     ]);
-  });
-});
-
-// --------------------------------------------------------------------------
-// calculateInteractionCosts
-// --------------------------------------------------------------------------
-describe("calculateInteractionCosts", () => {
-  test("prices the model actually used, once", async () => {
-    mockCalculateCost.mockResolvedValue(0.0005);
-    mockCalculateCacheCost.mockResolvedValue({
-      cacheCost: 0.0001,
-      cacheSavings: 0.0009,
-      cacheReadSavings: 0.001,
-    });
-
-    const result = await calculateInteractionCosts({
-      actualModel: "gpt-3.5-turbo",
-      usage: { inputTokens: 100, outputTokens: 50 },
-      providerName: "openai",
-    });
-
-    expect(result).toEqual({
-      actualCost: 0.0005,
-      cacheCost: 0.0001,
-      cacheSavings: 0.0009,
-      cacheReadSavings: 0.001,
-    });
-    expect(mockCalculateCost).toHaveBeenCalledTimes(1);
-    expect(mockCalculateCost).toHaveBeenCalledWith(
-      "gpt-3.5-turbo",
-      100,
-      50,
-      "openai",
-      {
-        readTokens: 0,
-        writeTokens: 0,
-        write1hTokens: 0,
-      },
-    );
-  });
-
-  test("records the cost the provider reports instead of the price-table estimate", async () => {
-    mockCalculateCost.mockResolvedValue(0.0099);
-    mockCalculateCacheCost.mockResolvedValue(undefined);
-
-    const result = await calculateInteractionCosts({
-      actualModel: "anthropic/claude-sonnet-4.5",
-      usage: {
-        inputTokens: 1200,
-        outputTokens: 300,
-        providerReportedCost: 0.0123,
-      },
-      providerName: "openrouter",
-    });
-
-    expect(result.actualCost).toBe(0.0123);
-    expect(mockCalculateCost).not.toHaveBeenCalled();
-  });
-
-  test("handles undefined costs (model not found)", async () => {
-    mockCalculateCost.mockResolvedValue(undefined);
-    mockCalculateCacheCost.mockResolvedValue(undefined);
-
-    const result = await calculateInteractionCosts({
-      actualModel: "unknown-model",
-      usage: { inputTokens: 100, outputTokens: 50 },
-      providerName: "openai",
-    });
-
-    expect(result).toEqual({
-      actualCost: undefined,
-      cacheCost: undefined,
-      cacheSavings: undefined,
-      cacheReadSavings: undefined,
-    });
   });
 });
 

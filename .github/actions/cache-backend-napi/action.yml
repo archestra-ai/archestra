@@ -9,7 +9,7 @@ inputs:
 
 outputs:
   usable:
-    description: Whether all four cached native addons loaded successfully
+    description: Whether all cached native addons loaded successfully
     value: ${{ steps.verify.outputs.usable }}
 
 runs:
@@ -38,6 +38,7 @@ runs:
           platform/archestra-rs/sandbox-rs/index.linux-x64-gnu.node
           platform/archestra-rs/image-rs/index.linux-x64-gnu.node
           platform/archestra-rs/openappa-rs/index.linux-x64-gnu.node
+          platform/archestra-rs/router-rs/index.linux-x64-gnu.node
         key: ${{ steps.key.outputs.value }}
 
     - name: Restore native addons without saving
@@ -50,6 +51,7 @@ runs:
           platform/archestra-rs/sandbox-rs/index.linux-x64-gnu.node
           platform/archestra-rs/image-rs/index.linux-x64-gnu.node
           platform/archestra-rs/openappa-rs/index.linux-x64-gnu.node
+          platform/archestra-rs/router-rs/index.linux-x64-gnu.node
         key: ${{ steps.key.outputs.value }}
 
     - name: Verify cached native addons
@@ -59,9 +61,9 @@ runs:
       env:
         CACHE_HIT: ${{ steps.cache.outputs.cache-hit || steps.restore.outputs.cache-hit }}
       run: |
-        if [ "$CACHE_HIT" = "true" ] && node -e 'for (const name of ["@archestra/app-runtime-rs", "@archestra/sandbox-rs", "@archestra/image-rs", "@archestra/openappa-rs"]) require(name)'; then
+        if [ "$CACHE_HIT" = "true" ] && node -e 'for (const name of ["@archestra/app-runtime-rs", "@archestra/sandbox-rs", "@archestra/image-rs", "@archestra/openappa-rs", "@archestra/router-rs"]) require(name)'; then
           echo "usable=true" >> "$GITHUB_OUTPUT"
         else
           echo "usable=false" >> "$GITHUB_OUTPUT"
-          rm -f ../archestra-rs/{app-runtime-rs,sandbox-rs,image-rs,openappa-rs}/index.linux-x64-gnu.node
+          rm -f ../archestra-rs/{app-runtime-rs,sandbox-rs,image-rs,openappa-rs,router-rs}/index.linux-x64-gnu.node
         fi

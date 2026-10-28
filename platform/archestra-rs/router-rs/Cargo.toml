@@ -1,0 +1,19 @@
+[package]
+name = "router_rs"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = "3"
+napi-derive = "3"
+router_core = { path = "../router-core" }
+# float_roundtrip: a plan's breakpoints must parse back bit-identical so tie checks stay exact.
+serde_json = { version = "1", features = ["float_roundtrip"] }
+
+[build-dependencies]
+napi-build = "2"

@@ -19,8 +19,11 @@ import logger from "@/logging";
 import { ApiError } from "@/types/api";
 import {
   COPILOT_APP_INTEGRATION_ID,
+  classifyCopilotAppRejection,
   copilotAppErrorMessage,
   type GithubAppCredential,
+  GithubAppCredentialGoneError,
+  GithubAppReferenceError,
   getGithubAppInstallationToken,
   resolveGithubAppCredential,
 } from "./github-app-copilot-token";
@@ -179,12 +182,29 @@ export const githubCopilotTokenManager = new GithubCopilotTokenManager();
 export function createGithubCopilotFetch(params: {
   githubToken: string | undefined;
   providerApiKeyId?: string;
+  /**
+   * A GitHub App not stored yet, for the setup to read its models. A stored
+   * plan key is never passed this way: its id is.
+   */
+  appCredential?: GithubAppCredential;
   innerFetch?: FetchLike;
 }): FetchLike {
-  const { githubToken, providerApiKeyId, innerFetch } = params;
+  const { githubToken, providerApiKeyId, appCredential, innerFetch } = params;
   const baseFetch: FetchLike = innerFetch ?? fetch;
 
   return async (input, init) => {
+    if (appCredential) {
+      return githubAppCopilotFetch({
+        load: async () => ({
+          storedValue: null,
+          resolve: async () => appCredential,
+        }),
+        input,
+        init,
+        baseFetch,
+      });
+    }
+
     if (!githubToken) {
       // Keyless calls cannot be exchanged; let Copilot reject the request so
       // the standard provider error path reports it.
@@ -192,20 +212,28 @@ export function createGithubCopilotFetch(params: {
     }
 
     if (isGithubAppCredential(githubToken)) {
+      // A GitHub App reference is honored only as a stored plan key's own
+      // value: one a caller sends could name any organization's App.
+      if (!providerApiKeyId)
+        return Response.json(
+          {
+            error: {
+              message:
+                "A GitHub App plan can only be used through its stored provider key.",
+              type: "invalid_request_error",
+            },
+          },
+          { status: 400 },
+        );
       return githubAppCopilotFetch({
-        value: githubToken,
+        load: () => storedPlanCredential(providerApiKeyId),
         input,
         init,
         baseFetch,
-        // The App can no longer sign in or Copilot refuses it: the key needs
-        // its App credentials again, like a personal sign-in needs a reconnect.
-        onRejected: providerApiKeyId
-          ? () =>
-              recordAppKeyRejected({
-                providerApiKeyId,
-                encodedCredential: githubToken,
-              })
-          : undefined,
+        // GitHub definitively refuses the App: the plan needs its App again,
+        // like a personal sign-in needs a reconnect.
+        onRejected: (storedValue) =>
+          recordAppKeyRejected({ providerApiKeyId, storedValue }),
       });
     }
 
@@ -337,26 +365,38 @@ function resolveCopilotRequestUrl(
 /**
  * Copilot request with a GitHub App credential: an installation token as the
  * Bearer, with the Copilot runtime's integration id and no editor identity.
- * A 401 mints a fresh token and retries once; a rejection gets a message that
- * says what to fix.
+ * A 401 mints a fresh token and retries once. Only a definitive refusal of
+ * the App flags the plan; a refusal of one request passes through.
  */
 async function githubAppCopilotFetch(params: {
-  /** The key's value: a reference to a GitHub App credential, or an embedded App. */
-  value: string;
+  /**
+   * The stored key value (null when not stored), then the App it names:
+   * resolving can fail definitively after the value is known.
+   */
+  load: () => Promise<{
+    storedValue: string | null;
+    resolve: () => Promise<GithubAppCredential>;
+  }>;
   input: string | URL | Request;
   init?: RequestInit;
   baseFetch: FetchLike;
-  onRejected?: () => Promise<void>;
+  onRejected?: (storedValue: string | null) => Promise<void>;
 }): Promise<Response> {
-  const { value, input, init, baseFetch, onRejected } = params;
+  const { input, init, baseFetch } = params;
+  let storedValue: string | null = null;
   let credential: GithubAppCredential;
   try {
-    const resolved = await resolveGithubAppCredential(value);
-    if (!resolved)
-      throw new ApiError(400, "The GitHub App credential is unreadable.");
-    credential = resolved;
+    const loaded = await params.load();
+    storedValue = loaded.storedValue;
+    credential = await loaded.resolve();
   } catch (error) {
-    return appSignInFailure(error, onRejected);
+    return appSignInFailure(error, rejectedFor(storedValue));
+  }
+  const onRejected = rejectedFor(storedValue);
+  function rejectedFor(value: string | null) {
+    return params.onRejected
+      ? () => params.onRejected?.(value) ?? Promise.resolve()
+      : undefined;
   }
   const send = (token: string) => {
     const headers = new Headers(
@@ -386,32 +426,48 @@ async function githubAppCopilotFetch(params: {
         return appSignInFailure(error, onRejected);
       }
       response = await send(token);
-      if (response.status === 401) await onRejected?.();
     }
     if (response.status !== 400 && response.status !== 403) return response;
     const text = await response.text();
     const githubMessage = githubMessageOf(text);
-    // Only an App-auth rejection is rewritten; request validation errors
-    // (e.g. the invocability probes' payload complaints) pass through as is.
-    if (
-      response.status === 400 &&
-      !/integration[- ]id|installation access token/i.test(githubMessage)
-    ) {
-      return new Response(text, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers,
-      });
+    const rejection = classifyCopilotAppRejection({
+      status: response.status,
+      githubMessage,
+    });
+    if (!rejection) {
+      // One request refused (a payload Copilot rejects, a model the policy
+      // blocks): an ordinary error, and the plan stays connected.
+      if (response.status === 400)
+        return new Response(text, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        });
+      return Response.json(
+        {
+          error: {
+            message: copilotAppErrorMessage({
+              rejection,
+              status: response.status,
+              githubMessage,
+              organization: credential.organization,
+            }),
+            type: "permission_error",
+          },
+        },
+        { status: 403 },
+      );
     }
     logger.info(
-      { status: response.status, message: githubMessage.slice(0, 300) },
-      "[GithubAppCopilot] Copilot rejected the installation token",
+      { rejection, message: githubMessage.slice(0, 300) },
+      "[GithubAppCopilot] Copilot refused the App",
     );
     await onRejected?.();
     return Response.json(
       {
         error: {
           message: copilotAppErrorMessage({
+            rejection,
             status: response.status,
             githubMessage,
             organization: credential.organization,
@@ -450,24 +506,45 @@ function githubMessageOf(text: string): string {
  * was uninstalled or its private key revoked) needs new App credentials and
  * answers 401; a GitHub outage stays a 502 and changes nothing.
  */
+/**
+ * Why the App could not sign in: GitHub definitively refused it (the plan is
+ * flagged), the stored value is no plan reference (refused, not flagged), or
+ * GitHub or the credential store failed for now (a transient error, not
+ * flagged).
+ */
 async function appSignInFailure(
   error: unknown,
   onRejected: (() => Promise<void>) | undefined,
 ): Promise<Response> {
   const message = error instanceof Error ? error.message : String(error);
-  const refused =
-    error instanceof ApiError &&
-    (error.statusCode === 400 || /: (401|403|404)\b/.test(message));
+  if (error instanceof GithubAppReferenceError)
+    return Response.json(
+      { error: { message, type: "invalid_request_error" } },
+      { status: 400 },
+    );
+  const refused = isDefinitiveRefusal(error);
   logger.info(
     { refused, message: message.slice(0, 300) },
     "[GithubAppCopilot] installation token mint failed",
   );
-  if (!refused) return exchangeErrorResponse(error);
+  if (!refused)
+    return Response.json(
+      {
+        error: {
+          message: `GitHub didn't answer for the App. Try again in a moment. GitHub said: "${message}"`,
+          type: "api_error",
+        },
+      },
+      { status: 503 },
+    );
   await onRejected?.();
   return Response.json(
     {
       error: {
-        message: `GitHub refused the App. Reconnect it with current App credentials. GitHub said: "${message}"`,
+        message:
+          error instanceof GithubAppCredentialGoneError
+            ? message
+            : `GitHub refused the App. Reconnect it with current App credentials. GitHub said: "${message}"`,
         type: "authentication_error",
       },
     },
@@ -475,16 +552,65 @@ async function appSignInFailure(
   );
 }
 
+/**
+ * GitHub's definitive refusal of the App: its credential is gone, its key is
+ * unusable, or minting a token answered 401 (key or JWT refused) or 404 (App
+ * or installation gone). Rate limits and outages are not.
+ */
+function isDefinitiveRefusal(error: unknown): boolean {
+  if (error instanceof GithubAppCredentialGoneError) return true;
+  if (!(error instanceof ApiError)) return false;
+  if (
+    error.statusCode === 400 &&
+    /installation was not found|private key is invalid/i.test(error.message)
+  )
+    return true;
+  return /installation token: (401|404)\b/.test(error.message);
+}
+
+/** The plan key's App, read from the key's own stored value only. */
+async function storedPlanCredential(providerApiKeyId: string) {
+  const [
+    { default: LlmProviderApiKeyModel },
+    { getSecretValueForLlmProviderApiKey },
+  ] = await Promise.all([
+    import("@/models/llm-provider-api-key"),
+    import("@/secrets-manager"),
+  ]);
+  const key = await LlmProviderApiKeyModel.findById(providerApiKeyId);
+  if (
+    !key ||
+    key.provider !== "github-copilot" ||
+    !key.secretId ||
+    !(await LlmProviderApiKeyModel.isGithubAppKey(key.id))
+  )
+    throw new GithubAppReferenceError(
+      "This provider key is not a GitHub App plan.",
+    );
+  const stored = await getSecretValueForLlmProviderApiKey(key.secretId);
+  const storedValue = typeof stored === "string" ? stored : null;
+  return {
+    storedValue,
+    resolve: () =>
+      resolveGithubAppCredential({
+        value: storedValue,
+        organizationId: key.organizationId,
+      }),
+  };
+}
+
 async function recordAppKeyRejected(params: {
   providerApiKeyId: string;
-  encodedCredential: string;
+  storedValue: string | null;
 }) {
+  if (!params.storedValue) return;
   const { recordSubscriptionAuthenticationFailure } = await import(
     "./subscription-authentication-status"
   );
   await recordSubscriptionAuthenticationFailure({
     providerApiKeyId: params.providerApiKeyId,
     provider: "github-copilot",
-    matchesCredential: (stored) => stored === params.encodedCredential,
+    // Only the value that failed: a key re-pointed since keeps working.
+    matchesCredential: (stored) => stored === params.storedValue,
   });
 }

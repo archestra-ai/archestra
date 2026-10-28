@@ -1,8 +1,8 @@
 import { createHash, createPublicKey, generateKeyPairSync } from "node:crypto";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
-  decodeGithubAppCredential,
-  encodeGithubAppCredential,
+  classifyCopilotAppRejection,
+  encodeGithubAppReference,
   type GithubAppCredential,
   githubAppKeyFingerprint,
   validateGithubAppPrivateKey,
@@ -47,34 +47,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("GitHub App credential marker", () => {
-  test("round-trips with the GitHub address and organization", () => {
-    const credential = uniqueCredential();
-    const encoded = encodeGithubAppCredential(credential);
-
-    expect(encoded.startsWith("github-app:")).toBe(true);
-    expect(encoded).not.toContain("BEGIN");
-    expect(decodeGithubAppCredential(encoded)).toEqual(credential);
-  });
-
-  test("decodes an embedded App without address or organization", () => {
-    const legacy = `github-app:${Buffer.from(
-      JSON.stringify({ appId: "1", installationId: "2", privateKey }),
-    ).toString("base64url")}`;
-
-    expect(decodeGithubAppCredential(legacy)).toEqual({
-      appId: "1",
-      installationId: "2",
-      privateKey,
-    });
-  });
-
-  test("decodes nothing from other credentials or a corrupted payload", () => {
-    expect(decodeGithubAppCredential("gho_personal")).toBeNull();
-    expect(decodeGithubAppCredential("github-app:not-json")).toBeNull();
-  });
-});
-
 describe("githubAppKeyFingerprint", () => {
   test("matches GitHub's SHA256 format of the public key", () => {
     const der = createPublicKey(privateKey).export({
@@ -112,7 +84,8 @@ describe("createGithubCopilotFetch with a GitHub App credential", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const copilotFetch = createGithubCopilotFetch({
-      githubToken: encodeGithubAppCredential(credential),
+      githubToken: undefined,
+      appCredential: credential,
     });
     const response = await copilotFetch("https://api.githubcopilot.com/models");
 
@@ -140,7 +113,8 @@ describe("createGithubCopilotFetch with a GitHub App credential", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const response = await createGithubCopilotFetch({
-      githubToken: encodeGithubAppCredential(credential),
+      githubToken: undefined,
+      appCredential: credential,
     })("https://api.githubcopilot.com/chat/completions", {
       method: "POST",
       body: "{}",
@@ -168,7 +142,8 @@ describe("createGithubCopilotFetch with a GitHub App credential", () => {
     );
 
     const response = await createGithubCopilotFetch({
-      githubToken: encodeGithubAppCredential(credential),
+      githubToken: undefined,
+      appCredential: credential,
     })("https://api.githubcopilot.com/models");
     const body = (await response.json()) as { error: { message: string } };
 
@@ -196,7 +171,8 @@ describe("createGithubCopilotFetch with a GitHub App credential", () => {
     );
 
     const response = await createGithubCopilotFetch({
-      githubToken: encodeGithubAppCredential(credential),
+      githubToken: undefined,
+      appCredential: credential,
     })("https://api.githubcopilot.com/chat/completions", {
       method: "POST",
       body: "{}",
@@ -204,5 +180,128 @@ describe("createGithubCopilotFetch with a GitHub App credential", () => {
 
     expect(response.status).toBe(400);
     expect(await response.text()).toContain("messages must be non-empty");
+  });
+});
+
+describe("createGithubCopilotFetch with a GitHub App credential, refusals", () => {
+  function copilotAnswer(status: number, message: string) {
+    return vi.fn(async (input: unknown) =>
+      isMintCall(input)
+        ? mintResponse()
+        : Response.json({ message }, { status }),
+    );
+  }
+
+  test("refuses a GitHub App reference a caller sends, before reading anything", async () => {
+    const fetchMock = vi.fn(async () => Response.json({}));
+    vi.stubGlobal("fetch", fetchMock);
+    const callerValue = encodeGithubAppReference({
+      ref: { organizationId: "another-org", credentialId: "their-app" },
+      installationId: "1",
+      organization: "their-org",
+      githubUrl: "https://github.com",
+    });
+
+    const response = await createGithubCopilotFetch({
+      githubToken: callerValue,
+    })("https://api.githubcopilot.com/models");
+
+    expect(response.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("passes a refusal of one request (a model the policy blocks) through as a 403", async () => {
+    vi.stubGlobal(
+      "fetch",
+      copilotAnswer(
+        403,
+        "The requested model is not enabled for your organization",
+      ),
+    );
+
+    const response = await createGithubCopilotFetch({
+      githubToken: undefined,
+      appCredential: uniqueCredential(),
+    })("https://api.githubcopilot.com/chat/completions", {
+      method: "POST",
+      body: "{}",
+    });
+    const body = (await response.json()) as { error: { message: string } };
+
+    expect(response.status).toBe(403);
+    expect(body.error.message).toBe(
+      'GitHub Copilot answered 403. GitHub said: "The requested model is not enabled for your organization"',
+    );
+  });
+
+  test("names a missing Copilot Requests permission", async () => {
+    vi.stubGlobal(
+      "fetch",
+      copilotAnswer(403, "Resource not accessible by integration"),
+    );
+
+    const response = await createGithubCopilotFetch({
+      githubToken: undefined,
+      appCredential: uniqueCredential(),
+    })("https://api.githubcopilot.com/models");
+    const body = (await response.json()) as { error: { message: string } };
+
+    expect(response.status).toBe(401);
+    expect(body.error.message).toContain(
+      "Check that it has the Copilot Requests permission",
+    );
+  });
+
+  test("answers a GitHub rate limit while minting a token as a passing outage", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { message: "API rate limit exceeded for installation" },
+          { status: 429, headers: { "retry-after": "30" } },
+        ),
+      ),
+    );
+
+    const response = await createGithubCopilotFetch({
+      githubToken: undefined,
+      appCredential: uniqueCredential(),
+    })("https://api.githubcopilot.com/models");
+
+    expect(response.status).toBe(503);
+  });
+});
+
+describe("classifyCopilotAppRejection", () => {
+  test("tells a missing permission from an organization that turns Apps off", () => {
+    expect(
+      classifyCopilotAppRejection({
+        status: 403,
+        githubMessage: "Resource not accessible by integration",
+      }),
+    ).toBe("missing_permission");
+    expect(
+      classifyCopilotAppRejection({
+        status: 403,
+        githubMessage:
+          "Copilot requests from GitHub App installations are not enabled for this organization",
+      }),
+    ).toBe("apps_disabled");
+    expect(
+      classifyCopilotAppRejection({
+        status: 400,
+        githubMessage: "missing or invalid Copilot-Integration-Id",
+      }),
+    ).toBe("integration_id");
+  });
+
+  test("does not take a message about an application, or any other 403, for the App's own refusal", () => {
+    for (const githubMessage of [
+      "This model is not available for this application",
+      "Your organization's policy blocks this model",
+    ])
+      expect(
+        classifyCopilotAppRejection({ status: 403, githubMessage }),
+      ).toBeNull();
   });
 });

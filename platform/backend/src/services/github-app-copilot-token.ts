@@ -85,17 +85,48 @@ export function decodeGithubAppReference(
 }
 
 /**
- * The App a key's value signs in as: read from the referenced GitHub App
- * credential, or embedded in the value (the in-memory form used to read a new
- * App's models before it is saved). Null for a value that is no
- * GitHub App marker. Throws a 400 when the referenced credential or its
- * connection is gone, which the fetch path turns into a reconnect.
+ * The plan's App credential is gone: its definition was deleted or its
+ * private key disconnected. Definitive, so the plan needs a reconnect.
  */
-export async function resolveGithubAppCredential(
-  value: string | null | undefined,
-): Promise<GithubAppCredential | null> {
-  const reference = decodeGithubAppReference(value);
-  if (!reference) return decodeGithubAppCredential(value);
+export class GithubAppCredentialGoneError extends ApiError {
+  constructor() {
+    super(
+      400,
+      "The GitHub App credential this plan uses was deleted or disconnected. Reconnect it.",
+    );
+  }
+}
+
+/**
+ * A value that is no usable plan reference: not a reference, or one that
+ * points at another organization's credential. Refused without reading any
+ * credential, and never a reason to flag a key.
+ */
+export class GithubAppReferenceError extends ApiError {
+  constructor(message: string) {
+    super(400, message);
+  }
+}
+
+/**
+ * The App a plan key signs in as, read from the GitHub App credential its
+ * stored reference names. Only a reference into `organizationId` (the stored
+ * key's own organization) is honored. A failing credential or secret store
+ * read is thrown as it is: it says nothing about the App.
+ */
+export async function resolveGithubAppCredential(params: {
+  value: string | null | undefined;
+  organizationId: string;
+}): Promise<GithubAppCredential> {
+  const reference = decodeGithubAppReference(params.value);
+  if (!reference)
+    throw new GithubAppReferenceError(
+      "The stored value is not a GitHub App reference.",
+    );
+  if (reference.ref.organizationId !== params.organizationId)
+    throw new GithubAppReferenceError(
+      "The GitHub App reference belongs to another organization.",
+    );
   const cacheKey = `${reference.ref.organizationId}:${reference.ref.credentialId}`;
   let app = referenceCache.get(cacheKey);
   if (!app) {
@@ -108,21 +139,14 @@ export async function resolveGithubAppCredential(
       id: reference.ref.credentialId,
       organizationId: reference.ref.organizationId,
     });
-    const privateKey =
-      definition?.kind === "github_app" && definition.appId
-        ? await connections
-            .resolveValue({
-              organizationId: reference.ref.organizationId,
-              credentialId: definition.key,
-              scope: "organization",
-            })
-            .catch(() => null)
-        : null;
-    if (!definition?.appId || !privateKey)
-      throw new ApiError(
-        400,
-        "The GitHub App credential this plan uses was deleted or disconnected. Reconnect it.",
-      );
+    if (definition?.kind !== "github_app" || !definition.appId)
+      throw new GithubAppCredentialGoneError();
+    const privateKey = await connections.resolveValue({
+      organizationId: reference.ref.organizationId,
+      credentialId: definition.key,
+      scope: "organization",
+    });
+    if (!privateKey) throw new GithubAppCredentialGoneError();
     app = { appId: definition.appId, privateKey, name: definition.name };
     referenceCache.set(cacheKey, app);
   }
@@ -148,47 +172,6 @@ export function forgetGithubAppReference(reference: {
 /** The web address of a credential's GitHub API base. */
 export function githubWebFromApi(api: string | null | undefined): string {
   return getGithubWebOrigin(api ?? "https://api.github.com");
-}
-
-export function encodeGithubAppCredential(
-  credential: GithubAppCredential,
-): string {
-  const json = JSON.stringify(credential);
-  return `${GITHUB_APP_CREDENTIAL_MARKER}${Buffer.from(json, "utf8").toString("base64url")}`;
-}
-
-/** @public — exercised directly by unit tests (the marker format) */
-export function decodeGithubAppCredential(
-  value: string | null | undefined,
-): GithubAppCredential | null {
-  if (!value || !value.startsWith(GITHUB_APP_CREDENTIAL_MARKER)) return null;
-  try {
-    const json = Buffer.from(
-      value.slice(GITHUB_APP_CREDENTIAL_MARKER.length),
-      "base64url",
-    ).toString("utf8");
-    const parsed = JSON.parse(json) as Partial<GithubAppCredential>;
-    if (
-      typeof parsed.appId !== "string" ||
-      typeof parsed.installationId !== "string" ||
-      typeof parsed.privateKey !== "string"
-    ) {
-      return null;
-    }
-    return {
-      appId: parsed.appId,
-      installationId: parsed.installationId,
-      privateKey: parsed.privateKey,
-      ...(typeof parsed.githubUrl === "string"
-        ? { githubUrl: parsed.githubUrl }
-        : {}),
-      ...(typeof parsed.organization === "string"
-        ? { organization: parsed.organization }
-        : {}),
-    };
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -269,25 +252,67 @@ export async function getGithubAppInstallationToken(
  */
 export const COPILOT_APP_INTEGRATION_ID = "copilot-developer-cli";
 
+/** Why Copilot refused an App's request, when it says so plainly. */
+type CopilotAppRejection =
+  | "integration_id"
+  | "missing_permission"
+  | "apps_disabled";
+
 /**
- * Turn Copilot's rejection of an installation token into a message that says
- * what to fix, quoting GitHub's own words.
+ * Name Copilot's refusal of the App itself, from GitHub's own message. A
+ * refusal of one request (a model the policy blocks, a bad payload) is none
+ * of these and returns null.
+ */
+export function classifyCopilotAppRejection(params: {
+  status: number;
+  githubMessage: string;
+}): CopilotAppRejection | null {
+  const { status, githubMessage: message } = params;
+  if (
+    (status === 400 || status === 403) &&
+    /integration[- ]id|installation access token/i.test(message)
+  )
+    return "integration_id";
+  if (status !== 403) return null;
+  if (
+    /resource not accessible by integration|copilot[ _]requests permission|organization_copilot_requests/i.test(
+      message,
+    )
+  )
+    return "missing_permission";
+  if (
+    /\b(github apps?|app installations?|integrations?)\b[^.]*\b(not allowed|not permitted|not enabled|disabled|blocked)\b|\bcopilot\b[^.]*\b(disabled|not enabled)\b[^.]*\bfor (github )?apps?\b/i.test(
+      message,
+    )
+  )
+    return "apps_disabled";
+  return null;
+}
+
+/**
+ * A message for a refusal, saying what to fix and quoting GitHub's words.
+ * Without a named reason it only quotes GitHub.
  */
 export function copilotAppErrorMessage(params: {
+  rejection: CopilotAppRejection | null;
   status: number;
   githubMessage: string;
   organization?: string | null;
 }): string {
-  const { status, githubMessage } = params;
   const org = params.organization ?? "the organization";
-  const quoted = githubMessage ? ` GitHub said: "${githubMessage}"` : "";
-  if (/integration[- ]id/i.test(githubMessage))
-    return `GitHub Copilot rejected the integration id.${quoted}`;
-  if (status === 403 && /not enabled|policy|app/i.test(githubMessage))
-    return `${org} doesn't allow Copilot requests from GitHub Apps. An owner can turn this on in the organization's Copilot policies (needs Copilot Business or Enterprise).${quoted}`;
-  if (status === 403)
-    return `The App can't make Copilot requests. Check that it has the Copilot Requests permission and that ${org} approved it.${quoted}`;
-  return `GitHub Copilot answered ${status}.${quoted}`;
+  const quoted = params.githubMessage
+    ? ` GitHub said: "${params.githubMessage}"`
+    : "";
+  switch (params.rejection) {
+    case "integration_id":
+      return `GitHub Copilot rejected the integration id.${quoted}`;
+    case "missing_permission":
+      return `The App can't make Copilot requests. Check that it has the Copilot Requests permission and that ${org} approved it.${quoted}`;
+    case "apps_disabled":
+      return `${org} doesn't allow Copilot requests from GitHub Apps. An owner can allow them in the organization's Copilot policies.${quoted}`;
+    default:
+      return `GitHub Copilot answered ${params.status}.${quoted}`;
+  }
 }
 
 // ===== Internal helpers =====

@@ -186,15 +186,19 @@ const githubCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     request: FastifyRequest,
     agentId: string | undefined,
   ) {
-    const { apiKey, baseUrl, extraHeaders } = await resolveProxyModelsApiKey({
-      request,
-      agentId,
-      provider: "github-copilot",
-      token: extractBearerToken(request.headers.authorization),
-    });
+    const { apiKey, baseUrl, extraHeaders, providerApiKeyId } =
+      await resolveProxyModelsApiKey({
+        request,
+        agentId,
+        provider: "github-copilot",
+        token: extractBearerToken(request.headers.authorization),
+      });
     logger.debug({ agentId }, "[UnifiedProxy] Listing GitHub Copilot models");
     return toOpenAiModelsList(
-      await fetchGithubCopilotModels(apiKey, baseUrl, extraHeaders),
+      // A stored plan key's App is read from the key itself.
+      await fetchGithubCopilotModels(apiKey, baseUrl, extraHeaders, {
+        providerApiKeyId,
+      }),
       "github-copilot",
     );
   }

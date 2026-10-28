@@ -260,7 +260,7 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
   valueFrom:
     secretKeyRef:
       name: {{ include "archestra-platform.authSecretName" . }}
-      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingSecretKey" "default" "auth-secret") }}
+      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingSecretKey" "default" "auth-secret") | quote }}
 {{- end }}
 
 {{/*
@@ -277,7 +277,7 @@ An explicit archestra.env value overrides the injection.
   valueFrom:
     secretKeyRef:
       name: {{ $authSecretName }}
-      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingSessionSecretKey" "default" "session-secret") }}
+      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingSessionSecretKey" "default" "session-secret") | quote }}
       # optional so pods still start when the key is absent (the pre-upgrade
       # migration Job runs before the Secret is updated; config.ts then falls
       # back to ARCHESTRA_AUTH_SECRET).
@@ -288,7 +288,7 @@ An explicit archestra.env value overrides the injection.
   valueFrom:
     secretKeyRef:
       name: {{ $authSecretName }}
-      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingSecretsEncryptionSecretKey" "default" "secrets-encryption-secret") }}
+      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingSecretsEncryptionSecretKey" "default" "secrets-encryption-secret") | quote }}
       optional: true
 {{- end }}
 {{- if not (hasKey .Values.archestra.env "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET") }}
@@ -296,7 +296,7 @@ An explicit archestra.env value overrides the injection.
   valueFrom:
     secretKeyRef:
       name: {{ $authSecretName }}
-      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingOfferSigningSecretKey" "default" "offer-signing-secret") }}
+      key: {{ include "archestra-platform.authSecretKeyFor" (dict "root" . "value" "existingOfferSigningSecretKey" "default" "offer-signing-secret") | quote }}
       # optional so pods still start when the key is absent (pre-upgrade
       # migration Job ordering, or an external Secret without this key;
       # config.ts then falls back to a key derived from the auth secret).

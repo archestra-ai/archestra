@@ -3273,3 +3273,48 @@ tests:
           content:
             name: ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES
             value: "staging,prod-ns"
+
+  - it: preserves YAML-sensitive external secret key names as strings
+    documentIndex: 1
+    set:
+      archestra.authSecret.existingSecretName: external-auth-secret
+      archestra.authSecret.existingSecretKey: "true"
+      archestra.authSecret.existingSessionSecretKey: "123"
+      archestra.authSecret.existingSecretsEncryptionSecretKey: "false"
+      archestra.authSecret.existingOfferSigningSecretKey: "1e3"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: external-auth-secret
+                key: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_SESSION_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: external-auth-secret
+                key: "123"
+                optional: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: external-auth-secret
+                key: "false"
+                optional: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: external-auth-secret
+                key: "1e3"
+                optional: true

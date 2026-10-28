@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   AUTO_ROUTING_BACKFILL_MAX_COST_USD,
   archestraApiClient,
@@ -874,17 +875,47 @@ describe("past sessions", () => {
     await waitFor(() => expect(scans).toBe(1));
   });
 
-  it("drops the routing-off notice once enabling refits", async () => {
+  it("says routing is off beside past sessions, and drops it once enabled", async () => {
     settings = makeSettings({ enabled: false });
+    serveBackfill({ backfill: scanned({ status: "done" }), scoreOffer: null });
+    server.use(
+      http.put(`${API_ORIGIN}/api/auto-routing/settings`, () =>
+        HttpResponse.json({
+          ...makeSettings({ enabled: true }),
+          fit: null,
+        } satisfies AutoRoutingSettingsChange),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByText("Auto routing is off")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("switch", { name: "Disabled" }));
+    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
+
+    await waitFor(() =>
+      expect(screen.queryByText("Auto routing is off")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("drops a fit-blocked notice once a re-plan refits", async () => {
     serveBackfill(
       {
         backfill: scanned({
           status: "done",
-          fitBlockedReason: "Auto routing is off.",
+          fitBlockedReason: "No daily budget is set.",
         }),
         scoreOffer: null,
       },
       { backfill: scanned({ status: "done" }), scoreOffer: null },
+    );
+    server.use(
+      http.post(`${API_ORIGIN}/api/auto-routing/replan`, () =>
+        HttpResponse.json({
+          ...makeSettings(),
+          fit: null,
+        } satisfies AutoRoutingSettingsChange),
+      ),
     );
     const user = userEvent.setup();
     renderPage();
@@ -892,8 +923,7 @@ describe("past sessions", () => {
       await screen.findByText("No plan is fitted on these sessions"),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("switch", { name: "Disabled" }));
-    await user.click(screen.getByRole("button", { name: "Save and re-plan" }));
+    await user.click(screen.getByRole("button", { name: "Re-plan now" }));
 
     await waitFor(() =>
       expect(
@@ -902,16 +932,69 @@ describe("past sessions", () => {
     );
   });
 
-  it("lists what a scan found by request shape and client", async () => {
-    serveBackfill({ backfill: scanned(), scoreOffer: offer });
+  it("shows how far past sessions got: found, scored, and what the plan needs", async () => {
+    serveBackfill({
+      backfill: scanned({
+        status: "running",
+        phase: "score",
+        progress: { scored: 30, sample: 240, noText: 0, failed: 0 },
+      }),
+      scoreOffer: null,
+    });
+    renderPage();
+
+    expect(
+      await screen.findByTestId("auto-routing-past-sessions-funnel"),
+    ).toHaveTextContent("240 found → 30 of 240 scored → plan needs 100");
+  });
+
+  it("totals sessions per client, folding agents and the tail", async () => {
+    const chain = `${randomUUID()}:${randomUUID()}`;
+    serveBackfill({
+      backfill: scanned({
+        breakdown: [
+          {
+            apiShape: "messages",
+            client: "anthropic_claude_code",
+            sessions: 200,
+          },
+          { apiShape: "messages", client: "anthropic_claude", sessions: 50 },
+          { apiShape: "responses", client: "openai_codex", sessions: 120 },
+          { apiShape: "responses", client: "kilo", sessions: 60 },
+          { apiShape: "chat_completions", client: "kilo", sessions: 20 },
+          { apiShape: "responses", client: chain, sessions: 30 },
+          { apiShape: "messages", client: randomUUID(), sessions: 5 },
+          { apiShape: "responses", client: "opencode", sessions: 25 },
+          {
+            apiShape: "messages",
+            client: "anthropic_claude_desktop",
+            sessions: 4,
+          },
+          { apiShape: "chat_completions", client: "unknown", sessions: 3 },
+        ],
+      }),
+      scoreOffer: offer,
+    });
     renderPage();
 
     const section = await screen.findByTestId("auto-routing-past-sessions");
     expect(
       within(section)
-        .getAllByRole("listitem")
-        .map((item) => item.textContent),
-    ).toEqual(["Messages, Claude Code: 200", "Chat Completions, OpenCode: 40"]);
+        .getAllByRole("row")
+        .map((row) =>
+          within(row)
+            .getAllByRole("cell")
+            .slice(0, 2)
+            .map((cell) => cell.textContent),
+        ),
+    ).toEqual([
+      ["Claude Code", "250"],
+      ["Codex", "120"],
+      ["Kilo Code", "80"],
+      ["Archestra agents", "35"],
+      ["OpenCode", "25"],
+      ["Other", "7"],
+    ]);
   });
 
   it("accepts a spending limit up to the API's bound and no further", async () => {

@@ -1,52 +1,73 @@
 "use client";
 
 import { Info } from "lucide-react";
+import type { ReactNode } from "react";
 import { AccountChip } from "@/components/github-app-setup/account-chip";
 import { ResourceAccessSection } from "@/components/resource-access-section";
+import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
+import { Badge } from "@/components/ui/badge";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 
 /**
- * The connect wizard and the Manage dialog share the medium width and frame,
- * each with a fixed height, so neither resizes as its content changes. The
- * body scrolls inside; the footer stays pinned. The wizard's 37rem fits its
- * tallest step with room for a two-line error; Manage's 46rem fits it with
- * Advanced folded.
+ * The wizard's one box, for Connect, Manage and Reconnect: the medium width
+ * and a fixed height that fits its tallest step with room for a two-line
+ * error, so it never resizes between steps. The body scrolls inside; the
+ * footer stays pinned.
  */
-export const COPILOT_CONNECT_DIALOG_CLASS = "h-[min(37rem,85vh)]";
-export const COPILOT_MANAGE_DIALOG_CLASS = "h-[min(46rem,85vh)]";
+export const COPILOT_DIALOG_CLASS = "h-[min(37rem,85vh)]";
 
-/** The organization a GitHub Copilot plan bills, as both dialogs show it. */
+/** The organization a GitHub Copilot plan bills. */
 export function OrganizationRow({ organization }: { organization: string }) {
   return (
-    <p className="flex items-center gap-2 text-sm text-muted-foreground">
-      <span>Organization</span>
+    <PlanRow label="Organization">
       <AccountChip account={organization} />
-    </p>
+    </PlanRow>
   );
 }
 
-/**
- * Who may use the plan, and how to cap what it costs. The wizard's Access
- * step and the Manage dialog show the same section.
- */
-export function CopilotAccess({
-  keyId,
-  registerSave,
-  onDirtyChange,
+/** The GitHub App a plan uses, linked to it on GitHub when known. */
+export function GithubAppRow({
+  name,
+  icon,
+  url,
 }: {
-  keyId: string;
-  /** From a dialog with its own Save, which then commits the permissions. */
-  registerSave?: (save: (() => Promise<void>) | null) => void;
-  onDirtyChange?: (dirty: boolean) => void;
+  name: string;
+  icon: string | null;
+  url: string | null;
 }) {
+  const chip = (
+    <Badge variant="outline" className="bg-background font-normal">
+      <RuntimeCredentialIcon
+        icon={icon ?? "logo:github"}
+        className="size-3"
+        size={12}
+      />
+      <span>{name}</span>
+    </Badge>
+  );
+  return (
+    <PlanRow label="GitHub App">
+      {url ? (
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="underline-offset-4 hover:underline"
+        >
+          {chip}
+        </a>
+      ) : (
+        chip
+      )}
+    </PlanRow>
+  );
+}
+
+/** Who may use the plan, and how to cap what it costs. */
+export function CopilotAccess({ keyId }: { keyId: string }) {
   return (
     <div className="space-y-4">
-      <ResourceAccessSection
-        resource="llmProviderApiKey"
-        id={keyId}
-        registerSave={registerSave}
-        onDirtyChange={onDirtyChange}
-      />
+      <ResourceAccessSection resource="llmProviderApiKey" id={keyId} />
       <InlineNotice variant="info">
         <Info aria-hidden />
         <InlineNoticeText>
@@ -55,5 +76,14 @@ export function CopilotAccess({
         </InlineNoticeText>
       </InlineNotice>
     </div>
+  );
+}
+
+function PlanRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <p className="flex items-center gap-2 text-sm text-muted-foreground">
+      <span className="w-24 shrink-0">{label}</span>
+      {children}
+    </p>
   );
 }

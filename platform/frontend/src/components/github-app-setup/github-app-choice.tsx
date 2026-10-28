@@ -20,6 +20,7 @@ export function GithubAppChoice({
   onUseExisting,
   onCreate,
   onConnectByKey,
+  others = false,
 }: {
   /** Icons of the connected Apps; their count is the offer. */
   icons: (string | null)[];
@@ -28,6 +29,8 @@ export function GithubAppChoice({
   onUseExisting: () => void;
   onCreate: () => void;
   onConnectByKey?: () => void;
+  /** The icons leave out the App in use: count them as other Apps. */
+  others?: boolean;
 }) {
   return (
     <ChoiceTiles columns={onConnectByKey ? 3 : 2}>
@@ -36,7 +39,11 @@ export function GithubAppChoice({
         onClick={onUseExisting}
         visual={<AppIconStack icons={icons} />}
         title="Use an App I already have"
-        body={`${icons.length} connected to ${appName}.`}
+        body={
+          others
+            ? `${icons.length} other ${icons.length === 1 ? "App" : "Apps"} connected to ${appName}.`
+            : `${icons.length} connected to ${appName}.`
+        }
       />
       <ChoiceTile
         onClick={onCreate}

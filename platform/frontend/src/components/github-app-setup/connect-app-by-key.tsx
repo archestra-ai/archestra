@@ -19,13 +19,16 @@ export function ConnectAppByKey({
   status,
   onFieldsChange,
   onCheck,
+  defaultAppId = "",
 }: {
   status: PrivateKeyStatus;
+  /** The App in use, when replacing its key: only the key is then new. */
+  defaultAppId?: string;
   /** Every edit, with both fields or null; an earlier check no longer holds. */
   onFieldsChange: (fields: AppKeyFields | null) => void;
   onCheck: (fields: AppKeyFields) => void;
 }) {
-  const [appId, setAppId] = useState("");
+  const [appId, setAppId] = useState(defaultAppId);
   const [privateKey, setPrivateKey] = useState<string | null>(null);
   const pendingCheck = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(

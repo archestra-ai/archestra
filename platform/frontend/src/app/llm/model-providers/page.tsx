@@ -100,7 +100,6 @@ import { useOauthClients } from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 import { CopilotOrganizationConnectDialog } from "./_parts/copilot-organization-connect-dialog";
-import { CopilotOrganizationManageDialog } from "./_parts/copilot-organization-manage-dialog";
 import { OrganizationSubscriptionCards } from "./_parts/organization-subscription-cards";
 import {
   buildSubscriptionOffers,
@@ -451,7 +450,12 @@ export default function ApiKeysPage() {
     [allApiKeys],
   );
   const [copilotConnect, setCopilotConnect] = useState<{
-    replace: { id: string; organization: string | null } | null;
+    manage: {
+      id: string;
+      name: string;
+      organization: string | null;
+      reconnect: boolean;
+    } | null;
   } | null>(null);
 
   /** Keys the cards already stand for, so the table never repeats them. */
@@ -729,12 +733,14 @@ export default function ApiKeysPage() {
           isLoading={
             permissionsPending || (apiKeyQueriesEnabled && allApiKeysPending)
           }
-          onConnect={() => setCopilotConnect({ replace: null })}
+          onConnect={() => setCopilotConnect({ manage: null })}
           onReconnect={(credential) =>
             setCopilotConnect({
-              replace: {
+              manage: {
                 id: credential.id,
+                name: credential.name,
                 organization: credential.githubOrganization ?? null,
+                reconnect: true,
               },
             })
           }
@@ -753,7 +759,7 @@ export default function ApiKeysPage() {
             onOpenChange={(open) => {
               if (!open) setCopilotConnect(null);
             }}
-            replace={copilotConnect.replace}
+            manage={copilotConnect.manage}
           />
         )}
 
@@ -903,15 +909,19 @@ export default function ApiKeysPage() {
         )}
 
         {/* Edit Dialog */}
-        {/* An organization's GitHub Copilot plan is managed in its own
-            dialog, the same as the one that connected it. */}
+        {/* An organization's GitHub Copilot plan is managed in the wizard
+            that connected it. */}
         {editingApiKey?.isGithubAppKey ? (
-          <CopilotOrganizationManageDialog
+          <CopilotOrganizationConnectDialog
             key={editingApiKey.id}
-            apiKey={editingApiKey}
-            existingKeys={apiKeys}
+            open
             onOpenChange={(open) => {
               if (!open) closeEditDialog();
+            }}
+            manage={{
+              id: editingApiKey.id,
+              name: editingApiKey.name,
+              organization: editingApiKey.githubOrganization ?? null,
             }}
           />
         ) : null}

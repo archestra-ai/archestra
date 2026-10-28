@@ -45,7 +45,7 @@ If Archestra can reach the internet freely, there is nothing to set up. If your 
 - `slack.com`
 - `*.slack.com`
 
-You need both entries. The wildcard entry, written with `*`, covers addresses such as `files.slack.com`, but many firewalls do not let it cover `slack.com` itself. Without `slack.com`, every request to Slack is blocked, and connecting Slack fails or never finishes.
+You need both entries. The wildcard entry, written with `*`, covers addresses such as `files.slack.com`, but many firewalls do not let it cover `slack.com` itself. Without `slack.com`, Archestra cannot use Slack's API, which it needs to check your tokens and to read and post messages, so connecting Slack fails or never finishes.
 
 The `api.slack.com` links in the setup steps open in your own browser. The Archestra server never connects to that address, so you do not need to allow it.
 
@@ -57,7 +57,7 @@ Archestra connects to these Slack addresses, all on port 443:
 
 | Address | Connection mode | What it is for |
 | --- | --- | --- |
-| `slack.com` | Both | Every request to Slack: checking your tokens, creating bots, and reading and posting messages |
+| `slack.com` | Both | Slack's API: checking your tokens, creating bots, and reading and posting messages |
 | `files.slack.com` and `files-origin.slack.com` | Both | Reading files people post, and uploading files the agent sends. Slack can forward a download from the first address to the second, so allow both. |
 | `hooks.slack.com` | Socket Mode | Answering a slash command when the reply is slow, or the connection to Slack is briefly down |
 | Socket Mode connection addresses, such as `wss-primary.slack.com` and `wss-backup.slack.com` | Socket Mode | The connection Archestra keeps open so Slack can send it new messages |

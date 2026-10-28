@@ -242,7 +242,7 @@ interface MaintainedIndex {
   name: string;
   columns: readonly string[];
   /** As pg_get_expr prints it, so an existing index can be compared. */
-  predicate: string;
+  predicate: string | null;
 }
 
 const AGENT_TOOLS_INDEXES: readonly MaintainedIndex[] = [
@@ -463,8 +463,8 @@ async function buildMaintainedIndex(params: {
   logger.info({ table: index.table, indexName: index.name }, "Building index");
   await client.query(
     `CREATE INDEX ${concurrently ? "CONCURRENTLY " : ""}"${index.name}" ` +
-      `ON "${index.table}" (${index.columns.map((column) => `"${column}"`).join(", ")}) ` +
-      `WHERE ${index.predicate}`,
+      `ON "${index.table}" (${index.columns.map((column) => `"${column}"`).join(", ")})` +
+      (index.predicate ? ` WHERE ${index.predicate}` : ""),
   );
   return existing ? "rebuilt_invalid" : "created";
 }

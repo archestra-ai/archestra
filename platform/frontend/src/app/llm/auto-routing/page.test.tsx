@@ -386,7 +386,7 @@ describe("AutoRoutingOverviewPage", () => {
     renderPage();
 
     expect(await screen.findByTestId("auto-routing-status")).toHaveTextContent(
-      "Cold start: 12 of 100 scored sessions",
+      "Cold start · 12 of 100 sessions scored",
     );
   });
 
@@ -401,7 +401,7 @@ describe("AutoRoutingOverviewPage", () => {
     renderPage();
 
     expect(await screen.findByTestId("auto-routing-status")).toHaveTextContent(
-      "Cold start: 1,000 of 1,000 scored sessions",
+      "Cold start · 1,000 of 1,000 sessions scored",
     );
   });
 
@@ -418,7 +418,7 @@ describe("AutoRoutingOverviewPage", () => {
     expect(screen.getByText("84.0%")).toBeInTheDocument();
     expect(screen.getByText("+2.0 points")).toBeInTheDocument();
     expect(screen.getByTestId("auto-routing-status")).toHaveTextContent(
-      "Active plan from",
+      "Active plan",
     );
   });
 
@@ -634,7 +634,7 @@ describe("AutoRoutingOverviewPage", () => {
 
     expect(await screen.findByText("$12.50/day")).toBeInTheDocument();
     expect(screen.getByTestId("auto-routing-status")).toHaveTextContent(
-      "Active plan from",
+      "Active plan",
     );
     expect(await screen.findByText("420")).toBeInTheDocument();
     expect(settingsReads).toBe(1);
@@ -1063,10 +1063,10 @@ describe("past sessions", () => {
 
       await vi.advanceTimersByTimeAsync(5_000);
       // The fit has not published yet: nothing re-read the settings.
-      expect(screen.queryByText(/Active plan from/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Active plan/)).not.toBeInTheDocument();
       await vi.advanceTimersByTimeAsync(5_000);
 
-      expect(await screen.findByText(/Active plan from/)).toBeInTheDocument();
+      expect(await screen.findByText(/Active plan/)).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
@@ -1223,7 +1223,7 @@ describe("past sessions", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("folds into one line beside an active plan with nothing to re-score", async () => {
+  it("hides past sessions beside an active plan with nothing to score", async () => {
     settings = makeSettings({
       status: {
         ...makeSettings().status,
@@ -1239,9 +1239,12 @@ describe("past sessions", () => {
     });
     renderPage();
 
+    expect(await screen.findByTestId("auto-routing-status")).toHaveTextContent(
+      "Active plan",
+    );
     expect(
-      await screen.findByTestId("auto-routing-past-traffic"),
-    ).toHaveTextContent("Past traffic: 238 scored");
+      screen.queryByTestId("auto-routing-past-traffic"),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("auto-routing-past-sessions"),
     ).not.toBeInTheDocument();

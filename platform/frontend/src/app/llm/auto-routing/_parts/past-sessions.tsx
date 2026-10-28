@@ -59,40 +59,29 @@ export function PastSessions({
   const { backfill, scoreOffer } = data;
   const running = backfill?.status === "running";
   if (hasActivePlan && !running && !opened) {
+    if (!scoreOffer) return null;
     return (
       <p
         className="flex items-center gap-2 text-sm text-muted-foreground"
         data-testid="auto-routing-past-traffic"
       >
         <span className="tabular-nums">
-          Past traffic:{" "}
-          {(backfill?.progress?.scored ?? 0).toLocaleString("en-US")} scored
+          {scoreOffer.rescore
+            ? `The scorer changed: ${count(scoreOffer.remaining)} past sessions to re-score`
+            : `${count(scoreOffer.remaining)} past sessions to score`}
         </span>
         {scorer === "no_jev_key" ? (
-          <>
-            <span aria-hidden>·</span>
-            <AddJevKeyLink />
-          </>
+          <AddJevKeyLink />
         ) : (
           canUpdate && (
-            <>
-              <span aria-hidden>·</span>
-              <Button
-                size="xs"
-                variant="link"
-                className="h-auto p-0 text-sm"
-                disabled={scan.isPending}
-                onClick={() => (scoreOffer ? setOpened(true) : scan.mutate())}
-              >
-                {scoreOffer
-                  ? scoreOffer.rescore
-                    ? "Re-score"
-                    : "Score"
-                  : backfill
-                    ? "Scan again"
-                    : "Scan"}
-              </Button>
-            </>
+            <Button
+              size="xs"
+              variant="link"
+              className="h-auto p-0 text-sm"
+              onClick={() => setOpened(true)}
+            >
+              {scoreOffer.rescore ? "Re-score" : "Score"}
+            </Button>
           )
         )}
       </p>

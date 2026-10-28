@@ -10,8 +10,11 @@ import { Slider } from "@/components/ui/slider";
 import {
   type AutoRoutingDiagnostics,
   useAutoRoutingDiagnostics,
+  useAutoRoutingPlan,
+  useAutoRoutingSettings,
 } from "@/lib/auto-routing.query";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
+import { formatDate } from "@/lib/utils/date-time";
 import { formatCurrency } from "@/lib/utils/format-currency";
 import { budgetScale } from "../_parts/budget-scale";
 import {
@@ -19,6 +22,7 @@ import {
   RoutingTriangle,
   SizeScatter,
 } from "../_parts/diagnostics-charts";
+import { parseFittedHistory } from "../_parts/plan-document";
 import { TIER_COLOR, TIER_NAMES } from "../_parts/tiers";
 
 type Ready = Extract<AutoRoutingDiagnostics, { status: "ready" }>;
@@ -51,6 +55,7 @@ export default function AutoRoutingDiagnosticsPage() {
   const fit = data.sizeFit.status === "ok" ? data.sizeFit : null;
   return (
     <div className="space-y-8">
+      <TrainingSummary />
       <Block title="Jev answers">
         <JevHistograms sessions={data.sessions} />
       </Block>
@@ -178,6 +183,50 @@ function RoutedView({ data }: { data: AutoRoutingDiagnostics }) {
     case "cold_start":
       return <EmptyLine>No active plan yet.</EmptyLine>;
   }
+}
+
+/** What the active plan was fitted on: how many sessions, how many from past traffic, and how recent. */
+function TrainingSummary() {
+  const { data: settings } = useAutoRoutingSettings();
+  const { data: plan } = useAutoRoutingPlan(
+    settings?.status.activePlan?.id ?? null,
+  );
+  const history = plan ? parseFittedHistory(plan.diagnostics) : null;
+  if (!history) return null;
+  const items = [
+    {
+      label: "Trained on",
+      value: `${history.sessions.toLocaleString("en-US")} sessions`,
+    },
+    {
+      label: "Past traffic",
+      value: `${Math.round((100 * history.past_sessions) / Math.max(history.sessions, 1))}%`,
+    },
+    ...(history.last_created_at
+      ? [
+          {
+            label: "Data up to",
+            value: formatDate({
+              date: history.last_created_at,
+              dateFormat: "MMM d",
+            }),
+          },
+        ]
+      : []),
+  ];
+  return (
+    <dl
+      className="flex flex-wrap gap-x-8 gap-y-1 text-sm"
+      data-testid="auto-routing-training-summary"
+    >
+      {items.map((item) => (
+        <div key={item.label} className="flex gap-2">
+          <dt className="text-muted-foreground">{item.label}</dt>
+          <dd className="tabular-nums">{item.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
 function Block({

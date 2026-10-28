@@ -108,6 +108,7 @@ function renderEditor(onParentSubmit?: () => void, canManageGlobal = false) {
 it.each([
   "llmProviderApiKey",
   "llmVirtualKey",
+  "serviceAccount",
 ] as const)("explains credential visibility and use in the %s permission dropdown", async (resource) => {
   Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
   Element.prototype.scrollIntoView = vi.fn();
@@ -134,9 +135,11 @@ it.each([
   expect(use).toHaveAccessibleDescription(
     resource === "llmProviderApiKey"
       ? expect.stringMatching(/model requests.*secret is not revealed/i)
-      : expect.stringMatching(
-          /requests authenticate with the token.*does not reveal/i,
-        ),
+      : resource === "llmVirtualKey"
+        ? expect.stringMatching(
+            /requests authenticate with the token.*does not reveal/i,
+          )
+        : expect.stringMatching(/integration identity.*fallback actor/i),
   );
   // Keyboard navigation must explain the highlighted level, not keep the
   // selected level's text or the description for another resource.
@@ -150,7 +153,9 @@ it.each([
   expect(detail).toHaveTextContent(
     resource === "llmProviderApiKey"
       ? /send model requests/i
-      : /does not reveal it or identify who holds a copy/i,
+      : resource === "llmVirtualKey"
+        ? /does not reveal it or identify who holds a copy/i
+        : /integration identity.*fallback actor/i,
   );
 });
 

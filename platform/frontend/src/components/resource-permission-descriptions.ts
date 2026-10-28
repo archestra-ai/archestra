@@ -5,10 +5,8 @@ import { scopedResourceNouns } from "@archestra/shared";
 type Descriptions = {
   view: string;
   use?: string;
-  edit?: string;
-  manage?: string;
   deploy?: string;
-};
+} & ({ edit: string; manage?: string } | { edit?: never; manage: string });
 
 /** Shared by the creation form and the editor for an existing resource. */
 export function presetDescription(preset: string, resource: ScopedResource) {
@@ -62,7 +60,7 @@ const resourceDescriptions: Record<ScopedResource, Descriptions> = {
   project: {
     view: "View the project and its context. Linked resources retain their own permissions.",
     use: "View and use the project's context. This does not grant access to its linked agents or apps.",
-    edit: "Update the project's details and context. Linked resources retain their own permissions.",
+    edit: "Use the project and update its details and context. Linked resources retain their own permissions.",
   },
   conversation: {
     view: "Read the chat session and its messages without changing access.",
@@ -77,7 +75,7 @@ const resourceDescriptions: Record<ScopedResource, Descriptions> = {
   plugin: {
     view: "View the plugin's details and included resources without changing them.",
     use: "View and use the plugin's included resources where permitted. Their own permissions still apply.",
-    edit: "Update the plugin's details and configuration.",
+    edit: "Use the plugin and update its details and configuration.",
   },
   knowledgeBase: {
     view: "View the knowledge base and its configuration without changing it.",
@@ -87,7 +85,7 @@ const resourceDescriptions: Record<ScopedResource, Descriptions> = {
   knowledgeConnector: {
     view: "View the connector's configuration and sync status without changing them.",
     use: "Use the connector as a knowledge source. Source access rules still apply.",
-    edit: "Update the connector's configuration and sync settings.",
+    edit: "Use the connector and update its configuration and sync settings.",
   },
   knowledgeFile: {
     view: "View the file's details and content without changing it.",
@@ -121,7 +119,7 @@ const resourceDescriptions: Record<ScopedResource, Descriptions> = {
   },
   serviceAccount: {
     view: "View the service account's details, permissions, and token metadata. Existing token values are not revealed.",
-    use: "View the service account. API calls authenticate with its tokens and assigned permissions; this grant does not issue a token.",
+    use: "View the service account and select it as an integration identity, such as a Jira bot's fallback actor. Existing tokens are not revealed or issued.",
     edit: "Update the service account and create or revoke its tokens, within your delegation permissions.",
   },
   credential: {

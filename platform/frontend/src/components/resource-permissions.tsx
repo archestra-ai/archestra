@@ -6,7 +6,6 @@ import {
   ORGANIZATION_WIDE_RESOURCES,
   type PermissionSubject,
   type ResourcePermissionAction,
-  type resourcePermissionPresets,
   resourcePermissionPresetsFor,
   type ScopedResource,
   scopedResourceNouns,
@@ -31,6 +30,7 @@ import {
   defaultAddedPreset,
   ResourceAccessAddField,
 } from "@/components/resource-access-add-field";
+import { presetDescription } from "@/components/resource-permission-descriptions";
 import { getPermissionSafetyPreview } from "@/components/resource-permission-safety-preview";
 import { SettingsLink } from "@/components/settings-link";
 import { StandardDialog } from "@/components/standard-dialog";
@@ -1015,31 +1015,6 @@ export function actionDetail(
   return actions.map((action) => actionLabels[action]).join(", ");
 }
 
-export function presetDescription(preset: string, resource: ScopedResource) {
-  if (
-    resource === "oauthClient" ||
-    resource === "mcpOauthClient" ||
-    resource === "llmOauthClient"
-  ) {
-    // Nothing is used "through" a registration, so the edit level has no use.
-    if (preset === "edit")
-      return "Read and update the client, including rotating its secret";
-    if (preset === "manage")
-      return "Read, update, delete, and change who can access the client";
-  }
-  if (preset === "use" && resource === "credential")
-    return "Read the credential and connect or bind its value";
-  if (preset === "deploy" && resource === "mcpRegistry")
-    return "Also read and update how the server is deployed";
-  if (
-    preset === "manage" &&
-    (resource === "conversation" || resource === "agentRun")
-  )
-    return "Read the session and change who can access it";
-  return preset === "manage" && (resource === "log" || resource === "auditLog")
-    ? "Read logs and change who can access them"
-    : presetDescriptions[preset as keyof typeof resourcePermissionPresets];
-}
 /** @public - shared with initial-resource-permissions.tsx */
 export const subjectLabels: Record<PermissionSubject["type"], string> = {
   user: "User",
@@ -1047,15 +1022,6 @@ export const subjectLabels: Record<PermissionSubject["type"], string> = {
   serviceAccount: "Service account",
   role: "Role",
   organization: "Organization",
-};
-const presetDescriptions: Record<
-  keyof typeof resourcePermissionPresets,
-  string
-> = {
-  view: "Read without making changes",
-  use: "Read and use the resource",
-  edit: "Read, use, and update the resource",
-  manage: "Read, use, update, delete, and change who can access the resource",
 };
 const actionLabels: Record<ResourcePermissionAction, string> = {
   read: "Read",

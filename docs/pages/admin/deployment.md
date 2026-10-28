@@ -28,7 +28,7 @@ You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Self-hoste
 Pin the chart version and review its defaults:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.7" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.8" # x-release-please-version
 helm show values \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" > values.yaml

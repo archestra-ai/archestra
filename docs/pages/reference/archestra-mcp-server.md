@@ -1894,7 +1894,7 @@ Required RBAC permission: [`agent:create`](/docs/reference/permissions#agent:cre
 | `runtime.ttlHours` | `integer \| null` | No |  |
 | `runtime.maxCostUsd` | `integer \| null` | No |  |
 | `runtime.idleTimeoutMinutes` | `integer \| null` | No |  |
-| `runtime.template` | `"claude-code" \| "codex" \| "opencode" \| "hermes" \| "openclaw" \| "grok" \| "kimi"` | No | Maintained CLI to run: 'claude-code' (Claude Code), 'codex' (Codex), 'opencode' (OpenCode), 'hermes' (Hermes), 'openclaw' (OpenClaw), 'grok' (Grok Build), 'kimi' (Kimi Code). The image, launch command, and model protocol come from the template. |
+| `runtime.template` | `"claude-code" \| "codex" \| "opencode" \| "hermes" \| "openclaw" \| "grok" \| "kimi" \| "copilot"` | No | Maintained CLI to run: 'claude-code' (Claude Code), 'codex' (Codex), 'opencode' (OpenCode), 'hermes' (Hermes), 'openclaw' (OpenClaw), 'grok' (Grok Build), 'kimi' (Kimi Code), 'copilot' (GitHub Copilot CLI). The image, launch command, and model protocol come from the template. |
 | `runtime.image` | `string` | No |  |
 | `runtime.command` | `string[] \| null` | No |  |
 | `runtime.inferenceProtocol` | `"openai_responses" \| "openai_chat" \| "anthropic"` | No |  |

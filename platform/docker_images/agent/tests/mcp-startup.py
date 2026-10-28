@@ -29,7 +29,7 @@ CLIENT = sys.argv.pop(1)
 TOOLS = ["archestra__get_remedy_plans", "archestra__execute_remedy_plan", "archestra__yell"]
 # The gateway puts an attestation marker in front of each description; the LLM
 # proxy resolves a client's renamed tool by it, so it must reach the model.
-DESCRIPTION = "[[gwa1_c3ludGhldGlj.bWFya2Vy]]\nSynthetic startup test tool" if CLIENT == "kimi" else "Synthetic startup test tool"
+DESCRIPTION = "[[gwa1_c3ludGhldGlj.bWFya2Vy]]\nSynthetic startup test tool" if CLIENT in ("kimi", "copilot") else "Synthetic startup test tool"
 STEER = "STEER_MARKER mention the steer in the reply"
 BIN = Path(os.environ.get("ARCHESTRA_TEST_WRAPPERS", "/usr/local/bin"))
 
@@ -175,6 +175,9 @@ class Handler(BaseHTTPRequestHandler):
         self.reply_id = str(self.server.sequence)
         self.server.requests.append({"names": names, "catalog_sent": self.server.catalog_sent})
         self.server.prompts.append(json.dumps(request.get("messages") or request.get("input") or ""))
+        if self.server.failure == "model":
+            self.respond({"error": {"message": "Synthetic provider rejection: synthetic-virtual-key"}}, status=401)
+            return
         results = [message for message in request.get("messages") or [] if message.get("role") == "tool"]
         self.server.returned_call_ids.update(message.get("tool_call_id") or "<tool result without tool_call_id>" for message in results)
         if len(self.server.requests) == 1:

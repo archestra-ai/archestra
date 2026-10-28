@@ -75,6 +75,7 @@ export const AGENT_CATALOG_NAMES: Record<AgentCatalogId, string> = {
   openclaw: "OpenClaw",
   grok: "Grok Build",
   kimi: "Kimi Code",
+  copilot: "GitHub Copilot CLI",
 };
 
 /** Every maintained CLI template, in catalog order. */
@@ -174,6 +175,7 @@ const CATALOG_RUNTIME_PROFILES: Record<
   openclaw: { inferenceProtocol: "openai_chat" },
   grok: { inferenceProtocol: "openai_chat" },
   kimi: { inferenceProtocol: "openai_chat" },
+  copilot: { inferenceProtocol: "openai_chat" },
 };
 
 /** An image reference without its tag. A registry port is not a tag. */

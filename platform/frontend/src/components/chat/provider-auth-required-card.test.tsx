@@ -26,11 +26,22 @@ vi.mock("@/lib/config/config.query");
 // Complete the sign-in on click so the save path is exercised directly.
 vi.mock("@/components/subscription-sign-in", () => ({
   SubscriptionSignIn: ({
+    kind,
     onSecret,
   }: {
+    kind: string;
     onSecret: (secret: string) => void | Promise<void>;
   }) => (
-    <button type="button" onClick={() => onSecret("chatgpt-oauth:fresh")}>
+    <button
+      type="button"
+      onClick={() =>
+        onSecret(
+          kind === "github-copilot"
+            ? "synthetic-copilot-token"
+            : "chatgpt-oauth:fresh",
+        )
+      }
+    >
       Sign in
     </button>
   ),
@@ -56,6 +67,39 @@ describe("ProviderAuthRequiredCard", () => {
     vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
       data: [],
     } as unknown as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+  });
+
+  it("connects Copilot from the runtime preflight notice before refreshing readiness", async () => {
+    let finishSave: () => void = () => {};
+    createMutateAsync.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSave = resolve;
+        }),
+    );
+    const onConnected = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ProviderAuthRequiredCard
+        provider="github-copilot"
+        providerLabel="GitHub Copilot"
+        agentName="Copilot personal"
+        variant="preflight"
+        onConnected={onConnected}
+      />,
+    );
+    expect(
+      screen.getByText("Connect GitHub Copilot to use Copilot personal"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(createMutateAsync).toHaveBeenCalledWith({
+      name: "GitHub Copilot",
+      provider: "github-copilot",
+      apiKey: "synthetic-copilot-token",
+    });
+    expect(onConnected).not.toHaveBeenCalled();
+    finishSave();
+    await vi.waitFor(() => expect(onConnected).toHaveBeenCalledOnce());
   });
 
   it("reconnects the user's existing personal subscription key in place", async () => {

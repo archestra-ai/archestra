@@ -348,3 +348,28 @@ USER 1000:1000
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/mcp-startup.py kimi
+
+# Redistribute the unmodified native binary and its license/notices together.
+# No package lifecycle scripts or automatic updates run in this image.
+FROM agent-base AS agent-copilot
+USER root
+ENV COPILOT_AUTO_UPDATE=false
+RUN case "$TARGETARCH" in \
+      amd64) copilot_arch=x64; copilot_checksum=f447acbbc5ededd46f56d72b0ba0b82f08216683e9ae2d2a09c4fea902ddd234e08eec891146ca6971aa9d529ef2af91e0b2859ef00a80ea7d679423328cffd5 ;; \
+      arm64) copilot_arch=arm64; copilot_checksum=ee33159afa559ac9cbdc44f7581172195742d0012556151de04c40ef1e55f26499236330738367f44f85d4f14a277e3ef647b83391b7f80a219e2effba20721e ;; \
+      *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+ && mkdir -p /opt/copilot \
+ && cd /tmp \
+ && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.101)" copilot.tgz \
+ && echo "$copilot_checksum  copilot.tgz" | sha512sum -c - \
+ && tar -xzf copilot.tgz --strip-components=1 -C /opt/copilot \
+ && test -s /opt/copilot/LICENSE.md \
+ && ln -s /opt/copilot/copilot /usr/local/bin/copilot \
+ && COPILOT_HOME=/tmp/copilot-version COPILOT_OFFLINE=true copilot --no-auto-update --version \
+ && rm -rf /tmp/copilot.tgz /tmp/copilot-version /root/.npm \
+ && chown -R 1000:1000 /home/node
+USER 1000:1000
+RUN --network=none \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
+    python3 /tmp/agent-image-tests/copilot.py

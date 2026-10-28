@@ -30,7 +30,10 @@ import type {
   AutoRoutingSimulation,
 } from "@/lib/auto-routing.query";
 import type { LlmModel } from "@/lib/llm-models.query";
-import { useOrganization } from "@/lib/organization.query";
+import {
+  useAppearanceSettings,
+  useOrganization,
+} from "@/lib/organization.query";
 import { formatDate } from "@/lib/utils/date-time";
 import AutoRoutingOverviewPage from "./page";
 import AutoRoutingPlansPage from "./plans/page";
@@ -180,6 +183,9 @@ beforeEach(() => {
   vi.mocked(useOrganization).mockReturnValue({
     data: null,
   } as unknown as ReturnType<typeof useOrganization>);
+  vi.mocked(useAppearanceSettings).mockReturnValue({
+    data: null,
+  } as unknown as ReturnType<typeof useAppearanceSettings>);
 });
 
 afterEach(() => server.resetHandlers());

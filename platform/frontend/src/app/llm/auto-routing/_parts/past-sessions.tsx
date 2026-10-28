@@ -26,6 +26,7 @@ import {
   useScanAutoRoutingBackfill,
   useScoreAutoRoutingBackfill,
 } from "@/lib/auto-routing.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { formatDate } from "@/lib/utils/date-time";
 import { formatCurrency } from "@/lib/utils/format-currency";
 import { AddJevKeyLink } from "./add-jev-key";
@@ -231,9 +232,10 @@ function BackfillStatus({
 
 /** Sessions per client, largest first; the tail past the top rows folds into "Other". */
 function ClientBreakdown({ breakdown }: { breakdown: Backfill["breakdown"] }) {
+  const appName = useAppName();
   const totals = new Map<string, number>();
   for (const row of breakdown) {
-    const label = clientLabel(row.client);
+    const label = clientLabel(row.client, appName);
     totals.set(label, (totals.get(label) ?? 0) + row.sessions);
   }
   const ranked = [...totals]
@@ -385,15 +387,14 @@ function ScoreAction({ offer }: { offer: ScoreOffer }) {
 
 const TOP_CLIENTS = 5;
 const OTHER_CLIENTS = "Other";
-const ARCHESTRA_AGENTS = "Archestra agents";
 /** Archestra agents record their delegation chain, agent ids joined by ":", as the client. */
 const DELEGATION_CHAIN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})*$/;
 
-function clientLabel(client: string): string {
+function clientLabel(client: string, appName: string): string {
   const family = clientForExternalAgentIds([client]);
   if (family) return family.label;
-  return DELEGATION_CHAIN.test(client) ? ARCHESTRA_AGENTS : OTHER_CLIENTS;
+  return DELEGATION_CHAIN.test(client) ? `${appName} agents` : OTHER_CLIENTS;
 }
 
 function count(value: number): string {

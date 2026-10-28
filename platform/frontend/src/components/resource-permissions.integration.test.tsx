@@ -81,7 +81,7 @@ function renderEditor(onParentSubmit?: () => void, canManageGlobal = false) {
   );
   const editor = (
     <ResourcePermissions
-      resource="mcpRegistry"
+      resource={policy.resource}
       scope={policy.scope}
       embedded={!!onParentSubmit}
     />
@@ -104,6 +104,60 @@ function renderEditor(onParentSubmit?: () => void, canManageGlobal = false) {
   );
   return { ...view, client };
 }
+
+it.each([
+  "llmProviderApiKey",
+  "llmVirtualKey",
+  "serviceAccount",
+] as const)("explains credential visibility and use in the %s permission dropdown", async (resource) => {
+  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  Element.prototype.scrollIntoView = vi.fn();
+  policy.resource = resource;
+  server.use(
+    http.get(
+      `${origin}/api/resource-permissions/${resource}/:scope`,
+      ({ params }) =>
+        HttpResponse.json(
+          params.scope === policy.scope
+            ? policy
+            : { ...policy, scope: "*", grants: [], effectiveActions: [] },
+        ),
+    ),
+  );
+  const user = userEvent.setup();
+  renderEditor();
+  await user.click(
+    await screen.findByRole("combobox", {
+      name: "Permission for Build automation",
+    }),
+  );
+  const use = await screen.findByRole("option", { name: "Can use" });
+  expect(use).toHaveAccessibleDescription(
+    resource === "llmProviderApiKey"
+      ? expect.stringMatching(/model requests.*secret is not revealed/i)
+      : resource === "llmVirtualKey"
+        ? expect.stringMatching(
+            /requests authenticate with the token.*does not reveal/i,
+          )
+        : expect.stringMatching(/integration identity.*fallback actor/i),
+  );
+  // Keyboard navigation must explain the highlighted level, not keep the
+  // selected level's text or the description for another resource.
+  await user.keyboard("{Home}");
+  const detail = screen.getByTestId("permission-level-detail");
+  expect(detail).toHaveTextContent("Can read");
+  expect(detail).toHaveTextContent(/not revealed/i);
+  expect(detail).not.toHaveTextContent(/Read without making changes/);
+  await user.keyboard("{ArrowDown}");
+  expect(detail).toHaveTextContent("Can use");
+  expect(detail).toHaveTextContent(
+    resource === "llmProviderApiKey"
+      ? /send model requests/i
+      : resource === "llmVirtualKey"
+        ? /does not reveal it or identify who holds a copy/i
+        : /integration identity.*fallback actor/i,
+  );
+});
 
 it("gives a member who owns the object the list without what they cannot act on", async () => {
   policy = {

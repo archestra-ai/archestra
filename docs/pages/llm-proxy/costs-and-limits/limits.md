@@ -2,7 +2,7 @@
 title: Limits
 description: Cap spend, tokens, and requests across your organization, teams, virtual keys, users, agents, OAuth clients, and environments
 order: 2
-lastUpdated: 2026-10-26
+lastUpdated: 2026-10-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -19,7 +19,7 @@ Set budgets and rate limits in **Costs & Limits → Limits** so a busy key, runa
 2. Under **Apply to**, choose the scope (**Organization**, **Team**, **Virtual key**, **User**, **Agent**, **LLM OAuth client**, or **Environment**) and select the target entity.
 3. Under **Select models**, keep **All models** so every model shares one pool, or pick specific models to cap only those models.
 4. Enter a whole-number **Limit value**, choose the **Limit kind** (**Spend**, **Tokens**, or **Requests**), and pick the reset **Interval**.
-5. Optionally expand **Labels** to tag the rule for filtering, then click **Create limit**.
+5. Optionally expand **Advanced** to choose **Behavior** (**Hard limit** blocks; **Soft limit** observes without blocking) or add labels, then click **Create limit**.
 
 ![The Create limit dialog showing scope, model selection, limit value, limit kind, and interval](/docs/automated_screenshots/llm-proxy_throughput.webp)
 
@@ -32,11 +32,19 @@ Set budgets and rate limits in **Costs & Limits → Limits** so a busy key, runa
 | **Organization**, **Team**, **Virtual key** | Rolling (`1h`–`1m`) and calendar intervals | **Per minute**, plus all rolling and calendar intervals | **Per minute**, plus all rolling and calendar intervals |
 | **User**, **Agent**, **LLM OAuth client**, **Environment** | Rolling (`1h`–`1m`) and calendar intervals | — | — |
 
-When more than one rule matches a call, every matching rule is checked:
+When more than one rule matches a call, every matching hard rule must allow it:
 
 - **Every matching scope must allow the request.** A virtual key with remaining allowance is still blocked if its billing team or the organization has reached its cap.
 - **Model-specific and all-models rules both apply.** A call to `claude-sonnet-4-6` checks both any rule targeting `claude-sonnet-4-6` and any rule set to **All models** on the same scope.
 - **Multi-model rules share one pool.** Selecting multiple models on a single rule caps their combined spend, tokens, or requests together.
+
+## Limit Behavior
+
+**Hard limit** blocks requests when the allowance is exhausted. **Soft limit** keeps requests flowing and records exceeded checks in Prometheus. Use soft limits to observe a workload before enforcing a cap. Existing limits and newly created limits default to hard.
+
+Choose **Behavior** under **Advanced** when creating or editing an explicit spend, token, or request limit. Changing behavior preserves recorded usage and the reset schedule. A soft limit does not override another matching hard limit. Default user allowances remain hard.
+
+See [Limit Metrics](/docs/admin/observability/metrics/limits) for the counters. Your existing monitoring and alerting stack can use them to notify your team.
 
 ## Reset Intervals
 
@@ -57,7 +65,7 @@ Each limit resets or recovers according to its **Interval**:
 At the top of **Costs & Limits → Limits**, the **Default user limit** card sets a baseline per-user spend allowance without creating a separate rule for every member. Click **Set default** (or **Edit**), enter a **Limit per user ($)**, choose an **Interval**, and pick **All models** or specific models. Every user gets their own individual counter of that size, while any matching organization, team, virtual key, agent, OAuth client, or environment rules in **Explicit limits** still apply on top.
 
 - **Environment override:** click **Environment override** (or **N environment overrides → Add environment override**) on the card to set a different default per-user cap for a specific [Environment](/docs/admin/environments).
-- **Custom limit for one user:** under **Who's affected**, click **All N** to open **Users and their limits**, open a user's actions menu (**...**), and select **Set custom limit** (or create a **User** spend limit in **Explicit limits**). You can include an optional **Reason** note that appears in the drawer and table. A custom user limit overrides any environment override and the organization default, and starts its own counter at `$0`.
+- **Custom limit for one user:** under **Who's affected**, click **All N** to open **Users and their limits**, open a user's actions menu (**...**), and select **Set custom limit** (or create a **User** spend limit in **Explicit limits**). You can include an optional **Reason** note that appears in the drawer and table. A hard custom user limit overrides any environment override and the organization default, and starts its own counter at `$0`. A soft custom user limit observes usage alongside the hard default allowance.
 - **Reset a user's current window:** in **Users and their limits**, click **Reset** on a user at their limit (or **Reset usage** from **...**, or **Reset all N** when filtered to **At limit**) to zero their spend for the current window immediately. The next scheduled reset stays unchanged and past usage remains in cost reports.
 
 ## How Usage Is Counted
@@ -68,7 +76,7 @@ At the top of **Costs & Limits → Limits**, the **Default user limit** card set
 
 ## When a Request Is Blocked
 
-When any matching rule is exhausted, the proxy rejects the call before forwarding it upstream:
+When any matching hard rule is exhausted, the proxy rejects the call before forwarding it upstream:
 
 | Limit reached | HTTP status | Error code | Details |
 | --- | --- | --- | --- |

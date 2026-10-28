@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 6
-lastUpdated: 2026-10-27
+lastUpdated: 2026-10-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -1090,7 +1090,7 @@ Embedding, reranking, and OCR models for the [Knowledge Base](/docs/knowledge) a
 - **`ARCHESTRA_KNOWLEDGE_BASE_QUOTE_VERIFICATION_ENABLED`** - In the built-in chat, asks the model to back claims with verbatim quotes and logs each quote that does not match the cited chunk.
   - Default: `true`
   - Values: `true`, `false`
-  - Log-only: it never blocks or changes an answer. Misses are counted in the [`rag_quote_verification_total`](/docs/admin/observability/metrics#rag_quote_verification_total) metric.
+  - Log-only: it never blocks or changes an answer. Misses are counted in the [`rag_quote_verification_total`](/docs/admin/observability/metrics/knowledge-base#rag_quote_verification_total) metric.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS`** - Token budget for one chunk, including its title and metadata.
   - Default: `512`
@@ -1406,7 +1406,7 @@ See [Observability](/docs/admin/observability) for metrics, tracing, and dashboa
   - Default: unset (no authentication)
   - Clients send `Authorization: Bearer <token>`.
 
-- **`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`** - How often the [`llm_active_users`](/docs/admin/observability/metrics#llm_active_users) gauge is recomputed.
+- **`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`** - How often the [`llm_active_users`](/docs/admin/observability/metrics/llm#llm_active_users) gauge is recomputed.
   - Default: `300000` (5 minutes)
   - Values: `0` (off), or `30000` and above
 

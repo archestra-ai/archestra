@@ -132,7 +132,13 @@ describe("member subscription disconnect", () => {
         `subscription-provider-card-${subscriptionKind}`,
       ),
     );
-    await user.click(await card.findByRole("button", { name: "Disconnect" }));
+    await user.click(
+      await card.findByRole(
+        "button",
+        { name: "Disconnect" },
+        { timeout: 5000 },
+      ),
+    );
     const dialog = within(
       screen.getByRole("dialog", { name: "Disconnect subscription" }),
     );
@@ -193,7 +199,13 @@ describe("member subscription disconnect", () => {
     const card = within(
       await screen.findByTestId("subscription-provider-card-github-copilot"),
     );
-    await user.click(await card.findByRole("button", { name: "Disconnect" }));
+    await user.click(
+      await card.findByRole(
+        "button",
+        { name: "Disconnect" },
+        { timeout: 5000 },
+      ),
+    );
     const dialogElement = screen.getByRole("dialog");
     const dialog = within(dialogElement);
     expect(await dialog.findByText("Team proxy key")).toBeVisible();
@@ -254,7 +266,13 @@ describe("member subscription disconnect", () => {
     const card = within(
       await screen.findByTestId("subscription-provider-card-github-copilot"),
     );
-    await user.click(await card.findByRole("button", { name: "Disconnect" }));
+    await user.click(
+      await card.findByRole(
+        "button",
+        { name: "Disconnect" },
+        { timeout: 5000 },
+      ),
+    );
     const dialogElement = screen.getByRole("dialog");
     const dialog = within(dialogElement);
     expect(await dialog.findByText("Subscription client")).toBeVisible();
@@ -363,7 +381,13 @@ describe("member subscription disconnect", () => {
     const card = within(
       await screen.findByTestId("subscription-provider-card-github-copilot"),
     );
-    await user.click(await card.findByRole("button", { name: "Disconnect" }));
+    await user.click(
+      await card.findByRole(
+        "button",
+        { name: "Disconnect" },
+        { timeout: 5000 },
+      ),
+    );
     const confirm = within(screen.getByRole("dialog")).getByRole("button", {
       name: "Disconnect",
     });

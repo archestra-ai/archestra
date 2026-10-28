@@ -61,6 +61,8 @@ describe("CopilotGithubAppReturnPage", () => {
     expect(
       screen.getByText("Saving it to My App. This takes a few seconds."),
     ).toBeInTheDocument();
+    expect(screen.getByText("Saving the GitHub App")).toBeInTheDocument();
+    expect(screen.queryByText("Loading…")).toBeNull();
     expect(complete.mutate).toHaveBeenCalledWith(
       { code: "one-time", state: "s1" },
       expect.anything(),

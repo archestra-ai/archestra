@@ -90,9 +90,16 @@ export default function CopilotGithubAppReturnPage() {
             <CardTitle>{copy.title}</CardTitle>
             <CardDescription>{copy.body}</CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-2">
+          {/* Two buttons high in every state, so the card never resizes. */}
+          <CardContent className="flex min-h-20 flex-col gap-2">
             {pending ? (
-              <LoadingState />
+              <div className="flex h-20 items-center justify-center">
+                <LoadingState
+                  variant="inline"
+                  label="Saving the GitHub App"
+                  showLabel
+                />
+              </div>
             ) : failed ? (
               <Button asChild>
                 <Link href={MODEL_PROVIDERS}>

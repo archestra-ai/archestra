@@ -49,6 +49,7 @@ describe("dropLegacyPayloadTrgmIndexes", () => {
 });
 
 describe("createAgentToolsIndexes", () => {
+  const allAssignments = "agent_tools_tool_id_all_agent_id_idx";
   const pinned = "agent_tools_mcp_server_id_agent_id_idx";
   const unpinned = "agent_tools_tool_id_agent_id_idx";
   // concurrently: false — PGlite rejects the concurrent forms. The test
@@ -62,16 +63,21 @@ describe("createAgentToolsIndexes", () => {
   };
 
   beforeEach(async () => {
+    await db.execute(sql.raw(`DROP INDEX IF EXISTS "${allAssignments}"`));
     await db.execute(sql.raw(`DROP INDEX IF EXISTS "${pinned}"`));
     await db.execute(sql.raw(`DROP INDEX IF EXISTS "${unpinned}"`));
   });
 
-  test("creates both partial indexes when missing", async () => {
+  test("creates the full tool lookup and both partial indexes when missing", async () => {
     expect(await createAgentToolsIndexes(options)).toEqual({
+      [allAssignments]: "created",
       [pinned]: "created",
       [unpinned]: "created",
     });
 
+    expect(await indexDefinition(allAssignments)).toBe(
+      `CREATE INDEX ${allAssignments} ON public.agent_tools USING btree (tool_id, agent_id)`,
+    );
     expect(await indexDefinition(pinned)).toBe(
       `CREATE INDEX ${pinned} ON public.agent_tools USING btree (mcp_server_id, agent_id) WHERE (mcp_server_id IS NOT NULL)`,
     );
@@ -81,38 +87,78 @@ describe("createAgentToolsIndexes", () => {
     expect(await advisoryLockCount()).toBe(0);
   });
 
+  test("supports a tool lookup without a pinned or unpinned predicate", async () => {
+    await createAgentToolsIndexes(options);
+
+    // The review counts every assignment. Its query cannot use the existing
+    // partial tool index because it does not constrain mcp_server_id.
+    const plan = await db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL enable_seqscan = off`);
+      return tx.execute(sql`
+        EXPLAIN (FORMAT JSON)
+        SELECT count(*) FROM agent_tools
+        WHERE tool_id = '00000000-0000-4000-8000-000000000001'::uuid
+      `);
+    });
+    expect(JSON.stringify(plan.rows)).toContain(allAssignments);
+  });
+
   test("leaves valid indexes alone", async () => {
     await createAgentToolsIndexes(options);
+    const allOid = await indexOid(allAssignments);
     const pinnedOid = await indexOid(pinned);
     const unpinnedOid = await indexOid(unpinned);
 
     expect(await createAgentToolsIndexes(options)).toEqual({
+      [allAssignments]: "already_valid",
       [pinned]: "already_valid",
       [unpinned]: "already_valid",
     });
+    expect(await indexOid(allAssignments)).toBe(allOid);
     expect(await indexOid(pinned)).toBe(pinnedOid);
     expect(await indexOid(unpinned)).toBe(unpinnedOid);
   });
 
-  test("rebuilds a matching index left invalid by an interrupted build", async () => {
+  test.each([
+    unpinned,
+    allAssignments,
+  ])("rebuilds %s after an interrupted build", async (indexName) => {
     await createAgentToolsIndexes(options);
     const pinnedOid = await indexOid(pinned);
-    const unpinnedOid = await indexOid(unpinned);
+    const invalidOid = await indexOid(indexName);
     // What a cancelled CREATE INDEX CONCURRENTLY leaves behind.
     await db.execute(
-      sql`update pg_index set indisvalid = false where indexrelid = ${unpinnedOid}::oid`,
+      sql`update pg_index set indisvalid = false where indexrelid = ${invalidOid}::oid`,
     );
 
     expect(await createAgentToolsIndexes(options)).toEqual({
+      [allAssignments]: "already_valid",
       [pinned]: "already_valid",
-      [unpinned]: "rebuilt_invalid",
+      [unpinned]: "already_valid",
+      [indexName]: "rebuilt_invalid",
     });
     expect(await indexOid(pinned)).toBe(pinnedOid);
-    expect(await indexOid(unpinned)).not.toBe(unpinnedOid);
+    expect(await indexOid(indexName)).not.toBe(invalidOid);
     const rebuilt = await db.execute(
-      sql`select indisvalid from pg_index where indexrelid = to_regclass(${unpinned})`,
+      sql`select indisvalid from pg_index where indexrelid = to_regclass(${indexName})`,
     );
     expect(rebuilt.rows[0]?.indisvalid).toBe(true);
+  });
+
+  test("leaves a partial index using the full lookup name alone", async () => {
+    await db.execute(
+      sql.raw(
+        `CREATE INDEX "${allAssignments}" ON agent_tools (tool_id, agent_id) WHERE mcp_server_id IS NULL`,
+      ),
+    );
+    const before = await indexDefinition(allAssignments);
+    expect(await createAgentToolsIndexes(options)).toEqual({
+      [allAssignments]: "unexpected_definition",
+      [pinned]: "created",
+      [unpinned]: "created",
+    });
+    expect(await indexDefinition(allAssignments)).toBe(before);
+    expect(await advisoryLockCount()).toBe(0);
   });
 
   test.each([
@@ -135,6 +181,7 @@ describe("createAgentToolsIndexes", () => {
     const before = await indexDefinition(takenName);
 
     expect(await createAgentToolsIndexes(options)).toEqual({
+      [allAssignments]: "created",
       [takenName]: "unexpected_definition",
       [otherName]: "created",
     });

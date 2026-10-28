@@ -5,6 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  npm@12.2.0: 12.2.1
   '@modelcontextprotocol/sdk@<1.32.0': 1.32.0
   body-parser@>=2.0.0 <2.4.0: 2.4.0
   brace-expansion@>=5.0.0 <5.0.12: 5.0.12
@@ -1321,8 +1322,8 @@ packages:
     resolution: {integrity: sha512-9qny7Z9DsQU8Ou39ERsPU4OZQlSTP47ShQzuKZ6PRXpYLtIFgl/DEBYEXKlvcEa+9tHVcK8CF81Y2V72qaZhWA==}
     engines: {node: '>=18'}
 
-  npm@12.2.0:
-    resolution: {integrity: sha512-ZsJjKpTnlmSXOLLXiU1xDCzC4Wlok4IwZmh/aw2KUuXytU7q6qMv/cUT7MoeSf95Slwuw/lRXYefGzGCspHPNQ==}
+  npm@12.2.1:
+    resolution: {integrity: sha512-bKCmFRVT/BB+YPEYbZwQ1XUI3N5t4xKSpU1MxOjo7z3iWzKBJ0ZXRC1xFdEN+TC7N5TdywaBzf2dMXGJq/e2PQ==}
     engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
     hasBin: true
     bundledDependencies:
@@ -3062,7 +3063,7 @@ snapshots:
       path-key: 4.0.0
       unicorn-magic: 0.3.0
 
-  npm@12.2.0: {}
+  npm@12.2.1: {}
 
   nth-check@3.0.1:
     dependencies:
@@ -3137,7 +3138,7 @@ snapshots:
       linkedom: 0.18.13
       minimatch: 10.2.6
       node-edge-tts: 1.2.10
-      npm: 12.2.0
+      npm: 12.2.1
       openai: 7.27.0(undici@8.12.2)(ws@8.22.0)(zod@4.6.6)
       p-limit: 7.3.3
       p-map: 7.0.8

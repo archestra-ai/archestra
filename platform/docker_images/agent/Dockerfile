@@ -272,6 +272,15 @@ RUN pnpm --dir /opt/agent-openclaw install --frozen-lockfile \
  && chown -R 1000:1000 /home/node
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
+    # npm 12.2.1 fixes its bundled brace-expansion, but still bundles undici 6.29.0.
+    # Reuse the checksummed 6.29.1 copy already installed for the global npm CLI.
+    npm_dir=/opt/agent-openclaw/node_modules/.pnpm/npm@12.2.1/node_modules/npm && \
+    test "$(node -p "require('${npm_dir}/package.json').version")" = 12.2.1 && \
+    test "$(node -p "require('/usr/local/lib/node_modules/npm/node_modules/undici/package.json').version")" = 6.29.1 && \
+    rm -rf "${npm_dir}/node_modules/undici" && \
+    cp -a /usr/local/lib/node_modules/npm/node_modules/undici "${npm_dir}/node_modules/undici" && \
+    node /tmp/agent-image-tests/npm-http.cjs "${npm_dir}/node_modules/undici" && \
     python3 /tmp/agent-image-patches/openclaw-mcp-required.py
 USER 1000:1000
 RUN --network=none \

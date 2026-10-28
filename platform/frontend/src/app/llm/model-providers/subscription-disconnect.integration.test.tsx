@@ -537,6 +537,62 @@ describe("enterprise plan disconnect", () => {
   });
 });
 
+describe("API key delete", () => {
+  it("says a key removed elsewhere was already deleted and drops its row", async () => {
+    const user = userEvent.setup();
+    const key = makeLlmProviderApiKey({
+      id: "shared-key",
+      name: "Shared API key",
+      scope: "org",
+      userId: null,
+    });
+    let present = true;
+    server.use(
+      http.get("/api/user/permissions", () =>
+        HttpResponse.json({
+          ...permissions,
+          llmProviderApiKey: ["read", "delete"],
+        }),
+      ),
+      http.get("/api/resource-permissions", () =>
+        HttpResponse.json([
+          { resource: "llmProviderApiKey", action: "delete", scope: "*" },
+        ]),
+      ),
+      http.get("/api/llm-provider-api-keys", () =>
+        HttpResponse.json(present ? [key] : []),
+      ),
+      http.delete("/api/llm-provider-api-keys/:id", () => {
+        present = false;
+        return notFound();
+      }),
+    );
+    renderPage();
+    await user.click(
+      await screen.findByRole(
+        "button",
+        { name: "Delete Shared API key" },
+        { timeout: 5000 },
+      ),
+    );
+    const confirm = within(screen.getByRole("dialog")).getByRole("button", {
+      name: "Delete API Key",
+    });
+    await waitFor(() => expect(confirm).toBeEnabled(), { timeout: 5000 });
+    await user.click(confirm);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(toast.info).toHaveBeenCalledWith("This API key was already deleted");
+    expect(toast.error).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Delete Shared API key" }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+});
+
 async function confirmDisconnect(user: ReturnType<typeof userEvent.setup>) {
   const confirm = within(screen.getByRole("dialog")).getByRole("button", {
     name: "Disconnect",

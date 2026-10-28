@@ -1,5 +1,5 @@
 {
-  "id": "b6d0c1d8-716c-41f7-bde7-01a365fb56b8",
+  "id": "506ca36e-a6b7-4139-8f5b-5e79d83f7ae3",
   "prevId": "d085204e-7a2c-4cf0-afe4-cc7affee4f4d",
   "version": "7",
   "dialect": "postgresql",
@@ -18730,6 +18730,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "member_default_model_id_idx": {
+          "name": "member_default_model_id_idx",
+          "columns": [
+            {
+              "expression": "default_model_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"member\".\"default_model_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

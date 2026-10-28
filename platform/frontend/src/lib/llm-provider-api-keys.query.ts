@@ -338,36 +338,28 @@ export function useDeleteLlmProviderApiKey() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    // `kind` only picks the toast in onSuccess.
     mutationFn: async ({
       id,
-      kind,
     }: {
       id: string;
       kind: LlmProviderApiKeyDeleteKind;
     }) => {
-      const { data: responseData, error } = await deleteLlmProviderApiKey({
-        path: { id },
-      });
+      const { error } = await deleteLlmProviderApiKey({ path: { id } });
       if (error) {
-        // Removed elsewhere (another tab, a teammate): the disconnect the user
-        // asked for already holds, and it is not an API key to them.
-        if (
-          kind !== "key" &&
-          getApiErrorType(error) === "api_not_found_error"
-        ) {
-          return { alreadyDisconnected: true };
+        // Removed elsewhere (another tab, a teammate, an earlier attempt that
+        // failed after the delete): what the user asked for already holds.
+        if (getApiErrorType(error) === "api_not_found_error") {
+          return "already-gone" as const;
         }
         handleApiError(error);
         throw toApiError(error);
       }
-      return responseData && { alreadyDisconnected: false };
+      return "deleted" as const;
     },
-    onSuccess: (result, { kind }) => {
-      if (!result) {
-        return;
-      }
-      if (result.alreadyDisconnected && kind !== "key") {
-        toast.info(ALREADY_DISCONNECTED_MESSAGE[kind]);
+    onSuccess: (outcome, { kind }) => {
+      if (outcome === "already-gone") {
+        toast.info(ALREADY_GONE_MESSAGE[kind]);
       } else {
         toast.success(DELETED_MESSAGE[kind]);
       }
@@ -441,10 +433,8 @@ const DELETED_MESSAGE: Record<LlmProviderApiKeyDeleteKind, string> = {
   plan: "Enterprise plan disconnected",
 };
 
-const ALREADY_DISCONNECTED_MESSAGE: Record<
-  Exclude<LlmProviderApiKeyDeleteKind, "key">,
-  string
-> = {
+const ALREADY_GONE_MESSAGE: Record<LlmProviderApiKeyDeleteKind, string> = {
+  key: "This API key was already deleted",
   subscription: "This subscription was already disconnected",
   plan: "This enterprise plan was already disconnected",
 };

@@ -5,6 +5,7 @@
  * provider API keys.
  */
 interface OrganizationSubscriptionKey {
+  name?: string | null;
   isGithubAppKey?: boolean;
   githubOrganization?: string | null;
 }
@@ -17,11 +18,18 @@ export function isOrganizationSubscription(
   return key.isGithubAppKey === true;
 }
 
-/** "GitHub Copilot · acme". */
+/**
+ * The plan's own name, as set when it was connected. A plan still named by
+ * default reads "GitHub Copilot · acme".
+ */
 export function organizationSubscriptionName(
   key: OrganizationSubscriptionKey,
 ): string {
-  return `GitHub Copilot · ${key.githubOrganization ?? "organization"}`;
+  const name = key.name?.trim();
+  const organization = key.githubOrganization ?? "organization";
+  return name && name !== `GitHub Copilot (${organization})`
+    ? name
+    : `GitHub Copilot · ${organization}`;
 }
 
 /** "Billed to acme on GitHub". */

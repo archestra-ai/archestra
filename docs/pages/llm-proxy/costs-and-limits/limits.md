@@ -2,7 +2,7 @@
 title: Limits
 description: Cap spend, tokens, and requests across your organization, teams, virtual keys, users, agents, OAuth clients, and environments
 order: 2
-lastUpdated: 2026-10-26
+lastUpdated: 2026-10-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -44,7 +44,7 @@ When more than one rule matches a call, every matching hard rule must allow it:
 
 Choose **Behavior** under **Advanced** when creating or editing an explicit spend, token, or request limit. Changing behavior preserves recorded usage and the reset schedule. A soft limit does not override another matching hard limit. Default user allowances remain hard.
 
-See [Limit Metrics](/docs/admin/observability/metrics#limit-metrics) for the counters. Your existing monitoring and alerting stack can use them to notify your team.
+See [Limit Metrics](/docs/admin/observability/metrics/limits) for the counters. Your existing monitoring and alerting stack can use them to notify your team.
 
 ## Reset Intervals
 

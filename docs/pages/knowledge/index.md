@@ -2,7 +2,7 @@
 title: Knowledge (RAG)
 description: Give agents and MCP clients cited answers from connected sources and uploaded documents
 order: 5
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -86,7 +86,7 @@ If an answer is wrong or missing, find the cause here:
 | "I could not find that" | The agent or gateway does not have the source, or the person has no **Can use** on it | Add the source under **Tools & Knowledge**. Check [permissions](#permissions). |
 | An old answer | The index is only as current as the last sync | Check the connector's status. See [Troubleshoot Sync](/docs/knowledge/connectors#troubleshoot-sync). |
 | An answer from the wrong space or project | Search covers every source the agent has | Name the place in the question: "In the DEV space, how do we roll back?" Or put it in the agent's instructions. |
-| A quote that is not in the source | The model changed the quote | In built-in chat, Archestra logs each quote it cannot find and counts it in the [`rag_quote_verification_total`](/docs/admin/observability/metrics#rag_quote_verification_total) metric. The person sees no warning. |
+| A quote that is not in the source | The model changed the quote | In built-in chat, Archestra logs each quote it cannot find and counts it in the [`rag_quote_verification_total`](/docs/admin/observability/metrics/knowledge-base#rag_quote_verification_total) metric. The person sees no warning. |
 
 Naming a place only narrows the results. It never shows a document the person cannot open.
 

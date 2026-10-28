@@ -8,7 +8,12 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import type { LimitCleanupInterval, LimitEntityType, LimitType } from "@/types";
+import type {
+  LimitBehavior,
+  LimitCleanupInterval,
+  LimitEntityType,
+  LimitType,
+} from "@/types";
 
 const limitsTable = pgTable(
   "limits",
@@ -19,7 +24,7 @@ const limitsTable = pgTable(
     limitType: varchar("limit_type").$type<LimitType>().notNull(),
     limitValue: integer("limit_value").notNull(),
     behavior: varchar("behavior")
-      .$type<"hard" | "soft">()
+      .$type<LimitBehavior>()
       .notNull()
       .default("hard"),
     mcpServerName: varchar("mcp_server_name", { length: 255 }),

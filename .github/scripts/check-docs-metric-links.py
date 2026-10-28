@@ -1,17 +1,8 @@
 #!/usr/bin/env python3
-"""Require every mention of a documented Prometheus metric in the docs to link to its row
-on the Metrics page.
+"""Require metric mentions to link to their canonical row in the nested Metrics reference.
 
-The rows are the "Metric" tables in docs/pages/admin/observability/metrics.md. Each
-metric name in a row's first cell carries a `<span id="metric_name"></span>` anchor, and
-a row without one is flagged too. A mention is inline code naming a documented metric
-(`rag_queries_total`), and it must be written
-[`rag_queries_total`](/docs/admin/observability/metrics#rag_queries_total). A link whose
-text is the metric but whose target is elsewhere (for example a section heading) is also
-flagged. Mentions inside fenced code blocks, headings, HTML comments, and other link
-text are exempt (links do not render there), as is the Metrics page itself.
-
-Run with --fix to add the missing anchors and rewrite mentions in place.
+Each reference table anchors its metric names. Run with --fix to add missing
+anchors and retarget mentions after a metric moves between reference pages.
 """
 
 from __future__ import annotations
@@ -22,8 +13,7 @@ import re
 import sys
 
 PAGES_DIR = Path("docs/pages")
-REFERENCE = PAGES_DIR / "admin/observability/metrics.md"
-REFERENCE_URL = "/docs/admin/observability/metrics"
+REFERENCE = PAGES_DIR / "admin/observability/metrics"
 
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 TABLE_HEADER = re.compile(r"^\|\s*Metric\s*\|")
@@ -41,27 +31,38 @@ def main() -> int:
     parser.add_argument("--fix", action="store_true", help="add anchors and link mentions in place")
     args = parser.parse_args()
 
-    if not REFERENCE.is_file():
+    if not (REFERENCE / "index.md").is_file():
         print(f"error: {REFERENCE} not found (run from the repo root)", file=sys.stderr)
         return 2
 
     violations: list[str] = []
-    reference_text = REFERENCE.read_text(encoding="utf-8")
-    anchored, metrics, missing = anchor_rows(reference_text)
-    if missing:
-        if args.fix:
-            REFERENCE.write_text(anchored, encoding="utf-8")
-            print(f"Anchored {len(missing)} metric(s) in {REFERENCE.as_posix()}")
-        else:
-            violations.extend(
-                f'{REFERENCE.as_posix()}:{line}: add <span id="{name}"></span> before `{name}`' for line, name in missing
-            )
+    metrics: dict[str, str] = {}
+    references = sorted(REFERENCE.rglob("*.md"))
+    page_metrics: dict[Path, frozenset[str]] = {}
+    for reference in references:
+        anchored, names, missing = anchor_rows(reference.read_text(encoding="utf-8"))
+        relative = reference.relative_to(PAGES_DIR).with_suffix("").as_posix()
+        url = "/docs/" + relative.removesuffix("/index")
+        page_metrics[reference] = names
+        for name in names:
+            if name in metrics:
+                violations.append(f"{reference}: metric `{name}` is already documented at {metrics[name]}")
+            metrics[name] = f"{url}#{name}"
+        if missing:
+            if args.fix:
+                reference.write_text(anchored, encoding="utf-8")
+                print(f"Anchored {len(missing)} metric(s) in {reference.as_posix()}")
+            else:
+                violations.extend(
+                    f'{reference.as_posix()}:{line}: add <span id="{name}"></span> before `{name}`'
+                    for line, name in missing
+                )
 
     for page in sorted(PAGES_DIR.rglob("*.md")):
-        if page == REFERENCE:
-            continue
         text = page.read_text(encoding="utf-8")
-        fixed, found = link_mentions(text, metrics)
+        # A metric's own reference prose can name it without a self-link.
+        external_metrics = {name: url for name, url in metrics.items() if name not in page_metrics.get(page, ())}
+        fixed, found = link_mentions(text, external_metrics)
         if not found:
             continue
         if args.fix:
@@ -69,7 +70,7 @@ def main() -> int:
             print(f"Linked {len(found)} metric mention(s) in {page.as_posix()}")
         else:
             violations.extend(
-                f"{page.as_posix()}:{line}: link `{name}` to {REFERENCE_URL}#{name}" for line, name in found
+                f"{page.as_posix()}:{line}: link `{name}` to {metrics[name]}" for line, name in found
             )
 
     if not violations:
@@ -119,7 +120,7 @@ def anchor_rows(text: str) -> tuple[str, frozenset[str], list[tuple[int, str]]]:
     return "\n".join(out), frozenset(metrics), missing
 
 
-def link_mentions(text: str, metrics: frozenset[str]) -> tuple[str, list[tuple[int, str]]]:
+def link_mentions(text: str, metrics: dict[str, str]) -> tuple[str, list[tuple[int, str]]]:
     """Return the text with every mention linked to its row, and the (line, metric) fixes made."""
     found: list[tuple[int, str]] = []
     comment_spans = [match.span() for match in HTML_COMMENT.finditer(text)]
@@ -143,7 +144,7 @@ def link_mentions(text: str, metrics: frozenset[str]) -> tuple[str, list[tuple[i
 
         def retarget(match: re.Match[str]) -> str:
             name, url = match.group(1), match.group(2)
-            expected = f"{REFERENCE_URL}#{name}"
+            expected = metrics.get(name)
             if name not in metrics or url == expected:
                 return match.group(0)
             found.append((number, name))
@@ -157,7 +158,7 @@ def link_mentions(text: str, metrics: frozenset[str]) -> tuple[str, list[tuple[i
             if name not in metrics or any(a <= match.start() < b for a, b in link_spans):
                 return match.group(0)
             found.append((number, name))
-            return f"[{match.group(0)}]({REFERENCE_URL}#{name})"
+            return f"[{match.group(0)}]({metrics[name]})"
 
         out.append(MENTION.sub(link, line))
     return "\n".join(out), found

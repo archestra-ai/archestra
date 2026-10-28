@@ -37,6 +37,7 @@ export const LimitTypeSchema = z.enum([
 export type LimitType = z.infer<typeof LimitTypeSchema>;
 
 export const LimitBehaviorSchema = z.enum(["hard", "soft"]);
+export type LimitBehavior = z.infer<typeof LimitBehaviorSchema>;
 
 export const LimitCleanupIntervalSchema = z.enum([
   "minute",

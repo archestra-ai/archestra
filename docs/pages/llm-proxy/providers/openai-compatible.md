@@ -30,6 +30,6 @@ The API key variable alone does not create a provider key at startup: the Base U
 
 ## Prompt Caching
 
-The proxy forwards `prompt_cache_key`, `prompt_cache_retention`, `prompt_cache_options`, and content-block `prompt_cache_breakpoint` fields on Chat Completions requests. The upstream server must support the fields you send; support differs between OpenAI-compatible servers and models.
+OpenAI-compatible servers manage their own prompt or prefix caches, and support depends on the server and model. The `/v1/vllm` endpoint currently does not forward explicit `prompt_cache_key`, `prompt_cache_retention`, `prompt_cache_options`, or content-block `prompt_cache_breakpoint` fields; the native OpenAI endpoint has separate request validation.
 
-Provider-reported cached input and cache-write tokens are recorded for streaming and non-streaming calls. Archestra does not insert cache breakpoints or guarantee cache hits. See [OpenAI’s prompt caching guide](https://developers.openai.com/api/docs/guides/prompt-caching) for OpenAI models.
+Archestra does not configure the server's cache, insert cache breakpoints, or guarantee cache hits. Check your server's documentation for automatic prefix caching and the usage fields it reports.

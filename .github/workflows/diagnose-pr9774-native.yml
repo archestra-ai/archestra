@@ -38,12 +38,10 @@ jobs:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests
           save-if: "false"
-      - name: Install native debugger
+      - name: Install native memory diagnostics
         run: |
-          if ! command -v gdb >/dev/null; then
-            sudo apt-get update -qq
-            sudo apt-get install -y --no-install-recommends gdb
-          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gdb valgrind
       - name: Migrate disposable test database
         env:
           ARCHESTRA_DATABASE_URL: postgresql://archestra:archestra_ci_password@localhost:5432/archestra_openappa_test

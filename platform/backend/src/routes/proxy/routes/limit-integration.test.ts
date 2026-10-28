@@ -148,7 +148,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
     });
 
     // Create virtual_key limit with threshold of 1
-    const limit = await LimitModel.create({
+    await LimitModel.create({
       entityType: "virtual_key",
       entityId: virtualKey.id,
       limitType: "token_cost",
@@ -181,14 +181,16 @@ describe("LLM proxy limit enforcement (integration)", () => {
         code: "token_cost_limit_exceeded",
         usage_limit: {
           entity_type: "virtual_key",
-          entity_id: virtualKey.id,
-          limit_id: limit.id,
+          entity_name: "Test VK for limit",
           limit_type: "token_cost",
           source: "explicit",
         },
       },
     });
-    expect(response.json().error.message).toContain(`Limit ID: ${limit.id}`);
+    expect(response.json().error.message).toContain(
+      'Affected virtual key: "Test VK for limit".',
+    );
+    expect(response.json().error.message).toContain("Limit: $1.00");
   });
 
   test("blocks request with 402 when user limit is exceeded", async ({
@@ -267,7 +269,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
       name: "Default User Limit Agent",
     });
 
-    const defaultLimit = await EnvironmentDefaultUserLimitModel.create({
+    await EnvironmentDefaultUserLimitModel.create({
       organizationId: org.id,
       environmentId: null,
       limitValue: 1,
@@ -308,16 +310,15 @@ describe("LLM proxy limit enforcement (integration)", () => {
         code: "token_cost_limit_exceeded",
         usage_limit: {
           entity_type: "user",
-          entity_id: user.id,
-          limit_id: defaultLimit.id,
+          entity_name: user.email,
           limit_type: "token_cost",
           source: "default_user",
         },
       },
     });
-    expect(response.json().error.message).toContain("user-level");
+    expect(response.json().error.message).toContain("default user cost limit");
     expect(response.json().error.message).toContain(
-      `Default user limit ID: ${defaultLimit.id}`,
+      `Affected user: "${user.email}".`,
     );
   });
 
@@ -830,7 +831,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
     await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     // Create team all-models limit with threshold of 1
-    const teamLimit = await LimitModel.create({
+    await LimitModel.create({
       entityType: "team",
       entityId: team.id,
       limitType: "token_cost",
@@ -867,11 +868,10 @@ describe("LLM proxy limit enforcement (integration)", () => {
     const body = response.json();
     expect(body.error.code).toBe("token_cost_limit_exceeded");
     expect(body.error.message).toContain("team-level");
-    expect(body.error.message).toContain(`team ID: ${team.id}`);
+    expect(body.error.message).toContain(`Affected team: "${team.name}".`);
     expect(body.error.usage_limit).toEqual({
       entity_type: "team",
-      entity_id: team.id,
-      limit_id: teamLimit.id,
+      entity_name: team.name,
       limit_type: "token_cost",
       source: "explicit",
     });

@@ -25,7 +25,7 @@ export type PoolFormValues = {
  * The pool's failover timing, in seconds as typed. Blank keeps the default.
  * The values are the API's limits.
  */
-export const MAX_SECONDS = {
+const MAX_SECONDS = {
   streamTimeoutSeconds: 1800,
   timeoutSeconds: 1800,
   cooldownSeconds: 3600,

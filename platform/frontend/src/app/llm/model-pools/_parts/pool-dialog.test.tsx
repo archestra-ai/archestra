@@ -149,6 +149,8 @@ describe("PoolDialog", () => {
         id: modelId,
         modelId,
         priority: index < 2 ? 1 : 2,
+        benchedUntil:
+          modelId === "e" ? new Date(NOW + 20_000).toISOString() : null,
       })),
     } as ModelPool;
     vi.mocked(useModelPools).mockReturnValue({
@@ -157,6 +159,8 @@ describe("PoolDialog", () => {
     render(<PoolDialog pool={big} onOpenChange={() => {}} />);
     const fold = screen.getByRole("button", { name: "Expand order 2" });
     expect(fold).toHaveAttribute("aria-expanded", "false");
+    // Its rows are hidden, so the header says a member is cooling down.
+    expect(screen.getByText("1 cooling down")).toBeInTheDocument();
     expect(screen.getAllByRole("spinbutton", { name: /Weight/ })).toHaveLength(
       2,
     );

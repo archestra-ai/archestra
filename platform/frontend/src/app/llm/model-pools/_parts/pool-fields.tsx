@@ -182,8 +182,8 @@ export function TimeoutFields({
           placeholder="Auto"
           disabled={disabled}
         >
-          Seconds for a full non-streamed response. Auto is 3 min plus 50 ms per
-          allowed output token, up to 30 min.
+          Seconds for a full non-streamed response. Auto is 3 min plus 1 s per
+          20 tokens the request lets the model write, up to 30 min.
         </SecondsField>
         <SecondsField
           form={form}
@@ -192,8 +192,9 @@ export function TimeoutFields({
           placeholder={String(DEFAULT_COOLDOWN_SECONDS)}
           disabled={disabled}
         >
-          Seconds a failed member is skipped by later requests. A Retry-After
-          header wins, up to {MAX_RETRY_AFTER_SECONDS} s.
+          Minimum seconds a failed member is skipped by later requests. A longer
+          Retry-After header extends it, up to {MAX_RETRY_AFTER_SECONDS} s or
+          this time if longer.
         </SecondsField>
       </div>
     </div>

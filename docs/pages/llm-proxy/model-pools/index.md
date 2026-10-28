@@ -56,7 +56,7 @@ A request moves to the next member when a member fails before it starts to answe
 | Rejects the request as invalid, such as a `400` | The error goes to the client. Other members would reject it too. |
 | Fails after it starts to answer | The error goes to the client. A pool never switches members mid-answer. |
 
-A failed member cools down for the pool's cooldown time. A `Retry-After` header wins, up to 60 s or the cooldown time if that is longer. Other requests skip it while it cools down. The pool's members show **Cooling down** with the seconds left, and the reason on hover.
+A failed member cools down for the pool's cooldown time. A longer `Retry-After` header extends it, up to 60 s or the cooldown time if that is longer. With no cooldown time set, the member cools down for 30 s, or for as long as its `Retry-After` header asks, up to 60 s. Other requests skip it while it cools down. The pool's members show **Cooling down** with the seconds left, and the reason on hover.
 
 - The last member has nowhere to move to, so the pool doesn't time it out, and it gets the usual connection retries.
 - When every member is cooling down, requests still try them, the one back soonest first.
@@ -70,7 +70,7 @@ Set these under **Timeouts and cooldown** when you create or edit a pool. They a
 | --- | --- | --- |
 | **Stream timeout** | 30 s | How long a member may take to send the first chunk of a streamed answer. Up to 1800 s. |
 | **Timeout** | Auto: 3 min plus 1 s per 20 tokens the request lets the model write, at most 30 min | How long a member may take to send a full answer that isn't streamed. Up to 1800 s. |
-| **Cooldown time** | 30 s | How long other requests skip a member that failed. Up to 3600 s. |
+| **Cooldown time** | 30 s, or the `Retry-After` up to 60 s | The shortest time other requests skip a member that failed. Up to 3600 s. |
 
 ## Who Can Use a Pool
 

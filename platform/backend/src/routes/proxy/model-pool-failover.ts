@@ -443,13 +443,16 @@ async function benchMember(params: {
   memberId: string;
   reason: string;
   retryAfterMs?: number;
-  /** The pool's cooldown, used without a Retry-After. */
+  /**
+   * The pool's cooldown: the shortest bench, which a longer Retry-After can
+   * extend. Without one, a Retry-After sets the bench, shorter or longer.
+   */
   cooldownMs?: number;
 }): Promise<void> {
   const cooldownMs = params.cooldownMs ?? DEFAULT_BENCH_MS;
   const ms = Math.min(
     Math.max(MAX_BENCH_MS, cooldownMs),
-    Math.max(1_000, params.retryAfterMs ?? cooldownMs),
+    Math.max(params.cooldownMs ?? 1_000, params.retryAfterMs ?? cooldownMs),
   );
   try {
     await cacheManager.set(

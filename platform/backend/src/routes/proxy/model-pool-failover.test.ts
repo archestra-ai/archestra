@@ -384,9 +384,11 @@ describe("a pool's own timeouts and cooldown", () => {
     { cooldownSeconds: undefined, retryAfter: undefined, seconds: 30 },
     { cooldownSeconds: undefined, retryAfter: "600", seconds: 60 },
     { cooldownSeconds: 300, retryAfter: undefined, seconds: 300 },
-    { cooldownSeconds: 300, retryAfter: "20", seconds: 20 },
+    { cooldownSeconds: undefined, retryAfter: "5", seconds: 5 },
+    { cooldownSeconds: 300, retryAfter: "20", seconds: 300 },
     { cooldownSeconds: 300, retryAfter: "600", seconds: 300 },
     { cooldownSeconds: 10, retryAfter: "45", seconds: 45 },
+    { cooldownSeconds: 10, retryAfter: "5", seconds: 10 },
   ])("cools a member down for $seconds s with cooldown $cooldownSeconds and Retry-After $retryAfter", async ({
     cooldownSeconds,
     retryAfter,

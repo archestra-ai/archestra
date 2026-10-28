@@ -37,6 +37,7 @@ import { OverlappedIcons } from "@/components/ui/overlapped-icons";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 import { MEMBER_COLUMNS, type MemberFields, MemberRow } from "./member-row";
+import { FoldedCooldown } from "./member-status";
 import { HelpTip } from "./pool-fields";
 import type { PoolOptions } from "./pool-form";
 import {
@@ -487,6 +488,9 @@ function FoldedSummary({
         <Dot>{shares.join(" / ")}</Dot>
       ) : null}
       {off > 0 ? <Dot>{off} off</Dot> : null}
+      <FoldedCooldown
+        saved={members.flatMap(({ saved }) => (saved ? [saved] : []))}
+      />
     </span>
   );
 }

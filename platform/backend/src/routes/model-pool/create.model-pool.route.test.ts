@@ -1,6 +1,9 @@
+import { desc } from "drizzle-orm";
 import config from "@/config";
+import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -26,6 +29,7 @@ describe("POST /api/model-pools", () => {
       ).organizationId = organizationId;
       (request as typeof request & { user: User }).user = user;
     });
+    registerAuditLogHook(app);
     const { default: modelPoolRoutes } = await import("./model-pool.routes");
     await app.register(modelPoolRoutes);
   });
@@ -143,6 +147,18 @@ describe("POST /api/model-pools", () => {
       streamTimeoutSeconds: null,
       timeoutSeconds: null,
       cooldownSeconds: null,
+    });
+    const [audit] = await db
+      .select({
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .orderBy(desc(schema.auditLogsTable.createdAt))
+      .limit(1);
+    expect(audit).toMatchObject({
+      before: { cooldownSeconds: 300 },
+      after: { cooldownSeconds: null },
     });
 
     for (const timing of [

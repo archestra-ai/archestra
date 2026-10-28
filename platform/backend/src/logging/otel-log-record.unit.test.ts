@@ -51,6 +51,38 @@ describe("toOtelLogRecord", () => {
     );
   });
 
+  test("budgets object arrays by their serialized UTF-8 size", () => {
+    const fields = Object.fromEntries(
+      Array.from({ length: 60 }, (_, index) => [
+        `field${index}`,
+        [{ detail: "é".repeat(950) }],
+      ]),
+    );
+    const record = toOtelLogRecord(
+      captureRecord((logger) => logger.error(fields, "upstream details")),
+    );
+    const entries = flattenLikeLoki(record.attributes ?? {});
+    const bytes = entries.reduce(
+      (sum, [key, value]) =>
+        sum + Buffer.byteLength(key) + Buffer.byteLength(value),
+      0,
+    );
+    expect(bytes).toBeLessThanOrEqual(LOKI_MAX_SIZE_BYTES);
+    expect(
+      record.attributes?.["archestra.log.dropped_attributes_count"],
+    ).toBeGreaterThan(0);
+    expect(record.body).toBe("upstream details");
+  });
+
+  test("preserves arrays containing diagnostic properties named toString", () => {
+    const details = [{ toString: "upstream diagnostic" }];
+    const record = toOtelLogRecord(
+      captureRecord((logger) => logger.error({ details }, "upstream failure")),
+    );
+    expect(record.body).toBe("upstream failure");
+    expect(record.attributes?.details).toEqual(details);
+  });
+
   test("passes small records through with their nested shape intact", () => {
     const record = toOtelLogRecord(
       captureRecord((logger) =>

@@ -159,7 +159,8 @@ function boundValue({
         ? boundJson(value)
         : value;
   const cost =
-    keyBytes + byteLength(typeof leaf === "string" ? leaf : String(leaf));
+    keyBytes +
+    byteLength(typeof leaf === "string" ? leaf : (JSON.stringify(leaf) ?? ""));
   if (
     budget.entries + 1 > MAX_ATTRIBUTE_ENTRIES ||
     budget.bytes + cost > MAX_ATTRIBUTE_BYTES

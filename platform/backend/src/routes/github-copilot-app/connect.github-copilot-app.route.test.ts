@@ -89,7 +89,9 @@ function githubFake(options: {
         html_url: "https://github.com/apps/my-org-copilot",
         owner: { login: "my-org", type: "Organization" },
       });
-    if (url.endsWith("api.githubcopilot.com/models"))
+    const parsed = URL.canParse(url) ? new URL(url) : null;
+    const copilot = parsed?.host === "api.githubcopilot.com";
+    if (copilot && parsed?.pathname === "/models")
       return (
         options.copilotModels?.clone() ??
         Response.json({
@@ -100,7 +102,7 @@ function githubFake(options: {
         })
       );
     // Invocability probes answer with a payload complaint: model accepted.
-    if (url.includes("api.githubcopilot.com"))
+    if (copilot)
       return Response.json(
         { error: { message: "messages must be non-empty" } },
         { status: 400 },

@@ -110,7 +110,7 @@ describe("McpElicitationCard", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders an OpenAPPA review as a collapsed tool card and submits approval from Approve", async () => {
+  it("shows the reviewed arguments immediately beside the approval controls", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn().mockResolvedValue(true);
     const request = openappaReview();
@@ -122,9 +122,6 @@ describe("McpElicitationCard", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByText("archestra__todo_write")).toBeInTheDocument();
     expect(screen.getByText("Approval requested")).toBeInTheDocument();
-    // Arguments stay collapsed until the header opens them.
-    expect(screen.queryByText(/qa-hitl/)).not.toBeInTheDocument();
-    await user.click(screen.getByText("archestra__todo_write"));
     expect(screen.getByText(/qa-hitl/)).toBeInTheDocument();
     expect(card).not.toHaveTextContent(/\\"/);
 
@@ -143,7 +140,8 @@ describe("McpElicitationCard", () => {
     });
   });
 
-  it("shows accepted review coverage without opening the arguments", () => {
+  it("keeps accepted review coverage and decision controls visible when arguments are collapsed", async () => {
+    const user = userEvent.setup();
     render(
       <McpElicitationCard
         requests={[
@@ -164,7 +162,85 @@ describe("McpElicitationCard", () => {
     expect(card).not.toHaveTextContent("What this ruling would cover");
     expect(card).not.toHaveTextContent("attention: human-approval");
     expect(card).not.toHaveTextContent("APPA asks you to rule");
+    await user.click(screen.getByText("archestra__todo_write"));
+    expect(screen.getByRole("button", { name: "Approve" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Deny" })).toBeVisible();
+    expect(card).toHaveTextContent("the readers must be the public audience");
     expect(screen.queryByText(/qa-hitl/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { name: "empty", input: {}, expected: "{}" },
+    {
+      name: "nested",
+      input: { filters: { states: ["open", "pending"] }, token: "[redacted]" },
+      expected: "[redacted]",
+    },
+    {
+      name: "large",
+      input: {
+        records: Array.from({ length: 35 }, (_, i) => `Synthetic row ${i + 1}`),
+      },
+      expected: "Synthetic row 35",
+    },
+  ])("shows $name reviewed arguments without opening the approval card", async ({
+    input,
+    expected,
+  }) => {
+    const user = userEvent.setup();
+    render(
+      <McpElicitationCard
+        requests={[
+          { ...openappaReview(), reviewedArguments: JSON.stringify(input) },
+        ]}
+        onRespond={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByRole("region", { name: "Code sample, json" }),
+    ).toBeVisible();
+    const more = screen.queryByRole("button", { name: /Show \d+ more lines/ });
+    if (more) {
+      await user.click(more);
+    }
+    expect(
+      screen.getByRole("region", { name: "Code sample, json" }),
+    ).toHaveTextContent(expected);
+    expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Deny" })).toBeEnabled();
+  });
+
+  it.each([
+    "approve",
+    "deny",
+  ] as const)("submits %s once while saving and removes completed review controls", async (decision) => {
+    const user = userEvent.setup();
+    const saving = deferred<boolean>();
+    const onRespond = vi.fn(() => saving.promise);
+    const request = openappaReview();
+    const { rerender } = render(
+      <McpElicitationCard requests={[request]} onRespond={onRespond} />,
+    );
+    await user.dblClick(
+      screen.getByRole("button", {
+        name: decision === "approve" ? "Approve" : "Deny",
+      }),
+    );
+    expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Deny" })).toBeDisabled();
+    expect(onRespond).toHaveBeenCalledExactlyOnceWith({
+      id: request.id,
+      action: "accept",
+      content: { action: decision },
+    });
+    await act(async () => saving.resolve(true));
+    rerender(<McpElicitationCard requests={[]} onRespond={onRespond} />);
+    expect(
+      screen.queryByRole("button", { name: "Approve" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Deny" }),
+    ).not.toBeInTheDocument();
   });
 
   it("submits an all-optional multi-choice question with nothing checked", async () => {

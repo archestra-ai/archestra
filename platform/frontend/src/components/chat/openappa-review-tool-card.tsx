@@ -16,7 +16,7 @@ import { ToolStatusRow } from "@/components/chat/tool-status-row";
 
 /**
  * An OpenAPPA review shown like Chat's tool approval: the reviewed tool's
- * card (arguments collapsed) with an always-visible Approve/Deny row.
+ * card (arguments initially expanded) with an always-visible Approve/Deny row.
  */
 export function OpenappaReviewToolCard({
   id,
@@ -45,7 +45,7 @@ export function OpenappaReviewToolCard({
   return (
     <Tool
       id={id}
-      defaultOpen={false}
+      defaultOpen={hasInput}
       className={hasInput ? "mb-0 cursor-pointer" : "mb-0"}
     >
       {view.toolCard ? (

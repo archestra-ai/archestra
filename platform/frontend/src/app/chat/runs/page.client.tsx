@@ -21,6 +21,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { AgentIcon } from "@/components/agent-icon";
+import { AgentRunId } from "@/components/agent-run-id";
 import { AgentRunLiveness } from "@/components/agent-run-liveness";
 import { AgentRunLogs } from "@/components/agent-run-logs";
 import { AgentRunState } from "@/components/agent-run-state";
@@ -93,10 +94,10 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   // owner is sent; `log:read` lets them open their own trace.
   const { data: canReadLogs } = useHasPermissions({ log: ["read"] });
 
-  // Metadata and the log stream are readable by shared viewers, but attaching
-  // to the live terminal runs a shell under the owner's own credentials — so it
-  // stays owner-only. Everyone else gets the read-only output stream.
+  // Attaching lends the actor's credentials. The server separately permits
+  // managers of an owning service account without making them run owners.
   const isOwner = run?.viewerRole === "owner";
+  const canAttach = run?.canAttach ?? isOwner;
 
   if (!query.isPending && !run) {
     // Sit in the same centered terminal-box placement the attach loader
@@ -122,7 +123,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const canReattach = Boolean(isOwner && run?.terminalRetained);
   const showLiveTerminal =
     (!run && query.isPending) ||
-    (isOwner && !showHistory && (live || (reattached && canReattach)));
+    (canAttach && !showHistory && (live || (reattached && canReattach)));
   const canContinue =
     isOwner &&
     !live &&
@@ -145,7 +146,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
     primary?: boolean;
     prominent?: boolean;
   }[] = [];
-  if (isOwner && (live || (reattached && canReattach))) {
+  if (canAttach && (live || (reattached && canReattach))) {
     actions.push({
       label: showHistory ? "Live terminal" : "Run history",
       icon: History,
@@ -237,6 +238,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                   />
                 </div>
                 <div className="mt-1 flex flex-wrap gap-x-1.5 text-xs text-muted-foreground @2xl:mt-0">
+                  <AgentRunId taskId={run.taskId} />
                   <span>{run.agent.name}</span>
                   <span aria-hidden>·</span>
                   <time
@@ -270,7 +272,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                     <span>{action.label}</span>
                   </Button>
                 ))}
-              {(isOwner || canManageAccess) && (
+              {(canAttach || canManageAccess) && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -396,7 +398,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
           />
         ) : run ? (
           <>
-            {live && !isOwner && (
+            {live && !canAttach && (
               <div className="shrink-0 overflow-hidden rounded-md border bg-slate-950">
                 <ExecTerminalStatus
                   title="Read-only terminal"

@@ -18,6 +18,7 @@ import { WebSocket as WS, WebSocketServer as WSS } from "ws";
 import { z } from "zod";
 import { betterAuth, userHasPermission } from "@/auth";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import { BrowserStreamSocketClientContext } from "@/features/browser-stream/websocket/browser-stream.websocket";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
@@ -37,6 +38,7 @@ import {
   AgentRuntimeOutputCapture,
   RETAINED_LOG_BYTES,
 } from "@/services/agent-runtime/output-capture";
+import { mayAttachAgentRun } from "@/services/agent-runtime/run-access";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import { projectMcpDeploymentStatuses } from "@/services/mcp-deployment-statuses";
@@ -571,7 +573,8 @@ export class WebSocketService {
    *
    * Authorization is narrower than being able to see the agent run: attaching
    * lands inside a shell running under the creator's own credentials, so only
-   * that creator may do it. Administrative Agent access must not become access
+   * that creator or a manager of the owning service account may do it.
+   * Administrative Agent access must not become access
    * to another person's live credentials.
    */
   private async handleSubscribeAgentRunAttach(
@@ -605,16 +608,32 @@ export class WebSocketService {
         organizationId: clientContext.organizationId,
       });
       if (!isCurrent()) return;
-      const session = await AgentRunModel.findByTaskId(
+      let session = await AgentRunModel.findByTaskId(
         ownedSession?.taskId ?? runId,
       );
+      // Managers follow the same current-turn alias as the owning account.
+      if (
+        session?.actorKind === "serviceAccount" &&
+        (await mayAttachAgentRun(session, clientContext))
+      ) {
+        const current = await AgentRunModel.findCurrentSessionForActor({
+          taskId: runId,
+          actorUserId: serviceAccountUserId(session.actorId),
+          organizationId: clientContext.organizationId,
+        });
+        if (current) session = await AgentRunModel.findByTaskId(current.taskId);
+      }
       if (!isCurrent()) return;
       if (!session || session.organizationId !== clientContext.organizationId) {
         throw new Error("Session not found");
       }
-      if (session.actorUserId !== clientContext.userId) {
+      const canAttach = await mayAttachAgentRun(session, clientContext);
+      if (!isCurrent()) return;
+      if (!canAttach) {
         throw new Error(
-          "Only the person who started this run can attach to it",
+          session.actorKind === "serviceAccount"
+            ? "Only the owning service account or its managers with Agent use access can attach to this run"
+            : "Only the person who started this run can attach to it",
         );
       }
 
@@ -1198,13 +1217,10 @@ export class WebSocketService {
    * live credentials, only a view of the output.
    */
   private async mayViewSessionLogs(
-    session: {
-      actorUserId: string | null;
-      taskId: string;
-      projectId: string | null;
-    },
+    session: AgentRunRecord,
     clientContext: WebSocketClientContext,
   ): Promise<boolean> {
+    if (await mayAttachAgentRun(session, clientContext)) return true;
     if (await this.mayControlSession(session, clientContext)) return true;
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

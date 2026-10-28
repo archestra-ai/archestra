@@ -5,8 +5,9 @@ import type {
   AgentRunLogsErrorMessage,
   AgentRunLogsMessage,
 } from "@archestra/shared";
-import { FileX2, TerminalSquare } from "lucide-react";
+import { Download, FileX2, TerminalSquare } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { DeploymentLogPanel } from "@/components/deployment-console";
 import { TerminalRecording } from "@/components/terminal-recording";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,10 @@ export function AgentRunLogs({
   const logId = sessionId ?? run.taskId;
   const [terminalContent, setTerminalContent] = useState("");
   const [error, setError] = useState<string>();
+  const [readableContent, setReadableContent] = useState("");
+  const [pendingDownload, setPendingDownload] = useState<
+    "logs" | "trajectory" | null
+  >(null);
   const [isStreaming, setIsStreaming] = useState(!run.endedAt);
   // An ended run's history is on its way until the server says it has ended:
   // until then the panel is loading, not empty.
@@ -52,6 +57,7 @@ export function AgentRunLogs({
     // An ended run's history renders once it has all arrived; a live run's
     // output at most every LIVE_FLUSH_MS.
     let received = "";
+    let readable = "";
     let pending: string[] = [];
     let flushTimer: ReturnType<typeof setTimeout> | undefined;
     const flush = () => {
@@ -82,6 +88,7 @@ export function AgentRunLogs({
       });
     };
     setTerminalContent("");
+    setReadableContent("");
     setError(undefined);
     setIsStreaming(!run.endedAt);
     setHistoryLoaded(!run.endedAt);
@@ -92,10 +99,10 @@ export function AgentRunLogs({
       websocketService.subscribe(
         "agent_run_logs",
         (message: AgentRunLogsMessage) => {
-          if (
-            message.payload.runId === logId &&
-            message.payload.channel !== "readable"
-          ) {
+          if (message.payload.runId !== logId) return;
+          if (message.payload.channel === "readable") {
+            readable += message.payload.logs;
+          } else {
             receivedOutput = true;
             pending.push(message.payload.logs);
             scheduleFlush();
@@ -121,6 +128,7 @@ export function AgentRunLogs({
             // end is retried; not when the server says what it left out.
             if (
               !receivedOutput &&
+              !readable &&
               !message.payload.omittedBytes &&
               emptyRetryCount < EMPTY_LOG_RETRY_LIMIT
             ) {
@@ -133,6 +141,7 @@ export function AgentRunLogs({
               return;
             }
             flush();
+            setReadableContent(readable);
             setIsStreaming(false);
             setHistoryLoaded(true);
             setOmittedBytes(message.payload.omittedBytes ?? 0);
@@ -158,9 +167,120 @@ export function AgentRunLogs({
     };
   }, [run.endedAt, logId, includeSessionHistory, requestTail]);
 
+  useEffect(() => {
+    if (
+      !pendingDownload ||
+      !historyLoaded ||
+      isStreaming ||
+      omittedBytes > 0 ||
+      requestTail
+    )
+      return;
+    setPendingDownload(null);
+    if (error) return;
+    if (pendingDownload === "logs" && terminalContent) {
+      downloadRunOutput(run.taskId, terminalContent, "log", "text/plain");
+    } else if (pendingDownload === "trajectory") {
+      if (readableContent)
+        downloadRunOutput(
+          run.taskId,
+          readableContent,
+          "json",
+          "application/json",
+        );
+      else
+        toast.info(
+          "No native trajectory was recorded for this run. Its retained terminal output is available in Download logs.",
+        );
+    }
+  }, [
+    pendingDownload,
+    historyLoaded,
+    isStreaming,
+    omittedBytes,
+    requestTail,
+    error,
+    terminalContent,
+    readableContent,
+    run.taskId,
+  ]);
+
   return (
     <DeploymentLogPanel
       title={title}
+      actions={
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={
+              !terminalContent || Boolean(error) || Boolean(pendingDownload)
+            }
+            title={
+              omittedBytes > 0
+                ? "Loads the full retained recording before downloading"
+                : "Download retained terminal output; live runs include output received so far"
+            }
+            onClick={() => {
+              if (omittedBytes > 0) {
+                setPendingDownload("logs");
+                setFullRecording(true);
+              } else {
+                downloadRunOutput(
+                  run.taskId,
+                  terminalContent,
+                  "log",
+                  "text/plain",
+                );
+              }
+            }}
+          >
+            <Download className="size-4" />
+            <span>
+              {pendingDownload === "logs" ? "Loading logs…" : "Download logs"}
+            </span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={
+              !run.endedAt ||
+              !historyLoaded ||
+              Boolean(error) ||
+              Boolean(pendingDownload)
+            }
+            title={
+              readableContent
+                ? "Download the retained native trajectory as JSON"
+                : "Available when native history has been collected after the run ends; load the full recording if only its end is shown"
+            }
+            onClick={() => {
+              if (readableContent)
+                downloadRunOutput(
+                  run.taskId,
+                  readableContent,
+                  "json",
+                  "application/json",
+                );
+              else if (requestTail) {
+                setPendingDownload("trajectory");
+                setHistoryLoaded(false);
+                setFullRecording(true);
+              } else
+                toast.info(
+                  "No native trajectory was recorded for this run. Its retained terminal output is available in Download logs.",
+                );
+            }}
+          >
+            <Download className="size-4" />
+            <span>
+              {pendingDownload === "trajectory"
+                ? "Loading trajectory…"
+                : "Download trajectory"}
+            </span>
+          </Button>
+        </div>
+      }
       content={terminalContent}
       contentRenderer={(output) => (
         <TerminalRecording
@@ -268,4 +388,21 @@ function RetainedTranscriptStatus({
       </span>
     </div>
   );
+}
+
+/** Export recorded bytes without copying the rendered terminal's viewport. */
+function downloadRunOutput(
+  taskId: string,
+  content: string,
+  extension: string,
+  type: string,
+) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `agent-run-${taskId}.${extension}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }

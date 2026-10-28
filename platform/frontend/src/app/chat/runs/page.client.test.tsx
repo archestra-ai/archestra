@@ -336,6 +336,24 @@ describe("AgentRunChatSession", () => {
     expect(screen.getByText("Retained run output")).toBeInTheDocument();
   });
 
+  it("connects a service-account manager while keeping run mutations owner-only", async () => {
+    queryState.value.data = run({
+      viewerRole: "shared",
+      canAttach: true,
+      actorKind: "serviceAccount",
+      actorUserId: null,
+    });
+    render(<AgentRunChatSession taskId="task-1" />);
+    expect(screen.getByText("Live terminal task-1")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "More run actions" }));
+    expect(screen.queryByRole("menuitem", { name: "Share" })).toBeNull();
+    await user.click(screen.getByRole("menuitem", { name: "Run history" }));
+    expect(screen.getByText("Retained run output")).toBeVisible();
+    expect(screen.queryByText("Read-only terminal")).toBeNull();
+  });
+
   it("gives a shared viewer read-only output without owner controls on a live run", () => {
     queryState.value.data = run({
       state: "TASK_STATE_WORKING",

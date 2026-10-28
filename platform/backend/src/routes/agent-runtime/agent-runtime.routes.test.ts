@@ -2457,6 +2457,85 @@ describe("Agent Runtime routes", () => {
       "retained transcript",
     );
   });
+  test("names service-account runs and exposes terminal access only to their account managers", async ({
+    makeServiceAccount,
+    makeCustomRole,
+  }) => {
+    const account = await makeServiceAccount(organizationId, {
+      name: "Build automation",
+    });
+    const task = await A2ATaskModel.create({
+      contextId: (
+        await A2AContextModel.create({
+          actorKind: "serviceAccount",
+          actorId: account.id,
+        })
+      ).id,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    await AgentRunModel.create({
+      organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "serviceAccount",
+      actorId: account.id,
+      actorUserId: null,
+      workloadName: `agent-run-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+    });
+    const role = await makeCustomRole(organizationId, { permission: {} });
+    await MemberModel.updateRole(user.id, organizationId, role.role);
+    const agentKey = {
+      organizationId,
+      resource: "agent" as const,
+      scope: agent.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(agentKey);
+    await ResourcePermissionPolicyModel.replace({
+      ...agentKey,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "user", id: user.id }, actions: ["read", "use"] },
+      ],
+    });
+    const list = () => app.inject({ url: `/api/agents/${agent.id}/runs` });
+    const before = await list();
+    expect(before.statusCode, before.body).toBe(200);
+    expect(before.json()[0]).toMatchObject({
+      initiatorName: "Build automation",
+      canAttach: false,
+    });
+    expect(
+      (await app.inject({ url: `/api/agent-runs/${task.id}` })).statusCode,
+    ).toBe(404);
+    await ResourcePermissionPolicyModel.replace({
+      organizationId,
+      resource: "serviceAccount",
+      scope: account.id,
+      revision: 0,
+      grants: [{ subject: { type: "user", id: user.id }, actions: ["update"] }],
+    });
+    expect((await list()).json()[0]).toMatchObject({ canAttach: true });
+    const detail = await app.inject({ url: `/api/agent-runs/${task.id}` });
+    expect(detail.statusCode, detail.body).toBe(200);
+    expect(detail.json()).toMatchObject({
+      canAttach: true,
+      viewerRole: "shared",
+    });
+    // Terminal access does not confer ownership or workspace mutation.
+    expect(
+      (
+        await app.inject({
+          method: "PATCH",
+          url: `/api/agent-runs/${task.id}`,
+          payload: { title: "changed" },
+        })
+      ).statusCode,
+    ).toBe(404);
+  });
+
   async function createTask(agentId: string, stateChangedAt?: Date) {
     const context = await A2AContextModel.create({
       actorKind: "user",

@@ -6,7 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentRun } from "@/lib/agent-runtime.query";
 
 const socket = vi.hoisted(() => {
@@ -33,7 +33,10 @@ vi.mock("@/components/terminal-playback", () => ({
   },
 }));
 
+import { toast } from "sonner";
 import { AgentRunLogs } from "./agent-run-logs";
+
+vi.mock("sonner");
 
 describe("AgentRunLogs", () => {
   beforeEach(() => {
@@ -42,6 +45,192 @@ describe("AgentRunLogs", () => {
     socket.send.mockClear();
     socket.subscribe.mockClear();
     playbackContents.length = 0;
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("downloads complete recorded logs and native trajectory bytes rather than the terminal viewport", async () => {
+    const blobs: Blob[] = [];
+    const create = vi.fn((blob: Blob) => {
+      blobs.push(blob);
+      return "blob:run-output";
+    });
+    vi.stubGlobal("URL", { createObjectURL: create, revokeObjectURL: vi.fn() });
+    const clicked: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      clicked.push(this.download);
+    });
+    render(<AgentRunLogs run={completedRun} />);
+    expect(
+      screen.getByRole("button", { name: "Download trajectory" }),
+    ).toBeDisabled();
+    const trajectory = JSON.stringify({
+      version: 1,
+      provider: "claude-code",
+      entries: [{ type: "message", role: "assistant", text: "Done" }],
+    });
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "task-1", logs: "first line\nlast line\n" },
+    });
+    emit({
+      type: "agent_run_logs",
+      payload: {
+        runId: "unrelated",
+        channel: "readable",
+        logs: "must not export",
+      },
+    });
+    emit({
+      type: "agent_run_logs",
+      payload: {
+        runId: "task-1",
+        channel: "readable",
+        logs: trajectory.slice(0, 25),
+      },
+    });
+    emit({
+      type: "agent_run_logs",
+      payload: {
+        runId: "task-1",
+        channel: "readable",
+        logs: trajectory.slice(25),
+      },
+    });
+    emit({
+      type: "agent_run_logs_ended",
+      payload: { runId: "task-1", source: "full", truncated: false },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Download logs" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Download trajectory" }),
+    );
+    expect(clicked).toEqual(["agent-run-task-1.log", "agent-run-task-1.json"]);
+    expect(await readBlob(blobs[0])).toBe("first line\nlast line\n");
+    expect(await readBlob(blobs[1])).toBe(trajectory);
+    expect(blobs.map((blob) => blob.type)).toEqual([
+      "text/plain",
+      "application/json",
+    ]);
+  });
+
+  it("loads omitted output before downloading logs", async () => {
+    const blobs: Blob[] = [];
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn((blob: Blob) => {
+        blobs.push(blob);
+        return "blob:full";
+      }),
+      revokeObjectURL: vi.fn(),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    render(<AgentRunLogs run={completedRun} />);
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "task-1", logs: "tail" },
+    });
+    emit({
+      type: "agent_run_logs_ended",
+      payload: {
+        runId: "task-1",
+        source: "full",
+        omittedBytes: 100,
+        truncated: false,
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Download logs" }));
+    expect(blobs).toHaveLength(0);
+    expect(socket.send).toHaveBeenLastCalledWith({
+      type: "subscribe_agent_run_logs",
+      payload: { runId: "task-1" },
+    });
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "task-1", logs: "entire recording" },
+    });
+    emit({
+      type: "agent_run_logs_ended",
+      payload: { runId: "task-1", source: "full", truncated: false },
+    });
+    await waitFor(() => expect(blobs).toHaveLength(1));
+    expect(await readBlob(blobs[0])).toBe("entire recording");
+  });
+
+  it("fetches native history on demand even when the initial terminal tail omits no bytes", async () => {
+    const blobs: Blob[] = [];
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn((blob: Blob) => {
+        blobs.push(blob);
+        return "blob:trajectory";
+      }),
+      revokeObjectURL: vi.fn(),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    render(<AgentRunLogs run={completedRun} />);
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "task-1", logs: "output" },
+    });
+    emit({
+      type: "agent_run_logs_ended",
+      payload: { runId: "task-1", source: "full", omittedBytes: 0 },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Download trajectory" }),
+    );
+    expect(blobs).toHaveLength(0);
+    expect(socket.send).toHaveBeenLastCalledWith({
+      type: "subscribe_agent_run_logs",
+      payload: { runId: "task-1" },
+    });
+    const native = JSON.stringify({
+      version: 1,
+      provider: "claude-code",
+      entries: [],
+    });
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "task-1", channel: "readable", logs: native },
+    });
+    emit({
+      type: "agent_run_logs_ended",
+      payload: { runId: "task-1", source: "full" },
+    });
+    await waitFor(() => expect(blobs).toHaveLength(1));
+    expect(await readBlob(blobs[0])).toBe(native);
+  });
+
+  it("explains absent native history without downloading an empty trajectory", async () => {
+    const create = vi.fn();
+    vi.stubGlobal("URL", { createObjectURL: create, revokeObjectURL: vi.fn() });
+    render(<AgentRunLogs run={completedRun} />);
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "task-1", logs: "retained output" },
+    });
+    emit({
+      type: "agent_run_logs_ended",
+      payload: { runId: "task-1", source: "full" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Download trajectory" }),
+    );
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "task-1", logs: "retained output" },
+    });
+    emit({
+      type: "agent_run_logs_ended",
+      payload: { runId: "task-1", source: "full" },
+    });
+    await waitFor(() =>
+      expect(toast.info).toHaveBeenCalledWith(
+        expect.stringContaining("No native trajectory was recorded"),
+      ),
+    );
+    expect(create).not.toHaveBeenCalled();
   });
 
   it("shows an ended run as loading, then renders its whole history once", () => {
@@ -337,3 +526,12 @@ const completedRun = {
   taskId: "task-1",
   endedAt: new Date().toISOString(),
 } as AgentRun;
+
+function readBlob(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
+}

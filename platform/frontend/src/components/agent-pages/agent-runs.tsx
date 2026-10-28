@@ -2,6 +2,7 @@
 
 import { formatDistance, formatDistanceToNow } from "date-fns";
 import {
+  History,
   Info,
   Maximize2,
   MoreHorizontal,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { AgentRunId } from "@/components/agent-run-id";
 import { AgentRunLiveness } from "@/components/agent-run-liveness";
 import { AgentRunLogs } from "@/components/agent-run-logs";
 import { AgentRunState } from "@/components/agent-run-state";
@@ -68,7 +70,7 @@ export function AgentRuns({ agentId }: { agentId: string }) {
     const names = new Map<string, string>();
     for (const run of runs) {
       const key = starterKey(run);
-      if (key !== userId && !names.has(key)) {
+      if (run.actorUserId !== userId && !names.has(key)) {
         names.set(key, initiatorLabel(run));
       }
     }
@@ -78,7 +80,7 @@ export function AgentRuns({ agentId }: { agentId: string }) {
   const visibleRuns = runs.filter(
     (run) =>
       (starter === ANYONE ||
-        starterKey(run) === (starter === ME ? userId : starter)) &&
+        starterKey(run) === (starter === ME ? `user:${userId}` : starter)) &&
       (!query ||
         run.title.toLowerCase().includes(query) ||
         run.taskId.startsWith(query) ||
@@ -203,7 +205,7 @@ export function AgentRuns({ agentId }: { agentId: string }) {
                     </span>
                     <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-normal text-muted-foreground">
                       <span className="min-w-0 truncate">
-                        {starterKey(run) === userId
+                        {run.actorUserId === userId
                           ? "You"
                           : initiatorLabel(run)}
                       </span>
@@ -226,7 +228,10 @@ export function AgentRuns({ agentId }: { agentId: string }) {
         <RunDetails
           key={selected.taskId}
           run={selected}
-          canAttach={selected.actorUserId === session?.user.id}
+          canAttach={
+            selected.canAttach ?? selected.actorUserId === session?.user.id
+          }
+          isOwner={selected.actorUserId === session?.user.id}
           onClosed={() => void refetch()}
         />
       )}
@@ -237,20 +242,23 @@ export function AgentRuns({ agentId }: { agentId: string }) {
 function RunDetails({
   run,
   canAttach,
+  isOwner,
   onClosed,
 }: {
   run: AgentRunListItem;
   canAttach: boolean;
+  isOwner: boolean;
   onClosed: () => void;
 }) {
   const active = !run.endedAt;
+  const [showHistory, setShowHistory] = useState(false);
   const now = useRuntimeClock(true);
   const [permissionsOpen, setPermissionsOpen] = useState(false);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
   const cancelRun = useCancelAgentRun();
   const capabilities = useScopedCapabilities();
   const canManageAccess =
-    canAttach ||
+    isOwner ||
     capabilities.data?.some(
       (grant) =>
         grant.resource === "agentRun" &&
@@ -292,8 +300,9 @@ function RunDetails({
               })}
             </time>
             <span className="min-w-0 break-words">
-              by {canAttach ? "you" : initiatorLabel(run)}
+              by {isOwner ? "you" : initiatorLabel(run)}
             </span>
+            <AgentRunId taskId={run.taskId} />
             {run.projectId && (
               <>
                 <span aria-hidden>·</span>
@@ -314,8 +323,9 @@ function RunDetails({
               <TooltipContent className="max-w-xs">
                 <p>
                   The run owner and Agent administrators can read output.
-                  Sharing grants others read-only access. Only the run owner can
-                  use the live terminal.
+                  Sharing grants others read-only access. Run owners can use the
+                  live terminal. Managers of a service account with Agent use
+                  access can also connect to its runs.
                 </p>
                 {run.projectId && (
                   <p className="mt-1">
@@ -342,6 +352,16 @@ function RunDetails({
             <TooltipContent>Open full view</TooltipContent>
           </Tooltip>
           {active && canAttach && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowHistory(!showHistory)}
+            >
+              <History className="size-4" />
+              <span>{showHistory ? "Live terminal" : "Run history"}</span>
+            </Button>
+          )}
+          {active && isOwner && (
             <Button
               type="button"
               variant="outline"
@@ -377,7 +397,7 @@ function RunDetails({
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
         {active && <AgentRunLiveness run={run} />}
-        {active && canAttach ? (
+        {active && canAttach && !showHistory ? (
           <AgentRunTerminal
             taskId={run.taskId}
             active
@@ -417,13 +437,14 @@ function RunDetails({
 const ANYONE = "__anyone";
 const ME = "__me";
 
-/** Groups runs by who started them: the user, else the kind of actor. */
+/** Keep each actor distinct, including separate service accounts. */
 function starterKey(run: AgentRunListItem): string {
-  return run.actorUserId ?? `kind:${run.actorKind}`;
+  return `${run.actorKind}:${run.actorId}`;
 }
 
 function initiatorLabel(run: AgentRunListItem): string {
   if (run.initiatorName) return run.initiatorName;
+  if (run.actorKind === "serviceAccount") return "a service account";
   if (run.actorKind === "organization") return "the organization";
   if (run.actorKind === "team") return "a team";
   if (run.actorKind === "system") return "automation";

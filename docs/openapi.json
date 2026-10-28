@@ -92608,6 +92608,9 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "canAttach": {
+                        "type": "boolean"
+                      },
                       "shareVisibility": {
                         "anyOf": [
                           {
@@ -94182,6 +94185,9 @@
                         "owner",
                         "shared"
                       ]
+                    },
+                    "canAttach": {
+                      "type": "boolean"
                     },
                     "startupProgress": {
                       "nullable": true,
@@ -499842,6 +499848,9 @@
                           "owner",
                           "shared"
                         ]
+                      },
+                      "canAttach": {
+                        "type": "boolean"
                       },
                       "startupProgress": {
                         "nullable": true,

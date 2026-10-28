@@ -272,7 +272,7 @@ function ScoreAction({ offer }: { offer: ScoreOffer }) {
     offer: ScoreOffer;
     maxCostUsd: number;
   } | null>(null);
-  const [ceiling, setCeiling] = useState(String(offer.suggestedMaxCostUsd));
+  const [ceiling, setCeiling] = useState(offer.suggestedMaxCostUsd.toFixed(2));
   const score = useScoreAutoRoutingBackfill();
   const maxCostUsd = Number(ceiling);
   const ceilingError =

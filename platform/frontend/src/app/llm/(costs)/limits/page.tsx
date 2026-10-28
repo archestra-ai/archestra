@@ -1096,13 +1096,10 @@ export default function LimitsPage() {
             <InlineNotice variant="warning">
               <Info aria-hidden="true" />
               <InlineNoticeText>
-                Requests are blocked when any applicable hard limit is reached.
-                For example, a virtual key with remaining allowance is still
-                blocked if its team or organization has reached a hard limit.
-                <br />
-                <br />
-                Soft limits keep requests flowing and record exceeded limits in
-                metrics.
+                Requests are blocked when any applicable hard limit is reached;
+                soft limits only record metrics. A key with allowance remaining
+                is still blocked if its team or organization reaches a hard
+                limit.
               </InlineNoticeText>
             </InlineNotice>
 
@@ -1118,14 +1115,12 @@ export default function LimitsPage() {
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <div className="flex h-5 items-center gap-1.5">
-                  <Label>Apply to</Label>
-                  {editingLimit && (
-                    <LimitFieldHelp label="Apply to help">
-                      Create a new limit to change who it applies to.
-                    </LimitFieldHelp>
-                  )}
-                </div>
+                <Label>Apply to</Label>
+                {editingLimit && (
+                  <FieldDescription>
+                    Create a new limit to change who it applies to.
+                  </FieldDescription>
+                )}
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <SearchableSelect
                     value={formState.entityType}
@@ -1322,15 +1317,9 @@ export default function LimitsPage() {
             <div className="space-y-4 border-t pt-4">
               <div className="grid items-start gap-4 sm:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1.4fr)]">
                 <div className="flex flex-col gap-2">
-                  <div className="flex h-5 items-center gap-1.5">
-                    <Label htmlFor="limit-kind">Limit kind</Label>
-                    {editingLimit && (
-                      <LimitFieldHelp label="Limit kind help">
-                        Create a new limit to change between spend, tokens and
-                        requests.
-                      </LimitFieldHelp>
-                    )}
-                  </div>
+                  <Label className="h-5" htmlFor="limit-kind">
+                    Limit kind
+                  </Label>
                   <Select
                     value={formState.limitType}
                     disabled={Boolean(editingLimit)}
@@ -1411,9 +1400,11 @@ export default function LimitsPage() {
                   ) : null}
                 </div>
 
-                <div className="grid grid-cols-[auto_1fr] grid-rows-[1.25rem_auto] content-start items-center gap-x-1.5 gap-y-2">
-                  <Label htmlFor="limit-interval">Interval</Label>
-                  <div className="col-span-2 row-start-2">
+                <div className="flex flex-col gap-2">
+                  <Label className="h-5" htmlFor="limit-interval">
+                    Interval
+                  </Label>
+                  <div>
                     <LimitCleanupIntervalSelect
                       id="limit-interval"
                       ariaLabel="Interval"
@@ -1440,16 +1431,19 @@ export default function LimitsPage() {
                       }
                     />
                   </div>
-                  <LimitFieldHelp
-                    label="Interval help"
-                    className="col-start-2 row-start-1 justify-self-start"
-                  >
-                    Per-minute allowance recovers continuously. Rolling
-                    intervals reset after elapsed time; calendar intervals reset
-                    at the next day, week or month boundary.
-                  </LimitFieldHelp>
                 </div>
               </div>
+              {editingLimit && (
+                <FieldDescription>
+                  Create a new limit to change between spend, tokens and
+                  requests.
+                </FieldDescription>
+              )}
+              <FieldDescription>
+                Per-minute allowance recovers continuously. Rolling intervals
+                reset after elapsed time; calendar intervals reset at the next
+                day, week or month boundary.
+              </FieldDescription>
               {!(
                 formState.limitType === "token_cost" &&
                 formState.cleanupInterval !== "minute"
@@ -1466,23 +1460,20 @@ export default function LimitsPage() {
                   </InlineNotice>
                 )}
               {formState.limitType === "tokens" && (
-                <p className="text-sm text-muted-foreground">
+                <FieldDescription>
                   Counts token usage reported by the provider. Requests in
                   flight can exceed this limit.
-                </p>
+                </FieldDescription>
               )}
             </div>
 
             <AdvancedSection keepMounted>
               <div className="space-y-2">
                 <Label htmlFor="limit-behavior">Behavior</Label>
-                <p
-                  id="limit-behavior-description"
-                  className="text-sm text-muted-foreground"
-                >
+                <FieldDescription id="limit-behavior-description">
                   Choose whether reaching this limit blocks requests or only
                   records metrics.
-                </p>
+                </FieldDescription>
                 <Select
                   value={formState.behavior}
                   onValueChange={(value) =>
@@ -2005,36 +1996,4 @@ function getLimitInterval(limit: LimitData): LimitCleanupInterval {
     return "minute";
   }
   return limit.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL;
-}
-
-function LimitFieldHelp({
-  label,
-  children,
-  className,
-}: {
-  label: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          className={cn(
-            "text-muted-foreground hover:text-foreground",
-            className,
-          )}
-          aria-label={label}
-        >
-          <Info aria-hidden="true" className="h-3.5 w-3.5" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent align="start" className="max-w-60 text-wrap">
-        {children}
-      </TooltipContent>
-    </Tooltip>
-  );
 }

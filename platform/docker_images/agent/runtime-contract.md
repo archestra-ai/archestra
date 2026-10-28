@@ -75,6 +75,8 @@ In the default TUI mode, the maintained images wait for their native client's ga
 
 The real-client tests in `docker_images/agent/tests/mcp-startup.py` run during image builds. They hold discovery behind a barrier, execute all three OpenAPPA recovery tools, resume a saved conversation, and check discovery errors and timeouts. The MCP and model endpoints are synthetic; the pinned clients, wrappers, tmux sessions, and tool execution paths are real.
 
+Copilot CLI uses prompt-mode JSON events with a terminal input loop for interactive runs. Its pipe steering applies after the current prompt completes. The inference relay refuses model requests until the CLI reports a non-empty gateway catalog, and fails discovery after thirty seconds. `tests/copilot.py` exercises this path with the real pinned executable. It preserves native sessions and exports a readable transcript; native background work is outside this wrapper's completion contract.
+
 ## Readable Transcript
 
 The maintained Archestra Agent, Claude Code, Codex, OpenCode, Hermes, OpenClaw, Grok Build, and Kimi Code images export their native message and tool history as a readable transcript. A custom image can provide the same completed-run experience by writing `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json` (normally `/var/run/archestra/readable-transcript.json`) before its process exits.

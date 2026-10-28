@@ -13,6 +13,7 @@ non-root working directory and the invoking user's Agent-scoped MCP gateway endp
 | `agent-openclaw` | `archestra-openclaw` | OpenAI Chat Completions or OpenAI Responses |
 | `agent-grok` | `archestra-grok` | OpenAI Chat Completions |
 | `agent-kimi` | `archestra-kimi` | OpenAI Chat Completions |
+| `agent-copilot` | `archestra-copilot` | OpenAI Chat Completions |
 
 All targets inherit the same tools from `agent-base`:
 
@@ -76,7 +77,7 @@ docker build -f docker_images/agent/Dockerfile --target agent-codex -t agent-cod
 ```
 
 Tilt pulls the public GAR images by default. Set
-`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG=dev` to build all seven targets locally and
+`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG=dev` to build all eight targets locally and
 use them for Agent Runtime workspaces.
 
 The native wrappers create client configuration at run time under `/var/run/archestra`. Credentials are never baked into images. On the provider path, the runtime receives a temporary virtual key and routes inference through the Agent-scoped LLM proxy. The upstream provider credential stays in the backend.
@@ -89,7 +90,7 @@ Delegated Claude Code assignments stay open until registered background work fin
 
 Maintained clients send `ARCHESTRA_AGENT_RUNTIME_TASK_ID` as `X-Archestra-Run-Id` to label one turn. They send `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` as both `X-Archestra-Session-Id` and `X-Appa-Session-ID` to keep the conversation together across turns and follow-ups. New wrappers must use the same stable session ID on proxy and MCP gateway requests; see the [runtime image contract](runtime-contract.md#runtime-environment).
 
-All seven targets also export their native message and tool history to
+All eight targets also export their native message and tool history to
 `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json`. The control plane
 validates and persists this provider-neutral artifact independently of the
 terminal recording. Custom images can opt into the same completed-run view by
@@ -200,7 +201,51 @@ Kimi Code differs from the other clients in these ways:
 - Telemetry, auto-update, the feedback survey and session titles are off. The binding header reaches the proxy through
   `KIMI_CODE_CUSTOM_HEADERS`, never through a file.
 
-The seven public catalog targets are built for development deployments and
+## GitHub Copilot CLI
+
+Select **GitHub Copilot CLI** in the Agent catalog and choose a streaming,
+tool-capable model under **Model Providers**. The CLI uses BYOK mode with the
+Agent's temporary virtual key; inference goes through the LLM proxy and remote
+tools go through the caller-scoped MCP gateway. Existing GitHub Copilot provider
+connections remain subject to their existing personal-account access rules.
+Other configured providers use their normal credentials and billing. The image
+does not start GitHub sign-in or consume a separate CLI subscription token.
+
+The wrapper runs the unmodified CLI in prompt mode and translates its JSON
+events into terminal output and a readable transcript. In interactive runs,
+enter a follow-up at the prompt, or `/exit` to leave. This terminal is a prompt
+loop, rather than Copilot's full-screen TUI. Pipe steering queues messages until
+the current prompt completes. Saved follow-ups resume an explicit native
+session; missing native state fails without starting a replacement session.
+
+The CLI otherwise continues without gateway tools after discovery errors. A
+loopback inference relay waits for the native client's completed gateway catalog
+before forwarding any model request; a missing, empty, failed, or timed-out
+catalog fails the run. The relay preserves run/session identity and runtime
+binding headers. Copilot's automatic updates, telemetry, built-in MCP servers,
+and GitHub-hosted remote control/export are disabled. Repository configuration
+is not automatically trusted. Local tools receive the same unattended execution
+permission as the other maintained images; gateway policy and review gates
+remain authoritative for remote tools. Detached work is outside the assignment
+completion contract.
+
+The native Linux packages, `@github/copilot-linux-{x64,arm64}`, are pinned in
+the Dockerfile with SHA-512 verification. The complete
+unmodified package, including `LICENSE.md` and vendor notices, stays under
+`/opt/copilot`. GitHub permits redistribution of unmodified copies as part of
+an independently licensed application with material additional functionality;
+see the [CLI license](https://github.com/github/copilot-cli/blob/main/LICENSE.md).
+BYOK configuration and noninteractive operation are described in
+[GitHub's documentation](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/use-byok-models)
+and the pinned executable's `help providers` and `--help` output.
+
+`tests/copilot.py` runs the real CLI with synthetic streaming model and MCP
+servers, including a discovery barrier, all three recovery tools, signed call
+IDs, saved-session resume, and discovery failure/timeout cases. It runs without
+external network access in both native architecture image builds. Authenticated
+provider and Kubernetes end-to-end validation are separate deployment checks.
+
+The eight public catalog targets are built for development deployments and
 releases. Keep native CLI versions exact and review their published package
 scripts before updating them.
 

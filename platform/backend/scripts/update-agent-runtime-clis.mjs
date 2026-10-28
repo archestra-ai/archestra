@@ -201,6 +201,26 @@ const AGENT_RUNTIME_CLIS = [
     },
   },
   {
+    target: "agent-copilot",
+    label: "GitHub Copilot CLI",
+    resolve: () => resolveNpm({ name: "@github/copilot", channel: "latest" }),
+    read: (files) => readSingleVersion(files.dockerfile, [
+      /@github\/copilot-linux-\$\{copilot_arch\}@(\d+\.\d+\.\d+)\b/g,
+    ]),
+    write: async (files, version) => {
+      let dockerfile = replaceVersion(files.dockerfile, [
+        /(@github\/copilot-linux-\$\{copilot_arch\}@)\d+\.\d+\.\d+\b/g,
+      ], version);
+      for (const [dockerArch, copilotArch] of GROK_ARCHES) {
+        const checksum = await npmTarballSha512(`@github/copilot-linux-${copilotArch}`, version);
+        dockerfile = replaceExactlyOnce(dockerfile,
+          new RegExp(`(${dockerArch}\\) copilot_arch=${copilotArch}; copilot_checksum=)[0-9a-f]{128}`, "g"),
+          `$1${checksum}`);
+      }
+      files.dockerfile = dockerfile;
+    },
+  },
+  {
     target: "agent-kimi",
     label: "Kimi Code",
     resolve: () =>

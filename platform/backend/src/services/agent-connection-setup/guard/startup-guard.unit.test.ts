@@ -478,18 +478,18 @@ describe("renderStartupGuardScript", () => {
     );
   });
 
-  test("encodes the retry contract on the single request: 15s budget, notice at 3s, hang-tight at 10s, own-line (Y/n) offer", () => {
+  test("encodes the retry contract on the single request: 15s budget, notice at 3s, hang-tight at 10s, own-line session skip offer", () => {
     const script = renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT);
     expect(script).toContain("RETRY_TOTAL_SECONDS=15");
     expect(script).toContain("NOTICE_AFTER_SECONDS=3");
     expect(script).toContain("HANG_TIGHT_AFTER_SECONDS=10");
     expect(script).toContain("few more seconds, hang tight...");
     expect(script).toContain("trying to connect...");
-    // the disconnect offer sits two lines below the block — the persistent
-    // [C] hint takes +1, this (Y/n) offer +2 — so both stay visible, drawn
+    // the session-only skip offer sits two lines below the block — the persistent
+    // [C] hint takes +1, this skip offer +2 — so both stay visible, drawn
     // via cursor save/restore so the dots keep appending to the row above
     expect(script).toContain(
-      "Disconnect all $ACTIVE_TOTAL unreachable resources from Claude now? (Y/n)",
+      "Instance unreachable. Press [Enter] to skip checks for this session; connections stay configured.",
     );
     expect(script).toContain(
       "printf '\\033[s\\033[%dB\\r\\033[2K%s \\033[u' \"$((ACTIVE_TOTAL + 2))\"",
@@ -802,11 +802,11 @@ describe("renderStartupGuardScript", () => {
     }
   });
 
-  test("interactive, platform unreachable, y during the wait: disconnects EVERYTHING and removes the guard itself", async () => {
+  test("interactive, platform unreachable, explicit menu removal disconnects everything and removes the guard", async () => {
     const { output, guardHome } = await runGuardInteractive({
       script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 7,
-      keys: "y",
+      keys: "c123",
     });
     // every remote's connect step is reversed…
     const log = await readClaudeLog(guardHome);

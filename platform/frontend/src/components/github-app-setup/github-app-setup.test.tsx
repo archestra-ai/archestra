@@ -9,6 +9,7 @@ import {
 import { GithubAppChoice } from "./github-app-choice";
 import { GithubAppPicker } from "./github-app-picker";
 import { ManifestRow } from "./manifest-row";
+import { shortGithubAppError } from "./short-error";
 
 afterEach(() => {
   cleanup();
@@ -225,7 +226,10 @@ describe("ManifestRow", () => {
     expect(
       screen.getByText("Finish in the GitHub tab that opened."),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Create App" })).toBeNull();
+    // The action keeps its place while waiting, but can't be used.
+    expect(
+      screen.getByRole("button", { name: "Create App" }).closest("[inert]"),
+    ).not.toBeNull();
     await user.click(screen.getByRole("button", { name: "Done? Check again" }));
     expect(onCheckAgain).toHaveBeenCalledOnce();
   });
@@ -241,9 +245,16 @@ describe("ManifestRow", () => {
         />
       </ol>,
     );
-    expect(
-      screen.getByText("GitHub didn't return the new App."),
-    ).toBeInTheDocument();
+    // The error lies over the hint, which keeps its lines, so the row
+    // keeps its height.
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "GitHub didn't return the new App.",
+    );
+    expect(screen.getByRole("alert")).toHaveAttribute(
+      "title",
+      "GitHub didn't return the new App.",
+    );
+    expect(screen.getByText(base.hint)).toHaveAttribute("aria-hidden", "true");
     expect(screen.getByRole("button", { name: "Check again" })).toBeVisible();
 
     rerender(
@@ -281,5 +292,31 @@ describe("AccessSummary", () => {
     expect(screen.getByText("Contents")).toBeInTheDocument();
     expect(screen.getByText("Pull requests")).toBeInTheDocument();
     expect(screen.getAllByText("Read & write")).toHaveLength(2);
+  });
+});
+
+describe("shortGithubAppError", () => {
+  it("puts each setup error in one short line, and keeps unknown ones", () => {
+    expect(
+      shortGithubAppError(
+        "GitHub Copilot needs an organization on Copilot Business or Enterprise.",
+      ),
+    ).toBe("That's a personal account. Use an organization.");
+    expect(shortGithubAppError("GitHub has no account named nope.")).toBe(
+      "No such organization on this GitHub.",
+    );
+    expect(
+      shortGithubAppError(
+        "GitHub doesn't recognize App 42 with this private key. Check the App ID and download a current private key from the App settings.",
+      ),
+    ).toBe("GitHub doesn't know App 42 with this key.");
+    expect(
+      shortGithubAppError(
+        "My Org Copilot isn't installed on my-org. Install it on the organization on GitHub, then try again.",
+      ),
+    ).toBe("My Org Copilot isn't installed on my-org.");
+    expect(shortGithubAppError("Something else broke.")).toBe(
+      "Something else broke.",
+    );
   });
 });

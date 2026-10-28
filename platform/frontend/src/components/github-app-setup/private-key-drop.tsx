@@ -92,17 +92,19 @@ export function PrivateKeyStatusLine({
     <p
       id={id}
       className={cn(
-        "min-h-4 text-xs",
+        // Exactly one line high, whatever it says.
+        "h-4 truncate text-xs leading-4",
         status.kind === "error" ? "text-destructive" : "text-muted-foreground",
         className,
       )}
+      title={status.kind === "error" ? status.message : undefined}
       role={status.kind === "error" ? "alert" : undefined}
     >
       {status.kind === "checking" ? <span>Checking the key...</span> : null}
       {status.kind === "fingerprint" ? (
         <span>
           <span>Key fingerprint: </span>
-          <code className="break-all">{status.fingerprint}</code>
+          <code className="leading-4">{status.fingerprint}</code>
         </span>
       ) : null}
       {status.kind === "error" ? <span>{status.message}</span> : null}

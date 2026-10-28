@@ -23,6 +23,7 @@ import {
 } from "@/components/github-app-setup/github-app-window";
 import { ManifestRow } from "@/components/github-app-setup/manifest-row";
 import type { PrivateKeyStatus } from "@/components/github-app-setup/private-key-drop";
+import { shortGithubAppError } from "@/components/github-app-setup/short-error";
 import { GitHubConnectButton } from "@/components/github-connect-button";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { StandardDialog } from "@/components/standard-dialog";
@@ -314,12 +315,57 @@ export function CopilotOrganizationConnectDialog({
     : { organization: account.input };
   // A new key is created with the name from the Organization step.
   const connectTarget = replaceKeyId ? keyTarget : { ...keyTarget, name };
+  // Messages for the whole step, not one field: they sit at the bottom of
+  // the step and grow up into free space, so nothing above them moves.
+  const stepMessage =
+    step === "app" && mode === "pick" && needsPermission ? (
+      <InlineNotice variant="warning">
+        <CircleAlert aria-hidden />
+        <InlineNoticeBody>
+          <span className="font-medium">
+            {`${needsPermission.appName} can't make Copilot requests yet.`}
+          </span>
+          <InlineNoticeText>
+            {`Add Copilot Requests (Read-only) in its settings; an owner of ${needsPermission.organization} approves the change.`}
+          </InlineNoticeText>
+        </InlineNoticeBody>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <Button variant="outline" size="xs" asChild>
+            <a
+              href={needsPermission.settingsUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span>Open settings</span>
+              <ExternalLink className="size-3" />
+            </a>
+          </Button>
+          <Button
+            variant="ghost"
+            size="xs"
+            disabled={fromCredential.isPending}
+            onClick={usePicked}
+          >
+            <span>Check again</span>
+          </Button>
+        </div>
+      </InlineNotice>
+    ) : step === "app" && mode === "pick" && fromCredential.error ? (
+      <ErrorNotice
+        message={shortGithubAppError(fromCredential.error.message)}
+      />
+    ) : step === "access" && update.error ? (
+      <ErrorNotice message={update.error.message} />
+    ) : null;
   const keyStatus: PrivateKeyStatus = byKey.error
-    ? { kind: "error", message: byKey.error.message }
+    ? { kind: "error", message: shortGithubAppError(byKey.error.message) }
     : validate.isPending
       ? { kind: "checking" }
       : validate.error
-        ? { kind: "error", message: validate.error.message }
+        ? {
+            kind: "error",
+            message: shortGithubAppError(validate.error.message),
+          }
         : validate.data
           ? { kind: "fingerprint", fingerprint: validate.data.fingerprint }
           : // Before a new key is dropped: the key in use.
@@ -345,7 +391,8 @@ export function CopilotOrganizationConnectDialog({
       }
       size="medium"
       className={COPILOT_DIALOG_CLASS}
-      bodyClassName="space-y-5"
+      // A column, so the step message can sit at its bottom.
+      bodyClassName="flex flex-col gap-5"
       footer={
         <>
           {step !== "organization" ? (
@@ -446,7 +493,8 @@ export function CopilotOrganizationConnectDialog({
           organizationError={
             replaceKeyId
               ? null
-              : (account.organizationError ?? check.error?.message ?? null)
+              : (account.organizationError ??
+                (check.error ? shortGithubAppError(check.error.message) : null))
           }
         />
       ) : null}
@@ -465,6 +513,7 @@ export function CopilotOrganizationConnectDialog({
             autoComplete="off"
             data-1p-ignore
             data-lpignore="true"
+            maxLength={256}
             onChange={(event) => setNameDraft(event.target.value)}
           />
         </div>
@@ -527,42 +576,6 @@ export function CopilotOrganizationConnectDialog({
               icon: app.icon,
             }))}
           />
-          {needsPermission ? (
-            <InlineNotice variant="warning">
-              <CircleAlert aria-hidden />
-              <InlineNoticeBody>
-                <span className="font-medium">
-                  {`${needsPermission.appName} can't make Copilot requests yet.`}
-                </span>
-                <InlineNoticeText>
-                  {`Add Copilot Requests (Read-only) in its settings; an owner of ${needsPermission.organization} approves the change.`}
-                </InlineNoticeText>
-              </InlineNoticeBody>
-              <div className="ml-auto flex shrink-0 items-center gap-2">
-                <Button variant="outline" size="xs" asChild>
-                  <a
-                    href={needsPermission.settingsUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <span>Open settings</span>
-                    <ExternalLink className="size-3" />
-                  </a>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  disabled={fromCredential.isPending}
-                  onClick={usePicked}
-                >
-                  <span>Check again</span>
-                </Button>
-              </div>
-            </InlineNotice>
-          ) : null}
-          {fromCredential.error ? (
-            <ErrorNotice message={fromCredential.error.message} />
-          ) : null}
         </div>
       ) : null}
 
@@ -575,7 +588,11 @@ export function CopilotOrganizationConnectDialog({
               hint={`Owned by ${organization}. It may only make Copilot requests.`}
               inlineAction
               waiting={waiting === "create"}
-              error={start.error?.message}
+              error={
+                start.error
+                  ? shortGithubAppError(start.error.message)
+                  : undefined
+              }
               onCheckAgain={() => {
                 setWaiting(null);
                 pending.refetch();
@@ -626,7 +643,11 @@ export function CopilotOrganizationConnectDialog({
               locked={!createdApp}
               inlineAction
               waiting={waiting === "install" || install.isPending}
-              error={install.error?.message}
+              error={
+                install.error
+                  ? shortGithubAppError(install.error.message)
+                  : undefined
+              }
               onCheckAgain={checkInstall}
               result={null}
               action={
@@ -661,6 +682,7 @@ export function CopilotOrganizationConnectDialog({
       {step === "access" && replaceKeyId ? (
         <ResourceAccessSection resource="llmProviderApiKey" id={replaceKeyId} />
       ) : null}
+      {stepMessage ? <div className="mt-auto">{stepMessage}</div> : null}
     </StandardDialog>
   );
 }

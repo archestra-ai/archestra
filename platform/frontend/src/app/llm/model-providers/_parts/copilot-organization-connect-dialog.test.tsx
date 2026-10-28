@@ -180,7 +180,7 @@ describe("CopilotOrganizationConnectDialog", () => {
     expect(screen.queryByText(/Copilot requests/)).toBeNull();
   });
 
-  it("shows the backend's organization error in place of the help line", async () => {
+  it("shows the backend's organization error, shortened, in place of the help line", async () => {
     vi.mocked(useCheckCopilotGithubOrganization).mockReturnValue({
       ...mutation(),
       mutate: vi.fn(),
@@ -190,8 +190,14 @@ describe("CopilotOrganizationConnectDialog", () => {
     } as never);
     render(<CopilotOrganizationConnectDialog open onOpenChange={vi.fn()} />);
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "GitHub Copilot needs an organization on Copilot Business or Enterprise.",
+    // One short line in the help line's place; GitHub's words in its tooltip.
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent(
+      "That's a personal account. Use an organization.",
+    );
+    expect(alert).toHaveAttribute(
+      "title",
+      "That's a personal account. Use an organization.",
     );
   });
 

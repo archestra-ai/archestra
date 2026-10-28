@@ -110,7 +110,9 @@ function AccountField(props: {
       <Label htmlFor={props.id}>{props.label}</Label>
       <FieldDescription
         id={`${props.id}-help`}
-        className={cn(props.error && "text-destructive")}
+        // One line, error or not, so the two columns stay aligned.
+        className={cn("truncate", props.error && "text-destructive")}
+        title={props.error ?? undefined}
         role={props.error ? "alert" : undefined}
       >
         {props.error ?? props.help}

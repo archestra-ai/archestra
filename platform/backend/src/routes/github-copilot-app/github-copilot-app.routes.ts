@@ -1,6 +1,9 @@
 import { RouteId } from "@archestra/shared";
+import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { sanitizeAuditSnapshot } from "@/middleware/audit-log-hook";
+import { LlmProviderApiKeyModel } from "@/models";
 import { copilotGithubAppSetup } from "@/services/github-copilot-app-setup";
 import { constructResponseSchema, DeleteObjectResponseSchema } from "@/types";
 import {
@@ -129,6 +132,7 @@ const githubCopilotAppRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request, reply) => {
+      await auditKeyReconnect(request);
       const result = await copilotGithubAppSetup.install({
         organizationId: request.organizationId,
         userId: request.user.id,
@@ -156,6 +160,7 @@ const githubCopilotAppRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request, reply) => {
+      await auditKeyReconnect(request);
       const result = await copilotGithubAppSetup.connectFromCredential({
         organizationId: request.organizationId,
         userId: request.user.id,
@@ -228,6 +233,7 @@ const githubCopilotAppRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request, reply) => {
+      await auditKeyReconnect(request);
       const result = await copilotGithubAppSetup.connectByKey({
         organizationId: request.organizationId,
         userId: request.user.id,
@@ -261,3 +267,19 @@ const githubCopilotAppRoutes: FastifyPluginAsyncZod = async (app) => {
 };
 
 export default githubCopilotAppRoutes;
+
+/**
+ * Reconnecting a plan (`replaceKeyId`) updates that key: audited as an
+ * update, with the key as it was before.
+ */
+async function auditKeyReconnect(request: FastifyRequest) {
+  const { replaceKeyId } = request.body as { replaceKeyId?: string };
+  if (!replaceKeyId) return;
+  request.auditAction = "llmProviderApiKey.updated";
+  request.auditBefore = sanitizeAuditSnapshot(
+    await LlmProviderApiKeyModel.findByIdForAudit(
+      replaceKeyId,
+      request.organizationId,
+    ),
+  );
+}

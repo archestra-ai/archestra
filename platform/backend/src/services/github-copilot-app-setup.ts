@@ -9,10 +9,12 @@ import { fetchAsGithubApp } from "@/integrations/github/app-auth";
 import { parseGitHubAppSecrets } from "@/integrations/github/app-secrets";
 import logger from "@/logging";
 import {
+  AuditLogModel,
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   RuntimeCredentialConnectionModel,
   RuntimeCredentialDefinitionModel,
+  UserModel,
 } from "@/models";
 import {
   getSecretValueForLlmProviderApiKey,
@@ -20,6 +22,7 @@ import {
 } from "@/secrets-manager";
 import {
   deleteRuntimeCredentialDefinition,
+  getRuntimeCredentialConnectionAuditSnapshot,
   setRuntimeCredentialConnection,
 } from "@/services/agent-runtime/runtime-credentials";
 import {
@@ -321,12 +324,19 @@ class CopilotGithubAppSetup {
       appId: checked.appId,
       api: checked.api,
     });
-    if (known)
-      await this.replaceAppPrivateKey({
-        ...params,
-        definition: known,
-        privateKey: checked.privateKey,
-      });
+    // The key's own checks come first: a refused connect must not have
+    // touched an App credential other plans and features share.
+    await this.assertCanStore({
+      ...params,
+      organization: checked.organization,
+    });
+    const previousValue = known
+      ? await this.replaceAppPrivateKey({
+          ...params,
+          definition: known,
+          privateKey: checked.privateKey,
+        })
+      : null;
     const definition =
       known ??
       (await githubAppManifestSetup.saveCredential({
@@ -358,12 +368,24 @@ class CopilotGithubAppSetup {
         models,
       });
     } catch (error) {
-      // A credential made for this connect alone goes with it.
+      // A credential made for this connect alone goes with it; a known App
+      // gets its previous private key back.
       if (!known)
         await deleteRuntimeCredentialDefinition({
           organizationId: params.organizationId,
           key: definition.key,
         }).catch(() => undefined);
+      else if (previousValue)
+        await this.restoreAppConnection({
+          ...params,
+          definition: known,
+          value: previousValue,
+        }).catch((restoreError) =>
+          logger.error(
+            { err: restoreError, credentialId: known.id },
+            "[CopilotGithubApp] could not restore the App's previous private key",
+          ),
+        );
       throw error;
     }
   }
@@ -550,6 +572,7 @@ class CopilotGithubAppSetup {
       (await RuntimeCredentialDefinitionModel.list(params.organizationId)).find(
         (definition) =>
           definition.kind === "github_app" &&
+          definition.allowOrganization &&
           definition.appId === params.appId &&
           normalize(definition.githubUrl) === normalize(params.api),
       ) ?? null
@@ -558,7 +581,8 @@ class CopilotGithubAppSetup {
 
   /**
    * Put a new private key on a known App's credential, keeping its stored
-   * shape (a bare PEM, or the PEM with the OAuth client secret).
+   * shape (a bare PEM, or the PEM with the OAuth client secret). Audited as
+   * a credential update; returns the value it replaced.
    */
   private async replaceAppPrivateKey(
     params: Owner & {
@@ -588,19 +612,101 @@ class CopilotGithubAppSetup {
     const clientSecret = current
       ? parseGitHubAppSecrets(current).clientSecret
       : undefined;
+    await this.restoreAppConnection({
+      ...params,
+      value: clientSecret
+        ? JSON.stringify({ privateKey: params.privateKey, clientSecret })
+        : params.privateKey,
+    });
+    return current;
+  }
+
+  /** Write an App credential's connection value, audited as its update. */
+  private async restoreAppConnection(
+    params: Owner & {
+      definition: { id: string; key: string; name: string };
+      value: string;
+    },
+  ) {
+    const snapshot = () =>
+      getRuntimeCredentialConnectionAuditSnapshot({
+        organizationId: params.organizationId,
+        credentialId: params.definition.key,
+        scope: "organization",
+      });
+    const before = await snapshot();
     await setRuntimeCredentialConnection({
       organizationId: params.organizationId,
       userId: params.userId,
       credentialId: params.definition.key,
       scope: "organization",
-      value: clientSecret
-        ? JSON.stringify({ privateKey: params.privateKey, clientSecret })
-        : params.privateKey,
+      value: params.value,
     });
     forgetGithubAppReference({
       organizationId: params.organizationId,
       credentialId: params.definition.id,
     });
+    const actor = await UserModel.getById(params.userId);
+    await AuditLogModel.create({
+      organizationId: params.organizationId,
+      actorId: params.userId,
+      actorType: "user",
+      actorName: actor?.name ?? null,
+      actorEmail: actor?.email ?? null,
+      action: "credential.updated",
+      outcome: "success",
+      resourceType: "credential",
+      resourceId: params.definition.key,
+      resourceName: params.definition.name,
+      before,
+      after: await snapshot(),
+      httpMethod: "POST",
+      httpPath: "/api/github-copilot-app/existing",
+      httpRoute: "/api/github-copilot-app/existing",
+      httpStatus: null,
+      requestId: null,
+      sourceIp: null,
+      userAgent: null,
+      occurredAt: new Date(),
+    }).catch((err) =>
+      logger.error(
+        { err },
+        "audit: failed to record the App credential update",
+      ),
+    );
+  }
+
+  /**
+   * The checks storing the plan key will make, run before anything else is
+   * written: the user may update the key being reconnected, or grant the new
+   * key's initial access.
+   */
+  private async assertCanStore(
+    params: Owner & {
+      organization: string;
+      replaceKeyId?: string;
+      grants?: ResourcePermissionGrant[];
+      name?: string;
+    },
+  ) {
+    if (params.replaceKeyId) {
+      await this.ownKey({ ...params, keyId: params.replaceKeyId }, "update");
+      return;
+    }
+    const grants = params.grants ?? EVERYONE_IN_ORGANIZATION;
+    if (grants.length)
+      await ResourcePermissions.validateInitialGrants({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        resource: "llmProviderApiKey",
+        grants,
+        target: {
+          id: randomUUID(),
+          name:
+            params.name?.trim() || `GitHub Copilot (${params.organization})`,
+          authorId: null,
+        },
+      });
   }
 
   /** An organization's GitHub Copilot key the user may act on. */

@@ -110,7 +110,7 @@ async function recordResponseAudit(
   if (cfg?.onlyWhenChanged && (outcome !== "success" || request.auditSkip)) {
     return;
   }
-  const action = resolveActionName(cfg, request.method);
+  const action = request.auditAction ?? resolveActionName(cfg, request.method);
 
   const id =
     (cfg ? await getAuditedResourceId(request, cfg) : null) ??

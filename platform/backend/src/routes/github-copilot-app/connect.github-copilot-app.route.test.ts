@@ -21,6 +21,7 @@ import {
 import { createGithubCopilotFetch } from "@/services/github-copilot-token";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
+import type { AuditEventName } from "@/types/audit-log";
 
 const { privateKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
@@ -1005,6 +1006,110 @@ describe("GitHub Copilot organization subscription setup", () => {
       organization: "my-org",
     });
     expect(response.statusCode).toBe(403);
+  });
+
+  async function auditRows(resourceId: string, action: AuditEventName) {
+    return db
+      .select()
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.organizationId, organizationId),
+          eq(schema.auditLogsTable.resourceId, resourceId),
+          eq(schema.auditLogsTable.action, action),
+        ),
+      );
+  }
+
+  test("audits a reconnect as an update of the key, and a rewritten App key as a credential update", async () => {
+    vi.stubGlobal("fetch", githubFake({ appId }));
+    const first = await post("/api/github-copilot-app/existing", {
+      appId,
+      organization: "my-org",
+      privateKey,
+    });
+    const keyId = first.json().id as string;
+    await LlmProviderApiKeyModel.setRequiresReauthentication({
+      id: keyId,
+      requiresReauthentication: true,
+    });
+    const [credential] = (
+      await RuntimeCredentialDefinitionModel.list(organizationId)
+    ).filter((definition) => definition.appId === appId);
+
+    const reconnected = await post("/api/github-copilot-app/existing", {
+      appId,
+      privateKey,
+      replaceKeyId: keyId,
+    });
+    expect(reconnected.statusCode, reconnected.body).toBe(200);
+
+    const [update] = await auditRows(keyId, "llmProviderApiKey.updated");
+    expect(update).toBeDefined();
+    expect(update.before).toMatchObject({ requiresReauthentication: true });
+    expect(update.after).toMatchObject({ requiresReauthentication: false });
+    expect(JSON.stringify(update)).not.toContain("PRIVATE KEY");
+
+    const [credentialUpdate] = await auditRows(
+      credential.key,
+      "credential.updated",
+    );
+    expect(credentialUpdate).toBeDefined();
+    expect(credentialUpdate.before).not.toEqual(credentialUpdate.after);
+    expect(JSON.stringify(credentialUpdate)).not.toContain("PRIVATE KEY");
+  });
+
+  test("leaves a known App's credential as it was when the connect fails", async () => {
+    vi.stubGlobal("fetch", githubFake({ appId }));
+    const first = await post("/api/github-copilot-app/existing", {
+      appId,
+      organization: "my-org",
+      privateKey,
+    });
+    const keyId = first.json().id as string;
+    const [credential] = (
+      await RuntimeCredentialDefinitionModel.list(organizationId)
+    ).filter((definition) => definition.appId === appId);
+    const stored = () =>
+      RuntimeCredentialConnectionModel.resolveValue({
+        organizationId,
+        credentialId: credential.key,
+        scope: "organization",
+      });
+    const original = JSON.stringify({ privateKey, clientSecret: "kept" });
+    const { setRuntimeCredentialConnection } = await import(
+      "@/services/agent-runtime/runtime-credentials"
+    );
+    await setRuntimeCredentialConnection({
+      organizationId,
+      userId: user.id,
+      credentialId: credential.key,
+      scope: "organization",
+      value: original,
+    });
+
+    // Refused by the key's own checks: the credential is never touched.
+    const refused = await post("/api/github-copilot-app/existing", {
+      appId,
+      privateKey,
+      organization: "my-org",
+      replaceKeyId: "00000000-0000-4000-8000-000000000000",
+    });
+    expect(refused.statusCode).toBe(404);
+    expect(await stored()).toBe(original);
+
+    // Failing after the rewrite: the previous value comes back.
+    const failing = vi
+      .spyOn(LlmProviderApiKeyModel, "recordCredentialKind")
+      .mockRejectedValueOnce(new Error("database went away"));
+    const failed = await post("/api/github-copilot-app/existing", {
+      appId,
+      privateKey,
+      replaceKeyId: keyId,
+    });
+    failing.mockRestore();
+    expect(failed.statusCode).toBe(500);
+    expect(await stored()).toBe(original);
   });
 
   test("removes the credential it made when connecting fails afterwards", async () => {

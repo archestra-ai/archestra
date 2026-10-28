@@ -34,7 +34,11 @@ export async function fetchAzureModels(
     baseUrl,
   });
   if (v1ModelsUrl) {
-    const deployments = await tryAzureManagementDeployments(baseUrl);
+    // An explicit key belongs to this endpoint. Ambient Entra credentials may
+    // see another account or a same-named Foundry project in a different scope.
+    const deployments = apiKey
+      ? []
+      : await tryAzureManagementDeployments(baseUrl);
     if (deployments.length > 0) {
       return deployments;
     }
@@ -85,7 +89,7 @@ export async function fetchAzureModels(
         { status: response.status, error: errorText },
         "Failed to fetch Azure deployments",
       );
-      if (modelsUrl) {
+      if (modelsUrl && !apiKey) {
         const deployments = await tryAzureManagementDeployments(baseUrl, {
           warnOnEmpty: true,
         });
@@ -121,7 +125,7 @@ export async function fetchAzureModels(
       : fallbackToConfiguredDeployment(deploymentName);
   } catch (error) {
     logger.error({ error }, "Error fetching Azure deployments");
-    if (modelsUrl) {
+    if (modelsUrl && !apiKey) {
       const deployments = await tryAzureManagementDeployments(baseUrl, {
         warnOnEmpty: true,
       });

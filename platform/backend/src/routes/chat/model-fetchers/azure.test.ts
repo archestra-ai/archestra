@@ -36,6 +36,65 @@ const mockGetAzureOpenAiBearerTokenProvider = vi.mocked(
 describe("fetchAzureModels", () => {
   test.each([
     "/openai",
+    "/openai/v1",
+  ])("does not use ambient management identity for an API-key endpoint at %s", async (path) => {
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
+    const mockFetch = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(String(input));
+      if (url.hostname === "management.azure.com") {
+        if (url.pathname === "/subscriptions") {
+          return Response.json({ value: [{ subscriptionId: "sub-1" }] });
+        }
+        if (url.pathname.endsWith("/resources")) {
+          return Response.json({
+            value: url.searchParams.get("$filter")?.includes("projects")
+              ? [
+                  {
+                    id: "/subscriptions/sub-1/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/unrelated-foundry/projects/resource-alias",
+                  },
+                ]
+              : [],
+          });
+        }
+        return Response.json({
+          value: [
+            {
+              name: "unrelated-embedding",
+              properties: { model: { name: "text-embedding-3-small" } },
+            },
+          ],
+        });
+      }
+      if (path === "/openai") {
+        // A failed key-authenticated listing must not borrow another identity.
+        return new Response("Unauthorized", { status: 401 });
+      }
+      return Response.json({
+        data: [{ id: "endpoint-chat", model: "gpt-4o-mini" }],
+      });
+    });
+    vi.stubGlobal("fetch", mockFetch);
+    try {
+      const models = await fetchAzureModels(
+        "endpoint-key",
+        `https://resource-alias.openai.azure.com${path}`,
+      );
+      expect(models.map((model) => model.id)).toEqual(
+        path === "/openai" ? [] : ["endpoint-chat"],
+      );
+      expect(
+        mockFetch.mock.calls.every(
+          ([input]) =>
+            new URL(String(input)).hostname !== "management.azure.com",
+        ),
+      ).toBe(true);
+    } finally {
+      mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    }
+  });
+
+  test.each([
+    "/openai",
     "/openai/deployments/shared-embedding",
     "/openai/v1",
   ])("discovers deployments independently for two API-key endpoints at %s", async (path) => {

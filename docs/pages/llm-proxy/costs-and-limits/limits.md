@@ -18,9 +18,8 @@ Set budgets and rate limits in **Costs & Limits → Limits** so a busy key, runa
 1. Go to **Costs & Limits → Limits** and click **Create limit**.
 2. Under **Apply to**, choose the scope (**Organization**, **Team**, **Virtual key**, **User**, **Agent**, **LLM OAuth client**, or **Environment**) and select the target entity.
 3. Under **Select models**, keep **All models** so every model shares one pool, or pick specific models to cap only those models.
-4. Under **Behavior**, choose **Hard limit** to block requests or **Soft limit** to observe usage without blocking.
-5. Enter a whole-number **Limit value**, choose the **Limit kind** (**Spend**, **Tokens**, or **Requests**), and pick the reset **Interval**.
-6. Optionally expand **Labels** to tag the rule for filtering, then click **Create limit**.
+4. Enter a whole-number **Limit value**, choose the **Limit kind** (**Spend**, **Tokens**, or **Requests**), and pick the reset **Interval**.
+5. Optionally expand **Advanced** to choose **Behavior** (**Hard limit** blocks; **Soft limit** observes without blocking) or add labels, then click **Create limit**.
 
 ![The Create limit dialog showing scope, model selection, limit value, limit kind, and interval](/docs/automated_screenshots/llm-proxy_throughput.webp)
 
@@ -43,7 +42,7 @@ When more than one rule matches a call, every matching hard rule must allow it:
 
 **Hard limit** blocks requests when the allowance is exhausted. **Soft limit** keeps requests flowing and records exceeded checks in Prometheus. Use soft limits to observe a workload before enforcing a cap. Existing limits and newly created limits default to hard.
 
-Choose **Behavior** when creating or editing an explicit spend, token, or request limit. Changing behavior preserves recorded usage and the reset schedule. A soft limit does not override another matching hard limit. Default user allowances remain hard.
+Choose **Behavior** under **Advanced** when creating or editing an explicit spend, token, or request limit. Changing behavior preserves recorded usage and the reset schedule. A soft limit does not override another matching hard limit. Default user allowances remain hard.
 
 See [Limit Metrics](/docs/admin/observability/metrics#limit-metrics) for the counters. Your existing monitoring and alerting stack can use them to notify your team.
 

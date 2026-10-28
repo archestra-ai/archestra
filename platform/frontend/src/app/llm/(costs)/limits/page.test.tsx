@@ -645,6 +645,10 @@ describe("LimitsPage", () => {
 
   it("defaults to hard and submits the selected soft behavior", async () => {
     render(<LimitsPage />);
+    expect(
+      screen.queryByRole("combobox", { name: "Behavior" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Advanced$/ }));
     const behavior = screen.getByRole("combobox", { name: "Behavior" });
     expect(behavior).toHaveTextContent("Hard limit");
     fireEvent.keyDown(behavior, { key: "ArrowDown" });

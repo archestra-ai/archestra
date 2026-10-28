@@ -26,6 +26,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import { AdvancedSection } from "@/components/advanced-section";
 import { AgentIcon } from "@/components/agent-icon";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { AgentSelector } from "@/components/agent-selector";
@@ -1318,62 +1319,6 @@ export default function LimitsPage() {
             </div>
 
             <div className="space-y-4 border-t pt-4">
-              <div className="space-y-2">
-                <Label htmlFor="limit-behavior">Behavior</Label>
-                <Select
-                  value={formState.behavior}
-                  onValueChange={(value) =>
-                    setFormState((current) => ({
-                      ...current,
-                      behavior: value as LimitFormState["behavior"],
-                    }))
-                  }
-                >
-                  <SelectTrigger
-                    id="limit-behavior"
-                    aria-label="Behavior"
-                    className="w-full"
-                  >
-                    <SelectValue>
-                      <span className="flex items-center gap-2">
-                        {formState.behavior === "hard" ? (
-                          <ShieldCheck className="size-4" />
-                        ) : (
-                          <Activity className="size-4" />
-                        )}
-                        {formState.behavior === "hard"
-                          ? "Hard limit"
-                          : "Soft limit"}
-                      </span>
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="w-[var(--radix-select-trigger-width)]">
-                    <SelectItem value="hard" textValue="Hard limit">
-                      <span className="flex items-start gap-2 py-1">
-                        <ShieldCheck className="mt-0.5 size-4 shrink-0" />
-                        <span className="flex flex-col gap-0.5">
-                          <span className="font-medium">Hard limit</span>
-                          <span className="text-muted-foreground text-xs whitespace-normal">
-                            Block requests when the limit is reached.
-                          </span>
-                        </span>
-                      </span>
-                    </SelectItem>
-                    <SelectItem value="soft" textValue="Soft limit">
-                      <span className="flex items-start gap-2 py-1">
-                        <Activity className="mt-0.5 size-4 shrink-0" />
-                        <span className="flex flex-col gap-0.5">
-                          <span className="font-medium">Soft limit</span>
-                          <span className="text-muted-foreground text-xs whitespace-normal">
-                            Keep requests flowing and record exceeded limits in
-                            metrics.
-                          </span>
-                        </span>
-                      </span>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="grid items-start gap-4 sm:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1.4fr)]">
                 <div className="flex flex-col gap-2">
                   <div className="flex h-5 items-center gap-1.5">
@@ -1527,14 +1472,64 @@ export default function LimitsPage() {
               )}
             </div>
 
-            <AdvancedLabelsSection
-              collapsible
-              ref={labelsRef}
-              labels={formState.labels}
-              onLabelsChange={(labels) =>
-                setFormState((current) => ({ ...current, labels }))
-              }
-            />
+            <AdvancedSection keepMounted>
+              <div className="space-y-2">
+                <Label htmlFor="limit-behavior">Behavior</Label>
+                <Select
+                  value={formState.behavior}
+                  onValueChange={(value) =>
+                    setFormState((current) => ({
+                      ...current,
+                      behavior: value as LimitFormState["behavior"],
+                    }))
+                  }
+                >
+                  <SelectTrigger
+                    id="limit-behavior"
+                    aria-label="Behavior"
+                    className="w-full"
+                  >
+                    <SelectValue>
+                      <span className="flex items-center gap-2">
+                        {formState.behavior === "hard" ? (
+                          <ShieldCheck className="size-4" />
+                        ) : (
+                          <Activity className="size-4" />
+                        )}
+                        {formState.behavior === "hard"
+                          ? "Hard limit"
+                          : "Soft limit"}
+                      </span>
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="w-[var(--radix-select-trigger-width)]">
+                    <SelectItem
+                      value="hard"
+                      textValue="Hard limit"
+                      icon={<ShieldCheck className="size-4" />}
+                      description="Block requests when the limit is reached."
+                    >
+                      Hard limit
+                    </SelectItem>
+                    <SelectItem
+                      value="soft"
+                      textValue="Soft limit"
+                      icon={<Activity className="size-4" />}
+                      description="Keep requests flowing and record exceeded limits in metrics."
+                    >
+                      Soft limit
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <AdvancedLabelsSection
+                ref={labelsRef}
+                labels={formState.labels}
+                onLabelsChange={(labels) =>
+                  setFormState((current) => ({ ...current, labels }))
+                }
+              />
+            </AdvancedSection>
           </DialogBody>
           <DialogStickyFooter className="mt-0">
             <Button type="button" variant="outline" onClick={closeDialog}>

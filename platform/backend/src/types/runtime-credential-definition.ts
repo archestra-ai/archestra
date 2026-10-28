@@ -101,7 +101,7 @@ export const RuntimeCredentialUsageSchema = z.object({
     z.object({
       id: z.string().uuid(),
       name: z.string(),
-      kind: z.enum(["mcp", "skill", "plugin", "knowledge"]),
+      kind: z.enum(["mcp", "skill", "plugin", "knowledge", "copilot"]),
     }),
   ),
   agents: z.array(

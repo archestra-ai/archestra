@@ -57,6 +57,7 @@ import {
 import logger from "@/logging";
 import { parseClaudeMetadataParentSessionId } from "@/routes/proxy/utils/headers/session-id";
 import type {
+  CopilotCredentialSource,
   InsertInteraction,
   Interaction,
   InteractionAuthMethod,
@@ -95,6 +96,7 @@ import InteractionDeltaManager from "./interaction-delta-manager";
 import InteractionSessionHeadModel from "./interaction-session-head";
 import InteractionUserActivityModel from "./interaction-user-activity";
 import LimitModel from "./limit";
+import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import { interactionBelongsToOrganization } from "./log-organization";
 import RoutingUsageModel from "./routing-usage";
 import VirtualApiKeyModel from "./virtual-api-key";
@@ -2586,6 +2588,9 @@ class InteractionModel {
         virtualKeyIds: sql<
           string[]
         >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.virtualKeyId}::text), NULL)`,
+        copilotProviderApiKeyIds: sql<
+          string[]
+        >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.providerApiKeyId}::text) FILTER (WHERE ${schema.interactionsTable.type} LIKE 'github-copilot:%'), NULL)`,
         passthroughVirtualKeyIds: sql<
           string[]
         >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.passthroughVirtualKeyId}::text), NULL)`,
@@ -2657,6 +2662,11 @@ class InteractionModel {
       ]),
     });
 
+    const copilotSources =
+      await LlmProviderApiKeyModel.findCopilotCredentialSources(
+        sessionsData.flatMap((s) => s.copilotProviderApiKeyIds ?? []),
+      );
+
     // Transform the data to the expected format
     const sessions = sessionsData.map((s) => {
       const externalAgentIds = s.externalAgentIds
@@ -2703,6 +2713,12 @@ class InteractionModel {
         userNames: s.userNames ?? [],
         userIds,
         unattributedReason: deriveUnattributedReason(userIds, authMethods),
+        copilotCredentialSources: dedupeCopilotSources(
+          (s.copilotProviderApiKeyIds ?? []).flatMap((id) => {
+            const source = copilotSources.get(id);
+            return source ? [source] : [];
+          }),
+        ),
         // Deduplicated across both columns: the two hold disjoint keys today
         // (each header rejects the other's key type), but a key reported twice
         // would render as two identical badges, so do not rely on that here.
@@ -4421,4 +4437,19 @@ async function retainDeletedBillingAttribution<T>(params: {
       );
     }
   }
+}
+
+/** One entry per distinct credential source, organizations first. */
+function dedupeCopilotSources(
+  sources: CopilotCredentialSource[],
+): CopilotCredentialSource[] {
+  const seen = new Map<string, CopilotCredentialSource>();
+  for (const source of sources) {
+    const key =
+      source.kind === "organization"
+        ? `org:${source.organization ?? ""}`
+        : "personal";
+    seen.set(key, source);
+  }
+  return [...seen.values()].sort((a, b) => a.kind.localeCompare(b.kind));
 }

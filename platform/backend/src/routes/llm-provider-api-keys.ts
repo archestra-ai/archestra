@@ -5,6 +5,7 @@ import {
   credentialRequiresPerUserScope,
   integrationLabel,
   isCredentialLevelSubscriptionProvider,
+  isGithubAppCredential,
   isProviderApiKeyOptional,
   isSubscriptionCredential,
   MAX_BULK_IDS,
@@ -436,6 +437,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId, user }, reply) => {
+      assertNoGithubAppReference(body.apiKey);
       // A service account acts under a synthetic user id with no `users` row,
       // so it cannot be the owner (`user_id`) of a key. Refuse before the key
       // is tested or its secret is stored.
@@ -883,6 +885,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, body, organizationId, user }, reply) => {
+      assertNoGithubAppReference(body.apiKey);
       const apiKeyFromDB = await LlmProviderApiKeyModel.findById(params.id);
 
       if (!apiKeyFromDB || apiKeyFromDB.organizationId !== organizationId) {
@@ -1961,4 +1964,17 @@ export async function getAvailableLlmProviderApiKeys(params: {
     bestModelId: bestModelsByApiKeyId.get(key.id)?.id ?? null,
   }));
   return apiKeysWithBestModel;
+}
+
+/**
+ * Only the GitHub Copilot plan setup stores a GitHub App reference, after
+ * checking the App and its organization. A key value that looks like one is
+ * refused here, before anything reads or stores it.
+ */
+function assertNoGithubAppReference(apiKey: string | null | undefined) {
+  if (isGithubAppCredential(apiKey))
+    throw new ApiError(
+      400,
+      "Connect a GitHub Copilot enterprise plan from its own setup, not as an API key.",
+    );
 }

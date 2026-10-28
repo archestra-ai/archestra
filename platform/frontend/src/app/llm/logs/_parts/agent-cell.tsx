@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { describeKey } from "@/components/virtual-key-badge";
+import { copilotCredentialSourceLabel } from "@/lib/organization-subscription";
 import { cn } from "@/lib/utils/tailwind";
 import { AgentIdenticon } from "./hue-avatar";
 import { isKnowledgeSource, type LogSession } from "./logs-table-format";
@@ -79,6 +80,13 @@ export function AgentCell({
           {agentName}
         </div>
         <KeyLine session={session} kind={kind} />
+        {(session.copilotCredentialSources ?? []).length > 0 && (
+          <div className="truncate text-xs leading-4 text-muted-foreground">
+            {(session.copilotCredentialSources ?? [])
+              .map(copilotCredentialSourceLabel)
+              .join(", ")}
+          </div>
+        )}
       </div>
     </div>
   );

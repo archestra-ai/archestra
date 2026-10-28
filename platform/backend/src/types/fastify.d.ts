@@ -1,5 +1,6 @@
 import type { User } from "./user";
 import type { AuditableRouteConfig } from "../middleware/audit-log-registry";
+import type { AuditEventName } from "./audit-log";
 import type {
   SelectServiceAccount,
   SelectServiceAccountToken,
@@ -58,6 +59,11 @@ declare module "fastify" {
     auditAfter?: Record<string, unknown> | null;
     /** Skip a registered mutation audit when the handler proves it was a no-op. */
     auditSkip?: boolean;
+    /**
+     * The action a handler found it performed, when the route's registered
+     * one does not fit this request (a POST that updated an existing key).
+     */
+    auditAction?: AuditEventName;
     /** Timestamp captured at the start of preHandler, before the route handler executes. */
     auditOccurredAt?: Date;
     /** ID extracted from the POST response body; set by the audit onSend hook. */

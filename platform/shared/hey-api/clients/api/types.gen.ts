@@ -41517,6 +41517,8 @@ export type GetNewChatBootstrapResponses = {
             bestModelId?: string | null;
             isAgentKey?: boolean;
             subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+            isGithubAppKey?: boolean;
+            githubOrganization?: string | null;
             labels?: Array<{
                 key: string;
                 value: string;
@@ -41556,6 +41558,8 @@ export type GetNewChatBootstrapResponses = {
             bestModelId?: string | null;
             isAgentKey?: boolean;
             subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+            isGithubAppKey?: boolean;
+            githubOrganization?: string | null;
             labels?: Array<{
                 key: string;
                 value: string;
@@ -42074,6 +42078,8 @@ export type GetConversationBootstrapResponses = {
                 bestModelId?: string | null;
                 isAgentKey?: boolean;
                 subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+                isGithubAppKey?: boolean;
+                githubOrganization?: string | null;
                 labels?: Array<{
                     key: string;
                     value: string;
@@ -42113,6 +42119,8 @@ export type GetConversationBootstrapResponses = {
                 bestModelId?: string | null;
                 isAgentKey?: boolean;
                 subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+                isGithubAppKey?: boolean;
+                githubOrganization?: string | null;
                 labels?: Array<{
                     key: string;
                     value: string;
@@ -56744,6 +56752,990 @@ export type UpdateGithubAppConfigResponses = {
 
 export type UpdateGithubAppConfigResponse = UpdateGithubAppConfigResponses[keyof UpdateGithubAppConfigResponses];
 
+export type StartCopilotGithubAppData = {
+    body: {
+        organization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/github-copilot-app/manifest';
+};
+
+export type StartCopilotGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StartCopilotGithubAppError = StartCopilotGithubAppErrors[keyof StartCopilotGithubAppErrors];
+
+export type StartCopilotGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        url: string;
+        manifest: string;
+    };
+};
+
+export type StartCopilotGithubAppResponse = StartCopilotGithubAppResponses[keyof StartCopilotGithubAppResponses];
+
+export type CompleteCopilotGithubAppData = {
+    body: {
+        code: string;
+        state: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/github-copilot-app/manifest/complete';
+};
+
+export type CompleteCopilotGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CompleteCopilotGithubAppError = CompleteCopilotGithubAppErrors[keyof CompleteCopilotGithubAppErrors];
+
+export type CompleteCopilotGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        slug: string;
+        account: string;
+        appId: string;
+        accountUrl: string;
+        htmlUrl: string;
+        installUrl: string;
+        settingsUrl: string;
+    };
+};
+
+export type CompleteCopilotGithubAppResponse = CompleteCopilotGithubAppResponses[keyof CompleteCopilotGithubAppResponses];
+
+export type DiscardCopilotGithubAppData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/github-copilot-app/pending';
+};
+
+export type DiscardCopilotGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DiscardCopilotGithubAppError = DiscardCopilotGithubAppErrors[keyof DiscardCopilotGithubAppErrors];
+
+export type DiscardCopilotGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DiscardCopilotGithubAppResponse = DiscardCopilotGithubAppResponses[keyof DiscardCopilotGithubAppResponses];
+
+export type GetPendingCopilotGithubAppData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/github-copilot-app/pending';
+};
+
+export type GetPendingCopilotGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetPendingCopilotGithubAppError = GetPendingCopilotGithubAppErrors[keyof GetPendingCopilotGithubAppErrors];
+
+export type GetPendingCopilotGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        slug: string;
+        account: string;
+        appId: string;
+        accountUrl: string;
+        htmlUrl: string;
+        installUrl: string;
+        settingsUrl: string;
+    } | null;
+};
+
+export type GetPendingCopilotGithubAppResponse = GetPendingCopilotGithubAppResponses[keyof GetPendingCopilotGithubAppResponses];
+
+export type InstallCopilotGithubAppData = {
+    body: {
+        grants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        }>;
+        replaceKeyId?: string;
+        name?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/github-copilot-app/install';
+};
+
+export type InstallCopilotGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type InstallCopilotGithubAppError = InstallCopilotGithubAppErrors[keyof InstallCopilotGithubAppErrors];
+
+export type InstallCopilotGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'waiting';
+    } | {
+        status: 'installed';
+        id: string;
+        organization: string;
+        modelIds: Array<string>;
+    };
+};
+
+export type InstallCopilotGithubAppResponse = InstallCopilotGithubAppResponses[keyof InstallCopilotGithubAppResponses];
+
+export type ConnectCopilotGithubAppCredentialData = {
+    body: {
+        credentialId: string;
+        organization?: string;
+        replaceKeyId?: string;
+        grants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        }>;
+        name?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/github-copilot-app/credential';
+};
+
+export type ConnectCopilotGithubAppCredentialErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ConnectCopilotGithubAppCredentialError = ConnectCopilotGithubAppCredentialErrors[keyof ConnectCopilotGithubAppCredentialErrors];
+
+export type ConnectCopilotGithubAppCredentialResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'installed';
+        id: string;
+        organization: string;
+        modelIds: Array<string>;
+    } | {
+        status: 'needs_permission';
+        appName: string;
+        organization: string;
+        settingsUrl: string;
+    };
+};
+
+export type ConnectCopilotGithubAppCredentialResponse = ConnectCopilotGithubAppCredentialResponses[keyof ConnectCopilotGithubAppCredentialResponses];
+
+export type CheckCopilotGithubOrganizationData = {
+    body: {
+        organization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/github-copilot-app/organization/check';
+};
+
+export type CheckCopilotGithubOrganizationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CheckCopilotGithubOrganizationError = CheckCopilotGithubOrganizationErrors[keyof CheckCopilotGithubOrganizationErrors];
+
+export type CheckCopilotGithubOrganizationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        organization: string;
+    };
+};
+
+export type CheckCopilotGithubOrganizationResponse = CheckCopilotGithubOrganizationResponses[keyof CheckCopilotGithubOrganizationResponses];
+
+export type ValidateExistingCopilotGithubAppData = {
+    body: {
+        appId: string;
+        organization?: string;
+        privateKey: string;
+        replaceKeyId?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/github-copilot-app/existing/validate';
+};
+
+export type ValidateExistingCopilotGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ValidateExistingCopilotGithubAppError = ValidateExistingCopilotGithubAppErrors[keyof ValidateExistingCopilotGithubAppErrors];
+
+export type ValidateExistingCopilotGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        fingerprint: string;
+        installationId: string;
+        organization: string;
+    };
+};
+
+export type ValidateExistingCopilotGithubAppResponse = ValidateExistingCopilotGithubAppResponses[keyof ValidateExistingCopilotGithubAppResponses];
+
+export type ConnectExistingCopilotGithubAppData = {
+    body: {
+        appId: string;
+        organization?: string;
+        privateKey: string;
+        replaceKeyId?: string;
+        grants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        }>;
+        name?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/github-copilot-app/existing';
+};
+
+export type ConnectExistingCopilotGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ConnectExistingCopilotGithubAppError = ConnectExistingCopilotGithubAppErrors[keyof ConnectExistingCopilotGithubAppErrors];
+
+export type ConnectExistingCopilotGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'installed';
+        id: string;
+        organization: string;
+        modelIds: Array<string>;
+    };
+};
+
+export type ConnectExistingCopilotGithubAppResponse = ConnectExistingCopilotGithubAppResponses[keyof ConnectExistingCopilotGithubAppResponses];
+
+export type GetCopilotGithubAppKeySummaryData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/github-copilot-app/keys/{id}';
+};
+
+export type GetCopilotGithubAppKeySummaryErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetCopilotGithubAppKeySummaryError = GetCopilotGithubAppKeySummaryErrors[keyof GetCopilotGithubAppKeySummaryErrors];
+
+export type GetCopilotGithubAppKeySummaryResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        organization: string | null;
+        appId: string;
+        appName: string | null;
+        appIcon: string | null;
+        appUrl: string | null;
+        githubUrl: string;
+        fingerprint: string;
+    };
+};
+
+export type GetCopilotGithubAppKeySummaryResponse = GetCopilotGithubAppKeySummaryResponses[keyof GetCopilotGithubAppKeySummaryResponses];
+
 export type GithubCopilotDeviceAuthStartData = {
     body?: never;
     path?: never;
@@ -60958,6 +61950,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -61197,6 +62195,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -61311,6 +62315,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
         } | {
@@ -61423,6 +62433,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
         } | {
@@ -61535,6 +62551,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
         } | {
@@ -61647,6 +62669,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
         } | {
@@ -61736,6 +62764,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -61827,6 +62861,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -62373,6 +63413,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -63004,6 +64050,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -63095,6 +64147,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -63186,6 +64244,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -63277,6 +64341,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -63368,6 +64438,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -63459,6 +64535,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -63550,6 +64632,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -63641,6 +64729,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -63732,6 +64826,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -63823,6 +64923,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -63914,6 +65020,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -64005,6 +65117,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -64096,6 +65214,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -65155,6 +66279,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -66214,6 +67344,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -67273,6 +68409,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -68332,6 +69474,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -68423,6 +69571,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -68582,6 +69736,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -69641,6 +70801,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -69765,6 +70931,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -69889,6 +71061,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -70025,6 +71203,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -70223,6 +71407,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -70421,6 +71611,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -70619,6 +71815,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
@@ -70710,6 +71912,12 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            copilotCredentialSource?: {
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            } | null;
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             externalAgentIdLabel?: string | null;
@@ -71018,6 +72226,12 @@ export type GetInteractionSessionsResponses = {
             userIds: Array<string>;
             unattributedReason: 'shared_virtual_key' | 'provider_key' | 'client_credentials' | 'internal' | 'unknown' | null;
             virtualKeys: Array<InteractionVirtualKey>;
+            copilotCredentialSources?: Array<{
+                kind: 'organization';
+                organization: string | null;
+            } | {
+                kind: 'personal';
+            }>;
             /**
              * Short preview (max 200 chars) of the session's last user message. Raw request bodies are not returned by this listing.
              */
@@ -71484,6 +72698,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -71723,6 +72943,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -71837,6 +73063,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
     } | {
@@ -71949,6 +73181,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
     } | {
@@ -72061,6 +73299,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
     } | {
@@ -72173,6 +73417,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
     } | {
@@ -72262,6 +73512,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -72353,6 +73609,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -72899,6 +74161,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -73530,6 +74798,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -73621,6 +74895,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -73712,6 +74992,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -73803,6 +75089,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -73894,6 +75186,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -73985,6 +75283,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -74076,6 +75380,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -74167,6 +75477,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -74258,6 +75574,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -74349,6 +75671,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -74440,6 +75768,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -74531,6 +75865,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -74622,6 +75962,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -75681,6 +77027,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -76740,6 +78092,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -77799,6 +79157,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -78858,6 +80222,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -78949,6 +80319,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -79108,6 +80484,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -80167,6 +81549,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -80291,6 +81679,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -80415,6 +81809,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -80551,6 +81951,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -80749,6 +82155,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -80947,6 +82359,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -81145,6 +82563,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
@@ -81236,6 +82660,12 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        copilotCredentialSource?: {
+            kind: 'organization';
+            organization: string | null;
+        } | {
+            kind: 'personal';
+        } | null;
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         externalAgentIdLabel?: string | null;
@@ -98418,6 +99848,8 @@ export type GetLlmProviderApiKeysResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        isGithubAppKey?: boolean;
+        githubOrganization?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -98585,6 +100017,8 @@ export type CreateLlmProviderApiKeyResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        isGithubAppKey?: boolean;
+        githubOrganization?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -98710,6 +100144,8 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        isGithubAppKey?: boolean;
+        githubOrganization?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -98922,6 +100358,8 @@ export type GetLlmProviderApiKeyResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        isGithubAppKey?: boolean;
+        githubOrganization?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -99067,6 +100505,8 @@ export type UpdateLlmProviderApiKeyResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        isGithubAppKey?: boolean;
+        githubOrganization?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -99193,6 +100633,8 @@ export type ReconnectLlmProviderApiKeyResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        isGithubAppKey?: boolean;
+        githubOrganization?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -127318,7 +128760,7 @@ export type GetRuntimeCredentialUsageResponses = {
         resources: Array<{
             id: string;
             name: string;
-            kind: 'mcp' | 'skill' | 'plugin' | 'knowledge';
+            kind: 'mcp' | 'skill' | 'plugin' | 'knowledge' | 'copilot';
         }>;
         agents: Array<{
             id: string;

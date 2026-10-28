@@ -39,6 +39,12 @@ import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 import type { AvailableModelPool } from "@/lib/model-pools.query";
+import {
+  isOrganizationSubscription,
+  ORGANIZATION_SUBSCRIPTIONS_HEADING,
+  organizationSubscriptionName,
+  organizationSubscriptionSubtitle,
+} from "@/lib/organization-subscription";
 import { cn } from "@/lib/utils/tailwind";
 
 type DropdownLlmProviderApiKey = Pick<
@@ -48,7 +54,12 @@ type DropdownLlmProviderApiKey = Pick<
   Partial<
     Pick<
       LlmProviderApiKey,
-      "scope" | "teamName" | "subscriptionKind" | "requiresReauthentication"
+      | "scope"
+      | "teamName"
+      | "subscriptionKind"
+      | "requiresReauthentication"
+      | "isGithubAppKey"
+      | "githubOrganization"
     >
   > & {
     connectRequired?: boolean;
@@ -135,8 +146,16 @@ export function LlmProviderApiKeyDropdown({
     () => selectableKeys.filter(isPersonalSubscription),
     [selectableKeys],
   );
+  const organizationKeys = useMemo(
+    () => selectableKeys.filter(isOrganizationSubscription),
+    [selectableKeys],
+  );
   const apiKeys = useMemo(
-    () => selectableKeys.filter((key) => !isPersonalSubscription(key)),
+    () =>
+      selectableKeys.filter(
+        (key) =>
+          !isPersonalSubscription(key) && !isOrganizationSubscription(key),
+      ),
     [selectableKeys],
   );
   const keysByProvider = useMemo(() => groupKeysByProvider(apiKeys), [apiKeys]);
@@ -194,7 +213,9 @@ export function LlmProviderApiKeyDropdown({
                     provider={selectedKey.provider}
                   />
                   <span className="truncate font-medium">
-                    {selectedKey.name}
+                    {isOrganizationSubscription(selectedKey)
+                      ? organizationSubscriptionName(selectedKey)
+                      : selectedKey.name}
                   </span>
                   {selectedKeyIsSubscription && (
                     <Badge
@@ -373,6 +394,48 @@ export function LlmProviderApiKeyDropdown({
                       </Badge>
                     </div>
                     {checkedKeyId === key.id && (
+                      <CheckIcon className="h-4 w-4 shrink-0" />
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {organizationKeys.length > 0 && (
+              <CommandGroup heading={ORGANIZATION_SUBSCRIPTIONS_HEADING}>
+                {organizationKeys.map((key) => (
+                  <CommandItem
+                    key={key.id}
+                    data-testid={
+                      showChatTestIds
+                        ? getChatApiKeySelectorOptionTestId(key.id)
+                        : undefined
+                    }
+                    value={key.id}
+                    keywords={[
+                      key.provider,
+                      key.name,
+                      key.githubOrganization ?? "",
+                      "enterprise plan",
+                    ]}
+                    disabled={providerFilter?.(key.provider) === false}
+                    onSelect={() => onSelectKey(key.id)}
+                    className="cursor-pointer"
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <SubscriptionBrandIcon
+                        kind={null}
+                        provider={key.provider}
+                      />
+                      <div className="flex min-w-0 flex-col">
+                        <span className="truncate">
+                          {organizationSubscriptionName(key)}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {organizationSubscriptionSubtitle(key)}
+                        </span>
+                      </div>
+                    </div>
+                    {selectedApiKeyId === key.id && (
                       <CheckIcon className="h-4 w-4 shrink-0" />
                     )}
                   </CommandItem>

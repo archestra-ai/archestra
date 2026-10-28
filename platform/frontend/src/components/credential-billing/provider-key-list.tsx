@@ -24,6 +24,12 @@ import {
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
+import {
+  isOrganizationSubscription,
+  ORGANIZATION_SUBSCRIPTIONS_HEADING,
+  organizationSubscriptionName,
+  organizationSubscriptionSubtitle,
+} from "@/lib/organization-subscription";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
@@ -358,15 +364,20 @@ function ProviderLine({
   const chosenIds = chosen.map((key) => key.id);
   const items = keys.map((key) => {
     const count = modelIdsByKey.get(key.id)?.length ?? 0;
+    // An organization subscription reads as one, not as an API key.
+    const organization = isOrganizationSubscription(key);
+    const name = organization ? organizationSubscriptionName(key) : key.name;
     return {
       value: key.id,
-      label: key.name,
-      searchText: `${key.name} ${ownerLabel(key)}`,
-      description: `${ownerLabel(key)} · ${isSubscriptionKey(key) ? "Subscription" : "Metered"}`,
+      label: name,
+      searchText: `${name} ${ownerLabel(key)}`,
+      description: organization
+        ? `${ORGANIZATION_SUBSCRIPTIONS_HEADING} · ${organizationSubscriptionSubtitle(key)}`
+        : `${ownerLabel(key)} · ${isSubscriptionKey(key) ? "Subscription" : "Metered"}`,
       checked: several && chosenIds.includes(key.id),
       content: (
         <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="min-w-0 basis-full break-words">{key.name}</span>
+          <span className="min-w-0 basis-full break-words">{name}</span>
           {key.isPrimary && <PrimaryBadge />}
           {!modelsPending && (
             <span

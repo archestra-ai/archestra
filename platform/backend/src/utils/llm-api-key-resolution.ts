@@ -126,6 +126,17 @@ export async function resolveProviderApiKey(params: {
       provider,
       agentLlmApiKeyId,
     });
+  } else if (
+    provider === "github-copilot" &&
+    (await LlmProviderApiKeyModel.isGithubAppKey(agentLlmApiKeyId))
+  ) {
+    // No acting user (scheduled, email): only a GitHub App key the agent or
+    // organization default names explicitly. Never an unnamed fallback.
+    resolvedApiKey = await LlmProviderApiKeyModel.getOrganizationApiKey({
+      organizationId,
+      provider,
+      agentLlmApiKeyId,
+    });
   }
 
   resolvedApiKey = params.selection

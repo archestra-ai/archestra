@@ -1,7 +1,7 @@
 ---
 title: Auto Routing
 description: Let the Model Router pick a cheap, normal, or smart model for each agent session
-order: 5
+order: 6
 alpha: "Set [`ARCHESTRA_AUTO_ROUTING_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_AUTO_ROUTING_ENABLED) to turn it on."
 lastUpdated: 2026-10-26
 ---

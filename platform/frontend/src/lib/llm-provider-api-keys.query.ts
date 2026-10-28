@@ -334,23 +334,6 @@ export function useUpdateLlmProviderApiKey() {
   });
 }
 
-/** What a delete removes, so its messages use the user's word for it. */
-export type LlmProviderApiKeyDeleteKind = "key" | "subscription" | "plan";
-
-const DELETED_MESSAGE: Record<LlmProviderApiKeyDeleteKind, string> = {
-  key: "API key deleted successfully",
-  subscription: "Subscription disconnected",
-  plan: "Enterprise plan disconnected",
-};
-
-const ALREADY_DISCONNECTED_MESSAGE: Record<
-  Exclude<LlmProviderApiKeyDeleteKind, "key">,
-  string
-> = {
-  subscription: "This subscription was already disconnected",
-  plan: "This enterprise plan was already disconnected",
-};
-
 export function useDeleteLlmProviderApiKey() {
   const queryClient = useQueryClient();
 
@@ -448,3 +431,20 @@ function listingWithKey(
 ) {
   return state?.data?.some((key) => key.id === keyId) ? state : undefined;
 }
+
+/** What a delete removes, so its messages use the user's word for it. */
+type LlmProviderApiKeyDeleteKind = "key" | "subscription" | "plan";
+
+const DELETED_MESSAGE: Record<LlmProviderApiKeyDeleteKind, string> = {
+  key: "API key deleted successfully",
+  subscription: "Subscription disconnected",
+  plan: "Enterprise plan disconnected",
+};
+
+const ALREADY_DISCONNECTED_MESSAGE: Record<
+  Exclude<LlmProviderApiKeyDeleteKind, "key">,
+  string
+> = {
+  subscription: "This subscription was already disconnected",
+  plan: "This enterprise plan was already disconnected",
+};

@@ -41,6 +41,7 @@ import {
   MCP_RESOURCE_REFERENCE_PREFIX,
 } from "@/services/identity-providers/enterprise-managed/authorization";
 import { issueManagedOauthClientAccessToken } from "@/services/oauth-client-credentials";
+import { revokeManagedOauthClientAccessToken } from "@/services/oauth-client-revocation";
 import {
   shieldRefreshTokenGrant,
   shieldRevocationRequest,
@@ -742,8 +743,9 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // invalidation (see services/oauth-refresh-replay.ts). Refresh-token
   // revocations are handled here in full: idempotent 200s per RFC 7009 §2.2,
   // where better-auth 400s and — for an already-rotated token — deletes the
-  // whole (client, user) token family. Access-token revocations forward to
-  // better-auth, which deletes just that row. Without this explicit route the
+  // whole (client, user) token family. Managed application access tokens use
+  // the issuance verifier; user/public-client tokens forward to better-auth.
+  // Without this explicit route the
   // request reaches better-auth through the /api/auth/* catch-all.
   fastify.route({
     method: "POST",
@@ -751,6 +753,34 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: {
       tags: ["Auth"],
     },
+    async onRequest(request, reply) {
+      if (config.authRateLimitDisabled) return;
+      // Use Fastify's trustProxy policy, never an unchecked forwarding header.
+      // All grants share an IP budget so rotating client IDs cannot bypass it.
+      try {
+        const limit = await oauthTokenRateLimiter.consume(request.ip);
+        if (limit.allowed) return;
+        return reply
+          .header("Retry-After", limit.retryAfter)
+          .header("Cache-Control", "no-store")
+          .code(429)
+          .send({
+            error: "temporarily_unavailable",
+            error_description:
+              "Too many OAuth requests. Retry after the indicated delay.",
+          });
+      } catch (error) {
+        logger.error(
+          { err: error },
+          "OAuth revocation rate-limit storage unavailable",
+        );
+        return reply.header("Cache-Control", "no-store").code(503).send({
+          error: "temporarily_unavailable",
+          error_description: "Token revocation is temporarily unavailable.",
+        });
+      }
+    },
+    // codeql[js/missing-rate-limiting] The onRequest hook enforces the shared atomic trusted-IP OAuth budget before password verification.
     async handler(request, reply) {
       const body = request.body as Record<string, unknown> | undefined;
 
@@ -777,6 +807,18 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       if (interception.action === "respond") {
         return reply.status(interception.statusCode).send(interception.body);
+      }
+
+      const managedRevocation = await revokeManagedOauthClientAccessToken({
+        clientId: body?.client_id,
+        clientSecret: body?.client_secret,
+        token: body?.token,
+        tokenTypeHint: body?.token_type_hint,
+      });
+      if (managedRevocation) {
+        return reply
+          .status(managedRevocation.statusCode)
+          .send(managedRevocation.body);
       }
 
       const url = new URL(request.url, getPublicRequestOrigin(request));

@@ -114,8 +114,25 @@ class OAuthAccessTokenModel {
   }
 
   /**
-   * Update the persisted expiry for a hashed access token.
+   * Revoke only a client-owned application token, never a user's token family.
    */
+  static async deleteClientCredentialsToken(params: {
+    tokenHash: string;
+    clientId: string;
+  }): Promise<void> {
+    await db
+      .delete(schema.oauthAccessTokensTable)
+      .where(
+        and(
+          eq(schema.oauthAccessTokensTable.token, params.tokenHash),
+          eq(schema.oauthAccessTokensTable.clientId, params.clientId),
+          isNull(schema.oauthAccessTokensTable.userId),
+          isNull(schema.oauthAccessTokensTable.refreshId),
+        ),
+      );
+  }
+
+  /** Update the persisted expiry for a hashed value. */
   static async updateExpiresAtByTokenHash(params: {
     tokenHash: string;
     expiresAt: Date;

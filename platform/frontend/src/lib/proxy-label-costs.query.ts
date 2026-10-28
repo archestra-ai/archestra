@@ -11,8 +11,7 @@ type LabelGroups = NonNullable<Response["labels"]>["groups"];
 export function useProxyLabelCosts({
   enabled,
   ...query
-}: Pick<Query, "timeframe" | "labelValue" | "labelUnassigned"> & {
-  labelKey: string;
+}: Pick<Query, "timeframe" | "labelKey" | "labelValue" | "labelUnassigned"> & {
   enabled: boolean;
 }) {
   return useQuery({
@@ -33,7 +32,7 @@ export function useProxyLabelCosts({
           throw new Error("Label attribution returned an incomplete page");
       }
     },
-    enabled,
+    enabled: enabled && !!query.labelKey,
     staleTime: 30_000,
   });
 }

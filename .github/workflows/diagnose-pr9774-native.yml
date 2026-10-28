@@ -6,6 +6,9 @@ on:
     paths:
       - .github/workflows/diagnose-pr9774-native.yml
       - .github/scripts/diagnose-pr9774-native.sh
+      - .github/scripts/diagnose-pr9774-full-suite.sh
+      - .github/scripts/native-abort-backtrace.c
+      - .github/scripts/native-abort-setup.cjs
 
 permissions:
   contents: read
@@ -48,16 +51,18 @@ jobs:
         run: pnpm --dir backend db:migrate
       - name: Build original native addon
         run: pnpm exec turbo build --filter=@archestra/openappa-rs
-      - name: Exercise native teardown with backtraces
+      - name: Exercise concurrent native suite with low overhead abort traces
         env:
           ARCHESTRA_OPENAPPA_TEST_DATABASE_URL: postgresql://archestra:archestra_ci_password@localhost:5432/archestra_openappa_test
           DIAGNOSTIC_DIRECTORY: ${{ runner.temp }}/pr9774-native
-        run: bash ../.github/scripts/diagnose-pr9774-native.sh
+        run: bash ../.github/scripts/diagnose-pr9774-full-suite.sh
       - name: Retain bounded diagnostic logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pr9774-native-diagnostics
-          path: ${{ runner.temp }}/pr9774-native/*.log
+          path: |
+            ${{ runner.temp }}/pr9774-native/*.log
+            ${{ runner.temp }}/pr9774-native/*.node
           retention-days: 3
           if-no-files-found: ignore

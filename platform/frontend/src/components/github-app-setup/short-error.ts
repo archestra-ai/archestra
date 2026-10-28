@@ -45,11 +45,11 @@ const SHORT_ERRORS: Array<[RegExp, string]> = [
     "No Copilot Business or Enterprise plan.",
   ],
   [
-    /^This subscription is for (\S+), but the new App is installed on (\S+)\./,
+    /^This plan is for (\S+), but the new App is installed on (\S+)\./,
     "This App is on $2, not $1.",
   ],
   [
-    /credential this subscription (?:uses|used) was deleted/,
+    /credential this plan (?:uses|used) was deleted/,
     "This plan's App was deleted. Choose another App.",
   ],
   [

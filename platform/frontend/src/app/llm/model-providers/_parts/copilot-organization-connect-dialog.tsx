@@ -337,7 +337,7 @@ export function CopilotOrganizationConnectDialog({
             {`${needsPermission.appName} can't make Copilot requests yet.`}
           </span>
           <InlineNoticeText>
-            {`Add Copilot Requests (Read-only) in its settings; an owner of ${needsPermission.organization} approves the change.`}
+            {`Add Copilot Requests (Read-only) in its settings. An owner of ${needsPermission.organization} must approve the change.`}
           </InlineNoticeText>
         </InlineNoticeBody>
         <div className="ml-auto flex shrink-0 items-center gap-2">

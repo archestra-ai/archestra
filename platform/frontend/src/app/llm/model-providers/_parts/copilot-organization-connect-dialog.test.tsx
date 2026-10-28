@@ -235,7 +235,7 @@ describe("CopilotOrganizationConnectDialog", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Add Copilot Requests (Read-only) in its settings; an owner of my-org approves the change.",
+        "Add Copilot Requests (Read-only) in its settings. An owner of my-org must approve the change.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open settings/ })).toHaveAttribute(

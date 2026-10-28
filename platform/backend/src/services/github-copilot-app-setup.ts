@@ -93,7 +93,7 @@ class CopilotGithubAppSetup {
       if (login.toLowerCase() !== app.account.toLowerCase())
         throw new ApiError(
           400,
-          `This subscription is for ${login}, but the new App is installed on ${app.account}.`,
+          `This plan is for ${login}, but the new App is installed on ${app.account}.`,
         );
     }
     const models = await fetchCopilotModelIds(
@@ -384,7 +384,7 @@ class CopilotGithubAppSetup {
     if (!definition?.appId)
       throw new ApiError(
         400,
-        "The GitHub App credential this subscription used was deleted. Use Reconnect to choose an App.",
+        "The GitHub App credential this plan used was deleted. Use Reconnect to choose an App.",
       );
     const { privateKey } = validateGithubAppPrivateKey({
       appId: definition.appId,

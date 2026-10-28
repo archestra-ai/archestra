@@ -59,7 +59,7 @@ export function OrganizationSubscriptionCards({
             name="GitHub Copilot"
             description={
               credential.requiresReauthentication
-                ? "GitHub refused the App. Its installation or private key changed. Reconnect it to use this subscription."
+                ? "GitHub refused the App. Its installation or private key changed. Reconnect it to use this plan."
                 : `Your organization's Copilot plan is linked through a GitHub App. Usage is billed to ${credential.githubOrganization ?? "the organization"}.`
             }
             isLoading={isLoading}

@@ -126,7 +126,7 @@ export async function resolveGithubAppCredential(
     if (!definition?.appId || !privateKey)
       throw new ApiError(
         400,
-        "The GitHub App credential this subscription uses was deleted or disconnected. Reconnect it.",
+        "The GitHub App credential this plan uses was deleted or disconnected. Reconnect it.",
       );
     app = { appId: definition.appId, privateKey, name: definition.name };
     referenceCache.set(cacheKey, app);

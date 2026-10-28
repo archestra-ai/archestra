@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.5.0-rc.11" # x-release-please-version
+  imageTag: "1.5.0-rc.12" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -522,7 +522,7 @@ archestra:
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Base image for MCP server containers
-    # Default: "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:1.5.0-rc.11" # x-release-please-version
+    # Default: "ghcr.io/archestra-ai/mcp-server-base:1.5.0-rc.12" # x-release-please-version
     baseImage: ""
 
     # Resource requests/limits applied to generated MCP server containers
@@ -722,13 +722,29 @@ archestra:
         #       name: custom-binding-name  # Optional: override the auto-generated binding name
         additionalRoleBindings: []
 
+  # SRE agent: a pre-installed, read-only Kubernetes MCP server and an "SRE"
+  # agent that investigates this installation's pods, logs, and events. It runs
+  # under a dedicated <fullname>-sre ServiceAccount bound to the read-only Role
+  # above (never to mcpServerRbac's additional bindings), so it needs
+  # orchestrator.kubernetes.mcpServerRbac.create. Turning it off removes what it
+  # seeded.
+  sre:
+    enabled: false
+    # Kubernetes API server endpoint CIDRs the SRE MCP server may reach. Its
+    # environment allows egress to these only. Use the endpoint IPs
+    # (`kubectl get endpoints kubernetes -n default`), not the Service IP.
+    # Example:
+    #   apiServerCidrs:
+    #     - 172.16.0.2/32
+    apiServerCidrs: []
+
   # Knowledge base configuration
   knowledgeBase:
     # Perforce permission sync
     perforceShim:
       # Image for the p4 shim pod the backend provisions for Perforce
       # permission sync. If not set, defaults to
-      # "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:<app version>"
+      # "ghcr.io/archestra-ai/p4-shim:<app version>"
       image: ""
 
   # Background worker configuration

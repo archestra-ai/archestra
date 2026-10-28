@@ -1,0 +1,35 @@
+diff --git a/dist/oauth2/index.d.mts b/dist/oauth2/index.d.mts
+index a882a3a86c220f39434068214f4dfdc669c89b41..e3efddfd2f06b349dc052bdb7cf57c8322b170dd 100644
+--- a/dist/oauth2/index.d.mts
++++ b/dist/oauth2/index.d.mts
+@@ -1,5 +1,9 @@
+ import { GenerateStateOptions, generateIdTokenNonce, generateState, parseState } from "./state.mjs";
+ import { applyUpdateUserInfoOnLink, handleOAuthUserInfo, linkOAuthAccount } from "./link-account.mjs";
+ import { decryptOAuthToken, getOAuthCallbackPath, setTokenUtil } from "./utils.mjs";
++import { verifyBearerToken } from "@better-auth/core/oauth2";
++export declare function verifyAccessToken(token: string, opts: Omit<Parameters<typeof verifyBearerToken>[1], "requiredScopes" | "isScopeSatisfied"> & {
++  scopes?: string[];
++}): ReturnType<typeof verifyBearerToken>;
+ export * from "@better-auth/core/oauth2";
+ export { GenerateStateOptions, applyUpdateUserInfoOnLink, decryptOAuthToken, generateIdTokenNonce, generateState, getOAuthCallbackPath, handleOAuthUserInfo, linkOAuthAccount, parseState, setTokenUtil };
+diff --git a/dist/oauth2/index.mjs b/dist/oauth2/index.mjs
+index abebc15096336e97b952b2b68ffc8dca363b7cb8..c2bf4d41ee62c68ba0a27b874ace619a024c4551 100644
+--- a/dist/oauth2/index.mjs
++++ b/dist/oauth2/index.mjs
+@@ -1,5 +1,16 @@
+ import { decryptOAuthToken, getOAuthCallbackPath, setTokenUtil } from "./utils.mjs";
+ import { applyUpdateUserInfoOnLink, handleOAuthUserInfo, linkOAuthAccount } from "./link-account.mjs";
+ import { generateIdTokenNonce, generateState, parseState } from "./state.mjs";
++import { verifyBearerToken } from "@better-auth/core/oauth2";
++// Keep the legacy OAuth provider on its current storage schema while using
++// the patched verifier, including issuer/audience and sender-binding checks.
++export async function verifyAccessToken(token, opts) {
++	const { scopes, ...verification } = opts;
++	return verifyBearerToken(token, {
++		...verification,
++		requiredScopes: [...(verification.requiredScopes ?? []), ...(scopes ?? [])],
++		isScopeSatisfied: void 0
++	});
++}
+ export * from "@better-auth/core/oauth2";
+ export { applyUpdateUserInfoOnLink, decryptOAuthToken, generateIdTokenNonce, generateState, getOAuthCallbackPath, handleOAuthUserInfo, linkOAuthAccount, parseState, setTokenUtil };

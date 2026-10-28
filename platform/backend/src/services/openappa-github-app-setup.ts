@@ -16,7 +16,6 @@ import {
   RuntimeCredentialDefinitionModel,
   VerificationModel,
 } from "@/models";
-import { isByosEnabled } from "@/secrets-manager";
 import {
   createRuntimeCredentialDefinition,
   deleteRuntimeCredentialDefinition,
@@ -402,11 +401,7 @@ class OpenAppaGithubAppSetup {
         409,
         "Enable OpenAPPA on the server before configuring Git sync",
       );
-    if (isByosEnabled())
-      throw new ApiError(
-        400,
-        "Creating a GitHub App requires writable secret storage. Add an existing App instead.",
-      );
+
     if (
       !(await userHasPermission(
         owner.userId,

@@ -58,6 +58,7 @@ import { copyToClipboard } from "@/lib/clipboard";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmModels, useModelsWithApiKeys } from "@/lib/llm-models.query";
+import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils/tailwind";
 
 type Endpoint = "model-router" | "provider";
@@ -69,7 +70,8 @@ type Endpoint = "model-router" | "provider";
 export function VirtualKeyConnectionGuide({
   keyValue,
   keyType,
-  mappedProviderKeys,
+  mappedProviderKeys: explicitKeys,
+  includeFutureProviders = false,
   connectionBaseUrl,
   name,
   expiration,
@@ -82,6 +84,8 @@ export function VirtualKeyConnectionGuide({
     provider: SupportedProvider;
     providerApiKeyId: string;
   }>;
+  /** The key also reaches each provider's shared primary key. */
+  includeFutureProviders?: boolean;
   connectionBaseUrl: string;
   name: string;
   expiration: string;
@@ -91,6 +95,22 @@ export function VirtualKeyConnectionGuide({
   const appName = useAppName();
   const providerCatalog = useModelProviderCatalog();
   const isPassthrough = keyType === "passthrough";
+  const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
+  // As the proxy resolves it: a provider the key doesn't map falls back to
+  // that provider's shared primary key.
+  const mappedProviderKeys = useMemo(() => {
+    if (!includeFutureProviders) return explicitKeys;
+    const mapped = new Set(explicitKeys.map((mapping) => mapping.provider));
+    return [
+      ...explicitKeys,
+      ...providerApiKeys
+        .filter(
+          (key) =>
+            key.isPrimary && key.userId === null && !mapped.has(key.provider),
+        )
+        .map((key) => ({ provider: key.provider, providerApiKeyId: key.id })),
+    ];
+  }, [includeFutureProviders, explicitKeys, providerApiKeys]);
 
   // A standard key only works on routes for the providers it maps; a
   // passthrough key carries no provider key, so any chat provider route works.
@@ -498,9 +518,14 @@ export function RequestExample({
     }));
   // A provider route still has a request to show before its models sync: the
   // provider's default model stands in rather than leaving the step empty.
-  if (!isPending && modelOptions.length === 0 && target.kind === "provider") {
+  // A key that reaches no provider yet (no shared primary keys) has none.
+  const defaultModel =
+    target.kind === "provider"
+      ? PROVIDER_MODEL_TIERS[target.provider]?.normal
+      : undefined;
+  if (!isPending && modelOptions.length === 0 && defaultModel) {
     modelOptions.push({
-      value: PROVIDER_MODEL_TIERS[target.provider].normal,
+      value: defaultModel,
       supportedEndpoints: null,
       isImage: false,
     });

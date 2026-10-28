@@ -3,10 +3,10 @@
 import {
   DocsPage,
   GITHUB_ACTIONS_ACCESS_MAX_ENTRIES,
+  GITHUB_ACTIONS_REPOSITORY_MESSAGE,
+  GITHUB_ACTIONS_REPOSITORY_REGEX,
   GITHUB_JOB_WORKFLOW_REF_MESSAGE,
   GITHUB_JOB_WORKFLOW_REF_REGEX,
-  GITHUB_REPOSITORY_FULL_NAME_MESSAGE,
-  GITHUB_REPOSITORY_FULL_NAME_REGEX,
   type GitHubActionsAccess,
   GitHubActionsAccessSchema,
   isGitHubActionsAppCredential,
@@ -39,8 +39,8 @@ import {
 } from "@/lib/runtime-credentials.query";
 
 /**
- * Which GitHub Actions pull-request jobs may use an MCP gateway as the pull
- * request's author. `null` turns it off.
+ * Which GitHub Actions pull-request jobs may use an MCP gateway, and as whom.
+ * `null` turns it off.
  */
 export function GitHubActionsAccessSection({
   value,
@@ -52,6 +52,8 @@ export function GitHubActionsAccessSection({
   const appName = useAppName();
   const switchId = useId();
   const appSelectId = useId();
+  const actAsSelectId = useId();
+  const resolveThreadsId = useId();
   const credentials = useRuntimeCredentials();
   const { data: canUseEveryCredential } = useCanUseEveryCredential();
   const canAttachCredential = useCanAttachCredential();
@@ -79,7 +81,7 @@ export function GitHubActionsAccessSection({
   return (
     <SettingsSection
       title="GitHub Actions"
-      description="Pull request workflows that may use this gateway as the pull request's author."
+      description="Pull request workflows that may use this gateway, and whose account they use."
     >
       <div className="space-y-2">
         <div className="flex items-center gap-3">
@@ -105,7 +107,7 @@ export function GitHubActionsAccessSection({
         </div>
         <FieldDescription>
           A trusted workflow on a pull request trades its GitHub OIDC token for
-          a token on this gateway. It acts as the author, who must have
+          a token on this gateway. It acts as one person, who must have
           connected GitHub to their {appName} account through the App below.
           {docsUrl ? (
             <>
@@ -171,13 +173,62 @@ export function GitHubActionsAccessSection({
             </Select>
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor={actAsSelectId}>Runs act as</Label>
+            <FieldDescription>
+              Whose account a run uses. With whoever started the run, someone
+              who asks for a review of another person's pull request uses their
+              own account, and the trusted workflow decides whose runs to start.
+            </FieldDescription>
+            <Select
+              value={value.actAs ?? "author"}
+              onValueChange={(actAs) =>
+                onChange({
+                  ...value,
+                  actAs: actAs === "actor" ? "actor" : undefined,
+                })
+              }
+            >
+              <SelectTrigger id={actAsSelectId}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="author">
+                  The pull request's author
+                </SelectItem>
+                <SelectItem value="actor">Whoever started the run</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <Switch
+                id={resolveThreadsId}
+                checked={value.resolveReviewThreads === true}
+                onCheckedChange={(checked) =>
+                  onChange({
+                    ...value,
+                    resolveReviewThreads: checked ? true : undefined,
+                  })
+                }
+              />
+              <Label htmlFor={resolveThreadsId}>Resolve review threads</Label>
+            </div>
+            <FieldDescription>
+              Gives each run's GitHub token Contents write, which GitHub
+              requires to resolve a review thread. The App needs Contents write
+              too; without it, runs still review.
+            </FieldDescription>
+          </div>
+
           <ListEditor
             label="Repositories"
-            description="Pull requests in these repositories may ask. Pull requests from forks never can."
-            placeholder="owner/name"
+            description="Pull requests in these repositories may ask; owner/* covers all of an owner's repositories. Pull requests from forks never can."
+            placeholder="owner/name or owner/*"
             values={value.repositories}
-            pattern={GITHUB_REPOSITORY_FULL_NAME_REGEX}
-            invalidMessage={GITHUB_REPOSITORY_FULL_NAME_MESSAGE}
+            pattern={GITHUB_ACTIONS_REPOSITORY_REGEX}
+            invalidMessage={GITHUB_ACTIONS_REPOSITORY_MESSAGE}
             caseInsensitive
             onChange={(repositories) => onChange({ ...value, repositories })}
           />

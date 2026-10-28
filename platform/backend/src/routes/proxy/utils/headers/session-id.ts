@@ -184,13 +184,26 @@ export function extractSessionInfo({
     }
   }
 
-  // Priority 7: Claude Code's own session header. `/branch` or
-  // `--fork-session` mints a new value here while `metadata.user_id.session_id`
-  // stays on the parent conversation.
+  // Priority 7: Out-of-process Claude Code / Claude Desktop children spawned
+  // with `--parent-session-id` carry `parent_session_id` in `metadata.user_id`
+  // alongside their own `x-claude-code-session-id`; group them under the parent
+  // session in logs. `/branch` and `--fork-session` do not set
+  // `parent_session_id`, so forks keep their new `x-claude-code-session-id`.
   const claudeCodeSessionId = getHeaderValue(
     headers,
     "x-claude-code-session-id",
   );
+  const claudeParentSessionId = parseClaudeMetadataParentSessionId(
+    body?.metadata?.user_id,
+  );
+  if (claudeParentSessionId) {
+    return {
+      sessionId: claudeParentSessionId,
+      sessionSource: claudeCodeSessionId
+        ? CLAUDE_CODE_HEADER_SESSION_SOURCE
+        : CLAUDE_METADATA_SESSION_SOURCE,
+    };
+  }
   if (claudeCodeSessionId) {
     return {
       sessionId: claudeCodeSessionId,
@@ -277,4 +290,31 @@ export function isClaudeMetadataUserId(
   userId: string | null | undefined,
 ): boolean {
   return parseClaudeMetadataSessionId(userId) !== null;
+}
+
+/**
+ * Extract `parent_session_id` from a unified JSON Claude `metadata.user_id`
+ * value, when an out-of-process child/teammate CLI was launched with
+ * `--parent-session-id`.
+ */
+export function parseClaudeMetadataParentSessionId(
+  userId: string | null | undefined,
+): string | null {
+  if (!userId || !userId.trimStart().startsWith("{")) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(userId) as { parent_session_id?: unknown };
+    if (
+      typeof parsed.parent_session_id === "string" &&
+      parsed.parent_session_id.trim()
+    ) {
+      return parsed.parent_session_id.trim();
+    }
+  } catch {
+    // Ignore malformed JSON.
+  }
+
+  return null;
 }

@@ -500,29 +500,6 @@ describe("InlineChatError", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("does not suggest an ordinary Vault key for an exact subscription gate", () => {
-    vi.mocked(useFeature).mockReturnValue(true);
-
-    render(
-      <ProviderAuthRequiredCard
-        provider="xai"
-        providerLabel="SuperGrok"
-        agentName="Research Agent"
-        variant="preflight"
-      />,
-    );
-
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      /managed secret storage, or choose an agent\/model/i,
-    );
-    expect(screen.getByRole("alert")).not.toHaveTextContent(
-      /provider API key from Vault/i,
-    );
-    expect(
-      screen.queryByRole("button", { name: "Sign in with Grok" }),
-    ).not.toBeInTheDocument();
-  });
-
   const retryableError = () =>
     new Error(
       JSON.stringify({

@@ -31,6 +31,7 @@ import AgentModel from "@/models/agent";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { credentialBilling } from "@/services/credential-billing";
+import { assertCanGrantModelPools } from "@/services/model-pool-grants";
 import { validateOauthServiceAccountBinding } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -41,6 +42,7 @@ import {
   LlmOauthClientGrantTypeSchema,
   ManagedOauthClientSchema,
   ManagedOauthClientWithSecretSchema,
+  ModelPoolIdsInputSchema,
 } from "@/types";
 import { assertValidProviderKeyMappings } from "@/utils/provider-key-mappings";
 import {
@@ -84,6 +86,10 @@ const OauthClientFields = z
     allowedGatewayIds: z.array(z.string().uuid()).optional(),
     grantType: LlmOauthClientGrantTypeSchema.default("client_credentials"),
     providerApiKeys: z.array(LlmOauthClientProviderKeyBodySchema).optional(),
+    modelPoolIds: ModelPoolIdsInputSchema.describe(
+      "Model pools the client may call by name without mapping one of their members. " +
+        "Omit on update to keep them. Only applies to client_credentials clients.",
+    ),
     includeFutureProviders: z
       .boolean()
       .optional()
@@ -316,6 +322,7 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       await validateGatewayConfig({
         organizationId,
+        userId: user.id,
         scopes: body.scopes,
         ids: body.allowedGatewayIds ?? [],
       });
@@ -332,6 +339,11 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         teamId: body.billingTeamId,
       });
+      await assertCanGrantModelPools({
+        modelPoolIds: body.modelPoolIds,
+        organizationId,
+        userId: user.id,
+      });
       const serviceAccountId = await validateOauthServiceAccountBinding({
         ...body,
         organizationId,
@@ -347,6 +359,7 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         allowedGatewayIds: body.allowedGatewayIds,
         providerApiKeys: body.providerApiKeys,
         includeFutureProviders: body.includeFutureProviders,
+        modelPoolIds: body.modelPoolIds,
         redirectUris: body.redirectUris,
         authorId: user.id,
         initialGrants: body.initialGrants,
@@ -439,6 +452,7 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // SPDX-SnippetEnd
       await validateGatewayConfig({
         organizationId,
+        userId: user.id,
         scopes: body.scopes,
         ids: body.allowedGatewayIds ?? existing.allowedGatewayIds,
       });
@@ -461,6 +475,11 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         cap: body.spendCap,
         current: existing.spendCap,
       });
+      await assertCanGrantModelPools({
+        modelPoolIds: body.modelPoolIds,
+        organizationId,
+        userId: user.id,
+      });
       const serviceAccountId = await validateOauthServiceAccountBinding({
         ...body,
         organizationId,
@@ -475,6 +494,7 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         allowedGatewayIds: body.allowedGatewayIds,
         providerApiKeys: body.providerApiKeys,
         includeFutureProviders: body.includeFutureProviders,
+        modelPoolIds: body.modelPoolIds,
         redirectUris: body.redirectUris,
         billingTeamId: body.billingTeamId,
       });
@@ -690,11 +710,12 @@ async function validateLlmOauthClientConfig(params: {
 
 async function validateGatewayConfig(params: {
   organizationId: string;
+  userId: string;
   scopes: Array<"mcp" | "a2a" | "llm:proxy">;
   ids: string[];
 }) {
   for (const id of params.ids) {
-    const agent = await AgentModel.findById(id);
+    const agent = await AgentModel.findById(id, params.userId, true);
     if (
       !agent ||
       agent.organizationId !== params.organizationId ||

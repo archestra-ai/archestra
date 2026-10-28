@@ -16,6 +16,7 @@ import GithubCopilotResponsesInteraction from "./llmProviders/github-copilot-res
 import GroqChatCompletionInteraction from "./llmProviders/groq";
 import JevDecisionsInteraction from "./llmProviders/jev";
 import KimiChatCompletionInteraction from "./llmProviders/kimi";
+import KimiCodeChatCompletionInteraction from "./llmProviders/kimi-code";
 import Microsoft365CopilotChatCompletionInteraction from "./llmProviders/microsoft-365-copilot";
 import MinimaxChatCompletionInteraction from "./llmProviders/minimax";
 import MistralChatCompletionInteraction from "./llmProviders/mistral";
@@ -63,6 +64,7 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "zhipuai:chatCompletions": (i) => new ZhipuaiChatCompletionInteraction(i),
   "deepseek:chatCompletions": (i) => new DeepSeekChatCompletionInteraction(i),
   "kimi:chatCompletions": (i) => new KimiChatCompletionInteraction(i),
+  "kimi-code:chatCompletions": (i) => new KimiCodeChatCompletionInteraction(i),
   "github-copilot:chatCompletions": (i) =>
     new GithubCopilotChatCompletionInteraction(i),
   "github-copilot:responses": (i) => new GithubCopilotResponsesInteraction(i),

@@ -46,6 +46,8 @@ export type ModelRouterOAuthClientAuth = {
   billingTeamId: string | null;
   /** In preference order; see `selectMappedProviderKey`. */
   providerApiKeys: ModelRouterMappedProviderKey[];
+  /** Pools the client was granted outright. */
+  modelPoolIds: string[];
   oauthClient: {
     id: string;
     name: string;

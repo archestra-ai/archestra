@@ -112,6 +112,38 @@ test("maps primary providers and the user's own sign-ins to the client's provide
   expect(payload.appName).toBe("Acme");
 });
 
+test("serves both Kimi Code plan catalogs on the Kimi Code route", () => {
+  const payload = openCodePrimaryConfig(
+    {
+      ...PROXY,
+      passthroughProviders: [],
+      primaryProviders: [
+        {
+          provider: "kimi-code",
+          name: "Kimi Code",
+          models: [
+            { id: "k3.1-pro", name: "K3.1 Pro", context: null, output: null },
+          ],
+        },
+      ],
+    },
+    "Acme",
+  );
+  expect(payload.catalog).toEqual({
+    routes: {
+      "kimi-code-plan-global": "https://proxy.example/v1/kimi-code",
+      "kimi-code-plan-cn": "https://proxy.example/v1/kimi-code",
+    },
+    managed: {
+      "kimi-code-plan-global": ["k3.1-pro"],
+      "kimi-code-plan-cn": ["k3.1-pro"],
+    },
+    passthrough: [],
+    // An earlier pin keeps the first catalog.
+    legacy: { "archestra-kimi-code": "kimi-code-plan-global" },
+  });
+});
+
 test("the runtime catalog addresses the installation's agent on ordinary proxy routes", () => {
   expect(
     publicManagedCatalog({
@@ -131,6 +163,71 @@ test("the runtime catalog addresses the installation's agent on ordinary proxy r
     legacy: {
       "archestra-anthropic": "anthropic",
       "archestra-kimi": "moonshotai",
+    },
+  });
+});
+
+test("managed Azure deployments and Copilot models use the model router without enabling native passthrough", () => {
+  const primaryProviders: SetupScriptProxySection["primaryProviders"] = [
+    {
+      provider: "azure",
+      name: "My resource",
+      models: [
+        {
+          id: "custom/deployment",
+          name: "Deployment",
+          context: 128000,
+          output: 4096,
+        },
+      ],
+    },
+    {
+      provider: "github-copilot",
+      name: "My subscription",
+      models: [{ id: "gpt-codex", name: "Codex", context: null, output: null }],
+    },
+  ];
+  const payload = openCodePrimaryConfig(
+    { ...PROXY, primaryProviders, passthroughProviders: [] },
+    "Acme",
+  );
+  expect(payload.unsupported).toEqual([]);
+  expect(payload.catalog).toMatchObject({
+    routes: {
+      "archestra-azure": "https://proxy.example/v1/model-router",
+      "archestra-github-copilot": "https://proxy.example/v1/model-router",
+    },
+    managed: {
+      "archestra-azure": ["custom/deployment"],
+      "archestra-github-copilot": ["gpt-codex"],
+    },
+    passthrough: [],
+    modelRouter: {
+      "archestra-azure": {
+        provider: "azure",
+        name: "Azure AI Foundry",
+        models: primaryProviders[0].models,
+      },
+      "archestra-github-copilot": {
+        provider: "github-copilot",
+        name: "GitHub Copilot",
+        models: primaryProviders[1].models,
+      },
+    },
+  });
+  expect(payload.routeHeaders).toEqual({});
+  expect(
+    publicManagedCatalog({
+      primaryProviders,
+      ordinaryBaseUrl: "https://deployment.example/v1",
+      routingAgentId: "agent-1",
+    }),
+  ).toMatchObject({
+    ...payload.catalog,
+    routes: {
+      "archestra-azure": "https://deployment.example/v1/model-router/agent-1",
+      "archestra-github-copilot":
+        "https://deployment.example/v1/model-router/agent-1",
     },
   });
 });

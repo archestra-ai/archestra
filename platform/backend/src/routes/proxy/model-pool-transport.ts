@@ -9,6 +9,7 @@
  * translator. Members a client's wire cannot reach are left out of its plan.
  */
 import {
+  isClaudeOnBedrock,
   isModelPoolProvider,
   type ModelPoolProvider,
   type SupportedProvider,
@@ -20,6 +21,7 @@ import {
   anthropicAdapterFactory,
   azureAdapterFactory,
   bedrockAdapterFactory,
+  bedrockInvokeAdapterFactory,
   cerebrasAdapterFactory,
   deepseekAdapterFactory,
   groqAdapterFactory,
@@ -99,8 +101,17 @@ export function memberTransport(params: {
   client: unknown;
 }): MemberTransport {
   const { inbound, provider, modelId, client } = params;
-  const adapter = memberAdapter(provider);
-  const target = wireOf(provider);
+  // Bedrock also serves Claude in Anthropic's own format (InvokeModel), as it
+  // does for Claude Code with CLAUDE_CODE_USE_BEDROCK, so an Anthropic client
+  // reaches it untranslated.
+  const claudeOnBedrock =
+    inbound === "anthropic" &&
+    provider === "bedrock" &&
+    isClaudeOnBedrock(modelId);
+  const adapter = claudeOnBedrock
+    ? bedrockInvokeAdapterFactory
+    : memberAdapter(provider);
+  const target = claudeOnBedrock ? "anthropic" : wireOf(provider);
   if (!adapter || !target) {
     throw new Error(`Provider ${provider} cannot serve a model pool`);
   }
@@ -182,16 +193,22 @@ export function memberTransport(params: {
     };
   }
 
-  if (inbound === "anthropic" && target === "openai-chat") {
+  if (inbound === "anthropic") {
+    // Through the OpenAI chat shape, which an OpenAI-style member speaks and
+    // the Converse translator takes. Anthropic-only fields (cache_control,
+    // thinking blocks) don't survive it.
+    const viaOpenai = memberTransport({
+      inbound: "openai-chat",
+      provider,
+      modelId,
+      client,
+    });
     return {
       async execute(request) {
         const { openaiBody, anthropicContext } = anthropicToOpenai(
           request as Anthropic.Types.MessagesRequest,
         );
-        const response = await adapter.execute(client, {
-          ...openaiBody,
-          model: modelId,
-        });
+        const response = await viaOpenai.execute(openaiBody);
         return openaiResponseToAnthropic(
           response as OpenAi.Types.ChatCompletionsResponse,
           anthropicContext,
@@ -201,9 +218,8 @@ export function memberTransport(params: {
         const { openaiBody, anthropicContext } = anthropicToOpenai(
           request as Anthropic.Types.MessagesRequest,
         );
-        const chunks = await adapter.executeStream(client, {
+        const chunks = await viaOpenai.executeStream({
           ...openaiBody,
-          model: modelId,
           stream: true,
         });
         const translator =
@@ -280,6 +296,7 @@ const TRANSLATED = new Set([
   "openai-chat>anthropic",
   "openai-chat>bedrock-converse",
   "anthropic>openai-chat",
+  "anthropic>bedrock-converse",
 ]);
 
 function wireOf(provider: SupportedProvider): PoolWire | null {
@@ -312,6 +329,7 @@ function anthropicEventsToOpenAiChunks(ctx: {
   let inputTokens = 0;
   let cacheRead = 0;
   let cacheWrite = 0;
+  let cacheWrite1h = 0;
   let outputTokens = 0;
   const chunk = (delta: Record<string, unknown>, finish: string | null) => ({
     id: ctx.chatcmplId,
@@ -329,6 +347,7 @@ function anthropicEventsToOpenAiChunks(ctx: {
           inputTokens = usage.input_tokens ?? 0;
           cacheRead = usage.cache_read_input_tokens ?? 0;
           cacheWrite = usage.cache_creation_input_tokens ?? 0;
+          cacheWrite1h = usage.cache_creation?.ephemeral_1h_input_tokens ?? 0;
           outputTokens = usage.output_tokens ?? 0;
           toolIndexByBlock = new Map();
           return [chunk({ role: "assistant" }, null)];
@@ -383,6 +402,8 @@ function anthropicEventsToOpenAiChunks(ctx: {
           inputTokens = usage.input_tokens ?? inputTokens;
           cacheRead = usage.cache_read_input_tokens ?? cacheRead;
           cacheWrite = usage.cache_creation_input_tokens ?? cacheWrite;
+          cacheWrite1h =
+            usage.cache_creation?.ephemeral_1h_input_tokens ?? cacheWrite1h;
           return [];
         }
         default:
@@ -414,8 +435,18 @@ function anthropicEventsToOpenAiChunks(ctx: {
             prompt_tokens: prompt,
             completion_tokens: outputTokens,
             total_tokens: prompt + outputTokens,
-            ...(cacheRead > 0
-              ? { prompt_tokens_details: { cached_tokens: cacheRead } }
+            ...(cacheRead > 0 || cacheWrite > 0
+              ? {
+                  prompt_tokens_details: {
+                    cached_tokens: cacheRead,
+                    ...(cacheWrite > 0
+                      ? { cache_write_tokens: cacheWrite }
+                      : {}),
+                    ...(cacheWrite1h > 0
+                      ? { cache_write_1h_tokens: cacheWrite1h }
+                      : {}),
+                  },
+                }
               : {}),
           },
         },

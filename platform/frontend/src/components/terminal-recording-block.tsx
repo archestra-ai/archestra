@@ -13,10 +13,13 @@ type DisplayLine = Omit<SnapshotLine, "runs"> & {
 export function TerminalRecordingBlock({
   lines,
   wrapLines,
+  cell = null,
   virtualize,
 }: {
   lines: DisplayLine[];
   wrapLines: boolean;
+  /** The measured cell in px; null until measured. */
+  cell?: { width: number; height: number } | null;
   virtualize: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null);
@@ -89,7 +92,7 @@ export function TerminalRecordingBlock({
               1,
               Math.ceil(
                 line.runs.reduce((cells, run) => cells + run.cells, 0) /
-                  Math.max(1, width / 7.2),
+                  Math.max(1, width / (cell?.width ?? FALLBACK_CELL.width)),
               ),
             ),
           0,
@@ -99,7 +102,13 @@ export function TerminalRecordingBlock({
       ref={root}
       data-recording-block={lines[0].row}
       style={
-        visible ? undefined : { height: measuredHeight ?? estimatedRows * 14.4 }
+        visible
+          ? undefined
+          : {
+              height:
+                measuredHeight ??
+                estimatedRows * (cell?.height ?? FALLBACK_CELL.height),
+            }
       }
     >
       {visible &&
@@ -107,7 +116,7 @@ export function TerminalRecordingBlock({
           <div
             key={line.row}
             data-terminal-row={line.row}
-            className="min-h-[1.2em]"
+            className="min-h-[1lh]"
             style={
               wrapLines
                 ? undefined
@@ -115,16 +124,37 @@ export function TerminalRecordingBlock({
             }
           >
             {line.runs.map((run) => {
+              // On the grid every run is an inline block of the row's height,
+              // as in xterm's own DOM renderer, so a coloured block keeps no
+              // gap between its rows even where a glyph falls back to a font
+              // with other metrics. Sized in whole cells, a run starts at its
+              // column's position in every row: sized by its text, the
+              // browser rounded each run's width, and a row split into more
+              // runs moved a divider's edge by a device pixel.
+              const joins = joinsAdjacentCells(run.text);
+              const runWidth = cell
+                ? `${run.cells * cell.width}px`
+                : run.fixedWidth
+                  ? `${run.cells}ch`
+                  : undefined;
               const style = {
                 ...run.style,
-                ...(!wrapLines && run.fixedWidth
+                ...(!wrapLines
                   ? {
                       display: "inline-block",
-                      width: `${run.cells}ch`,
                       verticalAlign: "top",
+                      ...(runWidth ? { width: runWidth } : {}),
                     }
                   : {}),
+                ...(joins ? JOINING_CELL_STYLE : {}),
               };
+              const text = joins ? (
+                <span key={run.key} style={STRETCHED_GLYPH_STYLE}>
+                  {run.text}
+                </span>
+              ) : (
+                run.text
+              );
               return run.url ? (
                 <a
                   key={run.key}
@@ -141,11 +171,11 @@ export function TerminalRecordingBlock({
                       : `underline ${style.textDecorationLine ?? ""}`,
                   }}
                 >
-                  {run.text}
+                  {text}
                 </a>
               ) : (
                 <span key={run.key} style={style}>
-                  {run.text}
+                  {text}
                 </span>
               );
             })}
@@ -153,4 +183,32 @@ export function TerminalRecordingBlock({
         ))}
     </div>
   );
+}
+
+// ===================== internals =====================
+
+/** A 12px monospace cell, for estimates before the font is measured. */
+const FALLBACK_CELL = { width: 7.2, height: 14.4 };
+
+/**
+ * Fonts draw box-drawing and block characters to their own metrics, which the
+ * browser rounds, so they stop a fraction of a pixel short of their cell and a
+ * divider, a rule or a logo showed as dashes. Each is stretched a little past
+ * its cell and clipped to it, as xterm's own glyphs fill their cell: unclipped,
+ * neighbours overlapped and the overlaps showed as brighter ticks.
+ */
+const JOINING_CELL_STYLE = {
+  display: "inline-block",
+  verticalAlign: "top",
+  overflow: "hidden",
+} as const;
+const STRETCHED_GLYPH_STYLE = {
+  display: "inline-block",
+  verticalAlign: "top",
+  transform: "scale(1.1)",
+} as const;
+
+function joinsAdjacentCells(text: string): boolean {
+  const code = text.codePointAt(0) ?? 0;
+  return text.length === 1 && code >= 0x2500 && code <= 0x259f;
 }

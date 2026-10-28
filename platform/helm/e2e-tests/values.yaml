@@ -139,7 +139,7 @@ mcpServerIdJag:
       cpu: 500m
       memory: 256Mi
 
-# HashiCorp Vault configuration for BYOS (Bring Your Own Secrets) testing
+# HashiCorp Vault test configuration
 vault:
   enabled: true
   image:

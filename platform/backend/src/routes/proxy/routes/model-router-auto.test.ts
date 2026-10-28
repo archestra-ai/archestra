@@ -506,7 +506,6 @@ describe("Model Router auto model", () => {
             enabled: true,
           },
         ],
-        virtualApiKeyIds: [],
       },
     });
 

@@ -142,8 +142,9 @@ export function buildContextWindowBreakdown(params: {
 /**
  * Rebuilds the derived fields of an existing breakdown using a provider-exact
  * `inputTokens` count instead of the heuristic estimate. Called after each
- * tool-call step so the visualizer headline stays accurate across multi-step
- * turns while the category proportions keep their initial estimates.
+ * finished step so the visualizer headline stays accurate across multi-step
+ * turns and the final response while the category proportions keep their
+ * initial estimates.
  */
 export function refreshBreakdownUsedTokens(
   breakdown: ContextWindowBreakdown,

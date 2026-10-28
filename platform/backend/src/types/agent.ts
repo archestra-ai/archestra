@@ -11,6 +11,7 @@ import {
   MAX_PASSTHROUGH_HEADERS,
   MAX_SUGGESTED_PROMPTS,
   ResourcePermissionGrantSchema,
+  StoredGitHubActionsAccessSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import {
@@ -192,9 +193,10 @@ const selectExtendedFields = {
   passthroughHeaders: z.array(z.string()).nullable(),
   /**
    * MCP gateways' GitHub Actions token exchange setting. Optional, like
-   * `lastUsedAt`, so agent objects built in code without it still fit.
+   * `lastUsedAt`, so agent objects built in code without it still fit. Read
+   * without the entry rules, so a row saved under other rules still loads.
    */
-  githubActionsAccess: GitHubActionsAccessSchema.nullable().optional(),
+  githubActionsAccess: StoredGitHubActionsAccessSchema.nullable().optional(),
   runtime: AgentRuntimeSchema.nullable(),
   activationSkillMode: AgentActivationSkillModeSchema,
   /**
@@ -398,6 +400,7 @@ export const ChatAgentRosterSchema = SelectAgentSchema.pick({
   runtime: true,
   modelId: true,
   llmApiKeyId: true,
+  modelPoolId: true,
 });
 export type ChatAgentRoster = z.infer<typeof ChatAgentRosterSchema>;
 

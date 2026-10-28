@@ -255,7 +255,7 @@ test("workflow selects release updates and benchmark changes without loading unr
       parents: [{ sha: "f".repeat(40) }],
       files: [
         {
-          filename: "docs/pages/admin/observability/performance-benchmarks.md",
+          filename: "docs/pages/admin/performance-benchmarks.md",
           status: "modified",
         },
       ],
@@ -400,7 +400,7 @@ test("generated docs may follow a measurement, but changed execution inputs and 
                       ? "platform/backend/src/server.ts"
                       : mode === "workflow"
                         ? ".github/workflows/llm-proxy-benchmark.yml"
-                        : "docs/pages/admin/observability/performance-benchmarks.md",
+                        : "docs/pages/admin/performance-benchmarks.md",
                   ...(mode === "renamed"
                     ? { previous_filename: "platform/backend/src/server.ts" }
                     : {}),

@@ -55,6 +55,7 @@ import {
   withholdInteractionContent,
 } from "@/log-content";
 import logger from "@/logging";
+import { parseClaudeMetadataParentSessionId } from "@/routes/proxy/utils/headers/session-id";
 import type {
   InsertInteraction,
   Interaction,
@@ -252,6 +253,10 @@ function computeRequestType(
     return computeOpenCodeRequestType(request);
   }
 
+  if (hasTitleGenerationMarker(findMarkers(request, SESSION_PREVIEW_MARKERS))) {
+    return "subagent";
+  }
+
   // Only apply detection heuristics for Claude sessions (claude_metadata, plus
   // the legacy claude_code / claude_desktop values on older rows).
   if (!isClaudeSessionSource(sessionSource)) {
@@ -261,11 +266,20 @@ function computeRequestType(
   const req = request as {
     system?: string | Array<{ text?: string; type?: string }>;
     tools?: Array<{ name: string }>;
+    metadata?: {
+      agent_id?: unknown;
+      parent_session_id?: unknown;
+      user_id?: unknown;
+    };
     messages?: Array<{
       content: string | Array<{ text?: string; type?: string }>;
       role: string;
     }>;
   };
+
+  if (hasClaudeSubagentMarker(req)) {
+    return "subagent";
+  }
 
   const messages = req?.messages ?? [];
 
@@ -287,20 +301,15 @@ function computeRequestType(
     }
   }
 
-  // Claude Agent SDK tool sub-agents (e.g. web search) are marked by their
-  // system prompt. This is the reliable signal for Claude Desktop, whose main
-  // agent — unlike Claude Code's — does not carry the Task tool.
-  if (getMessageText(req?.system).includes("an assistant for performing a")) {
-    return "subagent";
-  }
-
   // Legacy rows only: newer Claude requests record session_source as
   // claude_metadata, which can no longer be distinguished from Claude Desktop,
   // so the Task-tool negative signal (unsafe for Desktop main agents) is not
   // applied to them — they fall through to the default below.
   if (sessionSource === LEGACY_CLAUDE_CODE_SESSION_SOURCE) {
     const tools = req?.tools ?? [];
-    const hasTaskTool = tools.some((tool) => tool.name === "Task");
+    const hasTaskTool = tools.some(
+      (tool) => tool.name === "Task" || tool.name === "Agent",
+    );
     return hasTaskTool ? "main" : "subagent";
   }
 
@@ -324,6 +333,50 @@ export function isSessionMainTurn(row: {
   }
   return (
     computeRequestType(row.request, row.sessionSource, row.source) === "main"
+  );
+}
+
+const CLAUDE_SUBAGENT_SYSTEM_MARKERS = [
+  "an assistant for performing a",
+  "You are a file search specialist",
+  "You are a command execution specialist",
+  "You are a software architect and planning specialist",
+  "You are a general-purpose agent",
+  "You are a security monitor for autonomous AI coding agents",
+  "cc_is_subagent=true",
+] as const;
+
+function hasClaudeSubagentMarker(request: unknown): boolean {
+  const req = request as {
+    system?: string | Array<{ text?: string; type?: string }>;
+    metadata?: {
+      agent_id?: unknown;
+      parent_session_id?: unknown;
+      user_id?: unknown;
+    };
+  } | null;
+  if (!req) return false;
+  if (
+    typeof req.metadata?.agent_id === "string" &&
+    req.metadata.agent_id.trim().length > 0
+  ) {
+    return true;
+  }
+  if (
+    typeof req.metadata?.parent_session_id === "string" &&
+    req.metadata.parent_session_id.trim().length > 0
+  ) {
+    return true;
+  }
+  if (
+    typeof req.metadata?.user_id === "string" &&
+    parseClaudeMetadataParentSessionId(req.metadata.user_id) !== null
+  ) {
+    return true;
+  }
+  const systemText = getMessageText(req.system);
+  return CLAUDE_SUBAGENT_SYSTEM_MARKERS.some((marker) =>
+    systemText.includes(marker),
   );
 }
 
@@ -648,6 +701,11 @@ class InteractionModel {
       sessionId?: string;
       startDate?: Date;
       endDate?: Date;
+      /**
+       * Only calls from this source, plus untagged older rows; leaves out
+       * auxiliary calls (guardrails, tool-call repair) inside the session.
+       */
+      turnSource?: InteractionSource;
     },
   ): Promise<PaginatedResult<Interaction>> {
     // Determine the ORDER BY clause based on sorting params
@@ -698,6 +756,15 @@ class InteractionModel {
     // Session ID filter
     if (filters?.sessionId) {
       conditions.push(matchesSessionKey(filters.sessionId));
+    }
+
+    if (filters?.turnSource) {
+      conditions.push(
+        or(
+          isNull(schema.interactionsTable.source),
+          eq(schema.interactionsTable.source, filters.turnSource),
+        ) as SQL,
+      );
     }
 
     // Date range filter
@@ -2858,22 +2925,22 @@ class InteractionModel {
         const isGuardrail = isGuardrailSource(interaction.source);
         const isOpenCodeSideTurn =
           interaction.preview?.isOpenCodeSideTurn ??
-          (isOpenCodeFamilySessionSource(interaction.sessionSource) &&
+          ((isOpenCodeFamilySessionSource(interaction.sessionSource) &&
             computeRequestType(
               interaction.request,
               interaction.sessionSource,
               interaction.source,
-            ) === "subagent");
+            ) === "subagent") ||
+            (isClaudeSessionSource(interaction.sessionSource) &&
+              hasClaudeSubagentMarker(interaction.request)));
 
-        // Check for title generation request (Claude Code)
-        if (interaction.isTitleGeneration && claudeCodeTitle === undefined) {
-          // Extract title from response
-          const response = interaction.response as {
-            content?: Array<{ text?: string }>;
-          };
-          claudeCodeTitle = interaction.preview
-            ? interaction.preview.claudeCodeTitle
-            : (response?.content?.[0]?.text ?? null);
+        // Check for title generation request (Claude Code / Claude Desktop)
+        if (interaction.isTitleGeneration) {
+          if (!claudeCodeTitle) {
+            claudeCodeTitle = interaction.preview
+              ? interaction.preview.claudeCodeTitle
+              : extractClaudeCodeTitle(interaction.response);
+          }
           continue;
         }
 
@@ -2881,9 +2948,8 @@ class InteractionModel {
         if (
           !lastMainInteraction &&
           (isGuardrail ||
-            (!isOpenCodeSideTurn &&
-              !interaction.isPromptSuggestion &&
-              !interaction.isTitleGeneration))
+            isOpenCodeSideTurn ||
+            (!interaction.isPromptSuggestion && !interaction.isTitleGeneration))
         ) {
           // Check if request has valid content - support both OpenAI/Anthropic and Gemini formats
           // We accept any interaction that has a valid request structure, not just text content.
@@ -2918,13 +2984,16 @@ class InteractionModel {
               hasGeminiContent ||
               isLogContentNotStored(interaction.request))
           ) {
-            if (isGuardrail) guardrailTip ??= interaction;
-            else lastMainInteraction = interaction;
+            if (isGuardrail || isOpenCodeSideTurn) {
+              if (isGuardrail) guardrailTip ??= interaction;
+            } else {
+              lastMainInteraction = interaction;
+            }
           }
         }
 
-        // Early exit if we found both (undefined = not yet searched for title)
-        if (lastMainInteraction && claudeCodeTitle !== undefined) {
+        // Early exit if we found both (keep scanning if an earlier title-gen row had null text)
+        if (lastMainInteraction && claudeCodeTitle) {
           break;
         }
       }
@@ -3189,8 +3258,7 @@ class InteractionModel {
         attributionLabels: row.attribution_labels,
         response: undefined,
         isTitleGeneration:
-          preview?.isTitleGeneration ??
-          requestText.includes(TITLE_GENERATION_MARKER),
+          preview?.isTitleGeneration ?? hasTitleGenerationText(requestText),
         isPromptSuggestion:
           preview?.isPromptSuggestion ??
           requestText.includes(PROMPT_SUGGESTION_MARKER),
@@ -3464,6 +3532,22 @@ class InteractionModel {
       response: stripUnstorableChars(record.response),
     };
 
+    const claudeDesktopTitleDescription = !withheld
+      ? extractClaudeDesktopTitleDescription(sanitized.request)
+      : null;
+    if (claudeDesktopTitleDescription && sanitized.profileId) {
+      const matchedSession = await findMatchingClaudeDesktopMainSession({
+        profileId: sanitized.profileId,
+        userId: sanitized.userId ?? null,
+        currentSessionId: sanitized.sessionId ?? null,
+        description: claudeDesktopTitleDescription,
+      });
+      if (matchedSession) {
+        sanitized.sessionId = matchedSession.sessionId;
+        sanitized.sessionSource = matchedSession.sessionSource;
+      }
+    }
+
     // Delta-encode Claude Code / Claude Desktop requests so we don't re-store the
     // whole conversation on every row (no-op for all other interactions). Delta
     // encoding stays active under content encryption: deltas are computed on
@@ -3622,6 +3706,24 @@ class InteractionModel {
       InteractionDeltaManager.commitTip(interaction.id, tip);
     }
 
+    if (
+      !withheld &&
+      !claudeDesktopTitleDescription &&
+      sanitized.sessionId &&
+      isClaudeSessionSource(sanitized.sessionSource) &&
+      sanitized.profileId &&
+      values.parentId == null &&
+      !hasAssistantTurn(sanitized.request)
+    ) {
+      await linkClaudeDesktopTitleInteractions({
+        profileId: sanitized.profileId,
+        userId: sanitized.userId ?? null,
+        sessionId: sanitized.sessionId,
+        sessionSource: sanitized.sessionSource ?? null,
+        request: sanitized.request,
+      });
+    }
+
     // Update usage tracking after interaction is created
     // Run in background to not block the response
     if (!billingUsage)
@@ -3765,11 +3867,69 @@ async function withReconstructedRequests<
  * Returns null when the request has no extractable user text or an
  * unsupported provider shape — the listing renders its fallback instead.
  */
+function isHarnessInjectedUserBlock(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+  return (
+    trimmed.startsWith("<system-reminder>") ||
+    trimmed.startsWith("<local-command-stdout>") ||
+    trimmed.startsWith("<local-command-stderr>") ||
+    trimmed.startsWith("<local-command-caveat>") ||
+    trimmed.startsWith("<command-name>") ||
+    trimmed.startsWith(
+      "Another Claude session sent a message:\n<agent-message",
+    ) ||
+    trimmed.startsWith("[handback-send-enforce]") ||
+    trimmed === "/branch"
+  );
+}
+
+function extractGenuineAnthropicUserMessage(request: unknown): string | null {
+  const messages = (
+    request as {
+      messages?: Array<{
+        role?: string;
+        content?: string | Array<{ type?: string; text?: string }>;
+      }>;
+    } | null
+  )?.messages;
+  if (!Array.isArray(messages)) return null;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg?.role !== "user") continue;
+    if (typeof msg.content === "string") {
+      if (!isHarnessInjectedUserBlock(msg.content)) {
+        return msg.content.trim();
+      }
+      continue;
+    }
+    if (Array.isArray(msg.content)) {
+      for (let j = msg.content.length - 1; j >= 0; j--) {
+        const block = msg.content[j];
+        if (
+          block?.type === "text" &&
+          typeof block.text === "string" &&
+          !isHarnessInjectedUserBlock(block.text)
+        ) {
+          return block.text.trim();
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function buildLastUserMessagePreview(
   request: unknown,
   type: string,
 ): string | null {
   try {
+    if (type === "anthropic:messages") {
+      const genuine = extractGenuineAnthropicUserMessage(request);
+      if (genuine) {
+        return truncatePreview(genuine);
+      }
+    }
     const interaction = new DynamicInteraction({
       request,
       response: {},
@@ -3891,8 +4051,7 @@ function buildSessionPreview(
   const markers = isGuardrailSource(data.source ?? null)
     ? new Set<string>()
     : findMarkers(request, SESSION_PREVIEW_MARKERS);
-  const isTitleGeneration = markers.has(TITLE_GENERATION_MARKER);
-  const response = data.response as { content?: Array<{ text?: string }> };
+  const isTitleGeneration = hasTitleGenerationMarker(markers);
   const contentNotStored = isLogContentNotStored(request);
   return {
     hasContent:
@@ -3902,19 +4061,21 @@ function buildSessionPreview(
     isTitleGeneration,
     isPromptSuggestion: markers.has(PROMPT_SUGGESTION_MARKER),
     isOpenCodeSideTurn:
-      isOpenCodeFamilySessionSource(data.sessionSource ?? null) &&
-      computeRequestType(
-        request,
-        data.sessionSource ?? null,
-        data.source ?? null,
-      ) === "subagent",
+      (isOpenCodeFamilySessionSource(data.sessionSource ?? null) &&
+        computeRequestType(
+          request,
+          data.sessionSource ?? null,
+          data.source ?? null,
+        ) === "subagent") ||
+      (isClaudeSessionSource(data.sessionSource ?? null) &&
+        hasClaudeSubagentMarker(data.request)),
     contentNotStored,
     lastUserMessagePreview: buildLastUserMessagePreview(
       data.request,
       data.type,
     ),
     claudeCodeTitle: isTitleGeneration
-      ? (response?.content?.[0]?.text ?? null)
+      ? extractClaudeCodeTitle(data.response)
       : null,
     ...(contentNotStored
       ? { responseToolNames: [], responseTextPreview: null }
@@ -3923,11 +4084,240 @@ function buildSessionPreview(
 }
 
 const TITLE_GENERATION_MARKER = "Please write a 5-10 word title";
+const CLAUDE_DESKTOP_TITLE_GENERATION_MARKER =
+  "You are coming up with a succinct title";
+const CLAUDE_DESKTOP_TITLE_SYSTEM_MARKER =
+  "You write short session titles. Reply with only the tagged fields the prompt asks for.";
 const PROMPT_SUGGESTION_MARKER = "prompt suggestion generator";
 const SESSION_PREVIEW_MARKERS = [
   TITLE_GENERATION_MARKER,
+  CLAUDE_DESKTOP_TITLE_GENERATION_MARKER,
+  CLAUDE_DESKTOP_TITLE_SYSTEM_MARKER,
   PROMPT_SUGGESTION_MARKER,
 ];
+
+function hasTitleGenerationMarker(markers: Set<string>): boolean {
+  return (
+    markers.has(TITLE_GENERATION_MARKER) ||
+    markers.has(CLAUDE_DESKTOP_TITLE_GENERATION_MARKER) ||
+    markers.has(CLAUDE_DESKTOP_TITLE_SYSTEM_MARKER)
+  );
+}
+
+function hasTitleGenerationText(text: string): boolean {
+  return (
+    text.includes(TITLE_GENERATION_MARKER) ||
+    text.includes(CLAUDE_DESKTOP_TITLE_GENERATION_MARKER) ||
+    text.includes(CLAUDE_DESKTOP_TITLE_SYSTEM_MARKER)
+  );
+}
+
+function extractClaudeCodeTitle(response: unknown): string | null {
+  const content = (
+    response as { content?: Array<{ type?: string; text?: string }> } | null
+  )?.content;
+  if (!Array.isArray(content)) return null;
+  for (const block of content) {
+    if (typeof block?.text !== "string") continue;
+    const raw = block.text.trim();
+    if (!raw) continue;
+    const tagged = /<title>([\s\S]*?)<\/title>/i.exec(raw)?.[1]?.trim();
+    return tagged !== undefined ? tagged || null : raw;
+  }
+  return null;
+}
+
+function extractClaudeDesktopTitleDescription(request: unknown): string | null {
+  if (
+    !hasTitleGenerationMarker(findMarkers(request, SESSION_PREVIEW_MARKERS))
+  ) {
+    return null;
+  }
+  const messages = (
+    request as {
+      messages?: Array<{
+        role?: string;
+        content?: string | Array<{ text?: string; type?: string }>;
+      }>;
+    } | null
+  )?.messages;
+  if (!Array.isArray(messages) || messages.length === 0) return null;
+  const text = getMessageText(messages[0]?.content);
+  const match =
+    /<description>((?:(?!<description>)[\s\S])*?)<\/description>/i.exec(text);
+  const description = match?.[1]?.trim();
+  return description ? description : null;
+}
+
+function extractClaudeOpeningPrompts(request: unknown): string[] {
+  const messages = (
+    request as {
+      messages?: Array<{
+        role?: string;
+        content?: string | Array<{ text?: string; type?: string }>;
+      }>;
+    } | null
+  )?.messages;
+  if (!Array.isArray(messages) || messages.length === 0) return [];
+  const firstUser = messages.find((m) => m?.role === "user") ?? messages[0];
+  const content = firstUser?.content;
+  const candidates = new Set<string>();
+  const joined = getMessageText(content).trim();
+  if (joined) candidates.add(joined);
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (typeof block?.text === "string") {
+        const trimmed = block.text.trim();
+        if (trimmed && !trimmed.startsWith("<system-reminder>")) {
+          candidates.add(trimmed);
+        }
+      }
+    }
+  }
+  return [...candidates];
+}
+
+function claudePromptMatchesTitleDescription(
+  openingPrompts: string[],
+  description: string,
+): boolean {
+  return openingPrompts.some(
+    (prompt) => prompt === description || prompt.startsWith(description),
+  );
+}
+
+function hasAssistantTurn(request: unknown): boolean {
+  const messages = (request as { messages?: Array<{ role?: string }> } | null)
+    ?.messages;
+  return (
+    Array.isArray(messages) && messages.some((m) => m?.role === "assistant")
+  );
+}
+
+async function findMatchingClaudeDesktopMainSession(params: {
+  profileId: string;
+  userId: string | null;
+  currentSessionId: string | null;
+  description: string;
+}): Promise<{ sessionId: string; sessionSource: string | null } | null> {
+  try {
+    const t = schema.interactionsTable;
+    const rows = await db
+      .select({
+        id: t.id,
+        sessionId: t.sessionId,
+        sessionSource: t.sessionSource,
+        request: t.request,
+        encryptedChatConversationId: t.encryptedChatConversationId,
+      })
+      .from(t)
+      .where(
+        and(
+          eq(t.profileId, params.profileId),
+          params.userId ? eq(t.userId, params.userId) : isNull(t.userId),
+          sql`${t.createdAt} >= now() - interval '5 minutes'`,
+          isNotNull(t.sessionId),
+          isNull(t.parentId),
+          isNull(t.encryptedChatConversationId),
+        ),
+      )
+      .orderBy(desc(t.createdAt), desc(t.id))
+      .limit(10);
+    for (const row of rows) {
+      if (!row.sessionId || row.sessionId === params.currentSessionId) continue;
+      if (!isClaudeSessionSource(row.sessionSource)) continue;
+      readInteractionRow(row);
+      if (hasAssistantTurn(row.request)) continue;
+      if (extractClaudeDesktopTitleDescription(row.request)) continue;
+      const prompts = extractClaudeOpeningPrompts(row.request);
+      if (claudePromptMatchesTitleDescription(prompts, params.description)) {
+        return {
+          sessionId: row.sessionId,
+          sessionSource: row.sessionSource,
+        };
+      }
+    }
+  } catch (error) {
+    logger.warn(
+      { error, profileId: params.profileId },
+      "Failed to look up matching Claude Desktop main session for title request",
+    );
+  }
+  return null;
+}
+
+async function linkClaudeDesktopTitleInteractions(params: {
+  profileId: string;
+  userId: string | null;
+  sessionId: string;
+  sessionSource: string | null;
+  request: unknown;
+}): Promise<void> {
+  const openingPrompts = extractClaudeOpeningPrompts(params.request);
+  if (openingPrompts.length === 0) return;
+  try {
+    const t = schema.interactionsTable;
+    const rows = await db
+      .select({
+        id: t.id,
+        sessionId: t.sessionId,
+        request: t.request,
+        encryptedChatConversationId: t.encryptedChatConversationId,
+      })
+      .from(t)
+      .where(
+        and(
+          eq(t.profileId, params.profileId),
+          params.userId ? eq(t.userId, params.userId) : isNull(t.userId),
+          sql`${t.createdAt} >= now() - interval '5 minutes'`,
+          or(
+            isNull(t.sessionId),
+            and(
+              sql`${t.sessionId} <> ${params.sessionId}`,
+              sql`NOT EXISTS (SELECT 1 FROM ${t} i2 WHERE i2.session_id = ${t.sessionId} AND i2.id <> ${t.id})`,
+            ),
+          ),
+          isNull(t.parentId),
+          isNull(t.encryptedChatConversationId),
+        ),
+      )
+      .orderBy(desc(t.createdAt), desc(t.id))
+      .limit(15);
+    const matchedIds: string[] = [];
+    for (const row of rows) {
+      readInteractionRow(row);
+      const description = extractClaudeDesktopTitleDescription(row.request);
+      if (
+        description &&
+        claudePromptMatchesTitleDescription(openingPrompts, description)
+      ) {
+        matchedIds.push(row.id);
+      }
+    }
+    if (matchedIds.length === 0) return;
+    await db
+      .update(t)
+      .set({
+        sessionId: params.sessionId,
+        sessionSource: params.sessionSource,
+      })
+      .where(inArray(t.id, matchedIds));
+    await db.execute(sql`
+      DELETE FROM interaction_session_heads
+      WHERE last_interaction_id IN (${sql.join(
+        matchedIds.map((id) => sql`${id}::uuid`),
+        sql`, `,
+      )})
+        AND session_key <> ${params.sessionId}
+    `);
+    sessionTotalCache.clear();
+  } catch (error) {
+    logger.warn(
+      { error, profileId: params.profileId, sessionId: params.sessionId },
+      "Failed to link Claude Desktop title generation interaction to main session",
+    );
+  }
+}
 
 /**
  * Markers found in any string of a stored request. Walking the strings finds

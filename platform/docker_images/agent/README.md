@@ -177,9 +177,9 @@ Kimi Code differs from the other clients in these ways:
   delegated run `archestra-kimi-tui-start` presses Ctrl-S while a turn runs, so
   the message reaches the running turn. An interactive session keeps Kimi's
   queue, and the person chooses when to steer.
-- The provider is `type = "kimi"` for a Kimi key (the Moonshot (Kimi)
-  provider), which adds Kimi's thinking switch, and `type = "openai"` for any other Chat
-  Completions provider. Kimi Code matches thinking support by model name only
+- The runtime requires a Kimi Code model (the Kimi Code provider, a Kimi Code
+  membership key). The provider is `type = "kimi"`, which adds Kimi's thinking
+  switch. Kimi Code matches thinking support by model name only
   for its own catalog, so the launcher declares it for `k3`, `k3.1` and
   `kimi-for-coding` models; K3.1 Pro refuses a request without thinking.
 - Kimi ends a turn cut off by the output limit as completed. The `Stop` hook,

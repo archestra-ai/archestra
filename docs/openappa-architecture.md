@@ -542,10 +542,11 @@ flowchart TD
   Fork --> Start
 ```
 
-Adapters match in precedence order: Claude Code, Codex, OpenCode, then Chat. `X-Appa-Session-ID` overrides native extraction. `X-Appa-Parent-ID` overrides extracted parent metadata. Verified child bindings reject explicit claims that contradict known parents or child IDs.
+Adapters match in precedence order: Pi, Claude Desktop, Claude Code, Codex, Kilo Code, OpenCode, then Chat. `X-Appa-Session-ID` overrides native extraction. `X-Appa-Parent-ID` overrides extracted parent metadata. Verified child bindings reject explicit claims that contradict known parents or child IDs.
 
 | Client | Match Rule | Session Source | Notes |
 | --- | --- | --- | --- |
+| Claude Desktop | `anthropic_claude_desktop` agent ID header, `claude-desktop` user agent, or `cowork` / `claude-desktop` billing entrypoint | `x-claude-code-session-id`, otherwise session parsed from `metadata.user_id` | Shares Claude Code's runtime, tool names, subagent spawns, relays, and `AskUserQuestion` reviews in Code and Cowork tabs. Native Desktop background probes and title requests pass through without opening a session. |
 | Claude Code | `claude-code` / `claude-cli` user agent, or native session header | `x-claude-code-session-id`, otherwise session parsed from `metadata.user_id` | Stable across resume and native compaction. `Agent` and `Task` are child-spawn tools. A skill stays in the caller's trajectory. |
 | Codex | User agent/originator, `x-codex-turn-metadata`, or recognized `client_metadata` | Reconcile body `client_metadata`, its nested turn metadata, the turn-metadata header, and `session-id`. Prefer `thread_id` over session ID. | Contradictory claims return 400. A `forked_from_thread_id` alone does not establish a child. |
 | OpenCode | User agent/originator or `x-opencode-session` | Reconcile `x-session-id`, `x-session-affinity`, and `session-id`, plus hosted `x-opencode-session`. Contradictory claims are refused. | A differing `x-session-id` can identify the parent of the hosted session. Parent metadata still requires child-binding checks. |

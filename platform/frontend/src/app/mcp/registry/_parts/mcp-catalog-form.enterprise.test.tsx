@@ -94,7 +94,6 @@ describe("McpCatalogForm enterprise gating", () => {
     vi.mocked(useFeature).mockImplementation((feature: string) => {
       if (feature === "mcpServerBaseImage") return "";
       if (feature === "orchestratorK8sRuntime") return true;
-      if (feature === "byosEnabled") return false;
       return undefined;
     });
     vi.mocked(useEnterpriseFeature).mockReturnValue(false);

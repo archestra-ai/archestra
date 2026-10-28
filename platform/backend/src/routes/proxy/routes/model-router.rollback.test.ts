@@ -66,6 +66,7 @@ import {
   githubCopilotResponsesAdapterFactory,
   groqAdapterFactory,
   kimiAdapterFactory,
+  kimiCodeAdapterFactory,
   minimaxAdapterFactory,
   mistralAdapterFactory,
   ollamaAdapterFactory,
@@ -339,10 +340,11 @@ const ROUTABLE_PROVIDER_CASES: Array<{
   // separately below.
   { provider: "github-copilot", modelId: "gpt-4o" },
   { provider: "groq", modelId: "llama-3.1-8b-instant" },
-  // A Kimi for Coding plan id, served over the same chat completions wire. The
-  // Responses translation cannot replay Kimi's reasoning, so that surface is
-  // refused; see the dedicated test below.
-  { provider: "kimi", modelId: "k3.1-pro", responses: false },
+  // Kimi's platform and Kimi Code plan ids, served over the same chat
+  // completions wire. The Responses translation cannot replay Kimi's
+  // reasoning, so that surface is refused; see the dedicated test below.
+  { provider: "kimi", modelId: "kimi-k3.1-pro", responses: false },
+  { provider: "kimi-code", modelId: "k3.1-pro", responses: false },
   { provider: "minimax", modelId: "MiniMax-M1" },
   { provider: "mistral", modelId: "mistral-large-latest" },
   { provider: "ollama", modelId: "llama3.1" },
@@ -626,6 +628,7 @@ describe("model router proxy routes", () => {
       deepseekAdapterFactory,
       groqAdapterFactory,
       kimiAdapterFactory,
+      kimiCodeAdapterFactory,
       minimaxAdapterFactory,
       mistralAdapterFactory,
       ollamaAdapterFactory,
@@ -847,7 +850,13 @@ describe("model router proxy routes", () => {
     });
   }
 
-  test("refuses Kimi on the Responses endpoint, which cannot replay its reasoning", async ({
+  test.for([
+    ["kimi", "kimi-k3.1-pro"],
+    ["kimi-code", "k3.1-pro"],
+  ] as const)("refuses %s on the Responses endpoint, which cannot replay its reasoning", async ([
+    provider,
+    modelId,
+  ], {
     makeAgent,
     makeOrganization,
     makeUser,
@@ -856,8 +865,6 @@ describe("model router proxy routes", () => {
   }) => {
     const app = createFastifyApp();
     await app.register(modelRouterProxyRoutes);
-    const provider = "kimi";
-    const modelId = "k3.1-pro";
     await upsertModel({ provider, modelId });
     const organization = await makeOrganization();
     const { value } = await createModelRouterVirtualKey({

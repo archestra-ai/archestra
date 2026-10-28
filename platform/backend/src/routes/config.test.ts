@@ -161,7 +161,7 @@ describe("config routes", () => {
 
     expect(payload.features).toMatchObject({
       orchestratorK8sRuntime: expect.any(Boolean),
-      byosEnabled: expect.any(Boolean),
+
       azureOpenAiEntraIdEnabled: expect.any(Boolean),
       bedrockIamAuthEnabled: expect.any(Boolean),
       geminiVertexAiEnabled: expect.any(Boolean),
@@ -181,7 +181,6 @@ describe("config routes", () => {
       mcpIdleHibernationBetaEnabled: expect.any(Boolean),
       // SPDX-SnippetEnd
     });
-    expect([null, "1", "2"]).toContain(payload.features.byosVaultKvVersion);
     expect(typeof payload.features.incomingEmail.enabled).toBe("boolean");
     expect(["string", "undefined"]).toContain(
       typeof payload.features.incomingEmail.provider,
@@ -210,6 +209,7 @@ describe("config routes", () => {
       "groq",
       "jev",
       "kimi",
+      "kimi-code",
       "microsoft-365-copilot",
       "minimax",
       "mistral",

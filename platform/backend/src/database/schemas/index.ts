@@ -24,7 +24,7 @@
  *      mcp_server_user,
  *      organization_role, processed_email, secret,
  *      site_notification, skill_team,
- *      team_external_group, team_token, team_vault_folder, user_token,
+ *      team_external_group, team_token, user_token,
  *      virtual_api_key_provider_api_key, virtual_api_key_team
  *
  * New tables must be plural. Tables not listed in (1) or (2) must be plural.
@@ -151,6 +151,11 @@ export {
 } from "./interaction-user-activity";
 export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
 export { default as invitationsTable } from "./invitation";
+export {
+  jiraChatOpsDeliveriesTable,
+  jiraChatOpsEventsTable,
+} from "./jira-chatops-event";
+export { default as jiraChatOpsIdentitiesTable } from "./jira-chatops-identity";
 export { default as jwksTable } from "./jwks";
 export {
   kbBm25CorpusStatsTable,
@@ -289,7 +294,6 @@ export { team as teamsTable, teamMember as teamMembersTable } from "./team";
 export { default as teamExternalGroupsTable } from "./team-external-group";
 export { default as teamLabelsTable } from "./team-label";
 export { default as teamTokensTable } from "./team-token";
-export { default as teamVaultFoldersTable } from "./team-vault-folder";
 export { default as toolsTable } from "./tool";
 export { default as toolObservationsTable } from "./tool-observation";
 export { default as twoFactorsTable } from "./two-factor";

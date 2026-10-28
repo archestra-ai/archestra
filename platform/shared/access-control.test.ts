@@ -274,8 +274,6 @@ describe("access-control", () => {
   });
 
   describe("secrets routes", () => {
-    // The secrets backend is organization configuration; reading one stored
-    // Vault reference serves the MCP catalog form for one entry.
     test("the secrets backend is organization settings", () => {
       expect(requiredEndpointPermissionsMap[RouteId.GetSecretsType]).toEqual({
         organizationSettings: ["read"],
@@ -286,11 +284,6 @@ describe("access-control", () => {
       expect(requiredPagePermissionsMap["/settings/secrets"]).toEqual({
         organizationSettings: ["read"],
       });
-    });
-
-    test("reading a Vault reference is decided per registry entry", () => {
-      // The handler requires an update grant on the owning entry.
-      expect(requiredEndpointPermissionsMap[RouteId.GetSecret]).toEqual({});
     });
   });
 
@@ -436,14 +429,15 @@ describe("own-vs-all log split (Read and Admin role actions)", () => {
 });
 
 describe("platform_admin predefined role", () => {
-  test("withholds impersonation and organization-wide diagnostics", () => {
+  test("withholds impersonation, organization-wide diagnostics, and the SRE agent", () => {
     const p = predefinedPermissionsMap.platform_admin;
     expect(p.log).toEqual(["read"]);
     expect(p.auditLog).toEqual(["read"]);
     expect(p.member).not.toContain("impersonate");
+    expect(p.sre).toEqual([]);
     // …and is otherwise the full admin set.
     for (const [resource, actions] of Object.entries(allAvailableActions)) {
-      if (["log", "auditLog", "member"].includes(resource)) {
+      if (["log", "auditLog", "member", "sre"].includes(resource)) {
         continue;
       }
       expect(p[resource as keyof typeof p]).toEqual(actions);
@@ -457,6 +451,7 @@ describe("platform_admin predefined role", () => {
         "member:impersonate",
         "log:admin",
         "auditLog:admin",
+        "sre:read",
       ]),
     );
     // …while granting its own role or member stays possible.

@@ -78,8 +78,8 @@ export async function resolveInstallationCredential(
  */
 export async function createRepositoryInstallationToken(
   credentials: Omit<GithubAppCredentials, "minimumValidityMs"> & {
-    /** Repository name within the installation's account, without the owner. */
-    repository: string;
+    /** GitHub's id of a repository the installation covers. */
+    repositoryId: number;
     permissions: Record<string, "read" | "write">;
   },
   fetchImpl: typeof fetch = globalThis.fetch,
@@ -90,7 +90,7 @@ export async function createRepositoryInstallationToken(
     installationId: credentials.installationId,
     signingKey: readAppSigningKey(credentials),
     restrictTo: {
-      repositories: [credentials.repository],
+      repository_ids: [credentials.repositoryId],
       permissions: credentials.permissions,
     },
     fetchImpl,
@@ -98,6 +98,14 @@ export async function createRepositoryInstallationToken(
 }
 
 export const GITHUB_APP_NOT_FOUND = "github_app_not_found";
+
+/**
+ * `internalCode` of the error when GitHub refuses the requested token (HTTP
+ * 422): a permission the installation lacks, or a repository it does not
+ * cover.
+ */
+export const GITHUB_INSTALLATION_TOKEN_REFUSED =
+  "github_installation_token_refused";
 
 /**
  * Call an App-level GitHub endpoint (`/app/...`) authenticated as the App
@@ -186,7 +194,7 @@ async function mintInstallationToken(params: {
   installationId: string;
   signingKey: KeyObject;
   restrictTo?: {
-    repositories: string[];
+    repository_ids: number[];
     permissions: Record<string, "read" | "write">;
   };
   fetchImpl: typeof fetch;
@@ -229,6 +237,7 @@ async function mintInstallationToken(params: {
       ]
         .filter(Boolean)
         .join(": "),
+      response.status === 422 ? GITHUB_INSTALLATION_TOKEN_REFUSED : undefined,
     );
   }
 

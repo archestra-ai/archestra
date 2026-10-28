@@ -1,8 +1,7 @@
 "use client";
 
-import { parseVaultReference } from "@archestra/shared";
-import { Key, Loader2, Trash2 } from "lucide-react";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { Trash2 } from "lucide-react";
+import { useState } from "react";
 import type {
   FieldArrayWithId,
   FieldPath,
@@ -31,25 +30,12 @@ import {
   SecretFileDialog,
   type SecretFileDraft,
 } from "@/components/secret-file-dialog";
-import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { FormDescription } from "@/components/ui/form";
 import {
   useCanAttachCredential,
   useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
-
-const ExternalSecretSelector = lazy(
-  () =>
-    // biome-ignore lint/style/noRestrictedImports: lazy loading
-    import("@/components/external-secret-selector.ee"),
-);
-
-interface ExternalSecretValue {
-  teamId: string | null;
-  secretPath: string | null;
-  secretKey: string | null;
-}
 
 interface EnvironmentVariablesFormFieldProps<TFieldValues extends FieldValues> {
   // biome-ignore lint/suspicious/noExplicitAny: Generic field array types require any for flexibility
@@ -66,8 +52,7 @@ interface EnvironmentVariablesFormFieldProps<TFieldValues extends FieldValues> {
   showDescription?: boolean;
   /** Optional inline content rendered after the "Environment Variables" heading. */
   labelSuffix?: React.ReactNode;
-  /** When true, non-prompted secret values will be sourced from external secrets manager (Vault) */
-  useExternalSecretsManager?: boolean;
+
   /**
    * Set of env-var keys whose secret value is already stored on the server.
    * Rows whose `key` is in this set render `••••••••` + an Update button
@@ -120,16 +105,13 @@ export function EnvironmentVariablesFormField<
   showLabel = true,
   showDescription = true,
   labelSuffix,
-  useExternalSecretsManager = false,
+
   secretKeysWithStoredValue,
   disablePromptOnInstallation = false,
   disablePromptOnInstallationReason,
   validateValue,
   envFrom,
 }: EnvironmentVariablesFormFieldProps<TFieldValues>) {
-  const [dialogOpenForEnvIndex, setDialogOpenForEnvIndex] = useState<
-    number | null
-  >(null);
   const { data: credentials = [] } = useRuntimeCredentials();
   const canAttach = useCanAttachCredential();
   const credentialBindingOptions = credentials
@@ -159,26 +141,6 @@ export function EnvironmentVariablesFormField<
   const [secretFileDialog, setSecretFileDialog] = useState<
     { mode: "add" } | { mode: "edit"; index: number } | null
   >(null);
-
-  const handleSecretConfirm = (index: number, value: ExternalSecretValue) => {
-    if (value.secretPath && value.secretKey) {
-      form.setValue(
-        `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>,
-        `${value.secretPath}#${value.secretKey}` as PathValue<
-          TFieldValues,
-          FieldPath<TFieldValues>
-        >,
-      );
-    }
-    setDialogOpenForEnvIndex(null);
-  };
-
-  const dialogEnvKey =
-    dialogOpenForEnvIndex !== null
-      ? form.watch(
-          `${fieldNamePrefix}.${dialogOpenForEnvIndex}.key` as FieldPath<TFieldValues>,
-        )
-      : "";
 
   return (
     <div className="space-y-6">
@@ -245,7 +207,6 @@ export function EnvironmentVariablesFormField<
                 fields={fields}
                 rowIndexes={envVarIndexes}
                 fieldNamePrefix={fieldNamePrefix}
-                useExternalSecretsManager={useExternalSecretsManager}
                 secretKeysWithStoredValue={secretKeysWithStoredValue}
                 onEdit={(index) => setEnvVarDialog({ mode: "edit", index })}
                 onDelete={(index) => remove(index)}
@@ -272,7 +233,6 @@ export function EnvironmentVariablesFormField<
           envVarDialog?.mode === "edit" ? envVarDialog.index : null,
         )}
         secretKeysWithStoredValue={secretKeysWithStoredValue}
-        useExternalSecretsManager={useExternalSecretsManager}
         disableInstallation={disablePromptOnInstallation}
         disableInstallationReason={disablePromptOnInstallationReason}
         validateValue={validateValue}
@@ -441,7 +401,6 @@ export function EnvironmentVariablesFormField<
                 fields={fields}
                 rowIndexes={secretFileIndices}
                 fieldNamePrefix={fieldNamePrefix}
-                useExternalSecretsManager={useExternalSecretsManager}
                 secretKeysWithStoredValue={secretKeysWithStoredValue}
                 showType={false}
                 keyLabel="File"
@@ -473,7 +432,6 @@ export function EnvironmentVariablesFormField<
             secretFileDialog?.mode === "edit" ? secretFileDialog.index : null,
           )}
           secretKeysWithStoredValue={secretKeysWithStoredValue}
-          useExternalSecretsManager={useExternalSecretsManager}
           disableInstallation={disablePromptOnInstallation}
           disableInstallationReason={disablePromptOnInstallationReason}
           onClose={() => setSecretFileDialog(null)}
@@ -494,33 +452,6 @@ export function EnvironmentVariablesFormField<
       </div>
 
       {/* External Secret Selection Dialog */}
-      <ExternalSecretDialog
-        isOpen={dialogOpenForEnvIndex !== null}
-        envKey={dialogEnvKey as string}
-        initialValue={
-          dialogOpenForEnvIndex !== null
-            ? (() => {
-                const formValue = form.watch(
-                  `${fieldNamePrefix}.${dialogOpenForEnvIndex}.value` as FieldPath<TFieldValues>,
-                ) as string | undefined;
-                if (formValue) {
-                  const parsed = parseVaultReference(formValue as string);
-                  return {
-                    teamId: null,
-                    secretPath: parsed.path,
-                    secretKey: parsed.key,
-                  };
-                }
-                return undefined;
-              })()
-            : undefined
-        }
-        onConfirm={(value) =>
-          dialogOpenForEnvIndex !== null &&
-          handleSecretConfirm(dialogOpenForEnvIndex, value)
-        }
-        onClose={() => setDialogOpenForEnvIndex(null)}
-      />
     </div>
   );
 }
@@ -725,102 +656,6 @@ function applySecretFileDraftToRow<TFieldValues extends FieldValues>(
   set("required", draft.scope === "installation" ? draft.required : false);
   set("description", draft.description);
   set("mounted", true);
-}
-
-interface ExternalSecretDialogProps {
-  isOpen: boolean;
-  envKey: string;
-  initialValue?: ExternalSecretValue;
-  onConfirm: (value: ExternalSecretValue) => void;
-  onClose: () => void;
-}
-
-function ExternalSecretDialog({
-  isOpen,
-  envKey,
-  initialValue,
-  onConfirm,
-  onClose,
-}: ExternalSecretDialogProps) {
-  const [teamId, setTeamId] = useState<string | null>(
-    initialValue?.teamId ?? null,
-  );
-  const [secretPath, setSecretPath] = useState<string | null>(
-    initialValue?.secretPath ?? null,
-  );
-  const [secretKey, setSecretKey] = useState<string | null>(
-    initialValue?.secretKey ?? null,
-  );
-
-  // Reset state when dialog opens or initialValue changes
-  useEffect(() => {
-    if (isOpen) {
-      setTeamId(initialValue?.teamId ?? null);
-      setSecretPath(initialValue?.secretPath ?? null);
-      setSecretKey(initialValue?.secretKey ?? null);
-    }
-  }, [isOpen, initialValue]);
-
-  // Handle dialog open/close
-  const handleOpenChange = (open: boolean) => {
-    if (!open) {
-      onClose();
-    }
-  };
-
-  const handleConfirm = () => {
-    onConfirm({ teamId, secretPath, secretKey });
-  };
-
-  return (
-    <StandardDialog
-      open={isOpen}
-      onOpenChange={handleOpenChange}
-      title={
-        <span className="flex items-center gap-2">
-          <Key className="h-5 w-5" />
-          Set external secret
-          {envKey ? (
-            <span className="font-mono text-muted-foreground">{envKey}</span>
-          ) : null}
-        </span>
-      }
-      description="Select a secret from your team's external Vault to use for this environment variable."
-      size="small"
-      footer={
-        <>
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={handleConfirm}
-            disabled={!secretPath || !secretKey}
-          >
-            Confirm
-          </Button>
-        </>
-      }
-    >
-      <Suspense
-        fallback={
-          <div className="flex h-24 items-center justify-center text-muted-foreground">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Loading...
-          </div>
-        }
-      >
-        <ExternalSecretSelector
-          selectedTeamId={teamId}
-          selectedSecretPath={secretPath}
-          selectedSecretKey={secretKey}
-          onTeamChange={setTeamId}
-          onSecretChange={setSecretPath}
-          onSecretKeyChange={setSecretKey}
-        />
-      </Suspense>
-    </StandardDialog>
-  );
 }
 
 function ListHeading({

@@ -6,6 +6,21 @@ import { supportsUsage, usageCube, usageSeries } from "./usage-explorer-data";
 const props = makeUsageData();
 
 describe("personal usage explorer", () => {
+  it("keeps cached tokens separate and limits savings to the aggregate the API actually returns", () => {
+    for (const group of ["model", "client", "time"] as const) {
+      expect(usageCube(props, "cacheRead", group, false).total).toBe(1000);
+      expect(usageCube(props, "cacheWrite", group, false).total).toBe(10);
+    }
+    const savings = usageCube(props, "cacheSavings", "overall", false);
+    expect(savings.total).toBe(9);
+    expect(savings.rows[0].hasSeries).toBe(false);
+    expect(savings.api).toContain("/me/breakdown");
+    expect(supportsUsage("model", "cacheSavings")).toBe(false);
+    expect(supportsUsage("session", "cacheRead")).toBe(false);
+    expect(usageCube(props, "cacheRead", "time", false).rows[0].series).toEqual(
+      [1000],
+    );
+  });
   it("keeps token-type pivot totals consistent with uncached input, output and cache writes", () => {
     for (const group of ["model", "client"] as const) {
       const cube = usageCube(props, "tokens", group, true);

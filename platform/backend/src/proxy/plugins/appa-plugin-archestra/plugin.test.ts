@@ -50,7 +50,10 @@ import { setupTestCacheManager } from "@/test/cache-manager";
 import { makeReturnLabelReview } from "@/test/openappa-return-label-review";
 import { ApiError } from "@/types";
 import { AppaChatAdapter } from "./adapters/chat";
-import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
+import {
+  AppaClaudeCodeAdapter,
+  AppaClaudeDesktopAdapter,
+} from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPluginArchestra } from "./plugin";
@@ -5276,16 +5279,38 @@ describe("withoutRemedySections", () => {
 });
 
 describe("rendering runtime text for this client", () => {
-  test("carries a ruling the session cannot act on without its plans, and where Claude Code shows the gateway", async () => {
-    // The gateway needs a sign-in, so Claude Code lists no gateway tool and
+  test.each([
+    {
+      client: "Claude Code",
+      adapter: () => new AppaClaudeCodeAdapter(),
+      headers: { "user-agent": "claude-cli/2.1.300 (external, cli)" },
+      hint: (server: string) =>
+        `Run /mcp in Claude Code. If "${server}" is still connecting, wait for it. If it needs authentication, select it and sign in.`,
+    },
+    {
+      client: "Claude Desktop",
+      adapter: () => new AppaClaudeDesktopAdapter(),
+      headers: {
+        "user-agent": "claude-cli/2.1.289 (external, cli)",
+        "x-archestra-agent-id": "anthropic_claude_desktop",
+      },
+      hint: (server: string) =>
+        `In Claude Desktop, open Settings → Connectors, select "${server}", and complete sign-in if needed. In your conversation, open + → Connectors and enable "${server}" if it is off. If it is not listed, connect Claude Desktop again and start a new session.`,
+    },
+  ])("carries a ruling the session cannot act on without its plans, and where $client shows the gateway", async ({
+    adapter,
+    headers,
+    hint,
+  }) => {
+    // The gateway needs a sign-in, so the client lists no gateway tool and
     // no wait tool: nothing is pending. The ruling still names a plan and a
     // subagent route, which the model would pass on as options; neither can
-    // be taken here. The person is sent to /mcp, where the client says why.
-    // The ruling rides an undeclared notice call, which Claude Code answers
-    // with an error and the next request restores.
-    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    // be taken here. The person is sent to the client's MCP surface, where
+    // the client says why. The ruling rides an undeclared notice call, which
+    // the client answers with an error and the next request restores.
+    const plugin = new AppaPluginArchestra([adapter()]);
     const context = requestContext({ sessionId: "gateway-needs-sign-in" });
-    context.headers = { "user-agent": "claude-cli/2.1.300 (external, cli)" };
+    context.headers = headers;
     const trusted = context.resources.get(
       APPA_PLUGIN_TRUSTED_CONTEXT,
     ) as Record<string, unknown>;
@@ -5335,9 +5360,7 @@ describe("rendering runtime text for this client", () => {
       expect(message).toContain(
         `[appa] This request did not include the ${archestraMcpBranding.serverName} MCP gateway tools, so no remedy plan can be used in this session, and a subagent started from it has the same limit. The call is refused.`,
       );
-      expect(message).toContain(
-        `Run /mcp in Claude Code. If "${archestraMcpBranding.serverName}" is still connecting, wait for it. If it needs authentication, select it and sign in.`,
-      );
+      expect(message).toContain(hint(archestraMcpBranding.serverName));
       expect(message).toMatch(/Then send your message again\.$/);
     } finally {
       cancelCalls.mockRestore();

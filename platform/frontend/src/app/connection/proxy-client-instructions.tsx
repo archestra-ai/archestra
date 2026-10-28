@@ -73,6 +73,7 @@ export const PROVIDER_ORIGINAL_URLS: Record<ChatProvider, string> = {
   deepseek: "https://api.deepseek.com/",
   minimax: "https://api.minimax.io/v1/",
   kimi: "https://api.moonshot.ai/v1/",
+  "kimi-code": "https://api.kimi.ai/coding/v1/",
   zhipuai: "https://open.bigmodel.cn/api/",
   "github-copilot": "https://api.githubcopilot.com/",
   "microsoft-365-copilot": "https://graph.microsoft.com/beta/",

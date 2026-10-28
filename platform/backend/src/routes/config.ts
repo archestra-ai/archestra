@@ -29,7 +29,6 @@ import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
-import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
 import { devFeedbackService } from "@/services/dev-feedback";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
@@ -137,8 +136,7 @@ export const ConfigResponseSchema = z.strictObject({
     // in one request, so the composer needs this to stop a send that
     // the body parser would reject with an opaque 413.
     apiBodyLimitBytes: z.number(),
-    byosEnabled: z.boolean(),
-    byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
+
     azureOpenAiEntraIdEnabled: z.boolean(),
     anthropicWifEnabled: z.boolean(),
     anthropicKeylessAuthEnabled: z.boolean(),
@@ -250,8 +248,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
       sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
       chatAttachmentStorageBytesLimit: config.chat.attachmentStorageBytesLimit,
       apiBodyLimitBytes: config.api.bodyLimit,
-      byosEnabled: isByosEnabled(),
-      byosVaultKvVersion: getByosVaultKvVersion(),
+
       azureOpenAiEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
       anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
       anthropicKeylessAuthEnabled: isAnthropicKeylessAuthEnabled(),
@@ -312,6 +309,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
       deepseek: config.llm.deepseek.baseUrl || null,
       archestra: config.llm.archestra.baseUrl || null,
       kimi: config.llm.kimi.baseUrl || null,
+      "kimi-code": config.llm["kimi-code"].baseUrl || null,
       "github-copilot": config.llm["github-copilot"].baseUrl || null,
       "microsoft-365-copilot":
         config.llm["microsoft-365-copilot"].baseUrl || null,

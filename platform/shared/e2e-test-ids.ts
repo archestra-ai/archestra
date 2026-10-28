@@ -83,20 +83,9 @@ export const E2eTestId = {
   RemoveTeamBadge: "remove-team-badge",
   PromptOnInstallationCheckbox: "prompt-on-installation-checkbox",
   RevokeCredentialButton: "revoke-credential-button",
-  ExternalSecretSelector: "external-secret-selector",
   SelectEnvironmentVariableType: "select-environment-variable-type",
   SelectEnvironment: "select-environment",
   AddCatalogItemButton: "add-catalog-item-button",
-  ConfigureVaultFolderButton: "configure-vault-folder-button",
-  ExternalSecretSelectorTeamTrigger: "external-secret-selector-team-trigger",
-  ExternalSecretSelectorSecretTrigger:
-    "external-secret-selector-secret-trigger",
-  ExternalSecretSelectorSecretTriggerKey:
-    "external-secret-selector-secret-trigger-key",
-  InlineVaultSecretSelectorSecretTrigger:
-    "inline-vault-secret-selector-secret-trigger",
-  InlineVaultSecretSelectorSecretTriggerKey:
-    "inline-vault-secret-selector-secret-trigger-key",
   McpServerSettingsConnectionsNavButton:
     "mcp-server-settings-connections-nav-button",
   McpServerSettingsConnectionsContent:

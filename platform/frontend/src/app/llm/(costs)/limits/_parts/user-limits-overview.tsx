@@ -85,9 +85,19 @@ export function UserLimitsOverview({
 }: {
   limitsTable: ReactNode;
 }) {
-  const { data: defaults = [] } = useDefaultUserLimits();
-  const { data: environmentList } = useEnvironments();
+  const { data: defaults = [], isPending: defaultsPending } =
+    useDefaultUserLimits();
+  const { data: canReadEnvironments, isPending: environmentAccessPending } =
+    useHasPermissions({ environment: ["read"] });
+  const { data: environmentList, isPending: environmentsPending } =
+    useEnvironments();
   const environments = environmentList?.environments ?? [];
+  // Until both have loaded, "No limit" and the no-environments hint would
+  // flash in ahead of the real defaults and overrides.
+  const defaultsLoading =
+    defaultsPending ||
+    environmentAccessPending ||
+    (Boolean(canReadEnvironments) && environmentsPending);
   const { data: top } = useUserLimitUsageTop(MAX_STACK);
   const { data: canUpdate } = useHasPermissions({ llmLimit: ["update"] });
   const { data: canCreate } = useHasPermissions({ llmLimit: ["create"] });
@@ -171,32 +181,38 @@ export function UserLimitsOverview({
                 </h2>
                 <PrecedenceHint />
               </div>
-              <EnvironmentOverrides
-                overrides={overrides}
-                orgDefault={orgDefault}
-                canAdd={canAddOverride && Boolean(canCreate)}
-                canEdit={Boolean(canUpdate)}
-                canDelete={Boolean(canDelete)}
-                hasEnvironments={environments.length > 0}
-                open={overridesOpen}
-                onOpenChange={setOverridesOpen}
-                onView={(environmentId) => openRoster({ environmentId })}
-                onEdit={editDefault}
-                onDelete={setDeleteTarget}
-                onAdd={() => newDefault(undefined)}
-              />
+              {defaultsLoading ? null : (
+                <EnvironmentOverrides
+                  overrides={overrides}
+                  orgDefault={orgDefault}
+                  canAdd={canAddOverride && Boolean(canCreate)}
+                  canEdit={Boolean(canUpdate)}
+                  canDelete={Boolean(canDelete)}
+                  hasEnvironments={environments.length > 0}
+                  open={overridesOpen}
+                  onOpenChange={setOverridesOpen}
+                  onView={(environmentId) => openRoster({ environmentId })}
+                  onEdit={editDefault}
+                  onDelete={setDeleteTarget}
+                  onAdd={() => newDefault(undefined)}
+                />
+              )}
             </div>
 
-            <OrgLimit
-              orgDefault={orgDefault}
-              summary={summary}
-              canCreate={Boolean(canCreate)}
-              canEdit={Boolean(canUpdate)}
-              onEdit={editDefault}
-              onSet={() => newDefault(null)}
-              onOpenCustom={() => openRoster({ filter: "custom" })}
-              onOpenUncapped={() => openRoster({ filter: "none" })}
-            />
+            {defaultsLoading ? (
+              <OrgLimitSkeleton />
+            ) : (
+              <OrgLimit
+                orgDefault={orgDefault}
+                summary={summary}
+                canCreate={Boolean(canCreate)}
+                canEdit={Boolean(canUpdate)}
+                onEdit={editDefault}
+                onSet={() => newDefault(null)}
+                onOpenCustom={() => openRoster({ filter: "custom" })}
+                onOpenUncapped={() => openRoster({ filter: "none" })}
+              />
+            )}
           </section>
 
           <WhoIsAffected
@@ -696,6 +712,17 @@ function RowAction({ tip, children }: { tip: string; children: ReactNode }) {
 
 // ===
 // The organization default (read-only; edits go through the dialog)
+
+function OrgLimitSkeleton() {
+  return (
+    <div aria-hidden className="space-y-3">
+      <div className="flex min-h-9 items-center">
+        <div className="h-8 w-40 animate-pulse rounded-md bg-muted" />
+      </div>
+      <div className="h-4 w-48 animate-pulse rounded bg-muted" />
+    </div>
+  );
+}
 
 function OrgLimit({
   orgDefault,

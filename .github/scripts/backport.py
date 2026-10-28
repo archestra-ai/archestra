@@ -154,11 +154,12 @@ class Backporter:
         return [item for page in data for item in page] if paginate else data
 
     def git(self, *args, cwd=None, check=True):
-        # No credentials are written to the checkout or included in argv.
+        # Commit identity comes from the workflow-configured checkout and is
+        # shared with its worktrees. No credentials are written to the checkout
+        # or included in argv.
         command = ["git", "-c", "core.hooksPath=/dev/null", "-c", "credential.helper=",
                    "-c", 'credential.helper=!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f',
-                   "-c", "user.name=Archestra backport automation",
-                   "-c", "user.email=backport-bot@users.noreply.github.com", *args]
+                   *args]
         return subprocess.run(command, cwd=cwd or self.checkout, text=True, capture_output=True,
                               check=check, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
 

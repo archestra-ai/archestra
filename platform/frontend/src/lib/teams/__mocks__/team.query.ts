@@ -12,4 +12,3 @@ export const useTeamLabelValues = vi.fn();
 export const useMyTeams = vi.fn();
 export const useAssignableTeams = vi.fn();
 export const useTeamsPaginated = vi.fn();
-export const useTeamsWithVaultFolders = vi.fn();

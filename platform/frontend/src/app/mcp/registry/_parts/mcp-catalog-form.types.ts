@@ -224,14 +224,7 @@ const activeAuthFormSchema = z
     deploymentSpecYaml: z.string().optional(),
     // Original YAML from API (used to detect if user modified the YAML)
     originalDeploymentSpecYaml: z.string().optional(),
-    // BYOS: External Vault path for OAuth client secret
-    oauthClientSecretVaultPath: z.string().optional(),
-    // BYOS: External Vault key for OAuth client secret
-    oauthClientSecretVaultKey: z.string().optional(),
-    // BYOS: External Vault path for local config secret env vars
-    localConfigVaultPath: z.string().optional(),
-    // BYOS: External Vault key for local config secret env vars
-    localConfigVaultKey: z.string().optional(),
+
     // Labels for categorizing catalog items
     labels: z
       .array(z.object({ key: z.string(), value: z.string() }))

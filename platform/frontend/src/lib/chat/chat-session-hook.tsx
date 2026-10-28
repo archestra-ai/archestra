@@ -53,6 +53,7 @@ import {
   isPlaceholderTitle,
   resolveCanonicalMessageId,
 } from "@/lib/chat/chat-utils";
+import { reconcileContextWindowBreakdown } from "@/lib/chat/context-window-status";
 import { encryptedChatRequestHeaders } from "@/lib/chat/encrypted-chat";
 import { getQueueInterruptBlockedReason } from "@/lib/chat/queue-interrupt";
 import { ResumableChatTransport } from "@/lib/chat/resumable-chat-transport";
@@ -275,6 +276,7 @@ export default function ChatSessionHook({
         typeof lastCompaction.compactedTokenEstimate === "number"
       ) {
         setContextTokensUsed(lastCompaction.compactedTokenEstimate);
+        setContextWindow(null);
       }
     },
     [],
@@ -790,6 +792,15 @@ export default function ChatSessionHook({
         const occupancy = usage.inputTokens ?? usage.totalTokens;
         if (typeof occupancy === "number") {
           setContextTokensUsed(occupancy);
+          if (occupancy > 0) {
+            setContextWindow((current) =>
+              current
+                ? reconcileContextWindowBreakdown(current, {
+                    tokensUsed: occupancy,
+                  })
+                : null,
+            );
+          }
         }
       }
 
@@ -812,6 +823,9 @@ export default function ChatSessionHook({
         const parsed = ContextWindowBreakdownSchema.safeParse(dataPart.data);
         if (parsed.success) {
           setContextWindow(parsed.data);
+          if (parsed.data.usedTokens > 0) {
+            setContextTokensUsed(parsed.data.usedTokens);
+          }
         }
         // Malformed payload: silently drop — never throw, never surface to the user.
       }

@@ -37,20 +37,6 @@ describe("orderPoolMembers", () => {
     ).toEqual(["a", "b", "c"]);
   });
 
-  test("splits one priority by weight", () => {
-    const firsts = { heavy: 0, light: 0 };
-    for (let i = 0; i < 2000; i++) {
-      const [first] = orderPoolMembers({
-        members: [member("heavy", 1, 9), member("light", 1, 1)],
-        benchedUntil: new Map(),
-        seed: `session-${i}`,
-      });
-      firsts[first as keyof typeof firsts]++;
-    }
-    expect(firsts.heavy / 2000).toBeGreaterThan(0.85);
-    expect(firsts.light).toBeGreaterThan(0);
-  });
-
   test("AC-W1: weights 1:2:7 split first picks within the lab's bounds", () => {
     const counts = { a: 0, b: 0, c: 0 };
     const draws = 2000;
@@ -120,7 +106,6 @@ describe("planModelPool", () => {
           member(zai.id, "glm-5", 1),
           member(bedrock.id, "zai.glm-5", 2),
         ],
-        virtualApiKeyIds: [],
       },
     });
 
@@ -156,34 +141,6 @@ describe("planModelPool", () => {
     ).resolves.toBeNull();
   });
 
-  test("plans nothing while model pools are off", async ({
-    makeOrganization,
-    makeLlmProviderApiKey,
-  }) => {
-    const org = await makeOrganization();
-    const zai = await makeLlmProviderApiKey(org.id, null, {
-      provider: "zhipuai",
-    });
-    await ModelPoolModel.create({
-      organizationId: org.id,
-      input: {
-        name: "glm-5",
-        members: [member(zai.id, "glm-5", 1)],
-        virtualApiKeyIds: [],
-      },
-    });
-
-    config.llmProxy.modelPoolsEnabled = false;
-    await expect(
-      planModelPool({
-        organizationId: org.id,
-        name: "glm-5",
-        inbound: "openai-chat",
-        caller: { providerApiKeyIds: [zai.id] },
-      }),
-    ).resolves.toBeNull();
-  });
-
   test("leaves out members the client's wire cannot reach", async ({
     makeOrganization,
     makeLlmProviderApiKey,
@@ -203,18 +160,19 @@ describe("planModelPool", () => {
           member(zai.id, "glm-5", 1),
           member(bedrock.id, "zai.glm-5", 1),
         ],
-        virtualApiKeyIds: [],
       },
     });
 
-    // Anthropic's wire reaches OpenAI-style members, not Converse ones.
+    // Anthropic's wire reaches OpenAI-style and Converse members alike.
     const plan = await planModelPool({
       organizationId: org.id,
       name: "glm-5",
       inbound: "anthropic",
       caller: { providerApiKeyIds: [zai.id] },
     });
-    expect(plan?.members.map((m) => m.providerApiKeyId)).toEqual([zai.id]);
+    expect(plan?.members.map((m) => m.providerApiKeyId).sort()).toEqual(
+      [zai.id, bedrock.id].sort(),
+    );
     // Converse reaches only Converse members.
     const conversePlan = await planModelPool({
       organizationId: org.id,
@@ -251,8 +209,12 @@ describe("planModelPool", () => {
       input: {
         name: "glm-5",
         members: [member(zai.id, "glm-5", 1)],
-        virtualApiKeyIds: [granted.id],
       },
+    });
+    await ModelPoolModel.setPoolsForVirtualApiKey({
+      organizationId: org.id,
+      virtualApiKeyId: granted.id,
+      poolIds: [pool.id],
     });
     const plan = (caller: ModelPoolCaller, grantedPoolId?: string) =>
       planModelPool({
@@ -274,12 +236,49 @@ describe("planModelPool", () => {
     expect(
       await plan({ virtualKeyId: neither.id, providerApiKeyIds: [openai.id] }),
     ).toBeNull();
+    // An OAuth client gets in by a grant kept on the client.
+    expect(
+      await plan({ providerApiKeyIds: [openai.id], modelPoolIds: [pool.id] }),
+    ).not.toBeNull();
     // Any other caller must already use a member's key.
     expect(await plan({ providerApiKeyIds: [zai.id] })).not.toBeNull();
     expect(await plan({ providerApiKeyIds: [openai.id] })).toBeNull();
     expect(await plan({ providerApiKeyIds: [] })).toBeNull();
     // The Model Router passes on a pool it already let the caller use.
     expect(await plan({ providerApiKeyIds: [] }, pool.id)).not.toBeNull();
+  });
+
+  test("plans a chat's pool by id, whatever member model it sends", async ({
+    makeOrganization,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const zai = await makeLlmProviderApiKey(org.id, null, {
+      provider: "zhipuai",
+    });
+    const bedrock = await makeLlmProviderApiKey(org.id, null, {
+      provider: "bedrock",
+    });
+    const pool = await ModelPoolModel.create({
+      organizationId: org.id,
+      input: {
+        name: "glm-5",
+        members: [
+          member(zai.id, "glm-5", 1),
+          member(bedrock.id, "zai.glm-5", 2),
+        ],
+      },
+    });
+
+    const plan = await planModelPool({
+      organizationId: org.id,
+      name: "zai.glm-5",
+      poolId: pool.id,
+      inbound: "openai-chat",
+      caller: { providerApiKeyIds: [] },
+    });
+    expect(plan?.poolId).toBe(pool.id);
+    expect(plan?.members).toHaveLength(2);
   });
 
   test("moves a member that failed over behind the healthy ones", async ({
@@ -297,7 +296,6 @@ describe("planModelPool", () => {
           member(first.id, "claude-haiku-4-5", 1),
           member(second.id, "claude-haiku-4-5", 2),
         ],
-        virtualApiKeyIds: [],
       },
     });
     const planParams = {

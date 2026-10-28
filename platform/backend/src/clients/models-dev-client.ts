@@ -505,9 +505,10 @@ export class ModelsDevClient {
       zhipuai: ["zhipuai/"],
       deepseek: ["deepseek/"],
       minimax: ["minimax/"],
-      // The two Kimi for Coding regions list the same plan ids; prefer the
-      // global catalog, whose endpoint matches the provider default region.
-      kimi: ["moonshotai/", "kimi-code-plan-global/", "kimi-code-plan-cn/"],
+      kimi: ["moonshotai/"],
+      // The two Kimi Code regions list the same plan ids; prefer the global
+      // catalog, whose endpoint matches the provider's default region.
+      "kimi-code": ["kimi-code-plan-global/", "kimi-code-plan-cn/"],
       azure: ["azure/"],
       // Not synced via models.dev (subscription-dependent /models endpoint)
       "github-copilot": [],

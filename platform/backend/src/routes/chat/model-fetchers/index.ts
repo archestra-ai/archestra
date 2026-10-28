@@ -77,6 +77,26 @@ const fetchKimiModels = makeBearerFetcher({
   errorLabel: "Kimi models",
 });
 
+// The Kimi Code endpoint lists the plan's model ids with a product name
+// (`kimi-for-coding` is "K2.8 Preview").
+const fetchKimiCodeModels = makeBearerFetcher<{
+  id: string;
+  created?: number;
+  display_name?: string;
+}>({
+  provider: "kimi-code",
+  configKey: "kimi-code",
+  errorLabel: "Kimi Code models",
+  mapModel: (model, provider) => ({
+    id: model.id,
+    displayName: model.display_name || model.id,
+    provider,
+    createdAt: model.created
+      ? new Date(model.created * 1000).toISOString()
+      : undefined,
+  }),
+});
+
 const fetchMistralModels = makeBearerFetcher({
   provider: "mistral",
   configKey: "mistral",
@@ -105,6 +125,7 @@ export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   "github-copilot": fetchGithubCopilotModels,
   groq: fetchGroqModels,
   kimi: fetchKimiModels,
+  "kimi-code": fetchKimiCodeModels,
   "microsoft-365-copilot": fetchMicrosoft365CopilotModels,
   minimax: makeStaticFetcher("minimax", MINIMAX_MODELS),
   mistral: fetchMistralModels,

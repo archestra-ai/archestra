@@ -57,8 +57,7 @@ export function makeConfig(
       sandboxArtifactBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
       chatAttachmentStorageBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
       apiBodyLimitBytes: 70 * 1024 * 1024,
-      byosEnabled: false,
-      byosVaultKvVersion: "1",
+
       azureOpenAiEntraIdEnabled: false,
       anthropicWifEnabled: false,
       anthropicKeylessAuthEnabled: false,

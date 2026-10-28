@@ -3,8 +3,8 @@ import {
   DEFAULT_APP_NAME,
   isIntegrationHidden,
   legacyMcpClientServerNames,
-  OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   OPENCODE_PRIMARY_PROVIDERS,
+  openCodePassthroughProviders,
   providerDisplayNames,
   RouteId,
   resolveMcpClientServerName,
@@ -142,9 +142,7 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
   ],
   // OpenCode and Kilo Code route only the providers their plugin redirects
   // natively.
-  ...openCodeFamilyRecord(() =>
-    OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(({ provider }) => provider),
-  ),
+  ...openCodeFamilyRecord(() => openCodePassthroughProviders()),
 };
 
 /** Clients whose proxy setup mints one virtual key mapped to many providers. */
@@ -1954,9 +1952,7 @@ async function openCodeFamilyPassthroughProviders(
 ): Promise<SupportedProvider[]> {
   const { modelProviderOverrides } =
     await OrganizationModel.getIntegrationOverrides(organizationId);
-  return OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(
-    (route) => route.provider,
-  ).filter(
+  return openCodePassthroughProviders().filter(
     (provider) => !isIntegrationHidden(modelProviderOverrides, provider),
   );
 }

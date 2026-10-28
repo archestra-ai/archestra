@@ -1,13 +1,18 @@
 "use client";
 
-import { isModelPoolProvider, type SupportedProvider } from "@archestra/shared";
-import type { ColumnDef } from "@tanstack/react-table";
-import { Layers, Pencil, Plus, Server, Trash2 } from "lucide-react";
+import {
+  DocsPage,
+  isModelPoolProvider,
+  type SupportedProvider,
+} from "@archestra/shared";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
+import { Layers, Pencil, Plug, Plus, Server, Trash2 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { useCallback, useState } from "react";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   CollectionFilters,
   FilterBar,
@@ -25,26 +30,48 @@ import {
   TableCardViewToggle,
 } from "@/components/table-card-view";
 import { TableRowActions } from "@/components/table-row-actions";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { reportBulkOutcome } from "@/lib/bulk-action";
+import { useBulkRangeSelectionController } from "@/lib/bulk-range-selection-context";
 import { useFeature } from "@/lib/config/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
   type ModelPool,
+  useBulkDeleteModelPools,
   useDeleteModelPool,
   useModelPools,
 } from "@/lib/model-pools.query";
-import { CreatePoolDialog } from "./_parts/create-pool-dialog";
-import { EditPoolDialog } from "./_parts/edit-pool-dialog";
+import {
+  type ConnectablePool,
+  ConnectPoolDialog,
+} from "./_parts/connect-pool-dialog";
 import { PoolHealth } from "./_parts/member-status";
-import { PoolProviders } from "./_parts/pool-fields";
-import { accessSummary, memberSummary } from "./_parts/pool-form";
+import { PoolDialog } from "./_parts/pool-dialog";
+import { memberSummary } from "./_parts/pool-form";
+import { PoolProviderIcons, PoolProviders } from "./_parts/pool-providers";
 
-const DESCRIPTION =
-  "Serve one model from several provider keys, on one provider or several. Clients ask for the pool's name; requests go to the lowest order first, split by weight, and to the next order on rate limits and outages.";
+const DESCRIPTION = (
+  <>
+    <span>
+      Serve one model name from several provider keys, with load balancing and
+      failover.
+    </span>{" "}
+    <ExternalDocsLink
+      href={getFrontendDocsUrl(DocsPage.PlatformLlmProxyModelPools)}
+      showIcon={false}
+    >
+      Read more in the docs
+    </ExternalDocsLink>
+  </>
+);
 
 const EMPTY_MESSAGE =
   "No model pools yet. Create one to serve a model from several provider keys.";
@@ -69,9 +96,18 @@ function ModelPools() {
 
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // The pool itself, so a pool just created shows before the list refetches.
+  const [connecting, setConnecting] = useState<{
+    pool: ConnectablePool;
+    ready: boolean;
+  } | null>(null);
   const [deleting, setDeleting] = useState<ModelPool | null>(null);
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
   const deletePool = useDeleteModelPool();
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const bulkDelete = useBulkDeleteModelPools();
+  const clearSelection = useCallback(() => setRowSelection({}), []);
   const providerCatalog = useModelProviderCatalog();
 
   const { data: canReadProviders } = useHasPermissions({
@@ -110,17 +146,34 @@ function ModelPools() {
     ...new Set(pools.flatMap((pool) => pool.members.map((m) => m.provider))),
   ].sort();
   const editing = pools.find((pool) => pool.id === editingId) ?? null;
+  const rangeSelection = useBulkRangeSelectionController();
+  const cardSelection = useBulkCardSelection({
+    rows: visible,
+    getRowId: (pool) => pool.id,
+    rowSelection,
+    setRowSelection,
+    rangeSelection,
+  });
+  // Only what the filters show, so a delete never takes a pool out of sight.
+  const selected = visible.filter((pool) => rowSelection[pool.id]);
 
   const rowActions = (pool: ModelPool) => (
     <TableRowActions
       itemName={pool.name}
       actions={[
         {
+          icon: <Plug className="h-4 w-4" />,
+          label: "Connect",
+          onClick: () => setConnecting({ pool, ready: false }),
+        },
+        {
           icon: <Pencil className="h-4 w-4" />,
           label: "Edit",
           permissions: { llmModel: ["update"] },
           onClick: () => setEditingId(pool.id),
         },
+      ]}
+      dropdownActions={[
         {
           icon: <Trash2 className="h-4 w-4" />,
           label: "Delete",
@@ -133,6 +186,10 @@ function ModelPools() {
   );
 
   const columns: ColumnDef<ModelPool>[] = [
+    createSelectColumn<ModelPool>({
+      rowLabel: (row) => `Select ${row.name}`,
+      allLabel: "Select all pools",
+    }),
     {
       id: "name",
       accessorKey: "name",
@@ -140,7 +197,7 @@ function ModelPools() {
       size: 240,
       cell: ({ row }) => (
         <div className="flex min-w-0 items-center gap-2.5">
-          <PoolIcon />
+          <PoolProviderIcons pool={row.original} />
           <div className="min-w-0">
             <div className="truncate font-mono font-medium">
               {row.original.name}
@@ -155,7 +212,7 @@ function ModelPools() {
     {
       id: "members",
       header: "Members",
-      size: 180,
+      size: 140,
       cell: ({ row }) => (
         <span className="text-sm">{memberSummary(row.original)}</span>
       ),
@@ -167,19 +224,8 @@ function ModelPools() {
       cell: ({ row }) => <PoolHealth pool={row.original} />,
     },
     {
-      id: "access",
-      header: "Access",
-      size: 140,
-      cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
-          {accessSummary(row.original.virtualApiKeyIds.length)}
-        </span>
-      ),
-    },
-    {
       id: "actions",
       header: "Actions",
-      size: 100,
       cell: ({ row }) => rowActions(row.original),
     },
   ];
@@ -265,12 +311,29 @@ function ModelPools() {
                 showSearch={false}
                 items={[
                   { value: "all", label: "Any status" },
-                  { value: "benched", label: "Has benched members" },
+                  { value: "benched", label: "Has members cooling down" },
                   { value: "healthy", label: "All healthy" },
                 ]}
               />
             </FilterBar>
           </CollectionFilters>
+
+          <BulkActions
+            count={selected.length}
+            noun="pool"
+            onClear={clearSelection}
+            busy={bulkDelete.isPending}
+          >
+            <PermissionButton
+              permissions={{ llmModel: ["update"] }}
+              variant="destructive"
+              size="sm"
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Delete</span>
+            </PermissionButton>
+          </BulkActions>
 
           <TableCardViewContent
             cards={
@@ -286,25 +349,19 @@ function ModelPools() {
                 {visible.map((pool) => (
                   <TableCard
                     key={pool.id}
-                    icon={<PoolIcon />}
+                    icon={<PoolProviderIcons pool={pool} />}
                     title={<span className="font-mono">{pool.name}</span>}
                     description={<PoolProviders pool={pool} />}
                     onNavigate={() => setEditingId(pool.id)}
                     actions={rowActions(pool)}
                     footer={<PoolHealth pool={pool} />}
+                    {...cardSelection(pool)}
+                    selectionLabel={`Select ${pool.name}`}
                   >
                     <dl className="grid grid-cols-[4.5rem_1fr] gap-x-3 gap-y-1 text-xs">
                       <dt className="text-muted-foreground">Members</dt>
                       <dd className="min-w-0 truncate">
                         {memberSummary(pool)}
-                      </dd>
-                      <dt className="text-muted-foreground">Routing</dt>
-                      <dd className="min-w-0 truncate">
-                        Priority, then weight
-                      </dd>
-                      <dt className="text-muted-foreground">Access</dt>
-                      <dd className="min-w-0 truncate">
-                        {accessSummary(pool.virtualApiKeyIds.length)}
                       </dd>
                     </dl>
                   </TableCard>
@@ -314,8 +371,17 @@ function ModelPools() {
             table={
               <DataTable
                 columns={columns}
+                flexibleColumnIds={["name"]}
+                fixedWidthColumnIds={["members", "status"]}
+                // The name cell already lists the providers, so a narrow
+                // window drops the member count first.
+                columnDropOrder={["members"]}
                 data={visible}
                 getRowId={(row) => row.id}
+                rowSelection={rowSelection}
+                onRowSelectionChange={setRowSelection}
+                rangeSelection={rangeSelection}
+                hideSelectedCount
                 onRowClick={(row) => setEditingId(row.id)}
                 isLoading={query.isLoading}
                 hasActiveFilters={hasActiveFilters}
@@ -337,18 +403,33 @@ function ModelPools() {
         onSuccess={() => setCreating(true)}
       />
       {creating ? (
-        <CreatePoolDialog
+        <PoolDialog
+          pool={null}
           onOpenChange={(open) => {
             if (!open) setCreating(false);
+          }}
+          onCreated={(pool) => {
+            setCreating(false);
+            setConnecting({ pool, ready: true });
           }}
         />
       ) : null}
       {editing ? (
-        <EditPoolDialog
+        <PoolDialog
           key={editing.id}
           pool={editing}
           onOpenChange={(open) => {
             if (!open) setEditingId(null);
+          }}
+        />
+      ) : null}
+      {connecting ? (
+        <ConnectPoolDialog
+          key={connecting.pool.id}
+          pool={connecting.pool}
+          ready={connecting.ready}
+          onOpenChange={(open) => {
+            if (!open) setConnecting(null);
           }}
         />
       ) : null}
@@ -368,18 +449,33 @@ function ModelPools() {
           });
         }}
       />
+      <DeleteConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title="Delete model pools"
+        description={`Delete ${selected.length} ${
+          selected.length === 1 ? "pool" : "pools"
+        }? Requests for their names go back to the caller's own key.`}
+        isPending={bulkDelete.isPending}
+        onConfirm={() => {
+          bulkDelete.mutate(selected, {
+            onSuccess: (outcome) => {
+              reportBulkOutcome({
+                outcome,
+                verb: "Deleted",
+                failureVerb: "delete",
+                noun: "pool",
+              });
+              setBulkDeleteOpen(false);
+              // Pools that failed stay ticked so the delete can be retried.
+              if (outcome.failed.length === 0) clearSelection();
+            },
+          });
+        }}
+        confirmLabel="Delete pools"
+        pendingLabel="Deleting..."
+      />
     </PageLayout>
-  );
-}
-
-function PoolIcon() {
-  return (
-    <span
-      aria-hidden="true"
-      className="flex size-6 shrink-0 items-center justify-center rounded bg-primary/15 text-primary"
-    >
-      <Layers className="size-3.5" />
-    </span>
   );
 }
 

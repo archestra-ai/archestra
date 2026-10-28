@@ -198,6 +198,9 @@ jobs:
         with:
           only: ${{ inputs.only }}
 
+      - name: Configure Git identity
+        uses: $/.github/actions/configure-git-identity
+
       - name: Commit updated screenshots
         id: publish-screenshots
         env:
@@ -217,8 +220,6 @@ jobs:
             echo "Screenshots are up to date."
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/assets
           git diff --cached --stat
           if [ "$EVENT_NAME" = "pull_request" ]; then

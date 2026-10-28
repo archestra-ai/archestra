@@ -15,10 +15,12 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 import {
   CreatedByModel,
   LlmProviderApiKeyModel,
   MemberModel,
+  ModelPoolModel,
   TeamModel,
   VirtualApiKeyLabelModel,
   VirtualApiKeyModel,
@@ -28,6 +30,7 @@ import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { readVirtualKeyValue } from "@/services/connection-setup";
 import { credentialBilling } from "@/services/credential-billing";
 import { CredentialResourcePermissions } from "@/services/credential-resource-permissions";
+import { assertCanGrantModelPools } from "@/services/model-pool-grants";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
@@ -35,6 +38,7 @@ import {
   constructResponseSchema,
   type LabelWithDetails,
   LabelWithDetailsSchema,
+  ModelPoolIdsInputSchema,
   ResourceVisibilityScopeSchema,
   type User,
   VirtualApiKeyTypeSchema,
@@ -77,6 +81,11 @@ const VirtualApiKeyBodyObjectSchema = z.object({
    * keep it; `null` removes it.
    */
   spendCap: CredentialSpendCapInputSchema.nullable().optional(),
+  /**
+   * Model pools the key may call by name even when it maps none of their
+   * members. Omit to keep the key's current pools. Needs model pools on.
+   */
+  modelPoolIds: ModelPoolIdsInputSchema,
 });
 
 /**
@@ -94,6 +103,13 @@ function refineVirtualApiKeyBody(
         code: "custom",
         path: ["providerApiKeys"],
         message: "Passthrough virtual keys cannot map provider API keys",
+      });
+    }
+    if (value.modelPoolIds?.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["modelPoolIds"],
+        message: "Passthrough virtual keys cannot use model pools",
       });
     }
     return;
@@ -535,6 +551,11 @@ async function createVirtualApiKey(params: {
     userId: user.id,
     ownerId,
   });
+  await assertCanGrantModelPools({
+    modelPoolIds: body.modelPoolIds,
+    organizationId,
+    userId: user.id,
+  });
 
   const { virtualKey, value, teams, authorName, providerApiKeys } =
     await VirtualApiKeyModel.create({
@@ -558,6 +579,11 @@ async function createVirtualApiKey(params: {
     entityType: "virtual_key",
     entityId: virtualKey.id,
     cap: body.spendCap,
+  });
+  await setModelPools({
+    modelPoolIds: body.modelPoolIds,
+    organizationId,
+    virtualApiKeyId: virtualKey.id,
   });
 
   return {
@@ -694,6 +720,11 @@ async function updateVirtualApiKey(params: {
       organizationId,
       userId: user.id,
     });
+    await assertCanGrantModelPools({
+      modelPoolIds: body.modelPoolIds,
+      organizationId,
+      userId: user.id,
+    });
     await CredentialResourcePermissions.validateVirtual({
       keyType: accessContext.keyType,
       ownerId: accessContext.authorId,
@@ -729,6 +760,13 @@ async function updateVirtualApiKey(params: {
     entityId: id,
     cap: body.spendCap,
   });
+  if (accessContext.keyType === "standard") {
+    await setModelPools({
+      modelPoolIds: body.modelPoolIds,
+      organizationId,
+      virtualApiKeyId: id,
+    });
+  }
 
   const visibilityMetadata =
     await VirtualApiKeyModel.getVisibilityForVirtualApiKeyIds([id]);
@@ -745,6 +783,21 @@ async function updateVirtualApiKey(params: {
     providerApiKeys,
     labels: await syncAndReadLabels(id, body.labels),
   };
+}
+
+/** Saves the pools a create/update body names; undefined keeps the current ones. */
+async function setModelPools(params: {
+  modelPoolIds: string[] | undefined;
+  organizationId: string;
+  virtualApiKeyId: string;
+}): Promise<void> {
+  if (params.modelPoolIds === undefined || !config.llmProxy.modelPoolsEnabled)
+    return;
+  await ModelPoolModel.setPoolsForVirtualApiKey({
+    organizationId: params.organizationId,
+    virtualApiKeyId: params.virtualApiKeyId,
+    poolIds: params.modelPoolIds,
+  });
 }
 
 async function readBilling(virtualKey: {

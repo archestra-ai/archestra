@@ -458,6 +458,13 @@ export const PROVIDER_BASE_URL_HEADER = "X-Archestra-Provider-Base-Url";
  */
 export const CHAT_API_KEY_ID_HEADER = "X-Archestra-Chat-Api-Key-Id";
 
+/**
+ * Header used to pass the model pool a chat was set to from chat → LLM proxy.
+ * In-process calls are pooled only when they carry it; like
+ * CHAT_API_KEY_ID_HEADER, it is only honored with the in-process proof.
+ */
+export const MODEL_POOL_ID_HEADER = "X-Archestra-Model-Pool-Id";
+
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
 
 export const TimeInMs = {

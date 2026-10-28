@@ -1,0 +1,15 @@
+model_list:
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_base: http://127.0.0.1:19092/v1
+      api_key: benchmark-no-inference
+litellm_settings:
+  telemetry: false
+  request_timeout: 30
+  num_retries: 0
+general_settings:
+  master_key: sk-benchmark-master-key-local-only
+  database_url: os.environ/DATABASE_URL
+  database_connection_pool_limit: 20
+  store_prompts_in_spend_logs: false

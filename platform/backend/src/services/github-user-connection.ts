@@ -11,16 +11,10 @@ import {
 import McpDeploymentLeaseModel, {
   ClusterLeaseHeldError,
 } from "@/models/mcp-deployment-lease";
-import { isByosEnabled } from "@/secrets-manager";
 import { ApiError, GITHUB_COM_API_URL, GitHubUserIdSchema } from "@/types";
 
 class GitHubUserConnectionManager {
   async start(owner: Owner) {
-    if (isByosEnabled())
-      throw new ApiError(
-        400,
-        "GitHub sign-in requires writable secret storage",
-      );
     const app = await this.app(owner);
     return this.lock(owner, async () => {
       const state = `${owner.credentialId}:${randomBytes(32).toString("base64url")}`;

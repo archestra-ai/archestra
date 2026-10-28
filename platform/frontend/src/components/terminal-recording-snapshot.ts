@@ -31,6 +31,10 @@ export function snapshotTerminalRecording(
     if (!line) continue;
     const runs: RecordingRun[] = [];
     let lastWrittenColumn = 0;
+    // A captured screen pads every line to the pane's width with spaces, so
+    // its background reaches the line's end; spaces that paint nothing are
+    // padding all the same.
+    let lastPaintedColumn = 0;
     let length = 0;
     for (let x = 0; x < Math.min(line.length, terminal.cols); x++) {
       const value = line.getCell(x, cell);
@@ -62,7 +66,10 @@ export function snapshotTerminalRecording(
           ...(url !== undefined ? { url } : {}),
         });
       length += text.length;
-      if (characters || paintsEmptyCell(value)) lastWrittenColumn = length;
+      const paints = paintsEmptyCell(value);
+      if (characters || paints) lastWrittenColumn = length;
+      if ((characters && characters !== " ") || paints)
+        lastPaintedColumn = length;
     }
     // Retain the grid gap before a wide glyph wraps, but distinguish it from
     // written spaces so URL inference can reconstruct the original text.
@@ -70,9 +77,9 @@ export function snapshotTerminalRecording(
       ? length - lastWrittenColumn
       : 0;
     if (!buffer.getLine(y + 1)?.isWrapped) {
-      trimUnwrittenPadding(runs, length - lastWrittenColumn);
+      trimUnwrittenPadding(runs, length - lastPaintedColumn);
     }
-    if (lastWrittenColumn > 0) lastWrittenRow = lines.length;
+    if (lastPaintedColumn > 0) lastWrittenRow = lines.length;
     lines.push({
       row: y,
       runs,
@@ -148,7 +155,10 @@ function cellStyle(cell: IBufferCell): CSSProperties {
   ].filter(Boolean);
   return {
     color: cell.isInvisible() ? "transparent" : foreground,
-    backgroundColor: background,
+    // The document paints the default background. Painted per run, it covered
+    // the part of a wide fallback glyph (a symbol the monospace font lacks)
+    // that reaches into the next cell, as a terminal does not.
+    ...(inverse || !cell.isBgDefault() ? { backgroundColor: background } : {}),
     ...(cell.isBold() ? { fontWeight: "bold" } : {}),
     ...(cell.isItalic() ? { fontStyle: "italic" } : {}),
     ...(decorations.length

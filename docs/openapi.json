@@ -370539,7 +370539,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Get all limits with optional filtering and per-model usage breakdown\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:read`: View token usage limits",
+        "description": "Get all limits with optional filtering and per-model usage breakdown\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:read` for organization-wide access. A session-authenticated team admin may list only their own team's limits by filtering on both `entityType=team` and `entityId`.",
         "parameters": [
           {
             "schema": {
@@ -371019,10 +371019,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:read"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:read` for organization-wide access. A session-authenticated team admin may list only their own team's limits by filtering on both `entityType=team` and `entityId`.",
+          "permissions": []
         }
       },
       "post": {
@@ -371030,7 +371029,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Create a new limit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:create`: Create new usage limits",
+        "description": "Create a new limit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:create`, or a session-authenticated team admin creating a limit on their own team.",
         "requestBody": {
           "required": true,
           "content": {
@@ -371497,10 +371496,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:create"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:create`, or a session-authenticated team admin creating a limit on their own team.",
+          "permissions": []
         }
       }
     },
@@ -371510,7 +371508,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Get a limit by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:read`: View token usage limits",
+        "description": "Get a limit by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:read`, or a session-authenticated team admin for a limit on their own team.",
         "parameters": [
           {
             "schema": {
@@ -371946,10 +371944,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:read"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:read`, or a session-authenticated team admin for a limit on their own team.",
+          "permissions": []
         }
       },
       "patch": {
@@ -371957,7 +371954,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Update a limit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:update`: Modify existing usage limits",
+        "description": "Update a limit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:update`, or a session-authenticated team admin updating a limit on their own team.",
         "requestBody": {
           "required": true,
           "content": {
@@ -372415,10 +372412,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:update"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:update`, or a session-authenticated team admin updating a limit on their own team.",
+          "permissions": []
         }
       },
       "delete": {
@@ -372426,7 +372422,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Delete a limit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:delete`: Remove usage limits",
+        "description": "Delete a limit\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:delete`, or a session-authenticated team admin deleting a limit on their own team.",
         "parameters": [
           {
             "schema": {
@@ -372693,10 +372689,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:delete"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:delete`, or a session-authenticated team admin deleting a limit on their own team.",
+          "permissions": []
         }
       }
     },
@@ -519222,7 +519217,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get usage statistics for every team in the active organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n\nReturns aggregate team usage for the active organization.",
+        "description": "Get usage statistics for every team in the active organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmCost:read` for organization-wide team statistics. A session-authenticated team admin may request only their own team by providing `teamId`.",
         "parameters": [
           {
             "schema": {
@@ -519252,6 +519247,16 @@
             },
             "in": "query",
             "name": "timeframe",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "query",
+            "name": "teamId",
             "required": false
           }
         ],
@@ -519596,11 +519601,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "note": "Returns aggregate team usage for the active organization.",
-          "permissions": [
-            "llmCost:read"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmCost:read` for organization-wide team statistics. A session-authenticated team admin may request only their own team by providing `teamId`.",
+          "permissions": []
         }
       }
     },

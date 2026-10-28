@@ -219,18 +219,20 @@ export function useSkillStatistics({
 
 export function useTeamStatistics({
   timeframe = "24h",
+  teamId,
   initialData,
   enabled = true,
 }: {
   timeframe?: StatisticsTimeFrame;
+  teamId?: string;
   initialData?: archestraApiTypes.GetTeamStatisticsResponses["200"];
   enabled?: boolean;
 } = {}) {
   return useQuery({
-    queryKey: ["statistics", "teams", timeframe],
+    queryKey: ["statistics", "teams", timeframe, teamId],
     queryFn: async () => {
       const { data, error } = await getTeamStatistics({
-        query: { timeframe },
+        query: { timeframe, teamId },
       });
       throwOnApiError(error, { toastOnError: false });
       return data;

@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.4.9](https://github.com/archestra-ai/archestra/compare/platform-v1.4.8...platform-v1.4.9) (2026-10-28)
+
+
+### Bug Fixes
+
+* **chat:** send a credential mode when adding Playwright tools in quick edit (backport release/1.4) ([#9789](https://github.com/archestra-ai/archestra/issues/9789)) ([80c78ed](https://github.com/archestra-ai/archestra/commit/80c78ed4a106121b87a78dc024ef79f91abf1bfe))
+* **chat:** show tool arguments in approval cards by default (1.4) ([#9785](https://github.com/archestra-ai/archestra/issues/9785)) ([a854c22](https://github.com/archestra-ai/archestra/commit/a854c2216793ff597b7e939fbf93e958e035df6d))
+* **connect:** preserve startup guard during transport outages ([#9788](https://github.com/archestra-ai/archestra/issues/9788)) ([8db5492](https://github.com/archestra-ai/archestra/commit/8db54921281379038a06a25a96449e2fa6071acc))
+* **connect:** retain unreachable instance diagnostics before client launch ([#9780](https://github.com/archestra-ai/archestra/issues/9780)) ([67d8821](https://github.com/archestra-ai/archestra/commit/67d8821f9ddfe841a732c02379024875d8609da4))
+* **git:** backport complete repository listing to 1.4 ([#9801](https://github.com/archestra-ai/archestra/issues/9801)) ([0912bb0](https://github.com/archestra-ai/archestra/commit/0912bb02d8bed816ca254578cc16f54023c9e180))
+* **mcp-registry:** list a remote server's tools in the Inspector (backport release/1.4) ([#9798](https://github.com/archestra-ai/archestra/issues/9798)) ([4f668d4](https://github.com/archestra-ai/archestra/commit/4f668d46b8eb994d36550dadcc87cd8ddfa889d1))
+* prefix release versions without prefixing commit hashes (backport release/1.4) ([#9777](https://github.com/archestra-ai/archestra/issues/9777)) ([8c2f288](https://github.com/archestra-ai/archestra/commit/8c2f288c8770d5633f7701e1c5c4e54a8da4c69b))
+* **sidebar:** align onboarding dots in collapsed navigation (1.4) ([#9781](https://github.com/archestra-ai/archestra/issues/9781)) ([0df465b](https://github.com/archestra-ai/archestra/commit/0df465ba0a5450deba4d143c71b9a63bee454fe5))
+
+
+### Performance Improvements
+
+* **mcp:** index all tool assignments for registry review (release/1.4) ([#9783](https://github.com/archestra-ai/archestra/issues/9783)) ([32dff90](https://github.com/archestra-ai/archestra/commit/32dff90ac1630639ba00d434072d6892160d8980))
+
 ## [1.4.8](https://github.com/archestra-ai/archestra/compare/platform-v1.4.7...platform-v1.4.8) (2026-10-28)
 
 

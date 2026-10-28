@@ -1007,6 +1007,8 @@ sys.exit(os.waitstatus_to_exitcode(status))
 
 test.each([
   "network",
+  "body",
+  "malformed",
   "http",
 ])("native Pi %s failure distinguishes transport from invalid credentials before Enter", (failure) => {
   const f = fixture();
@@ -1029,7 +1031,11 @@ test.each([
     network,
     failure === "network"
       ? 'global.fetch = async () => { throw new TypeError("synthetic transport failure"); };'
-      : 'global.fetch = async () => new Response("unauthorized", { status: 401 });',
+      : failure === "body"
+        ? 'global.fetch = async () => new Response(new ReadableStream({ start(controller) { controller.error(new TypeError("synthetic body failure")); } }), { headers: { "content-type": "application/json" } });'
+        : failure === "malformed"
+          ? 'global.fetch = async () => new Response("invalid json", { headers: { "content-type": "application/json" } });'
+          : 'global.fetch = async () => new Response("unauthorized", { status: 401 });',
   );
   const env = { ...process.env, HOME: f.home, PI_CODING_AGENT_DIR: "" };
   const check = () =>
@@ -1046,7 +1052,7 @@ test.each([
     });
   const guard = runGuard();
   expect(guard.status, guard.stderr).toBe(0);
-  if (failure === "network") {
+  if (failure === "network" || failure === "body") {
     expect(existsSync(path.join(root, "connection.json")), guard.stdout).toBe(
       true,
     );
@@ -1075,7 +1081,7 @@ test.each([
       paths.map((file) => readFileSync(path.join(f.home, file), "utf8")),
     ).toEqual(before);
   } else {
-    // An answered 401 is an explicit failed resource check, not an outage.
+    // Answered HTTP errors and malformed JSON remain explicit resource failures.
     expect(checked.status, checked.stderr).toBe(0);
     expect(JSON.parse(checked.stdout)).toMatchObject({
       transport: "ok",

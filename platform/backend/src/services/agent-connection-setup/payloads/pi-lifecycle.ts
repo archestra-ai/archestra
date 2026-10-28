@@ -239,6 +239,10 @@ async function checkPiConnection(install) {
     try { return await fetch(parsed, { ...options, redirect: "error", signal: AbortSignal.timeout(5000) }); }
     catch (error) { report.transport = "down"; throw error; }
   };
+  const readResponseBody = async response => {
+    try { return await response.text(); }
+    catch (error) { report.transport = "down"; throw error; }
+  };
   await Promise.all([
     (async () => {
       try {
@@ -246,7 +250,7 @@ async function checkPiConnection(install) {
         if (config.attributionKey) headers["x-archestra-virtual-key"] = config.attributionKey;
         const response = await request(config.url.replace(/\/$/, "") + "/models", { headers });
         if (!response.ok) { await response.body?.cancel(); report.reasons.push("LLM proxy check failed (HTTP " + response.status + "). Check the provider route on the connection page."); return; }
-        const data = await response.json();
+        const data = JSON.parse(await readResponseBody(response));
         if (!Array.isArray(data.data) || !data.data.some(model => model.id === (config.modelRouter ? config.provider + ":" + config.model : config.model))) throw new Error();
         report.llm = "ok";
       } catch { report.reasons.push("LLM proxy or selected model is unavailable. Check the connection page and retry."); }
@@ -258,7 +262,7 @@ async function checkPiConnection(install) {
         if (!entry || entry.serverUrl !== install.state.gateway || !entry.tokens?.access_token) throw new Error();
         const response = await request(install.state.gateway, { method: "POST", headers: { Authorization: "Bearer " + entry.tokens.access_token, "Content-Type": "application/json", Accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: "pi-startup", method: "tools/list", params: {} }) });
         if (!response.ok) { await response.body?.cancel(); throw new Error(); }
-        const text = await response.text(); const payload = response.headers.get("content-type")?.includes("text/event-stream") ? JSON.parse(text.split("\n").find(line => line.startsWith("data: "))?.slice(6) || "null") : JSON.parse(text);
+        const text = await readResponseBody(response); const payload = response.headers.get("content-type")?.includes("text/event-stream") ? JSON.parse(text.split("\n").find(line => line.startsWith("data: "))?.slice(6) || "null") : JSON.parse(text);
         if (!Array.isArray(payload?.result?.tools)) throw new Error();
         if (!install.state.authClient && entry.clientInformation?.client_id) {
           install.lock();

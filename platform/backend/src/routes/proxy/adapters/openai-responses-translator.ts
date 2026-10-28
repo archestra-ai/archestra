@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { ApiError } from "@archestra/shared/types";
 import type { Azure, OpenAi } from "@/types";
+import { CacheControlSchema } from "@/types/llm-providers/openai/messages";
 import { toResponsesUsage } from "./responses-usage";
 
 type ResponsesRequest = Azure.Types.ResponsesRequest;
@@ -46,6 +47,18 @@ export function responsesToOpenaiChat(
     stream: req.stream === true ? true : undefined,
   };
 
+  const extensions = req as ResponsesRequest & Record<string, unknown>;
+  for (const field of [
+    "cache_control",
+    "cachedContent",
+    "prompt_cache_key",
+    "prompt_cache_retention",
+    "prompt_cache_options",
+  ] as const) {
+    if (extensions[field] !== undefined)
+      Object.assign(chatBody, { [field]: extensions[field] });
+  }
+
   if (req.temperature !== undefined) {
     chatBody.temperature = req.temperature;
   }
@@ -57,11 +70,23 @@ export function responsesToOpenaiChat(
   if (req.tools) {
     chatBody.tools = req.tools.flatMap((tool) => {
       if (tool.type !== "function" || !("name" in tool)) {
+        if (
+          options?.preserveContentParts &&
+          "cache_control" in tool &&
+          tool.cache_control !== undefined
+        )
+          throw new ApiError(
+            400,
+            "Unsupported Responses tool with cache_control",
+          );
         return [];
       }
       return [
         {
           type: "function" as const,
+          ...(options?.preserveContentParts && "cache_control" in tool
+            ? cacheControlFields(tool.cache_control)
+            : {}),
           function: {
             name: tool.name as string,
             description:
@@ -194,8 +219,8 @@ function responseInputToChatMessages(
           content: preserveContentParts
             ? responseContentToChat(item.content)
             : stringifyResponseContent(item.content),
-          ...(preserveContentParts && item.cache_control !== undefined
-            ? { cache_control: item.cache_control }
+          ...(preserveContentParts
+            ? cacheControlFields(item.cache_control)
             : {}),
         } as OpenAiRequest["messages"][number],
       ];
@@ -205,8 +230,8 @@ function responseInputToChatMessages(
       return [
         {
           role: "assistant",
-          ...(preserveContentParts && item.cache_control !== undefined
-            ? { cache_control: item.cache_control }
+          ...(preserveContentParts
+            ? cacheControlFields(item.cache_control)
             : {}),
           content: null,
           tool_calls: [
@@ -238,8 +263,8 @@ function responseInputToChatMessages(
             : typeof item.output === "string"
               ? item.output
               : "",
-          ...(preserveContentParts && item.cache_control !== undefined
-            ? { cache_control: item.cache_control }
+          ...(preserveContentParts
+            ? cacheControlFields(item.cache_control)
             : {}),
         } as OpenAiRequest["messages"][number],
       ];
@@ -248,7 +273,7 @@ function responseInputToChatMessages(
     if (preserveContentParts && item.cache_control !== undefined)
       throw new ApiError(
         400,
-        "Unsupported Bedrock Responses input item with cache_control",
+        "Unsupported Responses input item with cache_control",
       );
     return [];
   });
@@ -258,10 +283,7 @@ function responseContentToChat(content: unknown): unknown {
   if (!Array.isArray(content)) return content;
   return content.map((part: LooseResponseItem) => {
     if (!part || typeof part !== "object") return part;
-    const marker =
-      part.cache_control === undefined
-        ? {}
-        : { cache_control: part.cache_control };
+    const marker = cacheControlFields(part.cache_control);
     if (part.type === "input_text" || part.type === "output_text")
       return { type: "text", text: part.text, ...marker };
     if (part.type === "input_image")
@@ -311,4 +333,15 @@ function responseToolChoiceToChatToolChoice(
   if (toolChoice === "none") return "none";
   if (toolChoice === "required") return "required";
   return "auto";
+}
+
+function cacheControlFields(value: unknown) {
+  if (value === undefined) return {};
+  const parsed = CacheControlSchema.safeParse(value);
+  if (!parsed.success)
+    throw new ApiError(
+      400,
+      "Invalid cache_control: expected ephemeral with optional 5m or 1h ttl",
+    );
+  return { cache_control: parsed.data };
 }

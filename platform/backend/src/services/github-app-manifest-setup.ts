@@ -25,9 +25,8 @@ import { decryptSecretValue, encryptSecretValue } from "@/utils/crypto";
 
 /**
  * Registers a GitHub App from a manifest so nobody copies an App ID,
- * installation ID or private key by hand. Guardrails (OpenAPPA Git sync) and
- * GitHub Copilot organization subscriptions both use it, each as a flow with
- * its own manifest and install step:
+ * installation ID or private key by hand. GitHub Copilot enterprise plans
+ * use it as a flow with its own manifest and install step:
  *
  * 1. `start` returns the manifest the browser posts to GitHub.
  * 2. GitHub creates the App and returns a one-time code; `complete` trades it
@@ -315,10 +314,10 @@ class GithubAppManifestSetup {
 
 export const githubAppManifestSetup = new GithubAppManifestSetup();
 
-type GithubAppSetupFlow = "openappa" | "copilot";
+type GithubAppSetupFlow = "copilot";
 
 interface GithubAppFlowConfig {
-  /** Personal accounts may own the App (Guardrails), or only organizations. */
+  /** Whether a personal account may own the App, or only an organization. */
   allowPersonal: boolean;
   /** Said when a personal account is given to a flow that needs an organization. */
   organizationRequired: string;
@@ -388,7 +387,7 @@ const START_TTL_MS = 30 * 60_000;
 // GitHub's manifest code lives an hour; installing usually follows within minutes.
 const PENDING_TTL_MS = 60 * 60_000;
 
-const FlowSchema = z.enum(["openappa", "copilot"]);
+const FlowSchema = z.enum(["copilot"]);
 const StartFlowSchema = z.object({
   flow: FlowSchema,
   stateHash: z.string(),

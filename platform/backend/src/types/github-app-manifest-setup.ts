@@ -31,9 +31,3 @@ export const PendingGithubAppSchema = z.object({
   settingsUrl: z.string(),
 });
 export type PendingGithubApp = z.infer<typeof PendingGithubAppSchema>;
-
-/** The created App, and which setup it belongs to, for the shared return page. */
-export const CompleteGithubAppResultSchema = z.object({
-  flow: z.enum(["openappa", "copilot"]),
-  app: PendingGithubAppSchema,
-});

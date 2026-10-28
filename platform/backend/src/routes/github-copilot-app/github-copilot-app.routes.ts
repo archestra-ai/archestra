@@ -4,6 +4,7 @@ import { z } from "zod";
 import { copilotGithubAppSetup } from "@/services/github-copilot-app-setup";
 import { constructResponseSchema, DeleteObjectResponseSchema } from "@/types";
 import {
+  CompleteGithubAppSchema,
   GithubAppManifestSchema,
   PendingGithubAppSchema,
 } from "@/types/github-app-manifest-setup";
@@ -45,6 +46,31 @@ const githubCopilotAppRoutes: FastifyPluginAsyncZod = async (app) => {
       request.auditSkip = true;
       return reply.send(
         await copilotGithubAppSetup.start({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          ...request.body,
+        }),
+      );
+    },
+  );
+  app.post(
+    "/api/github-copilot-app/manifest/complete",
+    {
+      schema: {
+        operationId: RouteId.CompleteCopilotGithubApp,
+        description:
+          "Exchange GitHub's one-time code for the new App; it is stored once installed",
+        tags: ["LLM Provider API Keys"],
+        body: CompleteGithubAppSchema,
+        response: constructResponseSchema(PendingGithubAppSchema),
+      },
+    },
+    async (request, reply) => {
+      // Only a short-lived setup record changes; the stored credential is
+      // audited when installation completes.
+      request.auditSkip = true;
+      return reply.send(
+        await copilotGithubAppSetup.complete({
           organizationId: request.organizationId,
           userId: request.user.id,
           ...request.body,

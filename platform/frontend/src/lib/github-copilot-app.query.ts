@@ -11,6 +11,23 @@ import { throwOnApiError, toApiError } from "@/lib/utils/api";
  * GitHub Copilot paid by a GitHub organization: the GitHub App setup that
  * stores it as a shared provider key.
  */
+/** GitHub's return from creating the App: trade its one-time code for the App. */
+export function useCompleteCopilotGithubApp() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      body: archestraApiTypes.CompleteCopilotGithubAppData["body"],
+    ) => {
+      const { data, error } = await archestraApiSdk.completeCopilotGithubApp({
+        body,
+      });
+      if (error) throw toApiError(error);
+      return data;
+    },
+    onSuccess: (data) => client.setQueryData(pendingQueryKey, data ?? null),
+  });
+}
+
 export function usePendingCopilotGithubApp(enabled: boolean) {
   return useQuery({
     enabled,

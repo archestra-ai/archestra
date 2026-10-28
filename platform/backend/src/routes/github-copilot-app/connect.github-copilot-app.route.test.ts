@@ -129,10 +129,6 @@ describe("GitHub Copilot organization subscription setup", () => {
     registerAuditLogHook(app);
     const { default: routes } = await import("./github-copilot-app.routes");
     await app.register(routes);
-    const { default: setupRoutes } = await import(
-      "../github-app-setup/github-app-setup.routes"
-    );
-    await app.register(setupRoutes);
     const { default: keyRoutes } = await import("../llm-provider-api-keys");
     await app.register(keyRoutes);
   });
@@ -150,14 +146,13 @@ describe("GitHub Copilot organization subscription setup", () => {
     });
     expect(started.statusCode, started.body).toBe(200);
     const state = new URL(started.json().url).searchParams.get("state");
-    // The shared return page completes every setup; the state names the flow.
-    const completed = await post("/api/github-app-setup/complete", {
+    // Model Providers' return page completes the setup.
+    const completed = await post("/api/github-copilot-app/manifest/complete", {
       code: "one-time-code",
       state,
     });
     expect(completed.statusCode, completed.body).toBe(200);
-    expect(completed.json().flow).toBe("copilot");
-    return { started: started.json(), pending: completed.json().app };
+    return { started: started.json(), pending: completed.json() };
   }
 
   test("registers, installs and stores the App as a shared key, audited without its key", async () => {
@@ -173,7 +168,7 @@ describe("GitHub Copilot organization subscription setup", () => {
       default_events: [],
     });
     expect(JSON.parse(started.manifest).redirect_url).toMatch(
-      /\/github\/app-setup$/,
+      /\/llm\/model-providers\/github-app$/,
     );
     expect(pending).toMatchObject({ account: "my-org", appId });
 
@@ -554,7 +549,7 @@ describe("GitHub Copilot organization subscription setup", () => {
     expect(JSON.stringify(audit[0])).not.toContain("PRIVATE KEY");
   });
 
-  /** A GitHub App credential connected the way Guardrails saves one. */
+  /** A GitHub App credential already connected to the organization. */
   async function connectedApp(params?: { permissions?: string }) {
     vi.stubGlobal(
       "fetch",

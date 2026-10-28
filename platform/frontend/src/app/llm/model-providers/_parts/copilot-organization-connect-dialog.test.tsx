@@ -159,7 +159,7 @@ async function continueWithOrganization(value = "my-org") {
 }
 
 describe("CopilotOrganizationConnectDialog", () => {
-  it("asks for the GitHub and the organization as Guardrails does, in its stepper", async () => {
+  it("asks for the GitHub and the organization, in the setup stepper", async () => {
     render(<CopilotOrganizationConnectDialog open onOpenChange={vi.fn()} />);
 
     const stepper = within(

@@ -54,6 +54,10 @@ import {
 } from "@/lib/llm-provider-api-keys.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import {
+  COPILOT_GITHUB_TAB,
+  COPILOT_SETUP_CHANNEL,
+} from "./copilot-github-app-setup";
+import {
   COPILOT_DIALOG_CLASS,
   GithubAppRow,
   OrganizationRow,
@@ -64,7 +68,7 @@ type AppMode = "choose" | "pick" | "create" | "key";
 
 /**
  * Connects and manages GitHub Copilot paid by a GitHub organization, in the
- * same steps and components as the Guardrails GitHub App setup: the
+ * shared GitHub App setup steps and components: the
  * organization, then its GitHub App (one already connected, a new one
  * registered on GitHub, or one by its ID and private key), then who may use
  * it. Every step but the first goes back. Once a key exists (managed, or
@@ -188,7 +192,14 @@ export function CopilotOrganizationConnectDialog({
     setWaiting(null);
     pending.refetch();
   };
-  useEffect(() => onGithubAppSetup((done) => onSetupStep.current(done)), []);
+  useEffect(
+    () =>
+      onGithubAppSetup(
+        (done) => onSetupStep.current(done),
+        COPILOT_SETUP_CHANNEL,
+      ),
+    [],
+  );
   // An owner may have to approve the install: keep checking while waiting.
   useEffect(() => {
     if (waiting !== "install") return;
@@ -224,13 +235,13 @@ export function CopilotOrganizationConnectDialog({
 
   function createApp() {
     // Open the tab inside the click so the browser does not block it.
-    const tab = openGithubWindow("about:blank");
+    const tab = openGithubWindow("about:blank", COPILOT_GITHUB_TAB);
     setWaiting("create");
     start.mutate(
       { organization: account.input },
       {
         onSuccess: (manifest) => {
-          if (manifest) postManifest(manifest);
+          if (manifest) postManifest(manifest, COPILOT_GITHUB_TAB);
           else tab?.close();
         },
         onError: () => {
@@ -244,7 +255,7 @@ export function CopilotOrganizationConnectDialog({
   function installApp() {
     if (!createdApp) return;
     install.reset();
-    openGithubWindow(createdApp.installUrl);
+    openGithubWindow(createdApp.installUrl, COPILOT_GITHUB_TAB);
     setWaiting("install");
   }
 

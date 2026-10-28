@@ -51388,105 +51388,6 @@ export type UpdateGithubAppConfigResponses = {
 
 export type UpdateGithubAppConfigResponse = UpdateGithubAppConfigResponses[keyof UpdateGithubAppConfigResponses];
 
-export type CompleteGithubAppSetupData = {
-    body: {
-        code: string;
-        state: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/github-app-setup/complete';
-};
-
-export type CompleteGithubAppSetupErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type CompleteGithubAppSetupError = CompleteGithubAppSetupErrors[keyof CompleteGithubAppSetupErrors];
-
-export type CompleteGithubAppSetupResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        flow: 'openappa' | 'copilot';
-        app: {
-            name: string;
-            slug: string;
-            account: string;
-            appId: string;
-            accountUrl: string;
-            htmlUrl: string;
-            installUrl: string;
-            settingsUrl: string;
-        };
-    };
-};
-
-export type CompleteGithubAppSetupResponse = CompleteGithubAppSetupResponses[keyof CompleteGithubAppSetupResponses];
-
 export type StartCopilotGithubAppData = {
     body: {
         organization: string;
@@ -51575,6 +51476,102 @@ export type StartCopilotGithubAppResponses = {
 };
 
 export type StartCopilotGithubAppResponse = StartCopilotGithubAppResponses[keyof StartCopilotGithubAppResponses];
+
+export type CompleteCopilotGithubAppData = {
+    body: {
+        code: string;
+        state: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/github-copilot-app/manifest/complete';
+};
+
+export type CompleteCopilotGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CompleteCopilotGithubAppError = CompleteCopilotGithubAppErrors[keyof CompleteCopilotGithubAppErrors];
+
+export type CompleteCopilotGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        slug: string;
+        account: string;
+        appId: string;
+        accountUrl: string;
+        htmlUrl: string;
+        installUrl: string;
+        settingsUrl: string;
+    };
+};
+
+export type CompleteCopilotGithubAppResponse = CompleteCopilotGithubAppResponses[keyof CompleteCopilotGithubAppResponses];
 
 export type DiscardCopilotGithubAppData = {
     body?: never;
@@ -102387,7 +102384,8 @@ export type CreateAppaGithubRepositoryResponse = CreateAppaGithubRepositoryRespo
 
 export type StartAppaGithubAppData = {
     body: {
-        organization: string;
+        githubUrl: string;
+        owner: string;
     };
     path?: never;
     query?: never;
@@ -102473,6 +102471,102 @@ export type StartAppaGithubAppResponses = {
 };
 
 export type StartAppaGithubAppResponse = StartAppaGithubAppResponses[keyof StartAppaGithubAppResponses];
+
+export type CompleteAppaGithubAppData = {
+    body: {
+        code: string;
+        state: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-app/manifest/complete';
+};
+
+export type CompleteAppaGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CompleteAppaGithubAppError = CompleteAppaGithubAppErrors[keyof CompleteAppaGithubAppErrors];
+
+export type CompleteAppaGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        slug: string;
+        account: string;
+        appId: string;
+        accountUrl: string;
+        htmlUrl: string;
+        installUrl: string;
+        settingsUrl: string;
+    };
+};
+
+export type CompleteAppaGithubAppResponse = CompleteAppaGithubAppResponses[keyof CompleteAppaGithubAppResponses];
 
 export type DiscardAppaGithubAppData = {
     body?: never;

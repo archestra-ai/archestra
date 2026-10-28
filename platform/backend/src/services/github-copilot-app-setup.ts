@@ -47,7 +47,7 @@ import { createGithubCopilotFetch } from "./github-copilot-token";
 /**
  * Connects GitHub Copilot paid by a GitHub organization, as a shared
  * `github-copilot` provider key. The App behind it is a GitHub App credential,
- * the store Guardrails uses too; the key references it with the App's
+ * in the organization's runtime credentials; the key references it with the App's
  * installation on the organization. Three ways to get there:
  *
  * - an App already connected to the organization (`connectFromCredential`),
@@ -59,6 +59,11 @@ class CopilotGithubAppSetup {
   /** Start registering a new App on the organization. */
   start(params: Owner & { organization: string }) {
     return githubAppManifestSetup.start({ ...params, flow: "copilot" });
+  }
+
+  /** GitHub's return from creating the App: exchange its code for the App. */
+  async complete(params: Owner & { code: string; state: string }) {
+    return (await githubAppManifestSetup.complete(params)).app;
   }
 
   pending(params: Owner) {
@@ -714,8 +719,9 @@ githubAppManifestSetup.register("copilot", {
     name: `${appName} Copilot`,
     description: `Lets ${appName} make GitHub Copilot requests paid from this organization's Copilot plan. It reads no code, repositories, issues or members.`,
     url: config.frontendBaseUrl,
-    redirect_url: `${config.frontendBaseUrl}/github/app-setup`,
-    setup_url: `${config.frontendBaseUrl}/github/app-setup`,
+    // GitHub returns to Model Providers, which finishes the setup.
+    redirect_url: `${config.frontendBaseUrl}/llm/model-providers/github-app`,
+    setup_url: `${config.frontendBaseUrl}/llm/model-providers/github-app`,
     public: false,
     default_permissions: { organization_copilot_requests: "read" },
     default_events: [],

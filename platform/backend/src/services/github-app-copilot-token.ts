@@ -4,7 +4,7 @@
  * An organization can let a GitHub App (organization permission "Copilot
  * Requests") call Copilot on its behalf, billed to the organization. The key
  * stores a marker-encoded value that references the App's GitHub App
- * credential (the store Guardrails uses too), with the installation on the
+ * credential (the organization's runtime credentials), with the installation on the
  * organization. Keys from the preview embed the App's private key instead and
  * keep working. Installation tokens (`ghs_…`)
  * come from the shared GitHub App helpers and are sent to Copilot as a Bearer

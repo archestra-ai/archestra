@@ -398,6 +398,25 @@ describe("auto routing backfill", () => {
     expect(prompts.length).toBeLessThanOrEqual(4);
   });
 
+  test("a new scan reports what of its sample is already scored", async () => {
+    await sessions(4);
+    await scanAndScore({ maxSessions: 4 });
+    await turn("late", "One more task", {
+      createdAt: new Date(Date.now() - 2 * DAY_MS),
+    });
+
+    await scan();
+
+    expect(await describeBackfill(organizationId)).toMatchObject({
+      backfill: {
+        status: "scanned",
+        eligibleSessions: 5,
+        progress: { sample: 5, scored: 4 },
+      },
+      scoreOffer: { remaining: 1 },
+    });
+  });
+
   test("stops at the cost ceiling and still lets the next fit read what it scored", async () => {
     await sessions(6);
     const before = await AutoRoutingSettingsModel.find(organizationId);

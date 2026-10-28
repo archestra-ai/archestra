@@ -1246,6 +1246,8 @@ describe("trustedOrigins", () => {
     const trustedOriginsOption = auth.options.trustedOrigins;
 
     expect(typeof trustedOriginsOption).toBe("function");
+    if (typeof trustedOriginsOption !== "function")
+      throw new Error("Expected dynamic trusted origins");
 
     const trustedOrigins = await trustedOriginsOption?.();
 
@@ -1264,6 +1266,8 @@ describe("trustedOrigins", () => {
     const trustedOriginsOption = auth.options.trustedOrigins;
 
     expect(typeof trustedOriginsOption).toBe("function");
+    if (typeof trustedOriginsOption !== "function")
+      throw new Error("Expected dynamic trusted origins");
 
     const trustedOrigins = await trustedOriginsOption?.(
       new Request("https://app.example.com/api/auth/sso/register"),
@@ -1284,6 +1288,8 @@ describe("trustedOrigins", () => {
     const trustedOriginsOption = auth.options.trustedOrigins;
 
     expect(typeof trustedOriginsOption).toBe("function");
+    if (typeof trustedOriginsOption !== "function")
+      throw new Error("Expected dynamic trusted origins");
 
     const trustedOrigins = await trustedOriginsOption?.(
       new Request("https://app.example.com/api/identity-providers", {
@@ -1306,6 +1312,8 @@ describe("trustedOrigins", () => {
     const trustedOriginsOption = auth.options.trustedOrigins;
 
     expect(typeof trustedOriginsOption).toBe("function");
+    if (typeof trustedOriginsOption !== "function")
+      throw new Error("Expected dynamic trusted origins");
 
     const trustedOrigins = await trustedOriginsOption?.(
       new Request("https://app.example.com/api/auth/sign-in/email"),

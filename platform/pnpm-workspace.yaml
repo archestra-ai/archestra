@@ -13,10 +13,10 @@ packages:
 
 catalog:
   ai: ^6.0.193
-  # GHSA-qq9h-g4jm-xgf3 (HIGH, improper authentication) affects >=1.1.3 and is
-  # fixed in 1.6.22. The @better-auth/* packages release in lockstep with it.
-  better-auth: 1.6.22
-  "@better-auth/core": 1.6.22
+  # GHSA-965c-763c-88jm and GHSA-r4xp-prcw-77qf require Better Auth 1.7.7.
+  # Keep core/OAuth contexts aligned; SSO retains its OAuth-only patch below.
+  better-auth: 1.7.7
+  "@better-auth/core": 1.7.7
   "@better-auth/oauth-provider": 1.6.22
   "@better-auth/sso": 1.6.22
   # TypeScript 7 ships a `tsc` binary but no programmatic API until 7.1. knip,
@@ -27,6 +27,10 @@ catalog:
   typescript-7: "npm:typescript@7.0.1-rc"
   zod: ^4.6.6
 overrides:
+  # Keep the OAuth-only SSO compatibility patch on Better Auth 1.7's
+  # endpoint context. The older plugins otherwise install an incompatible context.
+  '@better-auth/sso@1.6.22>better-call': 1.4.0
+  '@better-auth/oauth-provider@1.6.22>better-call': 1.4.0
   # CVE-2023-54404: these stable SDK releases still require vulnerable Zod 3.
   # Run their validators on patched Zod 4; the package patches below adapt
   # their record/function/error APIs while preserving current SDK interfaces.
@@ -247,6 +251,7 @@ packageExtensions:
       zod: ^4.6.6
 
 patchedDependencies:
+  better-auth@1.7.7: patches/better-auth@1.7.7.patch
   # Preserve function-call IDs across SDK responses and request history.
   # OpenAPPA uses these IDs to match released calls to returned results.
   # Remove when the provider preserves both functionCall.id and functionResponse.id.

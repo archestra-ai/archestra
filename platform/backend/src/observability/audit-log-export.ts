@@ -22,7 +22,7 @@ export function exportAuditLog(row: AuditLog): void {
 }
 
 /** An explicit allowlist: snapshots and free text must never leak into export. */
-export function auditLogAttributes(
+function auditLogAttributes(
   row: AuditLog,
 ): Record<string, string | number> {
   const attributes: Record<string, string | number> = {

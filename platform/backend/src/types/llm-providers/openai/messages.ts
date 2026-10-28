@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const PromptCacheBreakpointSchema = z.object({ mode: z.literal("explicit") });
+
 const FunctionToolCallSchema = z
   .object({
     id: z.string(),
@@ -53,6 +55,7 @@ export const ContentPartTextSchema = z
   .object({
     type: z.enum(["text"]),
     text: z.string(),
+    prompt_cache_breakpoint: PromptCacheBreakpointSchema.optional(),
   })
   .describe(
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821`,
@@ -61,6 +64,7 @@ export const ContentPartTextSchema = z
 export const ContentPartImageSchema = z
   .object({
     type: z.enum(["image_url"]),
+    prompt_cache_breakpoint: PromptCacheBreakpointSchema.optional(),
     image_url: z
       .object({
         url: z.string(),
@@ -77,6 +81,7 @@ export const ContentPartImageSchema = z
 export const ContentPartInputAudioSchema = z
   .object({
     type: z.enum(["input_audio"]),
+    prompt_cache_breakpoint: PromptCacheBreakpointSchema.optional(),
     input_audio: z
       .object({
         data: z.string(),
@@ -93,6 +98,7 @@ export const ContentPartInputAudioSchema = z
 export const ContentPartFileSchema = z
   .object({
     type: z.enum(["file"]),
+    prompt_cache_breakpoint: PromptCacheBreakpointSchema.optional(),
     file: z
       .object({
         file_data: z.string().optional(),

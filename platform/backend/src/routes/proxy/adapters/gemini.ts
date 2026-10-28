@@ -1333,6 +1333,10 @@ export function restToSdkGenerateContentParams(
     params.config.systemInstruction = { ...body.systemInstruction };
   }
 
+  if (body.cachedContent !== undefined) {
+    params.config.cachedContent = body.cachedContent;
+  }
+
   return params as GenerateContentParameters;
 }
 

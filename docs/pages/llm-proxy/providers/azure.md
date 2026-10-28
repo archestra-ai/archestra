@@ -2,7 +2,7 @@
 title: Azure AI Foundry
 description: Connect Azure model deployments with an API key or Microsoft Entra ID
 order: 2
-lastUpdated: 2026-10-08
+lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -114,3 +114,9 @@ The subject must match your Helm release's namespace and service account. See Mi
 - **Narrowest access:** use a custom role with `Microsoft.Resources/subscriptions/read`, `Microsoft.Resources/subscriptions/resources/read`, `Microsoft.CognitiveServices/accounts/read`, and `Microsoft.CognitiveServices/accounts/deployments/read`.
 - **Discovery and requests on different endpoints:** set `inferenceBaseUrl` on the provider key through the API. Archestra lists deployments from **Base URL** and sends every request to the inference URL.
 - **Grok on Azure** works through a Foundry v1 URL, once the model is deployed.
+
+## Prompt Caching
+
+The native Azure proxy forwards caller-supplied prompt-cache keys, policies, and content-block breakpoints on Chat Completions requests. It records provider-reported cache reads and writes for streaming and non-streaming calls.
+
+Configure caching for your deployed model using [Azure’s prompt caching guide](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/prompt-caching); Archestra does not add breakpoints or guarantee cache hits.

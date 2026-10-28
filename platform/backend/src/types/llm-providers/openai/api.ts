@@ -89,6 +89,15 @@ export const ChatCompletionRequestSchema = z
     // AI-SDK converts automatically), and `reasoning_effort` is how callers
     // bound or disable reasoning — both have to survive this schema.
     max_completion_tokens: z.number().int().positive().nullable().optional(),
+    prompt_cache_key: z.string().nullable().optional(),
+    prompt_cache_retention: z.enum(["in-memory", "24h"]).nullable().optional(),
+    prompt_cache_options: z
+      .object({
+        mode: z.enum(["implicit", "explicit"]).optional(),
+        ttl: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
     // Some OpenAI-compatible providers accept "max" reasoning effort.
     // Forward it unchanged; the upstream model decides which efforts it supports.
     reasoning_effort: z

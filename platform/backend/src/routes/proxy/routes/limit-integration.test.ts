@@ -370,32 +370,6 @@ describe("LLM proxy limit enforcement (integration)", () => {
     expect(response.json().error.message).toContain(
       `Affected user: "${user.email}".`,
     );
-
-    const credential = await makePassthroughCredential({
-      organizationId: agent.organizationId,
-      ownerId: user.id,
-    });
-    const withoutName = await withFailedEntityNameLookup(
-      "email",
-      schema.usersTable.email,
-      () =>
-        app.inject({
-          method: "POST",
-          url: OPENAI_ENDPOINT(agent.id),
-          headers: {
-            ...OPENAI_HEADERS("Bearer test-key", credential),
-            "X-Archestra-User-Id": user.id,
-          },
-          payload: SIMPLE_PAYLOAD(),
-        }),
-    );
-    expect(withoutName.statusCode).toBe(402);
-    expect(withoutName.json().error.usage_limit).toMatchObject({
-      entity_type: "user",
-      source: "default_user",
-    });
-    expect(withoutName.json().error.usage_limit.entity_name).toBeUndefined();
-    expect(withoutName.json().error.message).toContain("Affected scope: user.");
   });
 
   test("uses custom user limit instead of default user limit", async ({
@@ -1258,6 +1232,34 @@ describe("LLM proxy limit enforcement (integration)", () => {
     });
     expect(response.json().error.message).toContain(
       'Affected environment: "production".',
+    );
+
+    const credential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: user.id,
+    });
+    const withoutName = await withFailedEntityNameLookup(
+      "name",
+      schema.environmentsTable.name,
+      () =>
+        app.inject({
+          method: "POST",
+          url: OPENAI_ENDPOINT(agent.id),
+          headers: {
+            ...OPENAI_HEADERS("Bearer test-key", credential),
+            "X-Archestra-User-Id": user.id,
+          },
+          payload: SIMPLE_PAYLOAD(),
+        }),
+    );
+    expect(withoutName.statusCode).toBe(402);
+    expect(withoutName.json().error.usage_limit).toMatchObject({
+      entity_type: "environment",
+      source: "default_user",
+    });
+    expect(withoutName.json().error.usage_limit.entity_name).toBeUndefined();
+    expect(withoutName.json().error.message).toContain(
+      "Affected scope: environment.",
     );
   });
 

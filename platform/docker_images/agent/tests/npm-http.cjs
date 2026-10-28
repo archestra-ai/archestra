@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const { once } = require("node:events");
 const net = require("node:net");
 const { Client, fetch } = require(
-  "/usr/local/lib/node_modules/npm/node_modules/undici",
+  process.argv[2] ?? "/usr/local/lib/node_modules/npm/node_modules/undici",
 );
 
 (async () => {

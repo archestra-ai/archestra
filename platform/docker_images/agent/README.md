@@ -207,7 +207,7 @@ Select **GitHub Copilot CLI** in the Agent catalog and choose a streaming,
 tool-capable model under **Model Providers**. The CLI uses BYOK mode with the
 Agent's temporary virtual key; inference goes through the LLM proxy and remote
 tools go through the caller-scoped MCP gateway. Existing GitHub Copilot provider
-connections remain subject to their existing personal-account access rules.
+connections retain their configured access and billing rules.
 Other configured providers use their normal credentials and billing. The image
 does not start GitHub sign-in or consume a separate CLI subscription token.
 

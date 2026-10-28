@@ -2,7 +2,7 @@
 title: Observability
 description: Connect your monitoring stack and install dashboards
 order: 8
-lastUpdated: 2026-10-22
+lastUpdated: 2026-10-28
 ---
 
 Monitor your instance in your existing stack. For individual requests and conversations inside Archestra, use [Logs](/docs/admin/logs).
@@ -11,6 +11,7 @@ Monitor your instance in your existing stack. For individual requests and conver
 | --- | --- |
 | Request rates, latency, costs, and infrastructure health | [Prometheus metrics](/docs/admin/observability/metrics). |
 | Follow a model request or tool call across services | [OpenTelemetry traces and backend logs](/docs/admin/observability/tracing). |
+| Administrative changes sent to a SIEM | [Audit log export](/docs/admin/observability/audit-logs). |
 | Frontend sessions and page timings | [Real User Monitoring](#real-user-monitoring-rum). |
 
 <span id="distributed-tracing-and-logs"></span>

@@ -38,7 +38,7 @@ service:
       exporters: [debug]
 ```
 
-Create a test agent, then search the collector output for instrumentation scope `archestra-audit` and event name `archestra.audit.agent.created`. Its `log.record.uid` matches the event ID returned by `GET /api/audit-logs`. Backend logs also use this endpoint; filter by the audit scope to separate them.
+Create a test agent, then search the collector output for instrumentation scope `archestra-audit` and event name `archestra.audit.agent.created`. Its `log.record.uid` matches the event ID returned by [`GET /api/audit-logs`](/docs/reference/api#/Audit%20Log/getAuditLogs). Backend logs also use this endpoint; filter by the audit scope to separate them.
 
 ## Route Events to Your SIEM
 
@@ -52,7 +52,7 @@ Receiving OTLP does not configure security detections. Verify that a test event 
 
 ## Event Content and Delivery
 
-Audit export contains event IDs, organization ID, actor type and ID, impersonator ID, action, outcome, resource type and ID, event and persistence times, and available request metadata: request ID, HTTP method, route, status and source IP.
+Audit records identify the action and its outcome; the attribute table below lists the exported fields. All records have INFO severity, including denied and failed actions: write security rules against `archestra.audit.outcome`.
 
 - Snapshots, names, emails, raw request URLs, user agents, prompts and responses are excluded. Actor and resource IDs and IP addresses can still identify people; restrict destination access and retention. Some events, including service-account events, have no actor ID.
 - Export runs independently of application log levels and trace sampling. Active trace context may accompany a record; it is optional, and the associated trace may not have been retained. Audit export does not add LLM request or MCP tool-call payloads.
@@ -73,8 +73,8 @@ Missing values are omitted. Behind a trusted reverse proxy, configure [`ARCHESTR
 
 ## Retrieve Events Through the API
 
-Use `GET /api/audit-logs` to retrieve persisted events, including historical records still within your retention window.
+Use [`GET /api/audit-logs`](/docs/reference/api#/Audit%20Log/getAuditLogs) to retrieve persisted events, including historical records that have not been removed by [audit retention](/docs/admin/deployment/configuration#ARCHESTRA_AUDIT_LOG_RETENTION_DAYS).
 
-Authenticate with a dedicated [service account](/docs/reference/api#service-accounts) whose role has [`auditLog:read`](/docs/reference/permissions#auditLog:read) and [`auditLog:admin`](/docs/reference/permissions#auditLog:admin) for organization-wide collection. Follow `pagination.nextCursor` until `hasNext` is false; pages are newest first, with up to 100 events each.
+Authenticate with a dedicated [service account](/docs/reference/api#service-accounts) whose role has [`auditLog:read`](/docs/reference/permissions#auditLog:read) and [`auditLog:admin`](/docs/reference/permissions#auditLog:admin) for organization-wide collection. Pass `pagination.nextCursor` as the next request's `cursor` until `pagination.hasNext` is false. Pages are newest first; use `limit=100` for 100 events per page (the default is 20).
 
 A scheduled collector needs persistent checkpoints, overlapping date windows, retries and deduplication by deployment and event ID. API responses can contain more sensitive fields than the OTLP export, including snapshots; apply your own allowlist before forwarding them.

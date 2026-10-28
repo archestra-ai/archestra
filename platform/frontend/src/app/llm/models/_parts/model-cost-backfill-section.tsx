@@ -31,7 +31,7 @@ import {
 } from "@/lib/model-cost-backfill.query";
 import { cn } from "@/lib/utils/tailwind";
 import { type ChartDay, CostChart, presetDate } from "./model-cost-chart";
-import { formatModelCost } from "./model-cost-format";
+import { formatModelCost, formatUsdShort } from "./model-cost-format";
 
 /**
  * "Apply new prices to" on the Pricing page: recompute the recorded cost of
@@ -287,24 +287,6 @@ function toChartDays(days: ModelCostBackfillPreview["days"]): ChartDay[] {
       recomputedCost: day?.recomputedCost ?? 0,
     };
   });
-}
-
-/** Shorter USD for the stat strip: drops cents from $1,000, compacts from $100k. */
-function formatUsdShort(n: number): string {
-  const abs = Math.abs(n);
-  if (abs >= 100_000) {
-    return `${n < 0 ? "-" : ""}$${(abs / 1000).toLocaleString("en-US", {
-      maximumFractionDigits: 1,
-    })}k`;
-  }
-  if (abs >= 1000) {
-    return n.toLocaleString("en-US", {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 0,
-    });
-  }
-  return formatModelCost(n);
 }
 
 function OptionCard({

@@ -2,7 +2,7 @@
 title: Amazon Bedrock
 description: Connect Amazon Bedrock with an API key, AWS access keys, or the IAM identity of your Archestra deployment.
 order: 1
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -93,3 +93,9 @@ The two list actions populate the model picker. `ListInferenceProfiles` returns 
 ## Model Discovery
 
 Set [`ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS`](/docs/admin/deployment/configuration#ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS) to a comma-separated list such as `anthropic,amazon` to limit discovered model vendors. [`ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS`](/docs/admin/deployment/configuration#ARCHESTRA_BEDROCK_ALLOWED_INFERENCE_REGIONS) limits inference-region prefixes such as `us,global`. Empty values allow all.
+
+## Prompt Caching
+
+The native Converse and ConverseStream endpoints forward caller-supplied `cachePoint` blocks in system messages, message content, and tool definitions. Cache reads and writes reported by Bedrock are recorded.
+
+Archestra does not insert checkpoints into native proxy requests. Use a model and region that support [Bedrock prompt caching](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html); checkpoints do not guarantee cache hits.

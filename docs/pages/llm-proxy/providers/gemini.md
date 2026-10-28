@@ -2,7 +2,7 @@
 title: Google Gemini
 description: Connect Gemini using Google AI Studio or Vertex AI.
 order: 4
-lastUpdated: 2026-10-23
+lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -99,3 +99,9 @@ For non-GKE environments, Vertex AI supports several authentication methods thro
 - **AWS/Azure**: Use workload identity federation to authenticate without service account keys
 
 See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs/authentication) for detailed setup instructions for each environment.
+
+## Prompt Caching
+
+For models that support explicit context caching, pass the provider-created cache name in `cachedContent` when calling the native `generateContent` or `streamGenerateContent` endpoint. Archestra forwards the reference and records provider-reported cached input tokens, including implicit cache hits.
+
+It does not create cache objects or manage their storage lifetime. Model eligibility and cache storage charges follow [Gemini’s caching rules](https://ai.google.dev/gemini-api/docs/caching).

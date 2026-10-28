@@ -144,7 +144,9 @@ class CopilotGithubAppSetup {
    */
   async checkOrganization(params: Owner & { organization: string }) {
     await assertCopilotAllowed(params);
-    await authorize(params);
+    // Only provider keys: someone who can just reuse a connected App must get
+    // past this step too. The https-only parse below bounds what it fetches.
+    await authorize(params, ["llmProviderApiKey"]);
     const { api, login } = parseAccount(params.organization);
     const account = await lookupAccount({ api, login });
     if (account.type !== "Organization")
@@ -838,22 +840,27 @@ async function assertCopilotAllowed(owner: Owner) {
 }
 
 /** Saving a GitHub App credential and a shared key both need permission. */
-async function authorize(owner: Owner) {
-  for (const [resource, action] of [
-    ["llmProviderApiKey", "create"],
-    ["credential", "create"],
-  ] as const)
+async function authorize(
+  owner: Owner,
+  resources: ("llmProviderApiKey" | "credential")[] = [
+    "llmProviderApiKey",
+    "credential",
+  ],
+) {
+  for (const resource of resources)
     if (
       !(await userHasPermission(
         owner.userId,
         owner.organizationId,
         resource,
-        action,
+        "create",
       ))
     )
       throw new ApiError(
         403,
-        "You need permission to create provider keys and credentials.",
+        resources.includes("credential")
+          ? "You need permission to create provider keys and credentials."
+          : "You need permission to create provider keys.",
       );
 }
 

@@ -991,21 +991,32 @@ describe("GitHub Copilot organization subscription setup", () => {
     }
   });
 
-  test("checking an organization needs permission to create credentials", async ({
+  test("checking an organization needs only permission to create provider keys", async ({
     makeCustomRole,
     makeMember,
     makeUser,
   }) => {
-    const role = await makeCustomRole(organizationId, {
-      permission: { llmProviderApiKey: ["create"] },
+    // Someone who may only reuse a connected App still passes the first step.
+    const keysOnly = await makeCustomRole(organizationId, {
+      permission: { llmProviderApiKey: ["create"], credential: ["read"] },
     });
     user = await makeUser();
-    await makeMember(user.id, organizationId, { role: role.role });
-
-    const response = await post("/api/github-copilot-app/organization/check", {
+    await makeMember(user.id, organizationId, { role: keysOnly.role });
+    const allowed = await post("/api/github-copilot-app/organization/check", {
       organization: "my-org",
     });
-    expect(response.statusCode).toBe(403);
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.json()).toEqual({ organization: "my-org" });
+
+    const readOnly = await makeCustomRole(organizationId, {
+      permission: { llmProviderApiKey: ["read"] },
+    });
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: readOnly.role });
+    const refused = await post("/api/github-copilot-app/organization/check", {
+      organization: "my-org",
+    });
+    expect(refused.statusCode).toBe(403);
   });
 
   async function auditRows(resourceId: string, action: AuditEventName) {

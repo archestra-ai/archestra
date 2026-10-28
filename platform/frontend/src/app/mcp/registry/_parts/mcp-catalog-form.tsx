@@ -367,15 +367,24 @@ export function McpCatalogForm({
     nextAuthMethod: McpCatalogFormValues["authMethod"],
   ) => {
     const previousAuthMethod = form.getValues("authMethod");
+    if (nextAuthMethod === previousAuthMethod) return;
     form.setValue("authMethod", nextAuthMethod, { shouldDirty: true });
 
+    if (nextAuthMethod === "none" || nextAuthMethod === "auth_header") {
+      form.setValue("requiresAuth", nextAuthMethod === "auth_header", {
+        shouldDirty: true,
+      });
+    }
+
     if (
-      previousAuthMethod === "auth_header" &&
+      (previousAuthMethod === "auth_header" || nextAuthMethod === "none") &&
       nextAuthMethod !== "auth_header"
     ) {
       const existingHeaders = form.getValues("additionalHeaders") ?? [];
       const filtered = existingHeaders.filter(
-        (header) => !header.includeBearerPrefix,
+        (header) =>
+          !header.includeBearerPrefix &&
+          !(header.promptOnInstallation && header.sourceAuthFieldName),
       );
       if (filtered.length !== existingHeaders.length) {
         form.setValue("additionalHeaders", filtered, { shouldDirty: true });
@@ -438,8 +447,10 @@ export function McpCatalogForm({
         // dialog forces this choice on manual additions, but the
         // token-auth flow seeds the row programmatically and so must
         // own the default itself.
+        form.setValue("managesAuthFields", true, { shouldDirty: true });
         appendAdditionalHeader({
           fieldName: undefined,
+          sourceAuthFieldName: "authorization",
           headerName: "Authorization",
           promptOnInstallation: true,
           required: true,

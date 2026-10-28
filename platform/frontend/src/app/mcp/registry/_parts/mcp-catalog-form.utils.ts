@@ -52,6 +52,7 @@ export function emptyOauthFormConfig(): NonNullable<
 // Transform function to convert form values to API format
 export function transformFormToApiData(
   values: McpCatalogFormValues,
+  originalAuthFields?: McpCatalogApiData["authFields"],
 ): McpCatalogApiData {
   const data: McpCatalogApiData = {
     ...(values.initialGrants !== undefined && {
@@ -66,7 +67,28 @@ export function transformFormToApiData(
     multitenant:
       values.serverType === "local" ? Boolean(values.multitenant) : false,
     icon: values.icon ?? null,
+    ...(values.requiresAuth !== undefined && {
+      requiresAuth: values.requiresAuth,
+    }),
   };
+
+  // Keep imported declarations in sync with the editable header rows. Otherwise
+  // a renamed or deleted header would be imported again on the next load.
+  if (values.managesAuthFields) {
+    data.authFields = [
+      ...(originalAuthFields ?? []).filter(
+        (field) => field.type.toLowerCase() !== "header",
+      ),
+      ...(values.additionalHeaders ?? [])
+        .filter((header) => header.sourceAuthFieldName)
+        .map((header) => ({
+          name: header.headerName,
+          label: header.description || header.headerName,
+          type: "header",
+          required: header.required,
+        })),
+    ];
+  }
 
   if (values.serverUrl) {
     data.serverUrl = values.serverUrl;
@@ -300,6 +322,24 @@ export function transformCatalogItemToFormValues(
     secret: Record<string, unknown>;
   } | null,
 ): McpCatalogFormValues {
+  const staticHeaderFields = getHeaderMappedUserConfigEntries(item.userConfig);
+  // Entries written through the API, the built-in MCP tool or Terraform can
+  // declare their credentials as `requiresAuth` plus header `authFields`
+  // instead of header-mapped userConfig. Until a save writes them into
+  // userConfig, the form shows them as the install-time headers they describe.
+  const configuredHeaderNames = new Set(
+    Object.values(staticHeaderFields).map((field) =>
+      field.headerName.trim().toLowerCase(),
+    ),
+  );
+  const importedAuthHeaders = getAuthFieldHeaders(item);
+  const managedAuthFieldNames = importedAuthHeaders.map((field) =>
+    field.headerName.toLowerCase(),
+  );
+  const authFieldHeaders = importedAuthHeaders.filter(
+    (field) => !configuredHeaderNames.has(field.headerName.toLowerCase()),
+  );
+
   // Determine auth method
   let authMethod: McpCatalogFormValues["authMethod"] = "none";
   let includeBearerPrefix = true;
@@ -319,9 +359,17 @@ export function transformCatalogItemToFormValues(
   } else if (item.userConfig?.access_token) {
     authMethod = "bearer";
   } else if (
+    item.requiresAuth &&
+    (authFieldHeaders.length > 0 ||
+      Object.values(staticHeaderFields).some(
+        (config) => config.promptOnInstallation !== false,
+      ))
+  ) {
+    authMethod = "auth_header";
+  } else if (
     // Special case: GitHub server uses Bearer Token but external catalog doesn't define userConfig
-    item.name.includes("githubcopilot") ||
-    item.name.includes("github")
+    item.requiresAuth !== false &&
+    (item.name.includes("githubcopilot") || item.name.includes("github"))
   ) {
     authMethod = "bearer";
   } else if (
@@ -496,16 +544,20 @@ export function transformCatalogItemToFormValues(
     };
   }
 
-  const staticHeaderFields = getHeaderMappedUserConfigEntries(item.userConfig);
   const authHeaderConfig =
     staticHeaderFields.access_token ?? staticHeaderFields.raw_access_token;
-  const additionalHeaders = Object.entries(staticHeaderFields)
+  const headersFromUserConfig = Object.entries(staticHeaderFields)
     .filter(([fieldName]) => {
       return fieldName !== "access_token" && fieldName !== "raw_access_token";
     })
     .map(([fieldName, config]) => ({
       fieldName,
       headerName: config.headerName,
+      sourceAuthFieldName: managedAuthFieldNames.includes(
+        config.headerName.trim().toLowerCase(),
+      )
+        ? config.headerName.trim().toLowerCase()
+        : undefined,
       promptOnInstallation: config.promptOnInstallation ?? true,
       required: config.required ?? false,
       value: typeof config.default === "string" ? config.default : undefined,
@@ -513,6 +565,7 @@ export function transformCatalogItemToFormValues(
       includeBearerPrefix: config.valuePrefix === "Bearer ",
       sensitive: config.sensitive ?? false,
     }));
+  const additionalHeaders = [...headersFromUserConfig, ...authFieldHeaders];
 
   return {
     name: item.name,
@@ -521,6 +574,8 @@ export function transformCatalogItemToFormValues(
     serverType: item.serverType as "remote" | "local",
     multitenant: item.serverType === "local" && Boolean(item.multitenant),
     serverUrl: item.serverUrl || "",
+    requiresAuth: item.requiresAuth,
+    managesAuthFields: managedAuthFieldNames.length > 0,
     authMethod,
     includeBearerPrefix,
     authHeaderName:
@@ -954,6 +1009,34 @@ function getHeaderMappedUserConfigEntries(
         ];
       }),
   );
+}
+
+function getAuthFieldHeaders(
+  item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
+): NonNullable<McpCatalogFormValues["additionalHeaders"]> {
+  const sendsHeaders =
+    item.serverType === "remote" ||
+    (item.serverType === "local" &&
+      item.localConfig?.transportType === "streamable-http");
+  if (!item.requiresAuth || !sendsHeaders) {
+    return [];
+  }
+  return (item.authFields ?? [])
+    .filter(
+      (field) =>
+        field.type.toLowerCase() === "header" && field.name.trim().length > 0,
+    )
+    .map((field) => ({
+      fieldName: undefined,
+      headerName: field.name.trim(),
+      sourceAuthFieldName: field.name.trim().toLowerCase(),
+      promptOnInstallation: true,
+      required: field.required,
+      value: undefined,
+      description: field.description || field.label,
+      includeBearerPrefix: false,
+      sensitive: true,
+    }));
 }
 
 function isDefaultAuthorizationHeader(headerName: string): boolean {

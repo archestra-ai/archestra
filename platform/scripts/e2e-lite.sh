@@ -188,7 +188,8 @@ cmd_up() {
   wait_for "A2A fixture" "http://127.0.0.1:9191/health" 15
   # Cold startup includes embedded Kind, database initialization, migrations,
   # and seeding. On CI runners this can exceed four minutes.
-  wait_for backend "http://127.0.0.1:9000/health" 300
+  # Liveness succeeds during startup, before seeding and API routes are ready.
+  wait_for backend "http://127.0.0.1:9000/ready" 300
   wait_for frontend "http://127.0.0.1:3000/" 30
   # Keycloak last: its ~40-60s realm import overlaps the platform boot.
   wait_for Keycloak "http://127.0.0.1:30081/realms/archestra/.well-known/openid-configuration" 60

@@ -1,3 +1,4 @@
+import { a2aOAuthExecutionHeader } from "@/clients/a2a-oauth-execution";
 import type { LLMModel } from "@/clients/llm-client";
 import {
   type A2AOAuthExecution,
@@ -19,13 +20,23 @@ export function authorizeA2AModel(params: {
     get(target, property) {
       const value = Reflect.get(target, property, target);
       if (property !== "doGenerate" && property !== "doStream") return value;
-      return async (options: unknown) => {
+      return async (options: {
+        headers?: Record<string, string | undefined>;
+      }) => {
         await authorizeA2AOAuthExecution({
           agentId,
           organizationId,
           execution,
         });
-        return Reflect.apply(value, target, [options]);
+        return Reflect.apply(value, target, [
+          {
+            ...options,
+            headers: {
+              ...options.headers,
+              ...a2aOAuthExecutionHeader(agentId, execution),
+            },
+          },
+        ]);
       };
     },
   });

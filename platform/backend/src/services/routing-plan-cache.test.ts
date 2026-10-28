@@ -2,6 +2,7 @@ import type { PGlite } from "@electric-sql/pglite";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
+import AutoRoutingSettingsModel from "@/models/auto-routing-settings";
 import RoutingPlanModel from "@/models/routing-plan";
 import { ConfigCache, PROXY_CONFIG_TTL_MS } from "@/services/config-cache";
 import { type PgClient, PostgresNotifyHub } from "@/services/pg-notify-hub";
@@ -90,11 +91,17 @@ describe("RoutingPlanCache", () => {
     const organization = await makeOrganization();
     await AgentModel.getOrgLlmProxy(organization.id);
     const scorer = await makeScorerVersion();
+    await AutoRoutingSettingsModel.activateScorerVersion(
+      organization.id,
+      scorer.id,
+    );
+    const settings = await AutoRoutingSettingsModel.find(organization.id);
+    if (!settings) throw new Error("settings missing");
     const fit = (label: string, day: number) =>
       activeFit({
         organizationId: organization.id,
         scorerVersionId: scorer.id,
-        generation: 0,
+        generation: settings.generation,
         inputWatermark: new Date(Date.UTC(2026, 0, day)),
         label,
       });

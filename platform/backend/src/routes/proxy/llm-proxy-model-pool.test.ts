@@ -45,6 +45,11 @@ describe("Model pools - LLM Proxy", () => {
 
     vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
       (apiKey) => {
+        if (apiKey === "sk-silent") {
+          // Never answers: only the pool's timeout moves the request on.
+          const silent = () => new Promise(() => {});
+          return { chat: { completions: { create: silent } } } as never;
+        }
         if (apiKey !== "sk-limited") {
           return createOpenAiTestClient({}) as never;
         }
@@ -178,6 +183,80 @@ describe("Model pools - LLM Proxy", () => {
           failureReason: null,
           cost: expect.any(Number),
         },
+      ]);
+    });
+  }
+
+  for (const stream of [false, true]) {
+    test(`moves past a silent member after the pool's own timeout (stream: ${stream})`, async ({
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const [silent, healthy] = [
+        await makeLlmProviderApiKey(
+          proxy.organizationId,
+          (await makeSecret({ secret: { apiKey: "sk-silent" } })).id,
+          { provider: "openai" },
+        ),
+        await makeLlmProviderApiKey(
+          proxy.organizationId,
+          (await makeSecret({ secret: { apiKey: "sk-healthy" } })).id,
+          { provider: "openai" },
+        ),
+      ];
+      const { value: virtualKey, virtualKey: virtualKeyRow } =
+        await VirtualApiKeyModel.create({
+          name: "pinned-to-silent",
+          providerApiKeys: [
+            { provider: "openai", providerApiKeyId: silent.id },
+          ],
+        });
+      // The defaults (30 s first chunk, 3 min response) would outlast the test.
+      const pool = await ModelPoolModel.create({
+        organizationId: proxy.organizationId,
+        input: {
+          name: "gpt-4o-mini",
+          streamTimeoutSeconds: 1,
+          timeoutSeconds: 1,
+          members: [silent, healthy].map((key, index) => ({
+            providerApiKeyId: key.id,
+            modelId: "gpt-4o-mini",
+            priority: index + 1,
+            weight: 1,
+            enabled: true,
+          })),
+        },
+      });
+      await ModelPoolModel.setPoolsForVirtualApiKey({
+        organizationId: proxy.organizationId,
+        virtualApiKeyId: virtualKeyRow.id,
+        poolIds: [pool.id],
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${proxy.id}/chat/completions`,
+        remoteAddress: "203.0.113.5",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${virtualKey}`,
+        },
+        payload: {
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: "hello" }],
+          stream,
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.headers["x-archestra-provider-key"]).toBe(healthy.id);
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .orderBy(schema.interactionsTable.attempt);
+      expect(rows.map((row) => row.failureReason)).toEqual([
+        "timeout (408)",
+        null,
       ]);
     });
   }

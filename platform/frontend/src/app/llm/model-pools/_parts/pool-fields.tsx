@@ -4,7 +4,14 @@ import { DocsPage } from "@archestra/shared";
 import { CircleHelp, TriangleAlert } from "lucide-react";
 import { Controller } from "react-hook-form";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { FieldDescription } from "@/components/ui/field-description";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
@@ -15,7 +22,13 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { suggestModelId } from "./model-name";
-import type { PoolForm, PoolOptions } from "./pool-form";
+import {
+  isValidSeconds,
+  MAX_SECONDS,
+  type PoolForm,
+  type PoolOptions,
+  type PoolTiming,
+} from "./pool-form";
 
 export function ModelNameField({
   form,
@@ -115,24 +128,134 @@ export function HelpTip({
   );
 }
 
-/** What happens when a member fails, in one line, with the rules in the docs. */
-export function FailoverNote() {
+/** Failover timing a pool uses when its own is blank. */
+const DEFAULT_STREAM_TIMEOUT_SECONDS = 30;
+const DEFAULT_COOLDOWN_SECONDS = 30;
+const MAX_RETRY_AFTER_SECONDS = 60;
+
+/**
+ * When a member is skipped and for how long, named as LiteLLM names them.
+ * Blank keeps the default.
+ */
+export function TimeoutFields({
+  form,
+  disabled,
+}: {
+  form: PoolForm;
+  disabled: boolean;
+}) {
   return (
-    <p className="text-xs text-muted-foreground">
-      <span>
-        A member that answers 429, 5xx or times out is skipped and cools down
-        for up to 60 s.
-      </span>{" "}
-      <ExternalDocsLink
-        href={getFrontendDocsUrl(
-          DocsPage.PlatformLlmProxyModelPools,
-          "how-failover-works",
+    <div className="@container space-y-2">
+      <div className="space-y-0.5">
+        <Label>Timeouts and cooldown</Label>
+        <FieldDescription>
+          <span>
+            When a member is skipped, and for how long. The last member is never
+            timed out.
+          </span>{" "}
+          <ExternalDocsLink
+            href={getFrontendDocsUrl(
+              DocsPage.PlatformLlmProxyModelPools,
+              "when-a-member-fails",
+            )}
+            showIcon={false}
+            className="underline"
+          >
+            How failover works
+          </ExternalDocsLink>
+        </FieldDescription>
+      </div>
+      <div className="grid gap-3 @lg:grid-cols-3">
+        <SecondsField
+          form={form}
+          name="streamTimeoutSeconds"
+          label="Stream timeout"
+          placeholder={String(DEFAULT_STREAM_TIMEOUT_SECONDS)}
+          disabled={disabled}
+        >
+          Seconds to wait for the first chunk of a streamed response before
+          moving to the next member.
+        </SecondsField>
+        <SecondsField
+          form={form}
+          name="timeoutSeconds"
+          label="Timeout"
+          placeholder="Auto"
+          disabled={disabled}
+        >
+          Seconds for a full non-streamed response. Auto is 3 min plus 1 s per
+          20 tokens the request lets the model write, up to 30 min.
+        </SecondsField>
+        <SecondsField
+          form={form}
+          name="cooldownSeconds"
+          label="Cooldown time"
+          placeholder={String(DEFAULT_COOLDOWN_SECONDS)}
+          disabled={disabled}
+        >
+          Minimum seconds a failed member is skipped by later requests. A longer
+          Retry-After header extends it, up to {MAX_RETRY_AFTER_SECONDS} s or
+          this time if longer.
+        </SecondsField>
+      </div>
+    </div>
+  );
+}
+
+function SecondsField({
+  form,
+  name,
+  label,
+  placeholder,
+  disabled,
+  children,
+}: {
+  form: PoolForm;
+  name: PoolTiming;
+  label: string;
+  placeholder: string;
+  disabled: boolean;
+  /** The help tip. */
+  children: React.ReactNode;
+}) {
+  const id = `pool-${name}`;
+  return (
+    <div className="space-y-1.5">
+      <span className="flex items-center gap-1.5">
+        <Label
+          htmlFor={id}
+          className="text-xs font-normal text-muted-foreground"
+        >
+          {label}
+        </Label>
+        <HelpTip topic={label}>
+          {children} At most {MAX_SECONDS[name]} s.
+        </HelpTip>
+      </span>
+      <Controller
+        control={form.control}
+        name={name}
+        render={({ field }) => (
+          <InputGroup data-disabled={disabled}>
+            <InputGroupInput
+              id={id}
+              inputMode="numeric"
+              value={field.value}
+              placeholder={placeholder}
+              disabled={disabled}
+              aria-invalid={!isValidSeconds(name, field.value)}
+              onBlur={field.onBlur}
+              onChange={(event) =>
+                field.onChange(event.target.value.replace(/\D/g, ""))
+              }
+              className="tabular-nums"
+            />
+            <InputGroupAddon align="inline-end">
+              <InputGroupText>s</InputGroupText>
+            </InputGroupAddon>
+          </InputGroup>
         )}
-        showIcon={false}
-        className="underline"
-      >
-        How failover works
-      </ExternalDocsLink>
-    </p>
+      />
+    </div>
   );
 }

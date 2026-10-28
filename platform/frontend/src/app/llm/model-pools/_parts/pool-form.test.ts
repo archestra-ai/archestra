@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isValidSeconds,
   orderShare,
   type PoolFormMember,
   toFormValues,
@@ -21,6 +22,9 @@ describe("toFormValues and toPoolInput", () => {
       id: "pool",
       organizationId: "org",
       name: "glm-5",
+      streamTimeoutSeconds: null,
+      timeoutSeconds: null,
+      cooldownSeconds: null,
       createdAt: "",
       updatedAt: "",
       virtualApiKeyIds: [],
@@ -47,6 +51,34 @@ describe("toFormValues and toPoolInput", () => {
       ["m2", 2],
       ["m3", 3],
     ]);
+  });
+});
+
+describe("a pool's timing", () => {
+  it("sends blank as null, to keep the default", () => {
+    expect(
+      toPoolInput({
+        name: "glm-5",
+        members: [],
+        streamTimeoutSeconds: "45",
+        timeoutSeconds: "",
+        cooldownSeconds: "300",
+      }),
+    ).toMatchObject({
+      streamTimeoutSeconds: 45,
+      timeoutSeconds: null,
+      cooldownSeconds: 300,
+    });
+  });
+
+  it.each([
+    ["streamTimeoutSeconds", "", true],
+    ["streamTimeoutSeconds", "1800", true],
+    ["streamTimeoutSeconds", "1801", false],
+    ["cooldownSeconds", "3600", true],
+    ["cooldownSeconds", "0", false],
+  ] as const)("%s %j is valid: %s", (timing, value, valid) => {
+    expect(isValidSeconds(timing, value)).toBe(valid);
   });
 });
 

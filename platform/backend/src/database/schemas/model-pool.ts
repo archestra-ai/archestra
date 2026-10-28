@@ -1,4 +1,5 @@
 import {
+  integer,
   pgTable,
   text,
   timestamp,
@@ -20,6 +21,23 @@ const modelPoolsTable = pgTable(
     organizationId: text("organization_id").notNull(),
     /** The model name clients request, e.g. `glm-5` or `claude-opus-4-8`. */
     name: text("name").notNull(),
+    /**
+     * Seconds a member may take to send a stream's first chunk before the
+     * request moves on (LiteLLM's `stream_timeout`). Null keeps the default.
+     */
+    streamTimeoutSeconds: integer("stream_timeout_seconds"),
+    /**
+     * Seconds a member may take to return a whole non-streamed answer
+     * (LiteLLM's `timeout`). Null scales the default with the request's
+     * output limit.
+     */
+    timeoutSeconds: integer("timeout_seconds"),
+    /**
+     * Shortest time in seconds a failed member is skipped; a longer
+     * Retry-After extends it up to 60 s or this, whichever is longer
+     * (LiteLLM's `cooldown_time`). Null keeps the default.
+     */
+    cooldownSeconds: integer("cooldown_seconds"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

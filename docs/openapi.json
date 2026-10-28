@@ -420096,6 +420096,24 @@
                       "name": {
                         "type": "string"
                       },
+                      "streamTimeoutSeconds": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
+                      "timeoutSeconds": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
+                      "cooldownSeconds": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -420216,6 +420234,9 @@
                       "id",
                       "organizationId",
                       "name",
+                      "streamTimeoutSeconds",
+                      "timeoutSeconds",
+                      "cooldownSeconds",
                       "createdAt",
                       "updatedAt",
                       "members",
@@ -420524,6 +420545,24 @@
                         "modelId"
                       ]
                     }
+                  },
+                  "streamTimeoutSeconds": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1800
+                  },
+                  "timeoutSeconds": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1800
+                  },
+                  "cooldownSeconds": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3600
                   }
                 },
                 "required": [
@@ -420552,6 +420591,24 @@
                     },
                     "name": {
                       "type": "string"
+                    },
+                    "streamTimeoutSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "timeoutSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "cooldownSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
                     },
                     "createdAt": {
                       "type": "string",
@@ -420661,6 +420718,9 @@
                     "id",
                     "organizationId",
                     "name",
+                    "streamTimeoutSeconds",
+                    "timeoutSeconds",
+                    "cooldownSeconds",
                     "createdAt",
                     "updatedAt",
                     "members",
@@ -421281,6 +421341,24 @@
                         "modelId"
                       ]
                     }
+                  },
+                  "streamTimeoutSeconds": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1800
+                  },
+                  "timeoutSeconds": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1800
+                  },
+                  "cooldownSeconds": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3600
                   }
                 },
                 "required": [
@@ -421321,6 +421399,24 @@
                     },
                     "name": {
                       "type": "string"
+                    },
+                    "streamTimeoutSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "timeoutSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "cooldownSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
                     },
                     "createdAt": {
                       "type": "string",
@@ -421430,6 +421526,9 @@
                     "id",
                     "organizationId",
                     "name",
+                    "streamTimeoutSeconds",
+                    "timeoutSeconds",
+                    "cooldownSeconds",
                     "createdAt",
                     "updatedAt",
                     "members",

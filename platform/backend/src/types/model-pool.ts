@@ -40,6 +40,10 @@ export const ModelPoolMemberInputSchema = z.object({
 export const ModelPoolInputSchema = z.object({
   name: z.string().trim().min(1).max(512),
   members: z.array(ModelPoolMemberInputSchema).min(1).max(50),
+  // Null keeps the default; omitted keeps the pool's current value.
+  streamTimeoutSeconds: z.number().int().min(1).max(1800).nullish(),
+  timeoutSeconds: z.number().int().min(1).max(1800).nullish(),
+  cooldownSeconds: z.number().int().min(1).max(3600).nullish(),
 });
 
 /** The pools a virtual key or OAuth client form grants; omit to keep them. */

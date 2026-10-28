@@ -75,4 +75,3 @@ What to know:
 - **Generative models only**: the `/models` listing covers every model reachable through `/chat/completions` or `/responses`. Copilot also serves an Anthropic `/v1/messages` shim and embedding models, which Archestra does not route to.
 - **GitHub Enterprise**: point the base, token-exchange, and device-auth URLs at your GHE host. Organizations with their own GitHub App can override the client id.
 - **Enterprise plan models**: the plan lists only the models your organization's Copilot policy allows. If Claude or Gemini models are missing, check that policy on GitHub.
-- **Enterprise plan integration id**: GitHub App requests carry a `Copilot-Integration-Id`. If GitHub rejects it, set [`ARCHESTRA_GITHUB_COPILOT_APP_INTEGRATION_ID`](/docs/admin/deployment/configuration#ARCHESTRA_GITHUB_COPILOT_APP_INTEGRATION_ID).

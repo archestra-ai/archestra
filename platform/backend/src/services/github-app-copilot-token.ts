@@ -15,13 +15,8 @@ import {
   getGithubApiBaseUrl,
   getGithubWebOrigin,
 } from "@archestra/shared";
-import config from "@/config";
 import { LRUCacheManager } from "@/in-memory-lru-cache";
-import {
-  fetchAsGithubApp,
-  resolveInstallationCredential,
-} from "@/integrations/github/app-auth";
-import logger from "@/logging";
+import { resolveInstallationCredential } from "@/integrations/github/app-auth";
 import { ApiError } from "@/types/api";
 
 export interface GithubAppCredential {
@@ -266,16 +261,13 @@ export async function getGithubAppInstallationToken(
   return token;
 }
 
-/** The Copilot-Integration-Id sent with installation tokens. */
-export function copilotAppIntegrationId(): string {
-  return (
-    config.llm["github-copilot"].appIntegrationId?.trim() ||
-    // The Copilot runtime's default Copilot-Integration-Id, as named in
-    // GitHub's Copilot SDK docs (docs/setup/multi-tenancy.md); GitHub says
-    // that runtime works with installation tokens.
-    "copilot-developer-cli"
-  );
-}
+/**
+ * The Copilot-Integration-Id sent with installation tokens: the Copilot
+ * runtime's own id, as named in GitHub's Copilot SDK docs
+ * (docs/setup/multi-tenancy.md); GitHub says that runtime works with
+ * installation tokens.
+ */
+export const COPILOT_APP_INTEGRATION_ID = "copilot-developer-cli";
 
 /**
  * Turn Copilot's rejection of an installation token into a message that says
@@ -290,7 +282,7 @@ export function copilotAppErrorMessage(params: {
   const org = params.organization ?? "the organization";
   const quoted = githubMessage ? ` GitHub said: "${githubMessage}"` : "";
   if (/integration[- ]id/i.test(githubMessage))
-    return `GitHub Copilot rejected the integration id. Unset ARCHESTRA_GITHUB_COPILOT_APP_INTEGRATION_ID or set it to the value GitHub expects.${quoted}`;
+    return `GitHub Copilot rejected the integration id.${quoted}`;
   if (status === 403 && /not enabled|policy|app/i.test(githubMessage))
     return `${org} doesn't allow Copilot requests from GitHub Apps. An owner can turn this on in the organization's Copilot policies (needs Copilot Business or Enterprise).${quoted}`;
   if (status === 403)

@@ -2899,12 +2899,6 @@ const config = {
       clientId:
         process.env.ARCHESTRA_GITHUB_COPILOT_CLIENT_ID ||
         "Iv1.b507a08c87ecfe98",
-      /**
-       * Copilot-Integration-Id sent with GitHub App installation tokens.
-       * Unset: copilot-developer-cli, the Copilot runtime's own id.
-       */
-      appIntegrationId:
-        process.env.ARCHESTRA_GITHUB_COPILOT_APP_INTEGRATION_ID || undefined,
     },
     "microsoft-365-copilot": {
       /** Microsoft Graph base URL serving the Microsoft 365 Copilot Chat API (beta). */

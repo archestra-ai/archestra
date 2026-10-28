@@ -18,8 +18,8 @@ import { LRUCacheManager } from "@/in-memory-lru-cache";
 import logger from "@/logging";
 import { ApiError } from "@/types/api";
 import {
+  COPILOT_APP_INTEGRATION_ID,
   copilotAppErrorMessage,
-  copilotAppIntegrationId,
   type GithubAppCredential,
   getGithubAppInstallationToken,
   resolveGithubAppCredential,
@@ -362,7 +362,7 @@ async function githubAppCopilotFetch(params: {
     const headers = new Headers(
       init?.headers ?? (input instanceof Request ? input.headers : undefined),
     );
-    headers.set("copilot-integration-id", copilotAppIntegrationId());
+    headers.set("copilot-integration-id", COPILOT_APP_INTEGRATION_ID);
     headers.set("authorization", `Bearer ${token}`);
     return baseFetch(input, { ...init, headers });
   };

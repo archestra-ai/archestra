@@ -465,10 +465,6 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Default: `Iv1.b507a08c87ecfe98` (the VS Code Copilot client ID)
   - Set your own GitHub App's client ID if it has Copilot API access.
 
-- **`ARCHESTRA_GITHUB_COPILOT_APP_INTEGRATION_ID`** - `Copilot-Integration-Id` sent with an enterprise plan's GitHub App requests.
-  - Default: `copilot-developer-cli`
-  - Change it only if GitHub rejects the integration id.
-
 ### Microsoft 365 Copilot
 
 - **`ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID`** - Application (client) ID of your Entra app registration for **Sign in with Microsoft**.

@@ -21,7 +21,12 @@ import {
 import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { readRunToolArgs } from "@/archestra-mcp-server/run-tool-target";
-import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import {
+  type AllowedCacheKey,
+  CacheKey,
+  type CacheKeyPrefix,
+  cacheManager,
+} from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import AgentModel from "@/models/agent";
@@ -2273,17 +2278,36 @@ function remedylessRefusalNote(params: {
     : `${lead} Connect this client to the ${server} MCP gateway, then start a new session.`;
 }
 
+/** `keyv_cache.key` is varchar(255), and Keyv stores each key as `keyv:<key>`. */
+const MAX_CACHE_KEY_LENGTH = 255 - "keyv:".length;
+
+/**
+ * A session-scoped cache key. Agent-run session ids carry their caller's
+ * scope, and encoded with a call id they can exceed the column, which fails
+ * the write. A key that fits keeps its encoded form, so live sessions still
+ * find what they stored; a longer one uses a fixed-length digest.
+ */
+function sessionScopedCacheKey(
+  prefix: CacheKeyPrefix,
+  scope: string,
+): AllowedCacheKey {
+  const encoded: AllowedCacheKey = `${prefix}-${Buffer.from(scope).toString("base64url")}`;
+  if (encoded.length <= MAX_CACHE_KEY_LENGTH) return encoded;
+  return `${prefix}-${createHash("sha256").update(scope).digest("base64url")}`;
+}
+
 function deniedCallClarificationKey(params: {
   session: OpenAppaSession;
   callId: string;
 }): AllowedCacheKey {
-  return `${CacheKey.OpenAppaDeniedCallClarification}-${Buffer.from(
+  return sessionScopedCacheKey(
+    CacheKey.OpenAppaDeniedCallClarification,
     JSON.stringify([
       params.session.organization_id,
       params.session.session_id,
       withoutTrajectoryStamp(params.callId),
     ]),
-  ).toString("base64url")}`;
+  );
 }
 
 /** The client's own report of a failed wait, so the model sees the real error. */
@@ -2300,27 +2324,30 @@ function unansweredNoticeKey(params: {
   session: OpenAppaSession;
   callId: string;
 }): AllowedCacheKey {
-  return `${CacheKey.OpenAppaUnansweredAnnotationNotice}-${Buffer.from(
+  return sessionScopedCacheKey(
+    CacheKey.OpenAppaUnansweredAnnotationNotice,
     `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
-  ).toString("base64url")}`;
+  );
 }
 
 function notLoadedRulingKey(params: {
   session: OpenAppaSession;
   callId: string;
 }): AllowedCacheKey {
-  return `${CacheKey.OpenAppaNotLoadedRuling}-${Buffer.from(
+  return sessionScopedCacheKey(
+    CacheKey.OpenAppaNotLoadedRuling,
     `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
-  ).toString("base64url")}`;
+  );
 }
 
 function carriedRulingKey(params: {
   session: OpenAppaSession;
   callId: string;
 }): AllowedCacheKey {
-  return `${CacheKey.OpenAppaCarriedRuling}-${Buffer.from(
+  return sessionScopedCacheKey(
+    CacheKey.OpenAppaCarriedRuling,
     `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
-  ).toString("base64url")}`;
+  );
 }
 
 /** Whether the request declares the tool this call names, as the client spells it. */
@@ -2365,9 +2392,10 @@ async function seenBefore(
     | typeof CacheKey.OpenAppaRemedyToolsAwaited,
   session: OpenAppaSession,
 ): Promise<boolean> {
-  const key: AllowedCacheKey = `${flag}-${Buffer.from(
+  const key = sessionScopedCacheKey(
+    flag,
     `${session.organization_id}:${session.session_id}`,
-  ).toString("base64url")}`;
+  );
   if (await cacheManager.get<boolean>(key)) return true;
   await cacheManager.set(key, true, TimeInMs.Day);
   return false;
@@ -6068,9 +6096,10 @@ async function reviewQuestionAskedBefore(params: {
   session: OpenAppaSession;
   resultId: string;
 }): Promise<boolean> {
-  const key: AllowedCacheKey = `${CacheKey.OpenAppaHitlQuestionAsked}-${Buffer.from(
+  const key = sessionScopedCacheKey(
+    CacheKey.OpenAppaHitlQuestionAsked,
     `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.resultId)}`,
-  ).toString("base64url")}`;
+  );
   if (await cacheManager.get<boolean>(key)) return true;
   // Outlives the review it asked about, which expires after ten minutes.
   await cacheManager.set(key, true, TimeInMs.Hour);

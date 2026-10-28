@@ -5,6 +5,10 @@ name: Build Agent Catalog Images
 on:
   workflow_call:
     inputs:
+      image_registry:
+        description: "Destination registry prefix"
+        type: string
+        default: ghcr.io/archestra-ai
       push_to_gcr:
         description: "Whether to publish the images"
         required: true
@@ -68,6 +72,7 @@ jobs:
           - agent-openclaw
     permissions:
       contents: read # Required to invoke the reusable image build workflow.
+      packages: write # Publish CI images with the repository token.
       id-token: write # Required for Workload Identity Federation.
     uses: ./.github/workflows/build-native-multi-arch-image.yml
     with:
@@ -75,10 +80,10 @@ jobs:
       dockerfile: ./platform/docker_images/agent/Dockerfile
       target: ${{ matrix.image }}
       image_name: ${{ matrix.image }}
-      image_registry: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+      image_registry: ${{ inputs.image_registry }}
       version: ${{ inputs.version }}
       push_image: ${{ inputs.push_to_gcr }}
-      auth_provider: gar
+      auth_provider: ${{ startsWith(inputs.image_registry, 'ghcr.io/') && 'ghcr' || 'gar' }}
       checkout_ref: ${{ inputs.checkout_ref }}
       reuse_from_version: ${{ inputs.reuse_from_version }}
       reuse_paths: '["platform/docker_images/agent", "platform/backend/src/static/workspace-files.py", "platform/.dockerignore", ".github/workflows/build-agent-catalog-images.yml"]'
@@ -126,4 +131,4 @@ jobs:
           load: "true"
           tags: ${{ matrix.image }}:${{ github.sha }}
           # Read-only: the publish paths own cache export for this image.
-          cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/${{ matrix.image }}:buildcache-${{ matrix.arch }}
+          cache-from: type=registry,ref=ghcr.io/archestra-ai/ci/${{ matrix.image }}:buildcache-${{ matrix.arch }}

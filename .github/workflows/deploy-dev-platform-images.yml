@@ -61,7 +61,7 @@ jobs:
           PREVIOUS_SHA: ${{ github.event.before }}
           IMAGE_VERSION: ${{ inputs.version || github.sha }}
         run: |
-          candidate="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${PREVIOUS_SHA}"
+          candidate="ghcr.io/archestra-ai/ci/platform:${PREVIOUS_SHA}"
           if [ "$PREVIOUS_SHA" != "$IMAGE_VERSION" ] && docker buildx imagetools inspect "$candidate" >/dev/null 2>&1; then
             echo "previous-image=$candidate" >> "$GITHUB_OUTPUT"
           fi
@@ -80,12 +80,11 @@ jobs:
         id: deployed-platform-image
         if: ${{ steps.previous-main-image.outputs.previous-image == '' }}
         run: |
-          PREV_TAG=$(kubectl get deployment archestra-platform -n archestra \
-            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null \
-            | cut -d: -f2) || true
+          PREV_IMAGE=$(kubectl get deployment archestra-platform -n archestra \
+            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null) || true
 
-          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$IMAGE_VERSION" ]; then
-            echo "previous-image=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${PREV_TAG}" >> "$GITHUB_OUTPUT"
+          if [ -n "$PREV_IMAGE" ] && [ "${PREV_IMAGE##*:}" != "$IMAGE_VERSION" ]; then
+            echo "previous-image=${PREV_IMAGE}" >> "$GITHUB_OUTPUT"
           else
             echo "previous-image=" >> "$GITHUB_OUTPUT"
           fi
@@ -99,15 +98,16 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.label.name == 'deploy-dev-platform-images' && github.event.pull_request.head.repo.fork != true) }}
     permissions:
       contents: read # Required to checkout the repository and build the image.
+      packages: write # Publish development images and build caches to GHCR.
       id-token: write # Required for Workload Identity Federation when pushing images.
     uses: ./.github/workflows/build-native-multi-arch-image.yml
     with:
       image_directory: ./platform
       image_name: platform
-      image_registry: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+      image_registry: ghcr.io/archestra-ai/ci
       version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
       push_image: true
-      auth_provider: gar
+      auth_provider: ghcr
       # amd64-only ONLY for the automated staging deploy (push to main, via
       # on-commits-to-main): staging runs amd64 nodes, so the arm64 leg (~9-10
       # min, the long pole) produced an image nothing schedules. The
@@ -138,8 +138,10 @@ jobs:
     uses: ./.github/workflows/build-base-mcp-server-docker-image.yml
     permissions:
       contents: read # Required to invoke the reusable MCP server base image workflow.
+      packages: write # Publish development images and build caches to GHCR.
       id-token: write # Required for Workload Identity Federation.
     with:
+      image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
       version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
       reuse_from_version: ${{ github.event_name == 'push' && github.event.before || '' }}
@@ -153,8 +155,10 @@ jobs:
     uses: ./.github/workflows/build-agent-catalog-images.yml
     permissions:
       contents: read # Required to invoke the reusable Agent image workflow.
+      packages: write # Publish development images and build caches to GHCR.
       id-token: write # Required for Workload Identity Federation.
     with:
+      image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
       version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
       checkout_ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
@@ -169,8 +173,10 @@ jobs:
     uses: ./.github/workflows/build-p4-shim-docker-image.yml
     permissions:
       contents: read # Required to invoke the reusable p4 shim image workflow.
+      packages: write # Publish development images and build caches to GHCR.
       id-token: write # Required for Workload Identity Federation.
     with:
+      image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
       version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
       # Main publishes p4 under each commit SHA. If its Docker context did not
@@ -186,8 +192,10 @@ jobs:
     uses: ./.github/workflows/build-sandbox-base-docker-image.yml
     permissions:
       contents: read # Required to invoke the reusable sandbox base image workflow.
+      packages: write # Publish development images and build caches to GHCR.
       id-token: write # Required for Workload Identity Federation.
     with:
+      image_registry: ghcr.io/archestra-ai/ci
       push_to_gcr: true
       version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
       reuse_from_version: ${{ github.event_name == 'push' && github.event.before || '' }}

@@ -12,7 +12,7 @@ import sys
 import zipfile
 
 
-IMAGE = "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform"
+IMAGE = "ghcr.io/archestra-ai/ci/platform"
 ARTIFACT = "platform-byte-scan-inputs"
 FILENAME = f"{ARTIFACT}.json"
 MAX_AGE = dt.timedelta(days=7)

@@ -9,6 +9,10 @@ name: Build p4 Shim Docker Image
 on:
   workflow_call:
     inputs:
+      image_registry:
+        description: "Destination registry prefix"
+        type: string
+        default: ghcr.io/archestra-ai
       push_to_gcr:
         description: "Whether to push the built image to GCR"
         required: true
@@ -56,16 +60,17 @@ jobs:
     if: ${{ inputs.version != '' }}
     permissions:
       contents: read # Required to checkout the repository and build the image.
+      packages: write # Publish CI images with the repository token.
       id-token: write # Required for Workload Identity Federation when pushing images.
     uses: ./.github/workflows/build-native-multi-arch-image.yml
     with:
       image_directory: ./platform/docker_images/p4_shim
       dockerfile: ./platform/docker_images/p4_shim/Dockerfile
       image_name: p4-shim
-      image_registry: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+      image_registry: ${{ inputs.image_registry }}
       version: ${{ inputs.version }}
       push_image: ${{ inputs.push_to_gcr }}
-      auth_provider: gar
+      auth_provider: ${{ startsWith(inputs.image_registry, 'ghcr.io/') && 'ghcr' || 'gar' }}
       checkout_ref: ${{ inputs.checkout_ref }}
       reuse_from_version: ${{ inputs.reuse_from_version }}
       reuse_paths: '["platform/docker_images/p4_shim", ".github/workflows/build-p4-shim-docker-image.yml"]'
@@ -103,4 +108,4 @@ jobs:
           load: "true"
           tags: p4-shim:${{ github.sha }}
           # Read-only: the publish paths own cache export for this image.
-          cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:buildcache-amd64
+          cache-from: type=registry,ref=ghcr.io/archestra-ai/ci/p4-shim:buildcache-amd64

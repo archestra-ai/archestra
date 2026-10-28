@@ -852,6 +852,28 @@ describe("past sessions", () => {
     return scores;
   }
 
+  it("scans past traffic before routing is enabled", async () => {
+    settings = makeSettings({ enabled: false, budgetUsdPerDay: null });
+    let scans = 0;
+    server.use(
+      http.post(`${API_ORIGIN}/api/auto-routing/backfill/scan`, () => {
+        scans++;
+        return HttpResponse.json({
+          backfill: scanned({ status: "running" }),
+          scoreOffer: null,
+        } satisfies AutoRoutingBackfillState);
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Scan past sessions" }),
+    );
+
+    await waitFor(() => expect(scans).toBe(1));
+  });
+
   it("lists what a scan found by request shape and client", async () => {
     serveBackfill({ backfill: scanned(), scoreOffer: offer });
     renderPage();

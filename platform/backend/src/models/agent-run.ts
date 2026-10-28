@@ -5,6 +5,7 @@ import {
   desc,
   eq,
   getTableColumns,
+  gte,
   ilike,
   inArray,
   isNotNull,
@@ -531,6 +532,7 @@ class AgentRunModel {
     organizationId: string;
     limit: number;
     state?: A2ATaskState;
+    failedSince?: Date;
     thread?: { bindingId: string; threadId: string };
   }) {
     if (params.agentIds.length === 0) return [];
@@ -616,17 +618,33 @@ class AgentRunModel {
           params.state
             ? eq(schema.a2aTasksTable.state, params.state)
             : undefined,
-          // One row per run: its current turn.
-          or(
-            isNull(schema.agentWorkspacesTable.id),
-            eq(
-              schema.agentWorkspacesTable.lastTaskId,
-              schema.agentRunsTable.taskId,
-            ),
-          ),
+          params.failedSince
+            ? and(
+                eq(schema.a2aTasksTable.state, "TASK_STATE_FAILED"),
+                gte(schema.a2aTasksTable.stateChangedAt, params.failedSince),
+              )
+            : undefined,
+          // Alert correlation needs historical failed turns; normal lists keep
+          // one current turn per workspace.
+          params.failedSince
+            ? undefined
+            : or(
+                isNull(schema.agentWorkspacesTable.id),
+                eq(
+                  schema.agentWorkspacesTable.lastTaskId,
+                  schema.agentRunsTable.taskId,
+                ),
+              ),
         ),
       )
-      .orderBy(desc(schema.agentRunsTable.startedAt))
+      .orderBy(
+        desc(
+          params.failedSince
+            ? schema.a2aTasksTable.stateChangedAt
+            : schema.agentRunsTable.startedAt,
+        ),
+        desc(schema.agentRunsTable.id),
+      )
       .limit(params.limit);
 
     const prompts = await A2AMessageModel.findFirstUserPartsByTaskIds(

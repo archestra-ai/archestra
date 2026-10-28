@@ -91,12 +91,12 @@ const FENCED_ANSWER_BEFORE_CAPTURE =
   /\r?\n?===ARCHESTRA-FINAL-ANSWER===(?:(?!===ARCHESTRA-FINAL-ANSWER===)[\s\S])*?===ARCHESTRA-FINAL-ANSWER-END===\r?\n?(?=(?:\x1b\[[0-?]*[ -/]*[@-~])*?\x1b\[2J)/g;
 
 // The captured screen: its size, then `tmux capture-pane -e` output, which is
-// text, SGR attributes carried from line to line, and hyperlinks. Without -N (images
-// before it), tmux trimmed each line's trailing spaces, which had the attribute
-// in effect at the line's end, so a background that reached the edge (a
-// client's side panel) stopped at the last character. Erasing to each line's
-// end in that attribute restores it; on a line already full, or in the default
-// background, the erase changes nothing.
+// text, SGR attributes carried from line to line, and hyperlinks. Without -N
+// (images before it), tmux trimmed each line's trailing spaces, which had the
+// attribute in effect at the line's end, so a background that reached the
+// edge (a client's side panel) stopped at the last character. Erasing to each
+// line's end in that attribute restores it; on a line already full, or in the
+// default background, the erase changes nothing.
 const CAPTURED_SCREEN =
   // biome-ignore lint/suspicious/noControlCharactersInRegex: the clear, size event and attributes are terminal controls
   /\x1b\[2J\x1b\[H\x1b\]777;archestra-terminal-size=\d+x\d+\x07[^\x1b]*(?:(?:\x1b\[[0-9;:]*m|\x1b\]8;[^\x07\x1b]*(?:\x07|\x1b\\))[^\x1b]*)*/g;

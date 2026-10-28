@@ -307,7 +307,8 @@ type TerminalRecording = ReturnType<typeof prepareTerminalRecording>;
  * highlighted block showed dark seams between its rows and borders and
  * dividers broke into dashes. The advance is the browser's own, already a
  * whole number of its layout units, so a run sized in whole cells ends on the
- * same grid however its row is split. Null until measured.
+ * same grid however its row is split. Browser zoom changes those units, and
+ * fires a resize. Null until measured.
  */
 function useCellSize(
   glyphProbeRef: RefObject<HTMLSpanElement | null>,
@@ -317,11 +318,21 @@ function useCellSize(
     width: number;
   } | null>(null);
   useLayoutEffect(() => {
-    const probe = glyphProbeRef.current;
-    if (!probe) return;
-    const { height, width } = probe.getBoundingClientRect();
-    if (height > 0 && width > 0)
-      setCell({ rowHeight: `${height / BASE_FONT_PX}em`, width });
+    const measure = () => {
+      const probe = glyphProbeRef.current;
+      if (!probe) return;
+      const { height, width } = probe.getBoundingClientRect();
+      if (height <= 0 || width <= 0) return;
+      const rowHeight = `${height / BASE_FONT_PX}em`;
+      setCell((previous) =>
+        previous?.rowHeight === rowHeight && previous.width === width
+          ? previous
+          : { rowHeight, width },
+      );
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
   }, [glyphProbeRef]);
   return cell;
 }

@@ -1,4 +1,5 @@
 import { OAUTH_CLIENT_REFERENCE_PREFIX } from "@archestra/shared";
+import { APICallError } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import { HttpResponse, http } from "msw";
 import { describe, vi } from "vitest";
@@ -7,7 +8,9 @@ import { createFastifyInstance } from "@/fastify-instance";
 import {
   A2AContextModel,
   A2ATaskModel,
+  LlmProviderApiKeyModelLinkModel,
   ManagedOauthClientModel,
+  ModelModel,
   OAuthAccessTokenModel,
 } from "@/models";
 import { expect, test } from "@/test";
@@ -20,7 +23,19 @@ describe("OAuth A2A execution", () => {
 
   for (const { version, revocation } of (["v1", "v2"] as const).flatMap(
     (version) =>
-      (["none", "before-tool", "after-tool"] as const).map((revocation) => ({
+      (
+        [
+          "none",
+          "before-tool",
+          "after-tool",
+          "summary-none",
+          "summary-revoke",
+          "repair-none",
+          "repair-revoke",
+          "transport-none",
+          "transport-revoke",
+        ] as const
+      ).map((revocation) => ({
         version,
         revocation,
       })),
@@ -35,15 +50,48 @@ describe("OAuth A2A execution", () => {
       makeMcpServer,
       makeTool,
       makeAgentTool,
+      makeLlmProviderApiKey,
     }) => {
       const org = await makeOrganization();
       const user = await makeUser();
       await makeMember(user.id, org.id, { role: "admin" });
       const team = await makeTeam(org.id, user.id);
+      const compaction = revocation.startsWith("summary-");
+      const repair = revocation.startsWith("repair-");
+      const summaryModel = compaction
+        ? await ModelModel.create({
+            externalId: "synthetic-summary",
+            provider: "openai",
+            modelId: "synthetic-summary",
+            description: "Synthetic summary model",
+            contextLength: 20000,
+            outputLength: null,
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+            supportsToolCalling: true,
+            promptPricePerToken: null,
+            completionPricePerToken: null,
+            lastSyncedAt: new Date(),
+          })
+        : null;
+      const summaryKey = summaryModel
+        ? await makeLlmProviderApiKey(org.id, null, { provider: "openai" })
+        : null;
+      if (summaryKey && summaryModel)
+        await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+          summaryKey.id,
+          [summaryModel],
+          "openai",
+        );
       const agent = await makeInternalAgent({
         organizationId: org.id,
         access: { teams: [team.id] },
         toolExposureMode: "full",
+        ...(summaryModel &&
+          summaryKey && {
+            modelId: summaryModel.id,
+            llmApiKeyId: summaryKey.id,
+          }),
       });
       const catalog = await makeInternalMcpCatalog({
         organizationId: org.id,
@@ -100,9 +148,61 @@ describe("OAuth A2A execution", () => {
         ),
       );
       let providerCalls = 0;
+      let summaryCalls = 0;
       const model = new MockLanguageModelV3({
+        doGenerate: async () => {
+          providerCalls++;
+          summaryCalls++;
+          if (
+            (revocation === "summary-revoke" ||
+              revocation === "repair-revoke") &&
+            summaryCalls === 1
+          )
+            await invalidateToken();
+          if (repair && summaryCalls === 1)
+            throw new APICallError({
+              message: "Synthetic transient failure",
+              url: "https://synthetic.example.com",
+              requestBodyValues: {},
+              statusCode: 503,
+              isRetryable: true,
+            });
+          return {
+            content: [
+              {
+                type: "text",
+                text: repair
+                  ? "{}"
+                  : summaryCalls === 1
+                    ? "Deliberately untagged summary"
+                    : "<summary>Synthetic summary</summary>",
+              },
+            ],
+            finishReason: { unified: "stop", raw: undefined },
+            usage: {
+              inputTokens: {
+                total: 1,
+                noCache: 1,
+                cacheRead: 0,
+                cacheWrite: 0,
+              },
+              outputTokens: { total: 1, text: 1, reasoning: 0 },
+            },
+            warnings: [],
+          };
+        },
         doStream: async ({ prompt }) => {
           providerCalls++;
+          if (revocation.startsWith("transport-") && providerCalls === 1) {
+            if (revocation === "transport-revoke") await invalidateToken();
+            throw new APICallError({
+              message: "Synthetic transient failure",
+              url: "https://synthetic.example.com",
+              requestBodyValues: {},
+              statusCode: 503,
+              isRetryable: true,
+            });
+          }
           const finished = prompt.some((message) => message.role === "tool");
           if (!finished && revocation === "before-tool")
             await invalidateToken();
@@ -121,7 +221,7 @@ describe("OAuth A2A execution", () => {
                   type: "tool-call",
                   toolCallId: "echo-call",
                   toolName: tool.name,
-                  input: "{}",
+                  input: repair ? '{"message">"malformed"}' : "{}",
                 },
               ] as const);
           return {
@@ -193,12 +293,39 @@ describe("OAuth A2A execution", () => {
               message: {
                 messageId: crypto.randomUUID(),
                 role: version === "v1" ? "user" : "ROLE_USER",
-                parts: [{ kind: "text", text: "Call echo." }],
+                parts: [
+                  {
+                    kind: "text",
+                    text:
+                      "Call echo." +
+                      (compaction
+                        ? " Synthetic transcript context.".repeat(10000)
+                        : ""),
+                  },
+                ],
               },
             },
           },
         });
-        if (revocation !== "none") {
+        if (revocation === "summary-revoke" || revocation === "repair-revoke") {
+          expect(summaryCalls, response.body).toBe(1);
+          expect(providerCalls).toBe(2);
+          expect(invocations).toBe(compaction ? 1 : 0);
+          expect(response.json().error, response.body).toBeDefined();
+          return;
+        }
+        if (revocation === "transport-revoke") {
+          expect(providerCalls).toBe(1);
+          expect(invocations).toBe(0);
+          expect(response.json().error, response.body).toBeDefined();
+          return;
+        }
+        if (revocation === "summary-none" || revocation === "repair-none") {
+          expect(summaryCalls, response.body).toBe(2);
+          expect(providerCalls).toBe(4);
+        } else if (revocation === "transport-none") {
+          expect(providerCalls).toBe(3);
+        } else if (revocation !== "none") {
           await new Promise((resolve) => setTimeout(resolve, 100));
           expect(providerCalls).toBe(1);
           expect(invocations).toBe(revocation === "after-tool" ? 1 : 0);
@@ -208,7 +335,7 @@ describe("OAuth A2A execution", () => {
         expect(response.json().error, response.body).toBeUndefined();
         expect(invocations).toBe(1);
         expect(response.body).toContain("synthetic tool OK");
-        if (version === "v2") {
+        if (version === "v2" && revocation === "none") {
           const contextId = response.json().result.message.contextId;
           const context = await A2AContextModel.findById(contextId);
           expect(context).toMatchObject({

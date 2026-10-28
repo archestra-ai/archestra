@@ -22,6 +22,7 @@ import {
   type streamText,
   type ToolSet,
 } from "ai";
+import { authorizeA2AModel } from "@/agents/a2a/oauth-model";
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
 import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
@@ -442,19 +443,30 @@ export async function executeA2AMessage(
     // Pass sessionId to group A2A requests with the calling session
     // Pass delegationChain as externalAgentId so agent names appear in logs
     // Pass the resolved key so it can be used without user access check
-    const { model, anthropicNativeEndpoint, chatApiKeyId } =
-      await createLLMModelForAgent({
+    const {
+      model: providerModel,
+      anthropicNativeEndpoint,
+      chatApiKeyId,
+    } = await createLLMModelForAgent({
+      organizationId,
+      userId,
+      agentId: agent.id,
+      model: selectedModel,
+      provider,
+      sessionId,
+      source,
+      externalAgentId: delegationChain,
+      agentLlmApiKeyId: llmApiKeyId,
+      appaSubagentToken: params.appaSubagent?.token,
+    });
+    const authorizeModel = (model: typeof providerModel) =>
+      authorizeA2AModel({
+        model,
+        agentId,
         organizationId,
-        userId,
-        agentId: agent.id,
-        model: selectedModel,
-        provider,
-        sessionId,
-        source,
-        externalAgentId: delegationChain,
-        agentLlmApiKeyId: llmApiKeyId,
-        appaSubagentToken: params.appaSubagent?.token,
+        execution: params.oauthExecution,
       });
+    const model = authorizeModel(providerModel);
 
     // Which attachment mime types this model can read. A missing model row
     // (lookup failure or unknown model) falls back to the safe default set
@@ -616,20 +628,22 @@ export async function executeA2AMessage(
         // the turn that provoked it.
         createRepairModel: async () => {
           await authorizeOAuthExecution();
-          return (
-            await createLLMModelForAgent({
-              organizationId,
-              userId,
-              agentId: agent.id,
-              model: selectedModel,
-              provider,
-              sessionId,
-              source: "a2a:tool_call_repair",
-              externalAgentId: delegationChain,
-              agentLlmApiKeyId: llmApiKeyId,
-              appaSubagentToken: params.appaSubagent?.token,
-            })
-          ).model;
+          return authorizeModel(
+            (
+              await createLLMModelForAgent({
+                organizationId,
+                userId,
+                agentId: agent.id,
+                model: selectedModel,
+                provider,
+                sessionId,
+                source: "a2a:tool_call_repair",
+                externalAgentId: delegationChain,
+                agentLlmApiKeyId: llmApiKeyId,
+                appaSubagentToken: params.appaSubagent?.token,
+              })
+            ).model,
+          );
         },
       }),
       // Per-transport shape for the output budget resolved above.

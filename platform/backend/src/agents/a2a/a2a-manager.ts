@@ -517,6 +517,7 @@ export class A2AManager {
       // the model-window threshold) before building the request.
       if (!this.config.stateless && context && contextDbMessages.length > 0) {
         const compactionResult = await applyA2AContextCompaction({
+          oauthExecution: actor.oauthExecution,
           contextId: context.id,
           messages: contextDbMessages,
           agent: {

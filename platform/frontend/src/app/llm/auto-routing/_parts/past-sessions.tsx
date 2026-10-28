@@ -59,7 +59,19 @@ export function PastSessions({
   const { backfill, scoreOffer } = data;
   const running = backfill?.status === "running";
   if (hasActivePlan && !running && !opened) {
-    if (!scoreOffer) return null;
+    if (!scoreOffer) {
+      return canUpdate ? (
+        <Button
+          size="xs"
+          variant="link"
+          className="h-auto p-0 text-sm text-muted-foreground"
+          disabled={scan.isPending}
+          onClick={() => scan.mutate()}
+        >
+          Scan past sessions
+        </Button>
+      ) : null;
+    }
     return (
       <p
         className="flex items-center gap-2 text-sm text-muted-foreground"
@@ -167,8 +179,11 @@ function BackfillStatus({
     <div className="space-y-3 text-sm">
       <div className="space-y-1">
         <p className="text-muted-foreground">
-          {formatDate({ date: backfill.windowStart, dateFormat: "MMM d" })} –{" "}
-          {formatDate({ date: backfill.cutoff, dateFormat: "MMM d" })}
+          {formatDate({
+            date: backfill.windowStart,
+            dateFormat: "MMM d, yyyy",
+          })}{" "}
+          – {formatDate({ date: backfill.cutoff, dateFormat: "MMM d, yyyy" })}
         </p>
         <p
           className="tabular-nums"
@@ -184,7 +199,7 @@ function BackfillStatus({
           <span aria-hidden> → </span>
           <span>plan needs {count(required)}</span>
         </p>
-        {progress && (
+        {backfill.phase === "score" && (
           <p className="text-muted-foreground tabular-nums">
             {backfill.status === "running" ? "Scoring, spent " : "Spent "}
             {formatCurrency(backfill.spentCostUsd)}
@@ -298,13 +313,21 @@ function ScoreAction({ offer }: { offer: ScoreOffer }) {
             step="0.01"
             value={ceiling}
             aria-invalid={ceilingError !== null}
+            aria-describedby={
+              ceilingError ? "auto-routing-backfill-ceiling-error" : undefined
+            }
             onChange={(event) => setCeiling(event.target.value)}
             className="h-8 w-20"
           />
         </span>
       </div>
       {ceilingError && (
-        <p className="text-sm text-destructive">{ceilingError}</p>
+        <p
+          id="auto-routing-backfill-ceiling-error"
+          className="text-sm text-destructive"
+        >
+          {ceilingError}
+        </p>
       )}
       <Dialog
         open={confirming !== null}

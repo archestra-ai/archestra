@@ -1223,7 +1223,7 @@ describe("past sessions", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("hides past sessions beside an active plan with nothing to score", async () => {
+  it("beside an active plan with nothing to score, offers only a scan", async () => {
     settings = makeSettings({
       status: {
         ...makeSettings().status,
@@ -1237,17 +1237,40 @@ describe("past sessions", () => {
       }),
       scoreOffer: null,
     });
+    let scans = 0;
+    server.use(
+      http.post(`${API_ORIGIN}/api/auto-routing/backfill/scan`, () => {
+        scans++;
+        return HttpResponse.json({
+          backfill: scanned({ status: "running" }),
+          scoreOffer: null,
+        } satisfies AutoRoutingBackfillState);
+      }),
+    );
+    const user = userEvent.setup();
     renderPage();
 
-    expect(await screen.findByTestId("auto-routing-status")).toHaveTextContent(
-      "Active plan",
+    await user.click(
+      await screen.findByRole("button", { name: "Scan past sessions" }),
     );
+
+    await waitFor(() => expect(scans).toBe(1));
+  });
+
+  it("shows spend only for a scoring run, not for a scan", async () => {
+    serveBackfill({
+      backfill: scanned({
+        progress: { sample: 240, scored: 200, noText: 0, failed: 0 },
+      }),
+      scoreOffer: offer,
+    });
+    renderPage();
+
+    const section = await screen.findByTestId("auto-routing-past-sessions");
     expect(
-      screen.queryByTestId("auto-routing-past-traffic"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("auto-routing-past-sessions"),
-    ).not.toBeInTheDocument();
+      within(section).getByTestId("auto-routing-past-sessions-funnel"),
+    ).toHaveTextContent("200 of 240 scored");
+    expect(within(section).queryByText(/Spent/)).not.toBeInTheDocument();
   });
 });
 

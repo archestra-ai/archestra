@@ -5,12 +5,13 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import pg from "pg";
+import { dropInvalidConcurrentIndexes } from "./concurrent-index-leftovers.mjs";
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const migrationsDir = path.resolve(scriptDir, "../src/database/migrations");
 
 dotenv.config({
-  path: path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "../../.env",
-  ),
+  path: path.resolve(scriptDir, "../../.env"),
   quiet: true,
 });
 
@@ -65,6 +66,21 @@ try {
       await client.query(
         'DROP INDEX CONCURRENTLY IF EXISTS "interactions_statistics_covering_idx"',
       );
+    } finally {
+      await client.query("RESET lock_timeout");
+    }
+    // An interrupted concurrent index build leaves an invalid index that the
+    // rerun would keep. Dropping it concurrently waits for older transactions
+    // but blocks no one, so it gets the same lock_timeout as the build.
+    await client.query("SET lock_timeout = '5min'");
+    try {
+      for (const name of await dropInvalidConcurrentIndexes(client, {
+        migrationsDir,
+      })) {
+        console.log(
+          `Dropped invalid index ${name} left by an interrupted concurrent build`,
+        );
+      }
     } finally {
       await client.query("RESET lock_timeout");
     }

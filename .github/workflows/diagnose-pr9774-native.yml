@@ -1,0 +1,65 @@
+name: Diagnose PR 9774 native abort
+
+on:
+  push:
+    branches: [diagnostic/pr-9774-native-abort]
+    paths:
+      - .github/workflows/diagnose-pr9774-native.yml
+      - .github/scripts/diagnose-pr9774-native.sh
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubicloud-standard-8-ubuntu-2404
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: platform
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a
+        env:
+          POSTGRES_USER: archestra
+          POSTGRES_PASSWORD: archestra_ci_password
+          POSTGRES_DB: archestra_openappa_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U archestra -d archestra_openappa_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-env
+      - uses: ./.github/actions/setup-rust-build
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+          save-if: "false"
+      - name: Install native debugger
+        run: |
+          if ! command -v gdb >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends gdb
+          fi
+      - name: Migrate disposable test database
+        env:
+          ARCHESTRA_DATABASE_URL: postgresql://archestra:archestra_ci_password@localhost:5432/archestra_openappa_test
+        run: pnpm --dir backend db:migrate
+      - name: Build original native addon
+        run: pnpm exec turbo build --filter=@archestra/openappa-rs
+      - name: Exercise native teardown with backtraces
+        env:
+          ARCHESTRA_OPENAPPA_TEST_DATABASE_URL: postgresql://archestra:archestra_ci_password@localhost:5432/archestra_openappa_test
+          DIAGNOSTIC_DIRECTORY: ${{ runner.temp }}/pr9774-native
+        run: bash ../.github/scripts/diagnose-pr9774-native.sh
+      - name: Retain bounded diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pr9774-native-diagnostics
+          path: ${{ runner.temp }}/pr9774-native/*.log
+          retention-days: 3
+          if-no-files-found: ignore

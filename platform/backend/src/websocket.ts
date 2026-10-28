@@ -1037,6 +1037,14 @@ export class WebSocketService {
       }
     }
     if (signal.aborted) return true;
+    const readable = await this.streamReadableAgentRunTranscript({
+      ws,
+      runId,
+      sessionId: session.id,
+      taskId: session.taskId,
+      signal,
+    });
+    if (signal.aborted) return true;
     // A session's earlier turns are left out of a tail entirely, so they
     // count as omitted: a full subscription with the session's history
     // streams them along with the rest of this turn's recording.
@@ -1048,6 +1056,7 @@ export class WebSocketService {
         truncated: false,
         totalBytes: tail.uncompressedBytes + historyBytes,
         omittedBytes: tail.omittedBytes + historyBytes,
+        ...(readable ? { readable } : {}),
       },
     });
     this.unsubscribeAgentRunLogs(ws);
@@ -1211,10 +1220,9 @@ export class WebSocketService {
   }
 
   /**
-   * Who may stream a run's logs read-only: anyone who could control it, plus
-   * anyone the run's permission policy or project grants access to. Interactive attach stays owner-only (see
-   * {@link handleSubscribeAgentRunAttach}) — a share never lends the owner's
-   * live credentials, only a view of the output.
+   * Output is readable by anyone who may attach (see mayAttachAgentRun),
+   * anyone who may control the run, and its share or project recipients.
+   * A share grants a view of the output, not the actor's live credentials.
    */
   private async mayViewSessionLogs(
     session: AgentRunRecord,

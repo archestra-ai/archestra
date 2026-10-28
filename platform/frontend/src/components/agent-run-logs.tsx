@@ -101,7 +101,7 @@ export function AgentRunLogs({
           return;
         }
         setPendingDownload(kind);
-        if (requestTail) {
+        if (kind === "logs" && requestTail) {
           setHistoryLoaded(false);
           setFullRecording(true);
         }
@@ -242,8 +242,7 @@ export function AgentRunLogs({
       !pendingDownload ||
       !historyLoaded ||
       (run.endedAt && isStreaming) ||
-      omittedBytes > 0 ||
-      requestTail
+      (pendingDownload === "logs" && (omittedBytes > 0 || requestTail))
     )
       return;
     if (

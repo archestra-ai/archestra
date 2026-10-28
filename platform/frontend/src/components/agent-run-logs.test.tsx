@@ -168,7 +168,7 @@ describe("AgentRunLogs", () => {
     expect(await readBlob(blobs[0])).toBe("entire recording");
   });
 
-  it("fetches native history on demand even when the initial terminal tail omits no bytes", async () => {
+  it("downloads native history without fetching or replaying omitted terminal output", async () => {
     const blobs: Blob[] = [];
     vi.stubGlobal("URL", {
       createObjectURL: vi.fn((blob: Blob) => {
@@ -183,15 +183,11 @@ describe("AgentRunLogs", () => {
       type: "agent_run_logs",
       payload: { runId: "task-1", logs: "output" },
     });
-    emit({
-      type: "agent_run_logs_ended",
-      payload: { runId: "task-1", source: "full", omittedBytes: 0 },
-    });
     await selectDownload("Download trajectory");
     expect(blobs).toHaveLength(0);
     expect(socket.send).toHaveBeenLastCalledWith({
       type: "subscribe_agent_run_logs",
-      payload: { runId: "task-1" },
+      payload: { runId: "task-1", tailBytes: 2 * 1024 * 1024 },
     });
     const native = JSON.stringify({
       version: 1,
@@ -204,10 +200,19 @@ describe("AgentRunLogs", () => {
     });
     emit({
       type: "agent_run_logs_ended",
-      payload: { runId: "task-1", source: "full" },
+      payload: { runId: "task-1", source: "full", omittedBytes: 100 },
     });
     await waitFor(() => expect(blobs).toHaveLength(1));
     expect(await readBlob(blobs[0])).toBe(native);
+    expect(
+      socket.send.mock.calls.filter(
+        ([message]) => message.type === "subscribe_agent_run_logs",
+      ),
+    ).toHaveLength(1);
+    expect(screen.getByTestId("terminal-playback")).toHaveTextContent("output");
+    expect(
+      screen.getByRole("button", { name: /Load full recording/ }),
+    ).toBeVisible();
   });
 
   it("explains absent native history without downloading an empty trajectory", async () => {
@@ -223,14 +228,6 @@ describe("AgentRunLogs", () => {
       payload: { runId: "task-1", source: "full" },
     });
     await selectDownload("Download trajectory");
-    emit({
-      type: "agent_run_logs",
-      payload: { runId: "task-1", logs: "retained output" },
-    });
-    emit({
-      type: "agent_run_logs_ended",
-      payload: { runId: "task-1", source: "full" },
-    });
     await waitFor(() =>
       expect(toast.info).toHaveBeenCalledWith(
         expect.stringContaining("No native trajectory was recorded"),

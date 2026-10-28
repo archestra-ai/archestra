@@ -396,7 +396,7 @@ describe("AgentRunChatSession", () => {
     ).toBeNull();
   });
 
-  it("shows a shared viewer retained output for an ended run without owner controls", () => {
+  it("shows a shared viewer retained output for an ended run without owner controls", async () => {
     queryState.value.data = run({
       state: "TASK_STATE_COMPLETED",
       lastModelActivityAt: "2026-08-28T17:30:00.000Z",
@@ -407,6 +407,16 @@ describe("AgentRunChatSession", () => {
     render(<AgentRunChatSession taskId="task-1" />);
 
     expect(screen.getByText("Retained run output")).toBeInTheDocument();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "More run actions" }));
+    expect(
+      screen.getByRole("menuitem", { name: "Download logs" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("menuitem", { name: "Download trajectory" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("menuitem", { name: "Share" })).toBeNull();
     // No live terminal to contrast, so no read-only banner once the run has ended.
     expect(screen.queryByText(/read-only mode/i)).not.toBeInTheDocument();
     expect(

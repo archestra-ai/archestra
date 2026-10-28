@@ -39,7 +39,10 @@ import {
 import { getResolvedAgentRuntimeModelCompatibility } from "@/services/agent-runtime/model-compatibility";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
-import { mayAttachAgentRun } from "@/services/agent-runtime/run-access";
+import {
+  createAgentRunAccessChecker,
+  mayAttachAgentRun,
+} from "@/services/agent-runtime/run-access";
 import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
@@ -521,21 +524,24 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId: request.params.id,
         organizationId: request.organizationId,
       });
-      return reply.send(
-        await Promise.all(
-          runs.map(async (run) => ({
-            canAttach: await mayAttachAgentRun(run, {
-              userId: request.user.id,
-              organizationId: request.organizationId,
-            }),
-            ...run,
-            shareTeamNames:
-              run.actorUserId === request.user.id ? run.shareTeamNames : null,
-            shareUserNames:
-              run.actorUserId === request.user.id ? run.shareUserNames : null,
-          })),
-        ),
-      );
+      const canAttach = createAgentRunAccessChecker({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      const items = [];
+      // Bound permission work to distinct actors, without flooding the pool
+      // when an Agent has a long history or many different service accounts.
+      for (const run of runs) {
+        items.push({
+          ...run,
+          canAttach: !run.endedAt && (await canAttach(run)),
+          shareTeamNames:
+            run.actorUserId === request.user.id ? run.shareTeamNames : null,
+          shareUserNames:
+            run.actorUserId === request.user.id ? run.shareUserNames : null,
+        });
+      }
+      return reply.send(items);
     },
   );
 

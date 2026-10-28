@@ -25,6 +25,7 @@ import {
 } from "@/models";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import ServiceAccountModel from "@/models/service-account";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { resolveAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
@@ -2524,6 +2525,85 @@ describe("Agent Runtime routes", () => {
       canAttach: true,
       viewerRole: "shared",
     });
+    const original = await AgentRunModel.findByTaskId(task.id);
+    assert(original);
+    for (let i = 0; i < 4; i++) {
+      const repeatedTask = await A2ATaskModel.create({
+        contextId: task.contextId,
+        agentId: agent.id,
+        state: "TASK_STATE_WORKING",
+      });
+      await AgentRunModel.create({
+        ...original,
+        id: undefined,
+        taskId: repeatedTask.id,
+        workloadName: `agent-run-${repeatedTask.id}`,
+      });
+    }
+    const endedTask = await A2ATaskModel.create({
+      contextId: task.contextId,
+      agentId: agent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const endedRun = await AgentRunModel.create({
+      ...original,
+      id: undefined,
+      taskId: endedTask.id,
+      workloadName: `agent-run-${endedTask.id}`,
+    });
+    await AgentRunModel.close({ id: endedRun.id, logs: "done" });
+    // Count calls without replacing their implementation: authorization and storage stay real.
+    const accounts = vi.spyOn(ServiceAccountModel, "findAccount");
+    const permissions = vi.spyOn(ResourcePermissions, "allows");
+    const repeated = await list();
+    expect(repeated.statusCode, repeated.body).toBe(200);
+    expect(
+      repeated.json().filter((row: { canAttach: boolean }) => row.canAttach),
+    ).toHaveLength(5);
+    expect(accounts).toHaveBeenCalledTimes(1);
+    expect(
+      permissions.mock.calls.filter(
+        ([request]) => request.resource === "agent" && request.action === "use",
+      ),
+    ).toHaveLength(1);
+    expect(
+      repeated
+        .json()
+        .find((row: { taskId: string }) => row.taskId === endedTask.id)
+        .canAttach,
+    ).toBe(false);
+    const currentTask = await A2ATaskModel.create({
+      contextId: task.contextId,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    await AgentRunModel.create({
+      ...original,
+      id: undefined,
+      taskId: currentTask.id,
+    });
+    await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "serviceAccount",
+      actorId: account.id,
+      backend: "kubernetes",
+      runtimeScope: original.runtimeScope,
+      workloadName: original.workloadName,
+      state: "active",
+      activeTaskId: currentTask.id,
+      lastTaskId: currentTask.id,
+      expiresAt: new Date(Date.now() + 3600000),
+    });
+    const currentDetail = await app.inject({
+      url: `/api/agent-runs/${task.id}`,
+    });
+    expect(currentDetail.statusCode, currentDetail.body).toBe(200);
+    expect(currentDetail.json()).toMatchObject({
+      taskId: currentTask.id,
+      canAttach: true,
+      viewerRole: "shared",
+    });
     // Terminal access does not confer ownership or workspace mutation.
     expect(
       (
@@ -2533,6 +2613,25 @@ describe("Agent Runtime routes", () => {
           payload: { title: "changed" },
         })
       ).statusCode,
+    ).toBe(404);
+    const accountKey = {
+      organizationId,
+      resource: "serviceAccount" as const,
+      scope: account.id,
+    };
+    const accountPolicy = await ResourcePermissionPolicyModel.find(accountKey);
+    await ResourcePermissionPolicyModel.replace({
+      ...accountKey,
+      revision: accountPolicy?.revision ?? 0,
+      grants: [],
+    });
+    expect(
+      (await list())
+        .json()
+        .some((row: { canAttach: boolean }) => row.canAttach),
+    ).toBe(false);
+    expect(
+      (await app.inject({ url: `/api/agent-runs/${task.id}` })).statusCode,
     ).toBe(404);
   });
 

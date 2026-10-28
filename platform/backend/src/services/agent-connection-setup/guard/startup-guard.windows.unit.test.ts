@@ -172,7 +172,15 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     expect(script).toContain(
       "'Disconnect all ' + $downRemotes.Count + ' unreachable resources from Claude now? (Y/n) '",
     );
-    // Enter accepts the (Y/n) default: remove
+    // Transport failure must not enter the persistent removal branch, even
+    // for Enter/a buffered yes. Explicit reconfiguration remains available.
+    expect(script).toContain(
+      "$transportOutage = $Script:HealthState -eq 'down' -or -not $HealthUrl",
+    );
+    expect(script).toContain("if ($choice -eq 'y' -and -not $transportOutage)");
+    expect(script).not.toContain("$Script:DiscAll");
+    expect(script).toContain("{ $Script:SkipAll = $true; break }");
+    // An explicit health down marker retains the established Enter default.
     expect(script).toContain("$k.Key -eq 'Enter'");
     expect(script).toContain("Show-ArchDownSummaryPrompt $DownRemotes");
   });
@@ -243,7 +251,7 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     expect(script).toContain("if ($Script:SkipNow) { break }");
   });
 
-  test("encodes the retry contract on the single request: 15s budget, notice at 3s, hang-tight at 10s, own-line (Y/n) offer", () => {
+  test("encodes the retry contract on the single request: 15s budget, notice at 3s, hang-tight at 10s, own-line session skip offer", () => {
     const script = renderStartupGuardPowerShell(CTX, CLAUDE_CODE_GUARD_CLIENT);
     expect(script).toContain("$RetryTotalSeconds = 15");
     expect(script).toContain("$NoticeAfterSeconds = 3");
@@ -255,7 +263,7 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     // appending to the row above it
     expect(script).toContain("function Show-ArchWaitPrompt");
     expect(script).toContain(
-      "'Disconnect all ' + $ActiveRemotes.Count + ' unreachable resources from Claude now? (Y/n) '",
+      "'Instance unreachable. Press [Enter] to skip checks for this session; connections stay configured. '",
     );
     expect(script).toContain("[Math]::Min($delay * 2, 4)");
     expect(script).toContain("Get-Random -Minimum 0 -Maximum 2");

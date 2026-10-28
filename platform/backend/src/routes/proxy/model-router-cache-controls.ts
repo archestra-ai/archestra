@@ -41,8 +41,12 @@ export function assertModelRouterCacheControls(
       nodes.push(entry);
       if (entry.function && typeof entry.function === "object")
         nodes.push(entry.function);
-      if (Array.isArray(entry.content)) {
-        for (const part of entry.content) {
+      const contentArrays = [entry.content];
+      if (entry.type === "function_call_output")
+        contentArrays.push(entry.output);
+      for (const content of contentArrays) {
+        if (!Array.isArray(content)) continue;
+        for (const part of content) {
           if (part && typeof part === "object") nodes.push(part);
         }
       }

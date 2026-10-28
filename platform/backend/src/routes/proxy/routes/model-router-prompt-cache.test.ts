@@ -419,6 +419,39 @@ for (const provider of providers) {
                       ],
                     },
                   });
+                if (api === "responses") {
+                  const field =
+                    provider === "gemini"
+                      ? "cache_control"
+                      : "prompt_cache_breakpoint";
+                  cases.push({
+                    field,
+                    changes: {
+                      input: [
+                        {
+                          type: "function_call",
+                          call_id: "call_cache",
+                          name: tool.name,
+                          arguments: "{}",
+                        },
+                        {
+                          type: "function_call_output",
+                          call_id: "call_cache",
+                          output: [
+                            {
+                              type: "input_text",
+                              text: "result",
+                              [field]:
+                                provider === "gemini"
+                                  ? marker
+                                  : { mode: "explicit" },
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  });
+                }
                 for (const { field, changes } of cases) {
                   const invalid = await app.inject({
                     method: "POST",

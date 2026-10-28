@@ -51,7 +51,7 @@ jobs:
         run: pnpm --dir backend db:migrate
       - name: Build original native addon
         run: pnpm exec turbo build --filter=@archestra/openappa-rs
-      - name: Exercise concurrent native suite with low overhead abort traces
+      - name: Diagnose heap ownership with AddressSanitizer allocator interception
         env:
           ARCHESTRA_OPENAPPA_TEST_DATABASE_URL: postgresql://archestra:archestra_ci_password@localhost:5432/archestra_openappa_test
           DIAGNOSTIC_DIRECTORY: ${{ runner.temp }}/pr9774-native

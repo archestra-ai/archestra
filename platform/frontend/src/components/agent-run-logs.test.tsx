@@ -236,6 +236,25 @@ describe("AgentRunLogs", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it("reports empty live output immediately without downloading a later fragment", async () => {
+    const create = vi.fn();
+    vi.stubGlobal("URL", { createObjectURL: create, revokeObjectURL: vi.fn() });
+    render(<LogDownloadHarness run={{ ...completedRun, endedAt: null }} />);
+    await selectDownload("Download logs");
+    expect(toast.info).toHaveBeenCalledWith(
+      "No terminal output is available yet.",
+    );
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "task-1", logs: "later output" },
+    });
+    emit({ type: "agent_run_logs_ended", payload: { runId: "task-1" } });
+    expect(screen.getByTestId("terminal-playback")).toHaveTextContent(
+      "later output",
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("shows an ended run as loading, then renders its whole history once", () => {
     render(<AgentRunLogs run={completedRun} />);
     expect(screen.getByText("Loading recording")).toBeInTheDocument();
@@ -539,7 +558,7 @@ function readBlob(blob: Blob): Promise<string> {
   });
 }
 
-function LogDownloadHarness() {
+function LogDownloadHarness({ run = completedRun }: { run?: AgentRun } = {}) {
   const logsRef = useRef<AgentRunLogsHandle>(null);
   return (
     <>
@@ -550,10 +569,11 @@ function LogDownloadHarness() {
         <DropdownMenuContent>
           <AgentRunDownloadMenuItems
             onDownload={(kind) => logsRef.current?.download(kind)}
+            trajectoryDisabled={!run.endedAt}
           />
         </DropdownMenuContent>
       </DropdownMenu>
-      <AgentRunLogs ref={logsRef} run={completedRun} title="" />
+      <AgentRunLogs ref={logsRef} run={run} title="" />
     </>
   );
 }

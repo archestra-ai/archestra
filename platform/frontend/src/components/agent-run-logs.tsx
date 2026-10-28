@@ -82,6 +82,10 @@ export function AgentRunLogs({
     ref,
     () => ({
       download: (kind) => {
+        if (kind === "logs" && !run.endedAt && !terminalContent) {
+          toast.info("No terminal output is available yet.");
+          return;
+        }
         if (
           !error &&
           kind === "logs" &&
@@ -114,6 +118,7 @@ export function AgentRunLogs({
       omittedBytes,
       readableContent,
       run.taskId,
+      run.endedAt,
     ],
   );
 

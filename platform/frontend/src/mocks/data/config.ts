@@ -92,6 +92,7 @@ export function makeConfig(
       },
       mcpGatewaySkillsEnabled: false,
       devFeedbackEnabled: false,
+      autoRoutingEnabled: false,
       ...overrides.features,
       maintenanceMode: overrides.features?.maintenanceMode ?? null,
     },

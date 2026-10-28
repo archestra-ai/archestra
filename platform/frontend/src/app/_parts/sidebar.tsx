@@ -27,6 +27,7 @@ import { getCostsNavigationUrl } from "@/app/_parts/costs-navigation";
 import { ShortcutHint } from "@/app/_parts/shortcut-hint";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
 import {
+  AUTO_ROUTING_URL,
   chatsNavItems,
   contentNavGroups,
   isNavItemPermitted,
@@ -525,6 +526,7 @@ export function AppSidebar() {
   });
   const showConnect = Boolean(canReadMcpGateway || canReadLlmProxy);
   const { data: guardrailsDeployment } = useGuardrailsDeployment();
+  const autoRoutingEnabled = useFeature("autoRoutingEnabled");
   const modelPoolsEnabled = useFeature("llmModelPoolsEnabled") === true;
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
@@ -560,7 +562,9 @@ export function AppSidebar() {
           // Model pools are a beta feature, off unless this deployment's flag
           // is on, so the row waits for the answer rather than flashing.
           .filter(
-            (item) => item.url !== "/llm/model-pools" || modelPoolsEnabled,
+            (item) =>
+              (item.url !== "/llm/model-pools" || modelPoolsEnabled) &&
+              (item.url !== AUTO_ROUTING_URL || autoRoutingEnabled === true),
           )
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
@@ -599,7 +603,12 @@ export function AppSidebar() {
             return item;
           }),
       })),
-    [guardrailsDeployment?.enabled, modelPoolsEnabled, permissionMap],
+    [
+      guardrailsDeployment?.enabled,
+      modelPoolsEnabled,
+      permissionMap,
+      autoRoutingEnabled,
+    ],
   );
 
   return (

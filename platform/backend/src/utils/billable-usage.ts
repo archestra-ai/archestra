@@ -47,6 +47,39 @@ export interface PricedComponent extends BillableComponent {
   cost: string;
 }
 
+/** One model's rates at one prompt size, resolved with the catalog precedence. */
+export interface QuotedPrices {
+  model: string;
+  prices: TokenPrices;
+  cacheSource: import("@/types/model").PriceSource | null;
+  /** A selected provider instance published this model's rates; rates it omits stay unknown. */
+  instancePriced: boolean;
+}
+
+/** Request-scoped quote shared by cost, cache cost, savings and billable usage. */
+export interface PricingQuote {
+  model: string;
+  provider: SupportedProvider;
+  providerApiKeyId?: string;
+  /** The request model at the top-level usage's prompt size. */
+  request: QuotedPrices;
+  /** Billable components by id, each at its own prompt size. */
+  components: ReadonlyMap<string, QuotedPrices>;
+}
+
+/** The size that selects long-context prices; 1h writes are part of cache writes. */
+export function promptTokens(usage: {
+  inputTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+}): number {
+  return (
+    usage.inputTokens +
+    (usage.cacheReadTokens ?? 0) +
+    (usage.cacheWriteTokens ?? 0)
+  );
+}
+
 export interface PricedBillingUsage {
   version: 1;
   mode: "off" | "shadow" | "enforce";

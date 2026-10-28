@@ -515,3 +515,8 @@ export function isEditableTextFile(params: {
  */
 export const AGENT_OPTIONS_MAX_IDS = 200;
 export const AGENT_OPTIONS_MAX_PAGE_SIZE = 1000;
+
+/** Highest spending limit one auto-routing backfill may be given, in USD. */
+export const AUTO_ROUTING_BACKFILL_MAX_COST_USD = 1000;
+/** Scorer calls a backfill has in flight: how many per-call costs it may overshoot its spending limit by. */
+export const AUTO_ROUTING_BACKFILL_SCORER_CALLS = 4;

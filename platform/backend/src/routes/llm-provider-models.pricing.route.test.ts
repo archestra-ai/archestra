@@ -79,3 +79,69 @@ test("Models API displays the selected instance and leaves conflicting merged ra
     }),
   ]);
 });
+
+test("Models API accepts long-context pricing only as a complete, positive set", async ({
+  makeMember,
+}) => {
+  await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+  const model = await ModelModel.create({
+    externalId: "anthropic/long-context",
+    provider: "anthropic",
+    modelId: "long-context",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+  });
+  const url = `/api/llm-models/${model.id}`;
+  const complete = {
+    longContextThreshold: 200000,
+    longContextPricePerMillionInput: "6",
+    longContextPricePerMillionOutput: "22.5",
+    longContextPricePerMillionCacheRead: "0.6",
+    longContextPricePerMillionCacheWrite: "7.5",
+  };
+  for (const invalid of [
+    { ...complete, longContextThreshold: 0 },
+    { ...complete, longContextThreshold: 1.5 },
+    { ...complete, longContextPricePerMillionOutput: null },
+    { longContextThreshold: 200000 },
+    { ...complete, longContextPricePerMillionCacheRead: "1usd" },
+  ]) {
+    const response = await ctx.app.inject({
+      method: "PATCH",
+      url,
+      payload: invalid,
+    });
+    expect(response.statusCode, JSON.stringify(invalid)).toBe(400);
+  }
+  expect(await ModelModel.findById(model.id)).toMatchObject({
+    longContextThreshold: null,
+    longContextPricePerMillionInput: null,
+  });
+
+  const saved = await ctx.app.inject({
+    method: "PATCH",
+    url,
+    payload: complete,
+  });
+  expect(saved.statusCode, saved.body).toBe(200);
+  expect(saved.json()).toMatchObject({
+    longContextThreshold: 200000,
+    longContextPricePerMillionInput: "6.00",
+    longContextPricePerMillionOutput: "22.50",
+    longContextPricePerMillionCacheRead: "0.60",
+    longContextPricePerMillionCacheWrite: "7.50",
+  });
+
+  const cleared = await ctx.app.inject({
+    method: "PATCH",
+    url,
+    payload: Object.fromEntries(
+      Object.keys(complete).map((key) => [key, null]),
+    ),
+  });
+  expect(cleared.statusCode, cleared.body).toBe(200);
+  expect(await ModelModel.findById(model.id)).toMatchObject({
+    longContextThreshold: null,
+    longContextPricePerMillionCacheWrite: null,
+  });
+});

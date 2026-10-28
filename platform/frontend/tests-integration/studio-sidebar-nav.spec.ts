@@ -200,4 +200,30 @@ test.describe("studio sidebar navigation", () => {
     await expect(page.getByRole("link", { name: /^Plugins/ })).toBeVisible();
     expect(await rowNames(page)).toEqual(STUDIO_NAV);
   });
+
+  test("offers Auto Routing after Costs & Limits once the alpha is enabled", async ({
+    page,
+    mswControl,
+    request,
+  }) => {
+    const config = await (
+      await request.get("/internal-test/api/api/config")
+    ).json();
+    await mswControl.use({
+      method: "get",
+      url: "/api/config",
+      body: {
+        ...config,
+        features: { ...config.features, autoRoutingEnabled: true },
+      },
+    });
+    await page.goto("/agents");
+
+    await expect(
+      page.getByRole("link", { name: /^Auto Routing/ }),
+    ).toBeVisible();
+    const expected = [...STUDIO_NAV];
+    expected.splice(expected.indexOf("Costs & Limits") + 1, 0, "Auto Routing");
+    expect(await rowNames(page)).toEqual(expected);
+  });
 });

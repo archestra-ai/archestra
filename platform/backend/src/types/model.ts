@@ -232,6 +232,11 @@ export const PatchModelBodySchema = createUpdateSchema(
     customPricePerMillionOutput: true,
     customPricePerMillionCacheRead: true,
     customPricePerMillionCacheWrite: true,
+    longContextThreshold: true,
+    longContextPricePerMillionInput: true,
+    longContextPricePerMillionOutput: true,
+    longContextPricePerMillionCacheRead: true,
+    longContextPricePerMillionCacheWrite: true,
     customContextLength: true,
     customOutputLength: true,
     ignored: true,
@@ -245,6 +250,17 @@ export const PatchModelBodySchema = createUpdateSchema(
     customPricePerMillionOutput: z.string().nullable().optional(),
     customPricePerMillionCacheRead: z.string().nullable().optional(),
     customPricePerMillionCacheWrite: z.string().nullable().optional(),
+    longContextThreshold: z
+      .number()
+      .int("Must be a whole number of tokens")
+      .min(1, "Must be 1 or greater")
+      .max(MAX_CUSTOM_MODEL_TOKEN_LIMIT)
+      .nullable()
+      .optional(),
+    longContextPricePerMillionInput: z.string().nullable().optional(),
+    longContextPricePerMillionOutput: z.string().nullable().optional(),
+    longContextPricePerMillionCacheRead: z.string().nullable().optional(),
+    longContextPricePerMillionCacheWrite: z.string().nullable().optional(),
     /**
      * Admin-set context window / max output tokens, overriding whatever the
      * provider reported (including nothing at all). `null` clears the override
@@ -328,11 +344,36 @@ export const PatchModelBodySchema = createUpdateSchema(
   )
   .refine(
     (data) => {
+      // The threshold and its four prices are written together, all set or all null.
+      const fields = [
+        data.longContextThreshold,
+        data.longContextPricePerMillionInput,
+        data.longContextPricePerMillionOutput,
+        data.longContextPricePerMillionCacheRead,
+        data.longContextPricePerMillionCacheWrite,
+      ];
+      return (
+        fields.every((value) => value === undefined) ||
+        fields.every((value) => value === null) ||
+        fields.every((value) => value != null)
+      );
+    },
+    {
+      message:
+        "Long-context threshold and all four long-context prices must be set together or all be null",
+    },
+  )
+  .refine(
+    (data) => {
       for (const value of [
         data.customPricePerMillionInput,
         data.customPricePerMillionOutput,
         data.customPricePerMillionCacheRead,
         data.customPricePerMillionCacheWrite,
+        data.longContextPricePerMillionInput,
+        data.longContextPricePerMillionOutput,
+        data.longContextPricePerMillionCacheRead,
+        data.longContextPricePerMillionCacheWrite,
       ]) {
         if (value != null) {
           if (!isValidModelPrice(value)) return false;

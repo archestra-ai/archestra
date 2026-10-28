@@ -179,6 +179,16 @@ importers:
         specifier: ^3.4.0
         version: 3.6.2(@emnapi/runtime@1.11.3)(@types/node@25.9.1)
 
+  archestra-rs/router-rs:
+    dependencies:
+      '@archestra/napi-loader':
+        specifier: workspace:*
+        version: link:../napi-loader
+    devDependencies:
+      '@napi-rs/cli':
+        specifier: ^3.4.0
+        version: 3.6.2(@emnapi/runtime@1.11.3)(@types/node@25.9.1)
+
   archestra-rs/sandbox-rs:
     dependencies:
       '@archestra/napi-loader':
@@ -242,6 +252,9 @@ importers:
       '@archestra/openappa-rs':
         specifier: workspace:*
         version: link:../archestra-rs/openappa-rs
+      '@archestra/router-rs':
+        specifier: workspace:*
+        version: link:../archestra-rs/router-rs
       '@archestra/sandbox-rs':
         specifier: workspace:*
         version: link:../archestra-rs/sandbox-rs

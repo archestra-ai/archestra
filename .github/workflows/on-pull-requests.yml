@@ -829,7 +829,7 @@ jobs:
         run: |
           node ../.github/scripts/verify-backend-napi.cjs
           tar -czf /tmp/backend-test-napi.tar.gz \
-            archestra-rs/{app-runtime-rs,sandbox-rs,image-rs,openappa-rs}/index.linux-x64-gnu.node
+            archestra-rs/{app-runtime-rs,sandbox-rs,image-rs,openappa-rs,router-rs}/index.linux-x64-gnu.node
           echo "artifact-name=backend-test-napi-${RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
 
       # A same-run artifact works even on a cold cache. Merge-group cache

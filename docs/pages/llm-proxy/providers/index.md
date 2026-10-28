@@ -2,7 +2,7 @@
 title: Model Providers
 description: Connect provider API keys and personal subscriptions for Chat and the LLM Proxy
 order: 2
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -44,6 +44,18 @@ These credentials belong to one person and cannot be shared. An agent that uses 
 - **GitHub Copilot** and **Microsoft 365 Copilot** have their own pages: [GitHub Copilot](/docs/llm-proxy/providers/github-copilot), [Microsoft 365 Copilot](/docs/llm-proxy/providers/microsoft-365-copilot).
 
 ChatGPT and SuperGrok use bills $0 in Costs. GitHub Copilot and Microsoft 365 Copilot use counts as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost).
+
+### ChatGPT Egress Hosts
+
+If you restrict the backend's outbound traffic, allow HTTPS on TCP port 443 to these hosts, or ChatGPT sign-in and chats fail. Allowing `api.openai.com` does not cover them.
+
+| Host | Used for | Setting |
+| --- | --- | --- |
+| `auth.openai.com` | Sign-in, and refreshing each person's token | [`ARCHESTRA_OPENAI_CODEX_ISSUER`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAI_CODEX_ISSUER) |
+| `chatgpt.com` | Chat requests and model lists, under `/backend-api/codex` | [`ARCHESTRA_OPENAI_CODEX_API_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAI_CODEX_API_BASE_URL) |
+
+- If you change either setting, allow the host and port it points to instead.
+- The person who signs in also opens the sign-in host, `auth.openai.com` by default, in their own browser to enter the code.
 
 <span id="which-key-a-request-uses"></span>
 

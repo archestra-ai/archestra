@@ -38,6 +38,7 @@ import {
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
+import { normalizeVersion } from "@archestra/shared/version";
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
 import { getAppVersion } from "@/app-version";
@@ -2254,7 +2255,7 @@ const config = {
     host: isDevelopment ? "127.0.0.1" : "0.0.0.0",
     port: getPortFromUrl(),
     name: DEFAULT_APP_NAME,
-    version: appVersion,
+    version: normalizeVersion(appVersion),
     corsOrigins: getCorsOrigins(),
     apiKeyAuthorizationHeaderName: "Authorization",
     /**

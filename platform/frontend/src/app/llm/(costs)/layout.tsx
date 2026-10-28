@@ -8,6 +8,7 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { usePermissionMap } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useTeamLimitAccess } from "@/lib/limits-access";
 
 const TABS = [
   { label: "Costs", href: "/llm/costs" },
@@ -56,7 +57,14 @@ export default function CostsLayout({
 }) {
   const pathname = usePathname();
   const [actionButton, setActionButton] = useState<React.ReactNode>(null);
-  const permissionMap = usePermissionMap(requiredPagePermissionsMap);
+  const pageMap = usePermissionMap(requiredPagePermissionsMap);
+  const limitsAccess = useTeamLimitAccess();
+  const permissionMap: Record<string, boolean> | null = pageMap
+    ? {
+        ...pageMap,
+        "/llm/limits": pageMap["/llm/limits"] || limitsAccess.canRead,
+      }
+    : null;
   const prometheusDocsUrl = getFrontendDocsUrl("admin/observability/metrics");
 
   // Wait for the permission answer rather than flashing tabs that would only

@@ -93470,7 +93470,9 @@ export type BulkDeleteKnowledgeDirectoriesResponse = BulkDeleteKnowledgeDirector
 export type LimitLabelKeysData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        key?: string;
+    };
     url: '/api/limits/labels/keys';
 };
 
@@ -93555,9 +93557,6 @@ export type LimitLabelValuesData = {
     body?: never;
     path?: never;
     query?: {
-        /**
-         * Filter values by label key
-         */
         key?: string;
     };
     url: '/api/limits/labels/values';

@@ -1182,15 +1182,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAllDelegationConnections]: {},
   // Handlers also allow a team admin for only their own team's limits.
   [RouteId.GetLimits]: {},
-  [RouteId.GetLimitLabelKeys]: { llmLimit: ["read"] },
-  [RouteId.GetLimitLabelValues]: { llmLimit: ["read"] },
+  [RouteId.GetLimitLabelKeys]: {},
+  [RouteId.GetLimitLabelValues]: {},
   [RouteId.CreateLimit]: {},
   [RouteId.GetLimit]: {},
   [RouteId.UpdateLimit]: {},
   [RouteId.DeleteLimit]: {},
-  [RouteId.BulkDeleteLimits]: {
-    llmLimit: ["delete"],
-  },
+  [RouteId.BulkDeleteLimits]: {},
   [RouteId.ListDefaultUserLimits]: {
     llmLimit: ["read"],
   },

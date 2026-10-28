@@ -214,6 +214,7 @@ class LimitModel {
     limitType?: LimitType,
     organizationId?: string,
     labels?: Record<string, string[]>,
+    teamIds?: string[],
   ): Promise<LimitWithLabels[]> {
     const labelFilteredIds = labels
       ? await LimitLabelModel.getIdsMatchingLabels(labels)
@@ -223,6 +224,13 @@ class LimitModel {
     }
 
     const whereConditions: SQL[] = [];
+    if (teamIds) {
+      if (!teamIds.length) return [];
+      whereConditions.push(
+        eq(schema.limitsTable.entityType, "team"),
+        inArray(schema.limitsTable.entityId, teamIds),
+      );
+    }
 
     if (labelFilteredIds) {
       whereConditions.push(inArray(schema.limitsTable.id, labelFilteredIds));

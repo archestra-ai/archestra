@@ -64,11 +64,10 @@ import { throwOnApiError } from "@/lib/utils/api";
 import { formatRoleName } from "@/lib/utils/role";
 import { cn } from "@/lib/utils/tailwind";
 import { EnterpriseLicenseRequired } from "../enterprise-license-required";
-import { TeamBudgetsSection } from "./team-budgets-section";
 
 type Team = archestraApiTypes.GetTeamResponses["200"];
 type TeamListItem = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
-type TeamDialogSection = "team" | "members" | "budgets" | "external-groups";
+type TeamDialogSection = "team" | "members" | "external-groups";
 type TeamMemberRole = typeof ADMIN_ROLE_NAME | typeof MEMBER_ROLE_NAME;
 
 const MEMBERS_PAGE_SIZE = 20;
@@ -111,7 +110,6 @@ type TeamManagementDialogProps =
 const editNavItems = [
   { id: "team", label: "Team" },
   { id: "members", label: "Members" },
-  { id: "budgets", label: "Budgets" },
   { id: "external-groups", label: "External Group Sync" },
 ] satisfies Array<{ id: TeamDialogSection; label: string }>;
 
@@ -156,21 +154,19 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
 
   const navItems = useMemo(() => {
     if (mode === "create") {
-      return team
-        ? editNavItems.filter(
-            (item) => item.id !== "budgets" || team.myRole === ADMIN_ROLE_NAME,
-          )
-        : createNavItems;
+      return team ? [editNavItems[0], editNavItems[1]] : createNavItems;
     }
 
     if (readOnly) {
-      return [editNavItems[3]];
+      return [editNavItems[2]];
     }
 
-    return editNavItems.filter(
-      (item) => item.id !== "budgets" || team?.myRole === ADMIN_ROLE_NAME,
-    );
-  }, [mode, readOnly, team]);
+    if (!canUpdateTeams) {
+      return editNavItems;
+    }
+
+    return editNavItems;
+  }, [canUpdateTeams, mode, readOnly, team]);
   const title =
     mode === "create" && !team
       ? "Create Team"
@@ -205,7 +201,6 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     const canShowActiveSection =
       (activeSection === "team" && !readOnly) ||
       (activeSection === "members" && !!team && !readOnly) ||
-      (activeSection === "budgets" && !!team && !readOnly) ||
       activeSection === "external-groups";
 
     if (!canShowActiveSection) {
@@ -361,7 +356,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
       open={open}
       onOpenChange={onOpenChange}
       title={title}
-      description="Manage team details, members, budgets, and external group sync."
+      description="Manage team details, members, and external group sync."
       sidebarLabel={name.trim() || (mode === "create" ? "New team" : "Team")}
       sidebarDescription="Team"
       sidebarIcon={<Users className="h-4 w-4 text-muted-foreground" />}
@@ -436,9 +431,6 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
           }}
           onGoToExternalGroups={() => setActiveSection("external-groups")}
         />
-      )}
-      {activeSection === "budgets" && team && (
-        <TeamBudgetsSection team={team} open={open} />
       )}
       {(activeSection === "team" || activeSection === "members") && (
         <RoleAssignmentBlockedNotice
@@ -622,17 +614,13 @@ function TeamMembersSection(props: {
         </p>
         <div className="space-y-1 text-muted-foreground">
           <p>
-            <span className="font-medium text-foreground">
-              Able to edit team:
-            </span>{" "}
-            manage members.
+            <span className="font-medium text-foreground">Admin:</span> edit the
+            team, manage members, and view and manage its limits.
           </p>
           <p>
-            <span className="font-medium text-foreground">
-              Not able to edit team:
-            </span>{" "}
-            use resources available to the team. This is the default role from
-            group sync.
+            <span className="font-medium text-foreground">Member:</span> use
+            resources available to the team. New members and synced members
+            default to Member.
           </p>
         </div>
       </div>
@@ -943,12 +931,8 @@ function MembersSection({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={ADMIN_ROLE_NAME}>
-                      Able to edit team
-                    </SelectItem>
-                    <SelectItem value={MEMBER_ROLE_NAME}>
-                      Not able to edit team
-                    </SelectItem>
+                    <SelectItem value={ADMIN_ROLE_NAME}>Admin</SelectItem>
+                    <SelectItem value={MEMBER_ROLE_NAME}>Member</SelectItem>
                   </SelectContent>
                 </Select>
                 <Button

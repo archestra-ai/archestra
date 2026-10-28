@@ -996,7 +996,10 @@ class TeamModel {
     return teamIds;
   }
 
-  static async getUserAdminTeamIds(userId: string): Promise<string[]> {
+  static async getUserAdminTeamIds(
+    userId: string,
+    organizationId?: string,
+  ): Promise<string[]> {
     logger.debug(
       { userId },
       "TeamModel.getUserAdminTeamIds: fetching admin team IDs",
@@ -1008,6 +1011,19 @@ class TeamModel {
         and(
           eq(schema.teamMembersTable.userId, userId),
           eq(schema.teamMembersTable.role, ADMIN_ROLE_NAME),
+          ...(organizationId
+            ? [
+                inArray(
+                  schema.teamMembersTable.teamId,
+                  db
+                    .select({ id: schema.teamsTable.id })
+                    .from(schema.teamsTable)
+                    .where(
+                      eq(schema.teamsTable.organizationId, organizationId),
+                    ),
+                ),
+              ]
+            : []),
         ),
       );
 

@@ -145,7 +145,7 @@ import {
   useMissingPermissions,
 } from "@/lib/auth/auth.query";
 import { useOrganization } from "@/lib/organization.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useMyTeams, useTeams } from "@/lib/teams/team.query";
 
 vi.mock("@/components/loading", () => ({
   LoadingState: () => <div>Loading</div>,
@@ -334,6 +334,10 @@ vi.mock("@/lib/entity-labels.query");
 describe("LimitsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useMyTeams).mockReturnValue({
+      data: [],
+      isPending: false,
+    } as unknown as ReturnType<typeof useMyTeams>);
     // JSDOM has no layout/scroll API; keep the real Select behavior.
     Element.prototype.scrollIntoView = vi.fn();
     vi.mocked(usePathname).mockReturnValue("/llm/limits");
@@ -365,6 +369,53 @@ describe("LimitsPage", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("reuses the create form with only administered team scopes for a team admin", () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: Object.keys(permissions).length === 0,
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    vi.mocked(useMyTeams).mockReturnValue({
+      data: [
+        { id: "team-a", name: "Platform", myRole: "admin" },
+        { id: "team-b", name: "Product", myRole: "member" },
+      ],
+      isPending: false,
+    } as unknown as ReturnType<typeof useMyTeams>);
+    render(<LimitsPage />);
+    const action = mockSetCostsAction.mock.calls.at(-1)?.[0];
+    render(action);
+    fireEvent.click(screen.getByRole("button", { name: "Add Limit" }));
+    expect(
+      screen.getByRole("combobox", { name: "Limit scope" }),
+    ).toHaveTextContent("Team");
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Limit scope" }), {
+      key: "Enter",
+    });
+    expect(
+      screen.queryByText("Organization", { exact: true }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Virtual Key", { exact: true }),
+    ).not.toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Limit scope" }), {
+      key: "Escape",
+    });
+    fireEvent.change(screen.getByLabelText("Limit value"), {
+      target: { value: "250" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create limit" }));
+    expect(mockCreateLimit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: "team",
+        entityId: "team-a",
+        limitValue: 250,
+      }),
+    );
   });
 
   it("shows a model carried from Costs even when it is absent from the provider catalog", () => {

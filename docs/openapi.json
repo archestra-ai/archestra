@@ -370004,7 +370004,16 @@
         "tags": [
           "Limits"
         ],
-        "description": "Get all label keys used by limits\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:read`: View token usage limits",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "key",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -370253,11 +370262,11 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:read"
-          ]
-        }
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:read`, or a session-authenticated team admin. Label suggestions include only visible limits.",
+          "permissions": []
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:read`, or a session-authenticated team admin. Label suggestions include only visible limits."
       }
     },
     "/api/limits/labels/values": {
@@ -370266,7 +370275,6 @@
         "tags": [
           "Limits"
         ],
-        "description": "Get all label values used by limits\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:read`: View token usage limits",
         "parameters": [
           {
             "schema": {
@@ -370274,8 +370282,7 @@
             },
             "in": "query",
             "name": "key",
-            "required": false,
-            "description": "Filter values by label key"
+            "required": false
           }
         ],
         "responses": {
@@ -370526,11 +370533,11 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:read"
-          ]
-        }
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:read`, or a session-authenticated team admin. Label suggestions include only visible limits.",
+          "permissions": []
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:read`, or a session-authenticated team admin. Label suggestions include only visible limits."
       }
     },
     "/api/limits": {
@@ -370539,7 +370546,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Get all limits with optional filtering and per-model usage breakdown\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:read` for organization-wide access. A session-authenticated team admin may list only their own team's limits by filtering on both `entityType=team` and `entityId`.",
+        "description": "Get all limits with optional filtering and per-model usage breakdown\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:read` for organization-wide access. A session-authenticated team admin receives only limits for teams they directly administer, with optional entity filters.",
         "parameters": [
           {
             "schema": {
@@ -371020,7 +371027,7 @@
         },
         "x-required-permissions": {
           "kind": "dynamic",
-          "note": "Requires `llmLimit:read` for organization-wide access. A session-authenticated team admin may list only their own team's limits by filtering on both `entityType=team` and `entityId`.",
+          "note": "Requires `llmLimit:read` for organization-wide access. A session-authenticated team admin receives only limits for teams they directly administer, with optional entity filters.",
           "permissions": []
         }
       },
@@ -372701,7 +372708,7 @@
         "tags": [
           "Limits"
         ],
-        "description": "Delete several limits in one request. Missing or out-of-organization ids are reported in `failed` while visible limits are deleted.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmLimit:delete`: Remove usage limits",
+        "description": "Delete several limits in one request. Missing or out-of-organization ids are reported in `failed` while visible limits are deleted.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `llmLimit:delete`, or a session-authenticated team admin deleting only limits for teams they administer. Unauthorized targets are reported as not found.",
         "requestBody": {
           "required": true,
           "content": {
@@ -373026,10 +373033,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmLimit:delete"
-          ]
+          "kind": "dynamic",
+          "note": "Requires `llmLimit:delete`, or a session-authenticated team admin deleting only limits for teams they administer. Unauthorized targets are reported as not found.",
+          "permissions": []
         }
       }
     },

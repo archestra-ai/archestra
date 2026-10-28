@@ -219,29 +219,23 @@ describe("TeamManagementDialog member roles", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("labels the role control by what it grants, never as an RBAC role name", async () => {
+  it("shows team Admin and Member roles with their responsibilities", async () => {
     const user = await setupUserEvent();
     renderDialog();
     await user.click(screen.getByRole("button", { name: "Members" }));
 
-    const trigger = await findRoleTrigger(/not able to edit team/i);
+    const trigger = await findRoleTrigger(/^Member$/i);
     await user.click(trigger);
 
     const listbox = await screen.findByRole("listbox");
     expect(
-      within(listbox).getByRole("option", { name: "Able to edit team" }),
+      within(listbox).getByRole("option", { name: "Admin" }),
     ).toBeInTheDocument();
     expect(
-      within(listbox).getByRole("option", { name: "Not able to edit team" }),
+      within(listbox).getByRole("option", { name: "Member" }),
     ).toBeInTheDocument();
 
-    // The two stored values share their names with organization-wide RBAC
-    // roles. Surfacing those names here is the confusion this wording exists
-    // to prevent, so no option may be labelled with one.
-    for (const option of within(listbox).getAllByRole("option")) {
-      expect(option).not.toHaveAccessibleName("Admin");
-      expect(option).not.toHaveAccessibleName("Member");
-    }
+    expect(screen.getByText(/manage.*limits/i)).toBeInTheDocument();
   });
 
   it("still sends the stored role value when the new label is chosen", async () => {
@@ -249,10 +243,8 @@ describe("TeamManagementDialog member roles", () => {
     renderDialog();
     await user.click(screen.getByRole("button", { name: "Members" }));
 
-    await user.click(await findRoleTrigger(/not able to edit team/i));
-    await user.click(
-      await screen.findByRole("option", { name: "Able to edit team" }),
-    );
+    await user.click(await findRoleTrigger(/^Member$/i));
+    await user.click(await screen.findByRole("option", { name: "Admin" }));
     await user.click(screen.getByRole("button", { name: /save changes/i }));
 
     await waitFor(() => {
@@ -356,10 +348,8 @@ describe("TeamManagementDialog members of a large team", () => {
     await screen.findByText("Member 01");
 
     // Page 1: promote the first member.
-    await user.click(await findRoleTrigger(/not able to edit team/i));
-    await user.click(
-      await screen.findByRole("option", { name: "Able to edit team" }),
-    );
+    await user.click(await findRoleTrigger(/^Member$/i));
+    await user.click(await screen.findByRole("option", { name: "Admin" }));
     // Page 2: remove its first member.
     await user.click(
       screen.getAllByRole("button", { name: "Go to next page" })[0],
@@ -375,7 +365,7 @@ describe("TeamManagementDialog members of a large team", () => {
     await user.click(
       screen.getAllByRole("button", { name: "Go to previous page" })[0],
     );
-    expect(await findRoleTrigger(/^able to edit team/i)).toBeInTheDocument();
+    expect(await findRoleTrigger(/^Admin/i)).toBeInTheDocument();
     expect(screen.getByText("pending")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /save changes/i }));

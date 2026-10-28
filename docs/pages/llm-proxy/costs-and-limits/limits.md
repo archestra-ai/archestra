@@ -2,7 +2,7 @@
 title: Limits
 description: Cap spend, tokens, and requests across your organization, teams, virtual keys, users, agents, OAuth clients, and environments
 order: 2
-lastUpdated: 2026-10-27
+lastUpdated: 2026-10-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -42,7 +42,7 @@ When more than one rule matches a call, every matching rule is checked:
 
 ### Team Limits and Spend
 
-Open **Settings → Teams**, select a team you administer, and open **Budgets** to see its spend and manage its spend, token, and request limits. This access covers only that team; team members have no automatic budget access. See [team member and admin roles](/docs/admin/access-control#team-roles).
+Open **Limits** in the sidebar to view usage against limits and manage spend, token and request limits for teams you administer. Use **Add Limit** and select your team. Without organization cost or limit permissions, this page shows only your administered teams; ordinary team members have no automatic limit-management access. See [team member and admin roles](/docs/admin/access-control#team-roles).
 
 Limits for organization, users, virtual keys, OAuth clients, agents, and environments still require the organization `llmLimit` permissions above. Organization-wide spend requires [`llmCost:read`](/docs/reference/permissions#llmCost:read).
 

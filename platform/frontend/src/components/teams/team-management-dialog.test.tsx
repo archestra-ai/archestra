@@ -50,15 +50,14 @@ describe("TeamManagementDialog", () => {
   });
 
   it("shows team management sections to team admins", () => {
-    renderDialog("admin");
+    renderDialog();
 
     expect(screen.getByText("Team")).toBeInTheDocument();
     expect(screen.getByText("Members")).toBeInTheDocument();
-    expect(screen.getByText("Budgets")).toBeInTheDocument();
     expect(screen.getByText("External Group Sync")).toBeInTheDocument();
   });
 
-  it("keeps the budget tab out of non-admin team management", () => {
+  it("shows the appropriate team sections", () => {
     vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
       typeof useHasPermissions
     >);
@@ -68,12 +67,11 @@ describe("TeamManagementDialog", () => {
 
     renderDialog();
 
-    expect(screen.queryByText("Budgets")).not.toBeInTheDocument();
     expect(screen.getByText("External Group Sync")).toBeInTheDocument();
   });
 });
 
-function renderDialog(myRole?: "admin" | "member") {
+function renderDialog() {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -83,16 +81,12 @@ function renderDialog(myRole?: "admin" | "member") {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <TeamManagementDialog
-        open
-        onOpenChange={vi.fn()}
-        team={makeTeam(myRole)}
-      />
+      <TeamManagementDialog open onOpenChange={vi.fn()} team={makeTeam()} />
     </QueryClientProvider>,
   );
 }
 
-function makeTeam(myRole?: "admin" | "member"): Team {
+function makeTeam(): Team {
   return {
     id: "team-a",
     name: "Team A",
@@ -105,6 +99,5 @@ function makeTeam(myRole?: "admin" | "member"): Team {
     updatedAt: "2026-01-01T00:00:00.000Z",
     roles: [],
     members: [],
-    myRole,
   };
 }

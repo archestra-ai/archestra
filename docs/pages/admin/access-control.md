@@ -2,7 +2,7 @@
 title: Access Control
 description: Share resources and assign organization roles
 order: 2
-lastUpdated: 2026-10-27
+lastUpdated: 2026-10-28
 ---
 
 Give people **Can use** on an agent to let them run it without changing it. Give them **Can update** when they need to edit it.
@@ -101,7 +101,7 @@ Accounts combine their direct organization roles with organization roles assigne
 
 ## Team Member and Admin Roles
 
-Within each team, a person is a **member** or an **admin**. Members receive the team's grants but cannot manage its budgets or view its spend just by being members. Admins manage that team's members and settings, can manage its [limits](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend), and can view its spend. Team admin status does not pass to descendant teams.
+Within each team, a person is a **member** or an **admin**. Members receive the team's grants but cannot manage its limits or view its spend just by being members. Admins manage that team's members and settings, can manage its [limits](/docs/llm-proxy/costs-and-limits/limits#team-limits-and-spend), and can view its spend. Team admin status does not pass to descendant teams.
 
 <span id="delegation-and-concurrent-edits"></span>
 

@@ -1,11 +1,10 @@
 import { MAX_BULK_IDS, parseLabelsParam, RouteId } from "@archestra/shared";
-import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
-import { LimitLabelModel, LimitModel, TeamModel } from "@/models";
+import { LimitLabelModel, LimitModel } from "@/models";
 import LlmThroughputModel from "@/models/llm-throughput";
 import { createLimit, limitReadCleanup } from "@/services/limit";
+import { assertLimitTarget, getLimitAccess } from "@/services/limit-access";
 import {
   ApiError,
   CreateLimitSchema,
@@ -19,7 +18,6 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { BulkOutcomeSchema, runBulk } from "./bulk-route";
-import { registerEntityLabelRoutes } from "./entity-labels";
 
 const BulkDeleteLimitsBodySchema = z.object({
   ids: z
@@ -30,14 +28,60 @@ const BulkDeleteLimitsBodySchema = z.object({
 });
 
 const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  registerEntityLabelRoutes(fastify, {
-    basePath: "/api/limits",
-    tag: "Limits",
-    entityNamePlural: "limits",
-    model: LimitLabelModel,
-    keysOperationId: RouteId.GetLimitLabelKeys,
-    valuesOperationId: RouteId.GetLimitLabelValues,
-  });
+  for (const [suffix, operationId] of [
+    ["keys", RouteId.GetLimitLabelKeys],
+    ["values", RouteId.GetLimitLabelValues],
+  ] as const) {
+    fastify.get(
+      `/api/limits/labels/${suffix}`,
+      {
+        schema: {
+          operationId,
+          tags: ["Limits"],
+          querystring: z.object({ key: z.string().optional() }),
+          response: constructResponseSchema(z.array(z.string())),
+        },
+      },
+      async (request, reply) => {
+        const teamIds = await getLimitAccess(request, "read");
+        if (!teamIds) {
+          return reply.send(
+            suffix === "keys"
+              ? await LimitLabelModel.getAllKeys(request.organizationId)
+              : request.query.key
+                ? await LimitLabelModel.getValuesByKey({
+                    organizationId: request.organizationId,
+                    key: request.query.key,
+                  })
+                : await LimitLabelModel.getAllValues(request.organizationId),
+          );
+        }
+        const limits = await LimitModel.findAll(
+          undefined,
+          undefined,
+          undefined,
+          request.organizationId,
+          undefined,
+          teamIds,
+        );
+        const labels = limits.flatMap((limit) => limit.labels);
+        return reply.send(
+          [
+            ...new Set(
+              labels
+                .filter(
+                  (label) =>
+                    suffix === "keys" ||
+                    !request.query.key ||
+                    label.key === request.query.key,
+                )
+                .map((label) => (suffix === "keys" ? label.key : label.value)),
+            ),
+          ].sort(),
+        );
+      },
+    );
+  }
 
   fastify.get(
     "/api/limits",
@@ -66,7 +110,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         query: { entityType, entityId, limitType, labels },
         organizationId,
       } = request;
-      await assertCanAccessLimit(request, "read", entityType, entityId);
+      const teamIds = await getLimitAccess(request, "read");
       // Reset elapsed windows before reporting usage.
       await limitReadCleanup.run({
         organizationId,
@@ -81,6 +125,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         limitType,
         organizationId,
         parseLabelsParam(labels),
+        teamIds,
       );
 
       // Add per-model usage breakdown for token_cost limits
@@ -117,6 +162,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { body, organizationId } = request;
+      assertLimitTarget(await getLimitAccess(request, "create"), body);
       // Org-scoping: the limit's target entity must belong to the caller's
       // organization (limitsTable has no org column, so this is the tenancy
       // guard for cross-tenant entity IDs).
@@ -128,12 +174,6 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!inOrg) {
         throw new ApiError(404, `${body.entityType} not found`);
       }
-      await assertCanAccessLimit(
-        request,
-        "create",
-        body.entityType,
-        body.entityId,
-      );
 
       return reply.send(await createLimit(body));
     },
@@ -157,6 +197,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: { id },
         organizationId,
       } = request;
+      const teamIds = await getLimitAccess(request, "read");
       // Same cleanup the list read performs, so an elapsed reset window is
       // applied before the usage counters are reported either way.
       await limitReadCleanup.run({ organizationId });
@@ -166,13 +207,8 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!limit) {
         throw new ApiError(404, "Limit not found");
       }
-      await assertCanAccessLimit(
-        request,
-        "read",
-        limit.entityType,
-        limit.entityId,
-      );
 
+      assertLimitTarget(teamIds, limit);
       if (
         limit.limitType !== "token_cost" ||
         limit.cleanupInterval === "minute"
@@ -214,6 +250,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body,
         organizationId,
       } = request;
+      const teamIds = await getLimitAccess(request, "update");
       const existing = await LimitModel.findByIdInOrganization(
         id,
         organizationId,
@@ -221,13 +258,8 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!existing) {
         throw new ApiError(404, "Limit not found");
       }
-      await assertCanAccessLimit(
-        request,
-        "update",
-        existing.entityType,
-        existing.entityId,
-      );
 
+      assertLimitTarget(teamIds, existing);
       const limit = await LimitModel.patch(id, body);
 
       if (!limit) {
@@ -252,6 +284,11 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { organizationId } = request;
+      const teamIds = await getLimitAccess(request, "delete");
+      const visible = (limit: { entityType: string; entityId: string }) =>
+        limit.entityType !== "user" &&
+        (!teamIds ||
+          (limit.entityType === "team" && teamIds.includes(limit.entityId)));
       const outcome = await runBulk({
         ids: request.body.ids,
         logLabel: "limits bulk delete",
@@ -260,7 +297,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         load: async (ids) =>
           new Map(
             (await LimitModel.findByIdsInOrganization(ids, organizationId))
-              .filter((limit) => limit.entityType !== "user")
+              .filter(visible)
               .map((limit) => [limit.id, limit]),
           ),
         describe: (limit) => `${limit.entityType} limit`,
@@ -272,7 +309,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             limits: (
               await LimitModel.findByIdsInOrganization(ids, organizationId)
             )
-              .filter((limit) => limit.entityType !== "user")
+              .filter(visible)
               .map((limit) => ({
                 id: limit.id,
                 entityType: limit.entityType,
@@ -312,6 +349,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: { id },
         organizationId,
       } = request;
+      const teamIds = await getLimitAccess(request, "delete");
       const existing = await LimitModel.findByIdInOrganization(
         id,
         organizationId,
@@ -319,13 +357,8 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!existing) {
         throw new ApiError(404, "Limit not found");
       }
-      await assertCanAccessLimit(
-        request,
-        "delete",
-        existing.entityType,
-        existing.entityId,
-      );
 
+      assertLimitTarget(teamIds, existing);
       const deleted = await LimitModel.delete(id);
 
       if (!deleted) {
@@ -338,32 +371,3 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default limitsRoutes;
-
-async function assertCanAccessLimit(
-  request: FastifyRequest,
-  action: "read" | "create" | "update" | "delete",
-  entityType?: string,
-  entityId?: string,
-) {
-  const { success: canManageOrganizationLimits } = await hasPermission(
-    { llmLimit: [action] },
-    request.headers,
-    request.serviceAccount,
-  );
-  if (canManageOrganizationLimits) return;
-
-  // Team admins gain access only to the team's own rules. Require the team
-  // filter on list reads so an unscoped request cannot expose other budgets.
-  if (
-    entityType !== "team" ||
-    !entityId ||
-    request.authMethod !== "session" ||
-    !(await TeamModel.isUserTeamAdmin(entityId, request.user.id))
-  ) {
-    throw new ApiError(403, "You cannot manage these limits");
-  }
-  const team = await TeamModel.findById(entityId, { includeMembers: false });
-  if (!team || team.organizationId !== request.organizationId) {
-    throw new ApiError(404, "Team not found");
-  }
-}

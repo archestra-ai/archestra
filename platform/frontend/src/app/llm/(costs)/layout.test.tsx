@@ -1,3 +1,4 @@
+import "@/lib/limits-access";
 import { render, screen } from "@testing-library/react";
 import { usePathname } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +7,7 @@ import CostsLayout from "./layout";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/limits-access");
 
 vi.mock("@/components/page-layout", () => ({
   PageLayout: ({

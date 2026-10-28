@@ -291,7 +291,7 @@ const HTTP_METHODS = new Set<HttpMethod>([
 
 const DYNAMIC_ROUTE_PERMISSION_NOTES = {
   [RouteId.GetLimits]:
-    "Requires `llmLimit:read` for organization-wide access. A session-authenticated team admin may list only their own team's limits by filtering on both `entityType=team` and `entityId`.",
+    "Requires `llmLimit:read` for organization-wide access. A session-authenticated team admin receives only limits for teams they directly administer, with optional entity filters.",
   [RouteId.GetLimit]:
     "Requires `llmLimit:read`, or a session-authenticated team admin for a limit on their own team.",
   [RouteId.CreateLimit]:
@@ -300,6 +300,12 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
     "Requires `llmLimit:update`, or a session-authenticated team admin updating a limit on their own team.",
   [RouteId.DeleteLimit]:
     "Requires `llmLimit:delete`, or a session-authenticated team admin deleting a limit on their own team.",
+  [RouteId.BulkDeleteLimits]:
+    "Requires `llmLimit:delete`, or a session-authenticated team admin deleting only limits for teams they administer. Unauthorized targets are reported as not found.",
+  [RouteId.GetLimitLabelKeys]:
+    "Requires `llmLimit:read`, or a session-authenticated team admin. Label suggestions include only visible limits.",
+  [RouteId.GetLimitLabelValues]:
+    "Requires `llmLimit:read`, or a session-authenticated team admin. Label suggestions include only visible limits.",
   [RouteId.GetTeamStatistics]:
     "Requires `llmCost:read` for organization-wide team statistics. A session-authenticated team admin may request only their own team by providing `teamId`.",
   [RouteId.GetOrganizationMemberOptions]:

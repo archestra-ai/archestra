@@ -98,6 +98,7 @@ import {
   useLimits,
   useUpdateLimit,
 } from "@/lib/limits.query";
+import { useTeamLimitAccess } from "@/lib/limits-access";
 import { useLlmModelOptions } from "@/lib/llm-models.query";
 import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
 import { useMemberOptionsReferences } from "@/lib/member-options.query";
@@ -249,6 +250,7 @@ import { UserLimitsOverview } from "./_parts/user-limits-overview";
 
 export default function LimitsPage() {
   const setActionButton = useSetCostsAction();
+  const access = useTeamLimitAccess();
   const {
     data: limits = [],
     isPending,
@@ -256,20 +258,30 @@ export default function LimitsPage() {
     isLoadingError: isLimitsLoadError,
     refetch: refetchLimits,
   } = useLimits();
-  const { data: teams = [] } = useTeams({ includeRelations: false });
+  const { data: allTeams = [] } = useTeams({
+    includeRelations: false,
+    enabled: access.globalCreate || access.globalRead,
+  });
+  const teams =
+    access.globalCreate || access.globalRead ? allTeams : access.teams;
+  const createTeams = access.globalCreate ? allTeams : access.teams;
   const { data: organization } = useOrganization();
   const { data: members = EMPTY_ENTITY_OPTIONS } = useMemberOptionsReferences({
     ids: limits
       .filter((limit) => limit.entityType === "user")
       .map((limit) => limit.entityId),
   });
-  const { data: defaultUserLimits = [] } = useDefaultUserLimits();
+  const { data: defaultUserLimits = [] } = useDefaultUserLimits(
+    access.globalRead,
+  );
   const { data: virtualKeysData } = useAllVirtualApiKeys({
     limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
+    enabled: access.globalRead,
   });
   const virtualKeys = virtualKeysData?.data ?? [];
   const { data: oauthClientsData } = useLlmOauthClients({
     limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
+    enabled: access.globalRead,
   });
   const oauthClients = oauthClientsData?.data ?? [];
   const { data: agents = EMPTY_ENTITY_OPTIONS } = useAgentOptionsByIds({
@@ -278,7 +290,7 @@ export default function LimitsPage() {
       .map((limit) => limit.entityId),
     filters: { agentType: "agent" },
   });
-  const { data: environmentsData } = useEnvironments();
+  const { data: environmentsData } = useEnvironments(access.globalRead);
   const environments = environmentsData?.environments ?? [];
   const { data: modelsWithApiKeys = [] } = useLlmModelOptions();
   const createLimit = useCreateLimit();
@@ -391,14 +403,19 @@ export default function LimitsPage() {
 
   const handleCreateOpen = useCallback(() => {
     closeEditDialog();
-    setFormState({ ...DEFAULT_FORM_STATE, labels: [] });
+    setFormState({
+      ...DEFAULT_FORM_STATE,
+      entityType: access.globalCreate ? "organization" : "team",
+      entityId: access.globalCreate ? "" : (access.teams[0]?.id ?? ""),
+      labels: [],
+    });
     setIsCreateDialogOpen(true);
-  }, [closeEditDialog]);
+  }, [closeEditDialog, access.globalCreate, access.teams[0]?.id]);
 
   useEffect(() => {
     setActionButton(
       <PermissionButton
-        permissions={{ llmLimit: ["create"] }}
+        permissions={access.allows("create") ? {} : { llmLimit: ["create"] }}
         size="sm"
         onClick={handleCreateOpen}
       >
@@ -408,7 +425,7 @@ export default function LimitsPage() {
     );
 
     return () => setActionButton(null);
-  }, [handleCreateOpen, setActionButton]);
+  }, [handleCreateOpen, setActionButton, access.allows]);
 
   const buildEditFormState = useCallback((limit: LimitData): LimitFormState => {
     const models = getLimitModels(limit);
@@ -701,14 +718,18 @@ export default function LimitsPage() {
               {
                 icon: <Edit className="h-4 w-4" />,
                 label: "Edit limit",
-                permissions: { llmLimit: ["update"] },
+                permissions: access.allows("update", row.original)
+                  ? {}
+                  : { llmLimit: ["update"] },
                 onClick: () => openEditDialog(row.original),
               },
               {
                 icon: <Trash2 className="h-4 w-4" />,
                 label: "Delete limit",
                 variant: "destructive",
-                permissions: { llmLimit: ["delete"] },
+                permissions: access.allows("delete", row.original)
+                  ? {}
+                  : { llmLimit: ["delete"] },
                 onClick: () => setLimitToDelete(row.original),
               },
             ]}
@@ -723,6 +744,7 @@ export default function LimitsPage() {
       getUsageStatus,
       modelByModelId,
       openEditDialog,
+      access,
     ],
   );
 
@@ -765,7 +787,9 @@ export default function LimitsPage() {
     [updateQueryParams],
   );
   const shouldShowDefaultUserLimitNotice =
-    formState.entityType === "user" && defaultUserLimits.length > 0;
+    access.globalRead &&
+    formState.entityType === "user" &&
+    defaultUserLimits.length > 0;
 
   function closeDialog() {
     if (editingLimit) {
@@ -845,6 +869,7 @@ export default function LimitsPage() {
   return (
     <div className="-mt-3">
       <UserLimitsOverview
+        enabled={access.globalRead}
         limitsTable={
           <BulkActionsScope>
             <CollectionFilters>
@@ -1027,7 +1052,13 @@ export default function LimitsPage() {
               selectAllMatching={selectAllMatching}
             >
               <PermissionButton
-                permissions={{ llmLimit: ["delete"] }}
+                permissions={
+                  selectedLimits.every((limit) =>
+                    access.allows("delete", limit),
+                  )
+                    ? {}
+                    : { llmLimit: ["delete"] }
+                }
                 variant="destructive"
                 size="sm"
                 onClick={() => setIsBulkDeleteDialogOpen(true)}
@@ -1125,36 +1156,43 @@ export default function LimitsPage() {
                     disabled={Boolean(editingLimit)}
                     items={ENTITY_TYPE_ITEMS.filter(
                       (item) =>
-                        item.value === formState.entityType ||
-                        (formState.limitType === "token_cost" &&
-                          formState.cleanupInterval !== "minute") ||
-                        ["organization", "team", "virtual_key"].includes(
-                          item.value,
+                        Boolean(editingLimit) ||
+                        access.globalCreate ||
+                        item.value === "team",
+                    )
+                      .filter(
+                        (item) =>
+                          item.value === formState.entityType ||
+                          (formState.limitType === "token_cost" &&
+                            formState.cleanupInterval !== "minute") ||
+                          ["organization", "team", "virtual_key"].includes(
+                            item.value,
+                          ),
+                      )
+                      .map((item) => ({
+                        value: item.value,
+                        label: item.label,
+                        searchText: `${item.label} ${item.description}`,
+                        content: (
+                          <span className="flex flex-col gap-0.5">
+                            <span className="flex items-center gap-2">
+                              {item.icon}
+                              {item.label}
+                            </span>
+                            <span className="pl-6 text-xs text-muted-foreground">
+                              {formState.limitType === "token_cost"
+                                ? item.description
+                                : "Shared allowance across matching requests."}
+                            </span>
+                          </span>
                         ),
-                    ).map((item) => ({
-                      value: item.value,
-                      label: item.label,
-                      searchText: `${item.label} ${item.description}`,
-                      content: (
-                        <span className="flex flex-col gap-0.5">
+                        selectedContent: (
                           <span className="flex items-center gap-2">
                             {item.icon}
                             {item.label}
                           </span>
-                          <span className="pl-6 text-xs text-muted-foreground">
-                            {formState.limitType === "token_cost"
-                              ? item.description
-                              : "Shared allowance across matching requests."}
-                          </span>
-                        </span>
-                      ),
-                      selectedContent: (
-                        <span className="flex items-center gap-2">
-                          {item.icon}
-                          {item.label}
-                        </span>
-                      ),
-                    }))}
+                        ),
+                      }))}
                     className="w-full sm:flex-1"
                     showSearchIcon={false}
                   />
@@ -1169,11 +1207,13 @@ export default function LimitsPage() {
                         }))
                       }
                       placeholder="Select team"
-                      items={teams.map((team) => ({
-                        value: team.id,
-                        label: team.name,
-                        description: team.description ?? undefined,
-                      }))}
+                      items={(editingLimit ? teams : createTeams).map(
+                        (team) => ({
+                          value: team.id,
+                          label: team.name,
+                          description: team.description ?? undefined,
+                        }),
+                      )}
                       className="w-full sm:flex-1"
                       disabled={Boolean(editingLimit)}
                     />

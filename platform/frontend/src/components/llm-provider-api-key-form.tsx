@@ -17,15 +17,7 @@ import {
 } from "@archestra/shared";
 import { CheckCircle2, Trash2 } from "lucide-react";
 import Link from "next/link";
-import {
-  lazy,
-  type ReactNode,
-  type Ref,
-  Suspense,
-  useEffect,
-  useMemo,
-  useRef,
-} from "react";
+import { lazy, type Ref, Suspense, useEffect, useMemo, useRef } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import { AdvancedSection } from "@/components/advanced-section";
 import {
@@ -499,12 +491,6 @@ interface LlmProviderApiKeyFormProps {
   labels?: ProfileLabel[];
   onLabelsChange?: (labels: ProfileLabel[]) => void;
   labelsRef?: Ref<ProfileLabelsRef>;
-  /**
-   * Replaces the credential field, for keys whose credential is not an API
-   * key the form can show (an organization's GitHub App). The key is then
-   * treated as an ordinary shared key, not a personal sign-in.
-   */
-  credentialSection?: ReactNode;
 }
 
 export function LlmProviderApiKeyForm({
@@ -530,7 +516,6 @@ export function LlmProviderApiKeyForm({
   labels,
   onLabelsChange,
   labelsRef,
-  credentialSection,
 }: LlmProviderApiKeyFormProps) {
   const appName = useAppName();
   const byosEnabled = useFeature("byosEnabled");
@@ -831,8 +816,7 @@ export function LlmProviderApiKeyForm({
   // Per-user-credential providers (GitHub Copilot) hold an individual's token,
   // so a key is never shared — each user connects their own account. The
   // OpenAI "ChatGPT subscription" auth mode is the same shape.
-  const isPerUserProvider =
-    providerRequiresPerUserCredential(provider) && !credentialSection;
+  const isPerUserProvider = providerRequiresPerUserCredential(provider);
   const isPerUserCredential = isPerUserProvider || isCredentialSubscriptionMode;
   const hasAdvancedSettings = !isSubscriptionFlow && !isPerUserCredential;
   // The subscription this form is currently connecting, if any: implied by the
@@ -1457,145 +1441,139 @@ export function LlmProviderApiKeyForm({
                   </Tabs>
                 )}
 
-              {credentialSection ??
-                (!isBedrockSigV4 &&
-                  bedrockAuthMethod !== "iam" &&
-                  (activeSubscriptionKind && connectCopy ? (
-                    <>
-                      {!isSubscriptionFlow && (
-                        <>
-                          <Label>{connectCopy.accountLabel}</Label>
-                          {connectCopy.signInHint ? (
-                            <p className="text-xs text-muted-foreground">
-                              {connectCopy.signInHint}
-                            </p>
-                          ) : (
-                            providerBlurb && (
-                              <p className="text-xs text-muted-foreground">
-                                {providerBlurb}
-                              </p>
-                            )
-                          )}
-                        </>
-                      )}
-                      {subscriptionUnavailableWithByos ? (
-                        <InlineNotice>
-                          <span className="font-medium">
-                            Subscription sign-in is unavailable with Bring Your
-                            Own Secrets
-                          </span>
-                          <InlineNoticeText>
-                            {appName} has read-only access to your external
-                            Vault, so it cannot save or rotate OAuth credentials
-                            there.
-                            {requiresExactSubscriptionCredential
-                              ? " This agent requires the same personal subscription, so a provider API key from Vault will not work. Ask an administrator to use managed secret storage, or choose a different agent or model."
-                              : subscriptionHasApiKeyAlternative
-                                ? " Store a provider API key in Vault instead, or ask an administrator to use managed secret storage."
-                                : " This provider has no API-key alternative, so an administrator must use managed secret storage to enable subscription sign-in."}
-                          </InlineNoticeText>
-                        </InlineNotice>
-                      ) : (
-                        <>
-                          {perUserCredentialConnected && (
-                            <div className="flex items-start gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
-                              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-500" />
-                              <div>
-                                <p className="font-medium text-green-600 dark:text-green-400">
-                                  {connectCopy.connectedTitle}
-                                </p>
-                                <p className="mt-0.5 text-xs text-muted-foreground">
-                                  {connectCopy.connectedDescription}
-                                  {isEditMode &&
-                                  !isCredentialSubscriptionMode ? (
-                                    <span>
-                                      {
-                                        " Sign in again below to refresh the token."
-                                      }
-                                    </span>
-                                  ) : null}
-                                </p>
-                              </div>
-                            </div>
-                          )}
-                          <SubscriptionSignIn
-                            kind={activeSubscriptionKind}
-                            disabled={isPending}
-                            onSecret={async (secret) => {
-                              if (onSubscriptionCredential) {
-                                await onSubscriptionCredential(secret);
-                                return;
-                              }
-                              form.setValue("apiKey", secret, {
-                                shouldDirty: true,
-                              });
-                            }}
-                          />
-                        </>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <Label htmlFor="llm-provider-api-key-value">
-                        API Key{" "}
-                        {isProviderApiKeyOptional({
-                          provider,
-                          azureEntraIdEnabled:
-                            azureOpenAiEntraIdEnabled === true,
-                          anthropicKeylessAuthEnabled:
-                            anthropicKeylessAuthEnabled === true,
-                        }) ? (
-                          <span className="font-normal text-muted-foreground">
-                            (optional)
-                          </span>
+              {!isBedrockSigV4 &&
+                bedrockAuthMethod !== "iam" &&
+                (activeSubscriptionKind && connectCopy ? (
+                  <>
+                    {!isSubscriptionFlow && (
+                      <>
+                        <Label>{connectCopy.accountLabel}</Label>
+                        {connectCopy.signInHint ? (
+                          <p className="text-xs text-muted-foreground">
+                            {connectCopy.signInHint}
+                          </p>
                         ) : (
-                          isEditMode && (
-                            <span className="font-normal text-muted-foreground">
-                              (leave blank to keep current)
-                            </span>
+                          providerBlurb && (
+                            <p className="text-xs text-muted-foreground">
+                              {providerBlurb}
+                            </p>
                           )
                         )}
-                      </Label>
-                      {providerBlurb && (
-                        <FieldDescription>{providerBlurb}</FieldDescription>
-                      )}
-                      <div className="relative">
-                        <SecretInput
-                          id="llm-provider-api-key-value"
-                          placeholder={providerConfig.placeholder}
-                          disabled={isPending}
-                          // Offer the reveal toggle when adding a key so the user
-                          // can verify what they typed or pasted. Editing keeps the
-                          // "configured" check in that same corner instead, and
-                          // gating on the (constant) edit mode avoids remounting the
-                          // input mid-edit when the check would otherwise toggle.
-                          revealable={!isEditMode}
-                          className={
-                            showConfiguredStyling
-                              ? "border-green-500 pr-10"
-                              : ""
-                          }
-                          {...form.register("apiKey")}
-                        />
-                        {showConfiguredStyling && (
-                          <CheckCircle2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-green-500" />
+                      </>
+                    )}
+                    {subscriptionUnavailableWithByos ? (
+                      <InlineNotice>
+                        <span className="font-medium">
+                          Subscription sign-in is unavailable with Bring Your
+                          Own Secrets
+                        </span>
+                        <InlineNoticeText>
+                          {appName} has read-only access to your external Vault,
+                          so it cannot save or rotate OAuth credentials there.
+                          {requiresExactSubscriptionCredential
+                            ? " This agent requires the same personal subscription, so a provider API key from Vault will not work. Ask an administrator to use managed secret storage, or choose a different agent or model."
+                            : subscriptionHasApiKeyAlternative
+                              ? " Store a provider API key in Vault instead, or ask an administrator to use managed secret storage."
+                              : " This provider has no API-key alternative, so an administrator must use managed secret storage to enable subscription sign-in."}
+                        </InlineNoticeText>
+                      </InlineNotice>
+                    ) : (
+                      <>
+                        {perUserCredentialConnected && (
+                          <div className="flex items-start gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
+                            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-500" />
+                            <div>
+                              <p className="font-medium text-green-600 dark:text-green-400">
+                                {connectCopy.connectedTitle}
+                              </p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">
+                                {connectCopy.connectedDescription}
+                                {isEditMode && !isCredentialSubscriptionMode ? (
+                                  <span>
+                                    {
+                                      " Sign in again below to refresh the token."
+                                    }
+                                  </span>
+                                ) : null}
+                              </p>
+                            </div>
+                          </div>
                         )}
-                      </div>
-                      {showConsoleLink && (
-                        <FieldDescription>
-                          Get your API key from{" "}
-                          <Link
-                            href={providerConfig.consoleUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="underline hover:text-foreground"
-                          >
-                            {providerConfig.consoleName}
-                          </Link>
-                        </FieldDescription>
+                        <SubscriptionSignIn
+                          kind={activeSubscriptionKind}
+                          disabled={isPending}
+                          onSecret={async (secret) => {
+                            if (onSubscriptionCredential) {
+                              await onSubscriptionCredential(secret);
+                              return;
+                            }
+                            form.setValue("apiKey", secret, {
+                              shouldDirty: true,
+                            });
+                          }}
+                        />
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Label htmlFor="llm-provider-api-key-value">
+                      API Key{" "}
+                      {isProviderApiKeyOptional({
+                        provider,
+                        azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+                        anthropicKeylessAuthEnabled:
+                          anthropicKeylessAuthEnabled === true,
+                      }) ? (
+                        <span className="font-normal text-muted-foreground">
+                          (optional)
+                        </span>
+                      ) : (
+                        isEditMode && (
+                          <span className="font-normal text-muted-foreground">
+                            (leave blank to keep current)
+                          </span>
+                        )
                       )}
-                    </>
-                  )))}
+                    </Label>
+                    {providerBlurb && (
+                      <FieldDescription>{providerBlurb}</FieldDescription>
+                    )}
+                    <div className="relative">
+                      <SecretInput
+                        id="llm-provider-api-key-value"
+                        placeholder={providerConfig.placeholder}
+                        disabled={isPending}
+                        // Offer the reveal toggle when adding a key so the user
+                        // can verify what they typed or pasted. Editing keeps the
+                        // "configured" check in that same corner instead, and
+                        // gating on the (constant) edit mode avoids remounting the
+                        // input mid-edit when the check would otherwise toggle.
+                        revealable={!isEditMode}
+                        className={
+                          showConfiguredStyling ? "border-green-500 pr-10" : ""
+                        }
+                        {...form.register("apiKey")}
+                      />
+                      {showConfiguredStyling && (
+                        <CheckCircle2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-green-500" />
+                      )}
+                    </div>
+                    {showConsoleLink && (
+                      <FieldDescription>
+                        Get your API key from{" "}
+                        <Link
+                          href={providerConfig.consoleUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:text-foreground"
+                        >
+                          {providerConfig.consoleName}
+                        </Link>
+                      </FieldDescription>
+                    )}
+                  </>
+                ))}
 
               {isBedrockSigV4 && (
                 <div className="space-y-3">

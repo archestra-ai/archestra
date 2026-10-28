@@ -85,7 +85,6 @@ import {
   useLlmProviderApiKeyLabelKeys,
   useLlmProviderApiKeyLabelValues,
 } from "@/lib/entity-labels.query";
-import { useReplaceCopilotGithubAppPrivateKey } from "@/lib/github-copilot-app.query";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
@@ -100,8 +99,8 @@ import {
 import { useOauthClients } from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
-import { CopilotAppKeyCredential } from "./_parts/copilot-app-key-credential";
 import { CopilotOrganizationConnectDialog } from "./_parts/copilot-organization-connect-dialog";
+import { CopilotOrganizationManageDialog } from "./_parts/copilot-organization-manage-dialog";
 import { OrganizationSubscriptionCards } from "./_parts/organization-subscription-cards";
 import {
   buildSubscriptionOffers,
@@ -315,15 +314,6 @@ export default function ApiKeysPage() {
     );
 
     try {
-      // An organization subscription's new App key is checked with GitHub and
-      // stored first; the dialog's other fields save as for any key.
-      if (editingApiKey.isGithubAppKey && replacementPrivateKey) {
-        await replacePrivateKey.mutateAsync({
-          id: editingApiKey.id,
-          privateKey: replacementPrivateKey,
-        });
-        setReplacementPrivateKey(null);
-      }
       await permissionsSave.current?.();
       await updateMutation.mutateAsync({
         id: editingApiKey.id,
@@ -463,12 +453,6 @@ export default function ApiKeysPage() {
   const [copilotConnect, setCopilotConnect] = useState<{
     replace: { id: string; organization: string | null } | null;
   } | null>(null);
-  // A replacement private key for the organization subscription being
-  // edited; held for Test & Save and never rendered.
-  const [replacementPrivateKey, setReplacementPrivateKey] = useState<
-    string | null
-  >(null);
-  const replacePrivateKey = useReplaceCopilotGithubAppPrivateKey();
 
   /** Keys the cards already stand for, so the table never repeats them. */
   const connectedSubscriptionIds = useMemo(
@@ -919,13 +903,22 @@ export default function ApiKeysPage() {
         )}
 
         {/* Edit Dialog */}
+        {/* An organization's GitHub Copilot plan is managed in its own
+            dialog, the same as the one that connected it. */}
+        {editingApiKey?.isGithubAppKey ? (
+          <CopilotOrganizationManageDialog
+            key={editingApiKey.id}
+            apiKey={editingApiKey}
+            existingKeys={apiKeys}
+            onOpenChange={(open) => {
+              if (!open) closeEditDialog();
+            }}
+          />
+        ) : null}
         <StandardFormDialog
-          open={!!editingApiKey}
+          open={!!editingApiKey && !editingApiKey.isGithubAppKey}
           onOpenChange={(open) => {
-            if (!open) {
-              setReplacementPrivateKey(null);
-              closeEditDialog();
-            }
+            if (!open) closeEditDialog();
           }}
           title="Edit API Key"
           description="Update the name, the API key value, or who can reach it"
@@ -935,13 +928,9 @@ export default function ApiKeysPage() {
               <DialogCancelButton>Cancel</DialogCancelButton>
               <Button
                 type="submit"
-                disabled={
-                  !isEditValid ||
-                  updateMutation.isPending ||
-                  replacePrivateKey.isPending
-                }
+                disabled={!isEditValid || updateMutation.isPending}
               >
-                {(updateMutation.isPending || replacePrivateKey.isPending) && (
+                {updateMutation.isPending && (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
                 <span>Test & Save</span>
@@ -955,7 +944,7 @@ export default function ApiKeysPage() {
               JSON.stringify(editingApiKey?.labels ?? [])
           }
         >
-          {editingApiKey && (
+          {editingApiKey && !editingApiKey.isGithubAppKey && (
             <div className="space-y-4">
               {editingApiKey.createdBy && (
                 <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
@@ -978,14 +967,6 @@ export default function ApiKeysPage() {
                 labels={editLabels}
                 onLabelsChange={setEditLabels}
                 labelsRef={editLabelsRef}
-                credentialSection={
-                  editingApiKey.isGithubAppKey ? (
-                    <CopilotAppKeyCredential
-                      keyId={editingApiKey.id}
-                      onPrivateKeyChange={setReplacementPrivateKey}
-                    />
-                  ) : undefined
-                }
               />
               <ResourceAccessSection
                 resource="llmProviderApiKey"

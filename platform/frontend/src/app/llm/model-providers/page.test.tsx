@@ -71,12 +71,10 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/github-copilot-app.query", () => ({
-  useCopilotGithubAppKeySummary: () => ({ data: null, isPending: true }),
-  useReplaceCopilotGithubAppPrivateKey: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
+vi.mock("./_parts/copilot-organization-manage-dialog", () => ({
+  CopilotOrganizationManageDialog: ({ apiKey }: { apiKey: { id: string } }) => (
+    <div data-testid="copilot-manage-dialog">{apiKey.id}</div>
+  ),
 }));
 vi.mock("@/lib/oauth-clients.query", () => ({
   useOauthClients: (...args: unknown[]) => mockUseOauthClients(...args),
@@ -549,7 +547,7 @@ describe("ApiKeysPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows an organization subscription as a card with the shared Manage and Disconnect dialogs", async () => {
+  it("shows an organization subscription as a card with its own Manage dialog and the shared Disconnect dialog", async () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       isPending: false,
@@ -585,14 +583,15 @@ describe("ApiKeysPage", () => {
       screen.queryByRole("button", { name: /Connect another/ }),
     ).not.toBeInTheDocument();
 
+    // Manage opens the plan's own dialog, not the generic key editor.
     fireEvent.click(screen.getByRole("button", { name: "Manage" }));
-    await waitFor(() =>
-      expect(mockLlmProviderApiKeyForm).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          existingKey: expect.objectContaining({ id: "copilot-app-key" }),
-          credentialSection: expect.anything(),
-        }),
-      ),
+    expect(
+      await screen.findByTestId("copilot-manage-dialog"),
+    ).toHaveTextContent("copilot-app-key");
+    expect(mockLlmProviderApiKeyForm).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        existingKey: expect.objectContaining({ id: "copilot-app-key" }),
+      }),
     );
 
     const disconnects = screen.getAllByRole("button", { name: "Disconnect" });

@@ -6,12 +6,14 @@ import { ResourceAccessSection } from "@/components/resource-access-section";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 
 /**
- * The connect wizard and the Manage dialog share one box: the medium width
- * and a fixed height, so it never resizes between steps. The body scrolls
- * inside it; the footer stays pinned. 46rem fits the tallest state, Manage
- * with Advanced folded.
+ * The connect wizard and the Manage dialog share the medium width and frame,
+ * each with a fixed height, so neither resizes as its content changes. The
+ * body scrolls inside; the footer stays pinned. The wizard's 37rem fits its
+ * tallest step with room for a two-line error; Manage's 46rem fits it with
+ * Advanced folded.
  */
-export const COPILOT_DIALOG_CLASS = "h-[min(46rem,85vh)]";
+export const COPILOT_CONNECT_DIALOG_CLASS = "h-[min(37rem,85vh)]";
+export const COPILOT_MANAGE_DIALOG_CLASS = "h-[min(46rem,85vh)]";
 
 /** The organization a GitHub Copilot plan bills, as both dialogs show it. */
 export function OrganizationRow({ organization }: { organization: string }) {

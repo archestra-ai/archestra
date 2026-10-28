@@ -41,7 +41,7 @@ import {
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import {
-  COPILOT_DIALOG_CLASS,
+  COPILOT_CONNECT_DIALOG_CLASS,
   CopilotAccess,
   OrganizationRow,
 } from "./copilot-organization-parts";
@@ -263,7 +263,7 @@ export function CopilotOrganizationConnectDialog({
       title={replace ? "Reconnect GitHub Copilot" : "Connect GitHub Copilot"}
       description="Connect your enterprise GitHub Copilot plan. Can be shared."
       size="medium"
-      className={COPILOT_DIALOG_CLASS}
+      className={COPILOT_CONNECT_DIALOG_CLASS}
       bodyClassName="space-y-5"
       footer={
         <>

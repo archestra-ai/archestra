@@ -27,7 +27,7 @@ import {
 } from "@/lib/github-copilot-app.query";
 import { useUpdateLlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 import {
-  COPILOT_DIALOG_CLASS,
+  COPILOT_MANAGE_DIALOG_CLASS,
   CopilotAccess,
   OrganizationRow,
 } from "./copilot-organization-parts";
@@ -134,7 +134,7 @@ export function CopilotOrganizationManageDialog({
       title="Manage GitHub Copilot"
       description="Your enterprise GitHub Copilot plan. Can be shared."
       size="medium"
-      className={COPILOT_DIALOG_CLASS}
+      className={COPILOT_MANAGE_DIALOG_CLASS}
       bodyClassName="space-y-5"
       isDirty={newKey !== null || permissionsDirty || detailsChanged}
       footer={

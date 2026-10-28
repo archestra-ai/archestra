@@ -452,6 +452,31 @@ export class AppaClaudeDesktopAdapter extends AppaClaudeCodeAdapter {
     header: "claude-desktop-header",
     metadata: "claude-desktop-metadata",
   } as const;
+  // Claude Desktop's Code tab omits `option.preview` entirely, and its Cowork
+  // tab sanitizes HTML-like substrings inside `option.preview` via DOMPurify
+  // and hides the preview pane on narrow widths. Asking the full question
+  // without `option.preview` renders the call and policy scope as literal
+  // `whitespace-pre-wrap` text across both tabs and keeps single-click choice
+  // submission enabled.
+  override readonly nativeQuestion = {
+    toolName: "AskUserQuestion",
+    fromAskUser: (args: AskUserArguments) => ({
+      questions: [
+        {
+          question: args.question,
+          header: questionHeader(args.header, 12),
+          options: args.options.map((option) => ({
+            label: option.label,
+            description: option.description ?? option.label,
+          })),
+          multiSelect: args.allowMultiple === true,
+        },
+      ],
+    }),
+    rulingFromResult: (result: NativeQuestionResult, asked: AskUserArguments) =>
+      structuredQuestionRuling(result, asked.question),
+    formFallback: true,
+  };
 
   override gatewayToolsHint(serverName: string): string {
     return `In Claude Desktop, open Settings → Connectors, select "${serverName}", and complete sign-in if needed. In your conversation, open + → Connectors and enable "${serverName}" if it is off. If it is not listed, connect Claude Desktop again and start a new session. Then send your message again.`;
@@ -584,6 +609,25 @@ const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/;
 function shownQuestion(args: AskUserArguments): string {
   return showsCallPreview(args) ? args.shortQuestion : args.question;
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Claude Desktop's Code tab omits `option.preview` from AskUserQuestion cards,
+ * and its Cowork tab sanitizes HTML-like substrings inside `option.preview` and
+ * hides the preview pane on narrow widths. Combining the inspectable card's
+ * title and bounded plain-text preview into `question` shows the call and
+ * policy scope verbatim across both tabs.
+ */
+export function claudeDesktopReviewQuestion(card: AskUserArguments): string {
+  const title = card.shortQuestion ?? card.question;
+  const preview =
+    card.options.find((option) => option.label === "Allow")?.preview ??
+    card.callPreview;
+  return preview ? `${title}\n\n${preview}` : title;
+}
+// SPDX-SnippetEnd
 
 function parentSessionId(context: AppaMatchContext): string | undefined {
   const metadata = claudeUserMetadata(context);

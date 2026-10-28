@@ -95,6 +95,19 @@ function textQuestionSelection(
         return { label };
     }
   }
+  for (const opening of QUESTION_NO_ANSWER_OPENINGS) {
+    const asked = `${opening}"${question}"="`;
+    if (!content.startsWith(asked)) continue;
+    const answer = content.slice(asked.length);
+    for (const [sentinel, noAnswer] of QUESTION_NO_ANSWERS) {
+      if (
+        QUESTION_NO_ANSWER_ENDINGS.some((ending) =>
+          answer.startsWith(`${sentinel}"${ending}`),
+        )
+      )
+        return noAnswer;
+    }
+  }
   const trimmed = content.trim();
   return (
     NO_ANSWER.get(trimmed) ??
@@ -146,4 +159,31 @@ const TIMED_OUT_ANSWER =
 const SELECTED_OPTION_ENDINGS = [
   ". You can now continue",
   " selected preview:\n",
+];
+
+// Claude Desktop's Cowork and Code surfaces submit sentinel strings as the
+// question's answer when the user clicks Skip, clicks Dismiss (X), or sends a
+// message in the composer instead of answering the card. Because these strings
+// are not option labels, Claude Code formats them with "The user answered: ".
+const QUESTION_NO_ANSWER_OPENINGS = [...ANSWER_OPENINGS, "The user answered: "];
+
+const QUESTION_NO_ANSWERS = new Map<string, "unanswered" | "declined">([
+  ["[No preference]", "unanswered"],
+  [
+    "The user did not answer this question. Make a reasonable assumption and carry on, but tell the user what assumption you made.",
+    "unanswered",
+  ],
+  [
+    "[User did not answer this question \u2014 they sent a message instead. Treat that message as their response; do not re-ask.]",
+    "unanswered",
+  ],
+  [
+    "[User dismissed \u2014 do not proceed, wait for next instruction]",
+    "declined",
+  ],
+]);
+
+const QUESTION_NO_ANSWER_ENDINGS = [
+  ...SELECTED_OPTION_ENDINGS,
+  ". Read the answers carefully",
 ];

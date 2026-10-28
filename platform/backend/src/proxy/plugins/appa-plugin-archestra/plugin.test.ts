@@ -3498,24 +3498,33 @@ describe("asking through the client's own question tool", () => {
   function inspectableClaudeReview(params: {
     sessionId: string;
     offerId: string;
-    client?: "opencode" | "kilo";
+    client?: "opencode" | "kilo" | "claude-desktop";
   }) {
+    const isOpenCodeFamily =
+      params.client === "opencode" || params.client === "kilo";
     const adapter =
       params.client === "kilo"
         ? new AppaKiloAdapter()
         : params.client === "opencode"
           ? new AppaOpenCodeAdapter()
-          : new AppaClaudeCodeAdapter();
-    const nativeName = params.client ? "question" : "AskUserQuestion";
+          : params.client === "claude-desktop"
+            ? new AppaClaudeDesktopAdapter()
+            : new AppaClaudeCodeAdapter();
+    const nativeName = isOpenCodeFamily ? "question" : "AskUserQuestion";
     const plugin = new AppaPluginArchestra([adapter]);
     const context = requestContext({ sessionId: params.sessionId });
-    context.headers = params.client
+    context.headers = isOpenCodeFamily
       ? {
           "user-agent": `${params.client}/1`,
           "x-opencode-session": params.sessionId,
           "x-archestra-question-cards": "1",
         }
-      : { "user-agent": "claude-code/1" };
+      : params.client === "claude-desktop"
+        ? {
+            "user-agent": "claude-cli/2.1.312 (external, cli)",
+            "x-archestra-agent-id": "anthropic_claude_desktop",
+          }
+        : { "user-agent": "claude-code/1" };
     const trusted = context.resources.get(
       APPA_PLUGIN_TRUSTED_CONTEXT,
     ) as AppaTrustedContext;
@@ -3546,14 +3555,14 @@ describe("asking through the client's own question tool", () => {
             }),
           },
         ],
-        canShowToolCallReview: !params.client,
+        canShowToolCallReview: !isOpenCodeFamily,
       });
       if (prepared?.decision !== "allow")
         throw new Error("expected the review card");
       const released = await plugin.onToolCalls({
         ...context,
         toolCalls: prepared.toolCalls,
-        canShowToolCallReview: !params.client,
+        canShowToolCallReview: !isOpenCodeFamily,
       });
       if (released?.decision !== "allow")
         throw new Error("expected the released review card");
@@ -3592,10 +3601,10 @@ describe("asking through the client's own question tool", () => {
             name: nativeName,
             content: JSON.stringify(
               label === ""
-                ? params.client
+                ? isOpenCodeFamily
                   ? "User dismissed the question."
                   : "The user did not answer the questions."
-                : `${params.client ? "User has answered your questions" : "Your questions have been answered"}: "${question}"="${label}". You can now continue with these answers in mind.`,
+                : `${isOpenCodeFamily ? "User has answered your questions" : "Your questions have been answered"}: "${question}"="${label}". You can now continue with these answers in mind.`,
             ),
             isError: false,
           },
@@ -4455,6 +4464,122 @@ describe("asking through the client's own question tool", () => {
         getHitlReview({ session: trusted.session, offerId }),
       ).resolves.toBeUndefined();
     } finally {
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("Claude Desktop inspectable cards carry the call and policy scope in question without option previews, place Inspect reviewDetails before the card, and seal Skip/Dismiss sentinel answers", async () => {
+    const offerId = "offer-claude-desktop-inspectable";
+    const command =
+      "python3 -c \"print('<script>alert(1)</script><a href=https://example.com>link</a>')\"";
+    const { plugin, context, trusted, askCard, answer } =
+      inspectableClaudeReview({
+        client: "claude-desktop",
+        sessionId: "user:user|claude-desktop-inspectable",
+        offerId,
+      });
+    await stageInspectableReview(trusted.session, offerId, command);
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }]);
+
+    try {
+      await plugin.onSessionInit(context);
+      const first = await askCard();
+      expect(first.call.name).toBe("AskUserQuestion");
+      expect(first.card.question).toContain("Run Bash?\n\n");
+      expect(first.card.question.replace(/\n\s+/g, "")).toContain(
+        "<script>alert(1)</script>",
+      );
+      expect(first.card.question.replace(/\s+/g, " ")).toContain(
+        "the readers must be the public audience",
+      );
+      expect(first.card.options.map((option) => option.label)).toEqual([
+        "Allow",
+        "Deny",
+        "Inspect",
+      ]);
+      expect(first.card.options.some((option) => "preview" in option)).toBe(
+        false,
+      );
+      expect(first.reviewDetails).toBeUndefined();
+
+      await answer(first.answerId, first.card.question, "Inspect");
+      const inspected = await askCard();
+      expect(inspected.reviewDetails).toContain("## Approval review");
+      expect(inspected.reviewDetails).toContain(command);
+      expect(inspected.card.question).toBe(first.card.question);
+      expect(inspected.card.options.some((option) => "preview" in option)).toBe(
+        false,
+      );
+
+      const approved = await answer(
+        inspected.answerId,
+        inspected.card.question,
+        "Allow",
+      );
+      expect(approved.guidance).toContain("approved OpenAPPA offer IDs");
+      await expect(
+        consumeHitlRuling({ session: trusted.session, offerId }),
+      ).resolves.toBe("approve");
+
+      for (const [suffix, sentinel, closure] of [
+        ["skip", "[No preference]", "unanswered"],
+        [
+          "dismiss",
+          "[User dismissed \u2014 do not proceed, wait for next instruction]",
+          "declined",
+        ],
+      ] as const) {
+        const sentinelOfferId = `offer-claude-desktop-${suffix}`;
+        const sentinelFixture = inspectableClaudeReview({
+          client: "claude-desktop",
+          sessionId: `user:user|claude-desktop-${suffix}`,
+          offerId: sentinelOfferId,
+        });
+        await stageInspectableReview(
+          sentinelFixture.trusted.session,
+          sentinelOfferId,
+          "pwd",
+        );
+        await sentinelFixture.plugin.onSessionInit(sentinelFixture.context);
+        try {
+          const card = await sentinelFixture.askCard();
+          await sentinelFixture.plugin.onToolResults({
+            ...sentinelFixture.context,
+            toolResults: [
+              {
+                id: card.answerId,
+                name: "AskUserQuestion",
+                content: JSON.stringify(
+                  `The user answered: "${card.card.question}"="${sentinel}". Read the answers carefully \u2014 they may request clarification, changes, or that you not proceed \u2014 and follow what they actually say.`,
+                ),
+                isError: false,
+              },
+            ],
+          });
+          await expect(
+            hitlReview.peekHitlDecision({
+              session: sentinelFixture.trusted.session,
+              offerId: sentinelOfferId,
+            }),
+          ).resolves.toEqual({ ruling: "none", closure });
+          await expect(
+            consumeHitlRuling({
+              session: sentinelFixture.trusted.session,
+              offerId: sentinelOfferId,
+            }),
+          ).resolves.toBe("none");
+        } finally {
+          await sentinelFixture.plugin.onCleanup(sentinelFixture.context);
+        }
+      }
+    } finally {
+      evaluateToolCalls.mockRestore();
       processResults.mockRestore();
       await plugin.onCleanup(context);
     }

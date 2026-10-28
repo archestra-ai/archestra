@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { AskUserArguments } from "../types";
-import { AppaClaudeCodeAdapter } from "./claude-code";
+import { AppaClaudeCodeAdapter, AppaClaudeDesktopAdapter } from "./claude-code";
 import { AppaCodexAdapter } from "./codex";
 import { labeledQuestionRuling } from "./native-question-ruling";
 import { AppaOpenCodeAdapter } from "./opencode";
@@ -226,11 +226,46 @@ describe("Claude Code approval answers", () => {
       "No response after 600s \u2014 the user may be away from keyboard. Proceed using your best judgment based on the context so far; you can re-ask this question later if it's still relevant.",
       "unanswered",
     ],
+    [
+      `The user answered: "${SHORT_QUESTION}"="[No preference]". Read the answers carefully \u2014 they may request clarification, changes, or that you not proceed \u2014 and follow what they actually say.`,
+      "unanswered",
+    ],
+    [
+      `The user answered: "${SHORT_QUESTION}"="The user did not answer this question. Make a reasonable assumption and carry on, but tell the user what assumption you made.". Read the answers carefully \u2014 they may request clarification, changes, or that you not proceed \u2014 and follow what they actually say.`,
+      "unanswered",
+    ],
+    [
+      `The user answered: "${SHORT_QUESTION}"="[User did not answer this question \u2014 they sent a message instead. Treat that message as their response; do not re-ask.]". Read the answers carefully \u2014 they may request clarification, changes, or that you not proceed \u2014 and follow what they actually say.`,
+      "unanswered",
+    ],
+    [
+      `The user answered: "${SHORT_QUESTION}"="[User dismissed \u2014 do not proceed, wait for next instruction]". Read the answers carefully \u2014 they may request clarification, changes, or that you not proceed \u2014 and follow what they actually say.`,
+      "declined",
+    ],
   ] as const)("closes %s as %s, not a ruling or an unreadable answer", (content, expected) => {
     expect(ruling({ content }, review(APPROVAL_LIKE))).toBe(expected);
     expect(ruling({ content }, review(APPROVAL_LIKE))).not.toBe("unrecognized");
     expect(ruling({ content }, review(APPROVAL_LIKE))).not.toBe("approve");
     expect(ruling({ content }, review(APPROVAL_LIKE))).not.toBe("deny");
+  });
+
+  test("Claude Desktop asks the full review question without option previews and reads its answer", () => {
+    const desktop = new AppaClaudeDesktopAdapter().nativeQuestion;
+    const asked = review(APPROVAL_LIKE);
+    const [question] = desktop.fromAskUser(asked).questions;
+    expect(question.question).toBe(asked.question);
+    expect(question.options.some((option) => "preview" in option)).toBe(false);
+    expect(
+      desktop.rulingFromResult(
+        {
+          content: claudeCodeAnswer({
+            question: asked.question,
+            label: "Approve",
+          }),
+        },
+        asked,
+      ),
+    ).toBe("approve");
   });
 
   test("a dismissed question is unavailable, not an unreadable answer", () => {

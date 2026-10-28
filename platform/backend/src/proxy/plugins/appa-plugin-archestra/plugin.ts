@@ -166,6 +166,7 @@ import type {
 } from "@/types/openappa-runtime-launch";
 import {
   claudeCodeNativeChildIds,
+  claudeDesktopReviewQuestion,
   isClaudeCodeFamilyAdapter,
 } from "./adapters/claude-code";
 import {
@@ -1158,7 +1159,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         prepared = issued.call;
         // Claude's complete review precedes the card as assistant text.
         // OpenCode-family clients carry it in the bound question input instead.
-        if (reviewText && !askedQuestion)
+        if (reviewText && isClaudeCodeFamilyAdapter(binding.adapter?.id))
           prepared = { ...prepared, reviewDetails: reviewText };
         issuedNativeQuestions.push({
           ...issued.question,
@@ -4965,7 +4966,9 @@ async function canonicalizeHitlAskUserCall(params: {
         params.binding.adapter?.id === "kilo";
       const askedQuestion = family
         ? openCodeReviewQuestion(inspectable.card, inspectable.reviewText)
-        : undefined;
+        : params.binding.adapter?.id === "claude-desktop"
+          ? claudeDesktopReviewQuestion(inspectable.card)
+          : undefined;
       return {
         call: {
           ...params.call,

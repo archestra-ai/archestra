@@ -103,6 +103,9 @@ type LimitViolationResponse = [
   metadata?: {
     entityType: LimitEntityType;
     limitType: "token_cost";
+    entityId: string;
+    limitId: string;
+    source: "explicit" | "default_user";
   },
 ];
 
@@ -1688,6 +1691,8 @@ export class LimitValidationService {
         );
 
         return buildLimitViolationResponse({
+          limitId: limit.id,
+          source: "explicit",
           entityType,
           entityId,
           limitValue: limit.limitValue,
@@ -1788,6 +1793,8 @@ export class LimitValidationService {
       }
 
       return buildLimitViolationResponse({
+        limitId: globalDefault.id,
+        source: "default_user",
         entityType: "user",
         entityId: params.userId,
         limitValue: globalDefault.limitValue,
@@ -2178,6 +2185,8 @@ async function getDefaultUserLimitUsage(params: {
 }
 
 function buildLimitViolationResponse(params: {
+  limitId: string;
+  source: "explicit" | "default_user";
   entityType: LimitEntityType;
   entityId: string;
   limitValue: number;
@@ -2188,11 +2197,18 @@ function buildLimitViolationResponse(params: {
   cleanupInterval?: LimitCleanupInterval | null;
   models?: string[] | null;
 }): LimitViolationResponse {
+  const identityLine = `${params.source === "default_user" ? "Default user limit" : "Limit"} ID: ${params.limitId}; ${params.entityType.replace(/_/g, " ")} ID: ${params.entityId}.`;
   if (!Number.isFinite(params.comparisonValue))
     return [
       "Usage accounting is incomplete.",
-      `The ${archestraMcpBranding.appName} budget has incomplete billing usage. Ask an administrator to review provider usage and model prices before resetting the budget.`,
-      { entityType: params.entityType, limitType: "token_cost" },
+      `The ${archestraMcpBranding.appName} budget has incomplete billing usage. ${identityLine} Ask an administrator to review provider usage and model prices before resetting the budget.`,
+      {
+        entityType: params.entityType,
+        limitType: "token_cost",
+        entityId: params.entityId,
+        limitId: params.limitId,
+        source: params.source,
+      },
     ];
   const totalTokens = params.totalTokensIn + params.totalTokensOut;
   const remaining = Math.max(0, params.limitValue - params.comparisonValue);
@@ -2206,6 +2222,8 @@ function buildLimitViolationResponse(params: {
 <archestra-limit-type>token_cost</archestra-limit-type>
 <archestra-limit-entity-type>${params.entityType}</archestra-limit-entity-type>
 <archestra-limit-entity-id>${params.entityId}</archestra-limit-entity-id>
+<archestra-limit-id>${params.limitId}</archestra-limit-id>
+<archestra-limit-source>${params.source}</archestra-limit-source>
 <archestra-limit-model-scope>${modelScope}</archestra-limit-model-scope>
 <archestra-limit-reset-window>${resetWindow ?? "n/a"}</archestra-limit-reset-window>
 <archestra-limit-current-usage>${totalTokens}</archestra-limit-current-usage>
@@ -2237,6 +2255,7 @@ Remaining: ${Math.max(0, params.limitValue - totalTokens).toLocaleString()} toke
 ${header}
 
 ${ruleLine}
+${identityLine}
 
 ${usageBlock}
 
@@ -2245,7 +2264,13 @@ ${footer}`;
   return [
     `${archestraMetadata}\n${contentMessage}`,
     contentMessage,
-    { entityType: params.entityType, limitType: "token_cost" },
+    {
+      entityType: params.entityType,
+      limitType: "token_cost",
+      entityId: params.entityId,
+      limitId: params.limitId,
+      source: params.source,
+    },
   ];
 }
 

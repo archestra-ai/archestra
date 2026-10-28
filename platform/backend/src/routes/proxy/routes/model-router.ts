@@ -102,6 +102,7 @@ import {
   type LLMProxyAuthOverride,
 } from "../llm-proxy-handler";
 import { type ModelPoolCaller, mayUseModelPool } from "../model-pool-failover";
+import { assertModelRouterCacheControls } from "../model-router-cache-controls";
 import {
   buildRoutableModelId,
   listRoutableModels,
@@ -519,6 +520,7 @@ async function routeChatCompletion(
     allowedProviders: getMappedProviders(auth),
     allowedApiKeyIds: getMappedApiKeyIds(auth),
   });
+  assertModelRouterCacheControls(resolution.provider, body);
   const routedBody = {
     ...body,
     model: resolution.modelId,
@@ -567,6 +569,8 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     allowedProviders: getMappedProviders(auth),
     allowedApiKeyIds: getMappedApiKeyIds(auth),
   });
+
+  assertModelRouterCacheControls(resolution.provider, body);
 
   // Preserve native Responses semantics whenever that surface is available.
   // A chat round trip loses reasoning settings, encrypted replay state,

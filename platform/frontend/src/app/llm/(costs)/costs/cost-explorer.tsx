@@ -295,7 +295,7 @@ export default function CostExplorer() {
             }))}
             onChange={(group) => update({ group })}
           />
-          {q.group === "label" && (
+          {q.group === "label" && !!labelKeys.data?.length && (
             <SearchableSelect
               size="sm"
               ariaLabel="Label key"
@@ -305,27 +305,9 @@ export default function CostExplorer() {
                 value: key,
                 label: key,
               }))}
-              placeholder={
-                labelKeys.isPending
-                  ? "Loading label keys…"
-                  : labelKeys.isError
-                    ? "Label keys unavailable"
-                    : labelKeys.data?.length
-                      ? "Label key"
-                      : "No labels in this range"
-              }
-              disabled={labelKeys.isPending}
+              placeholder="Label key"
               searchPlaceholder="Search label keys…"
-              hint={
-                labelKeys.isError
-                  ? "Could not load label keys. Reopen this view to retry."
-                  : "Labels captured on requests in this time range."
-              }
-              emptyMessage={
-                labelKeys.isError
-                  ? "Label keys unavailable"
-                  : "No label keys in this time range"
-              }
+              emptyMessage="No matching label keys"
               className="w-44 border-transparent bg-muted/60 shadow-none"
             />
           )}

@@ -139,15 +139,12 @@ it("shows no selected label when the window contains no captured labels", async 
     },
   );
   fireEvent.click(screen.getByRole("menuitem", { name: "Spend by label" }));
-  expect(
-    await screen.findByText("No labels in this range"),
-  ).toBeInTheDocument();
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("combobox", { name: "Label key" }),
+    ).not.toBeInTheDocument(),
+  );
   expect(screen.queryByText("cost_center")).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("combobox", { name: "Label key" }));
-  expect(
-    screen.getByText("No label keys in this time range"),
-  ).toBeInTheDocument();
-  expect(screen.queryAllByRole("option")).toHaveLength(0);
 });
 
 it("selects only keys returned for the window and resets invalid selections on range changes", async () => {
@@ -206,16 +203,21 @@ it("selects only keys returned for the window and resets invalid selections on r
   });
   rerenderExplorer();
   await waitFor(() =>
-    expect(select).toHaveTextContent("No labels in this range"),
+    expect(
+      screen.queryByRole("combobox", { name: "Label key" }),
+    ).not.toBeInTheDocument(),
   );
-  expect(select).not.toHaveTextContent("project");
 
   vi.mocked(useCostsTimeRange).mockReturnValue({
     timeframe: "30d",
     enabled: true,
   });
   rerenderExplorer();
-  await waitFor(() => expect(select).toHaveTextContent("application"));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("combobox", { name: "Label key" }),
+    ).toHaveTextContent("application"),
+  );
 });
 
 it("offers retry after label discovery fails and discovers keys on recovery", async () => {
@@ -239,10 +241,9 @@ it("offers retry after label discovery fails and discovers keys on recovery", as
   expect(
     await screen.findByText("Could not load usage statistics"),
   ).toBeInTheDocument();
-  expect(screen.getByRole("combobox", { name: "Label key" })).toHaveTextContent(
-    "Label keys unavailable",
-  );
-  expect(screen.queryByText("No labels in this range")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("combobox", { name: "Label key" }),
+  ).not.toBeInTheDocument();
   available = true;
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   await waitFor(() =>

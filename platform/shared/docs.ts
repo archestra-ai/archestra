@@ -78,6 +78,7 @@ export const DocsPage = {
   PlatformKnowledgeConnectors: "knowledge/connectors",
   PlatformKnowledgeSettings: "knowledge/settings",
   PlatformLlmProxyAuthentication: "llm-proxy/authentication",
+  PlatformLlmProxyAutoRouting: "llm-proxy/auto-routing",
   PlatformLlmProxy: "llm-proxy",
   PlatformLlmProxyModelPools: "llm-proxy/model-pools",
   PlatformMastraExample: "integrations/sdks-and-frameworks",

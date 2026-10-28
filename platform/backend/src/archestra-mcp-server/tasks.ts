@@ -119,6 +119,17 @@ async function launchDelegatedTask(params: {
   context: ArchestraContext;
 }): Promise<{ result: CallToolResult; outcome?: RuntimeLaunchOutcome }> {
   const { agentId, message, context } = params;
+  if (
+    context.tokenAuth?.oauthExecution ||
+    (context.tokenAuth?.oauthClientId && !context.tokenAuth.isUserToken)
+  ) {
+    return failedLaunch(
+      "refused",
+      errorResult(
+        "OAuth applications cannot use Agent Runtime; use an in-process agent instead.",
+      ),
+    );
+  }
   try {
     const actor = requireActor(context);
     const agent = await AgentModel.findById(agentId);
@@ -1664,6 +1675,15 @@ function missingCredentialsFrom(error: unknown): {
 
 /** @public — also used by the credential transfer tool in `./credentials`. */
 export function requireActor(context: ArchestraContext): A2AActor {
+  if (
+    context.tokenAuth?.oauthExecution ||
+    (context.tokenAuth?.oauthClientId && !context.tokenAuth.isUserToken)
+  ) {
+    throw new ApiError(
+      403,
+      "OAuth applications cannot use Agent Runtime; use an in-process agent instead.",
+    );
+  }
   if (!context.userId || !context.organizationId) {
     throw new Error(
       "Run tools act as the calling user, so they need an authenticated user context.",

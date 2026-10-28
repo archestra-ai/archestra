@@ -271,10 +271,22 @@ function validateIncomingEmailDomain(
   }
 }
 
+/** Internal state written only by AutoRoutingSettingsModel, under the routing-plan lock; never read or written through agent payloads. */
+const AUTO_ROUTING_COLUMNS = {
+  autoRoutingEnabled: true,
+  autoRoutingBudgetUsdPerDay: true,
+  autoRoutingFastModelId: true,
+  autoRoutingNormalModelId: true,
+  autoRoutingSmartModelId: true,
+  autoRoutingScorerVersionId: true,
+  autoRoutingGeneration: true,
+  autoRoutingPlannedGeneration: true,
+} as const;
+
 const AgentRowSchema = createSelectSchema(
   schema.agentsTable,
   selectExtendedFields,
-);
+).omit(AUTO_ROUTING_COLUMNS);
 
 /**
  * Hot-path agent shape for the MCP gateway: the raw agents row plus labels,
@@ -520,6 +532,7 @@ export const InsertAgentSchemaBase = createInsertSchema(
     latestVersion: true,
     // Stamped by AgentUsageModel when the agent is used; never client-settable.
     lastUsedAt: true,
+    ...AUTO_ROUTING_COLUMNS,
     // Set on an existing gateway by the update route, which checks the
     // editor may use the GitHub App it names. A new agent starts without it.
     githubActionsAccess: true,
@@ -589,6 +602,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     latestVersion: true,
     // Stamped by AgentUsageModel when the agent is used; never client-settable.
     lastUsedAt: true,
+    ...AUTO_ROUTING_COLUMNS,
   });
 
 // Full schema with validation refinement

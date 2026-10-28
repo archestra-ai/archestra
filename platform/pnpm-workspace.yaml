@@ -8,6 +8,7 @@ packages:
   - "archestra-rs/openappa-rs"
   - "archestra-rs/app-runtime-rs"
   - "archestra-rs/image-rs"
+  - "archestra-rs/router-rs"
   - "e2e-tests"
   - "tools/docs-screenshots"
 

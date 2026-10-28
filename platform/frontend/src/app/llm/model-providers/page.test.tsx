@@ -377,6 +377,32 @@ describe("ApiKeysPage", () => {
     );
   });
 
+  it("opens an organization-wide key for the provider a link names", async () => {
+    useDataTableQueryParamsMock.mockReturnValue({
+      searchParams: new URLSearchParams("create=jev&access=organization"),
+      updateQueryParams: updateQueryParamsMock,
+    });
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+
+    render(<ApiKeysPage />);
+
+    expect(await screen.findByTestId("create-dialog")).toHaveTextContent(
+      JSON.stringify({
+        provider: "jev",
+        initialGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+            name: "Everyone in the organization",
+          },
+        ],
+      }),
+    );
+  });
+
   it("still offers subscriptions to a member who cannot read keys", () => {
     // Their key query never runs, so the cards must state the offer rather than
     // sit in a skeleton waiting on a query that will never resolve.

@@ -19,9 +19,11 @@
  */
 import { CONTEXT_COMPACTION_AUTO_THRESHOLD } from "@archestra/shared";
 import type { UIMessage } from "ai";
+import { authorizeA2AModel } from "@/agents/a2a/oauth-model";
 import logger from "@/logging";
 import { A2AContextCompactionModel, ModelModel } from "@/models";
 import { TOKEN_ESTIMATE } from "@/routes/chat/normalization/estimate-message-tokens";
+import type { A2AOAuthExecution } from "@/routes/mcp-gateway/utils";
 import { resolveCompactionLlm } from "@/services/compaction-llm";
 import {
   CONTEXT_COMPACTION_RECENT_KEEP_RATIO,
@@ -66,6 +68,7 @@ export async function applyA2AContextCompaction(params: {
   sessionId?: string;
   abortSignal?: AbortSignal;
   summarizeTranscript?: CompactionSummarizer;
+  oauthExecution?: A2AOAuthExecution;
 }): Promise<{
   messages: A2AMessage[];
   created: A2AContextCompactionEvent | null;
@@ -129,6 +132,7 @@ export async function applyA2AContextCompaction(params: {
         userId,
         sessionId,
         abortSignal,
+        oauthExecution: params.oauthExecution,
       }));
     if (!summarize) {
       return { messages: applied.view, created: null };
@@ -315,6 +319,7 @@ async function buildSummarizer(params: {
   userId: string | null;
   sessionId?: string;
   abortSignal?: AbortSignal;
+  oauthExecution?: A2AOAuthExecution;
 }): Promise<CompactionSummarizer | null> {
   const compactionLlm = await resolveCompactionLlm({
     organizationId: params.agent.organizationId,
@@ -340,7 +345,12 @@ async function buildSummarizer(params: {
   // Last-resort flow (no interactive retry affordance): salvage untagged
   // output rather than fail the compaction, like chat's fallback path.
   return createCompactionSummarizer({
-    model: compactionLlm.model,
+    model: authorizeA2AModel({
+      model: compactionLlm.model,
+      agentId: params.agent.id,
+      organizationId: params.agent.organizationId,
+      execution: params.oauthExecution,
+    }),
     systemPrompt: compactionLlm.systemPrompt,
     abortSignal: params.abortSignal,
     salvageUntagged: true,

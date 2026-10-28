@@ -210,12 +210,10 @@ async function filterModelsByLinkedApiKeys(
   models: Model[],
   apiKeyIds: string[],
 ): Promise<Model[]> {
-  if (models.length === 0 || apiKeyIds.length === 0) {
-    return [];
-  }
-  const linked =
-    await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(apiKeyIds);
-  const linkedIds = new Set(linked.map(({ model }) => model.id));
+  const linkedIds = await LlmProviderApiKeyModelLinkModel.filterLinkedModelIds({
+    apiKeyIds,
+    modelIds: models.map((model) => model.id),
+  });
   return models.filter((model) => linkedIds.has(model.id));
 }
 

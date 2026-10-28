@@ -4,11 +4,13 @@ import type {
 } from "@archestra/shared";
 import { type SQL, sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   index,
   integer,
   jsonb,
+  numeric,
   text,
   timestamp,
   uniqueIndex,
@@ -28,6 +30,7 @@ import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
 import modelPoolsTable from "./model-pool";
+import routingScorerVersionsTable from "./routing-scorer-version";
 import secretsTable from "./secret";
 import serviceAccountsTable from "./service-account";
 import { softDeletablePgTable } from "./soft-deletable-table";
@@ -121,6 +124,41 @@ const agentsTable = softDeletablePgTable(
     smartModelId: uuid("smart_model_id").references(() => modelsTable.id, {
       onDelete: "set null",
     }),
+
+    /**
+     * Auto routing (the org's `llm_proxy` row only). Server-managed: written
+     * under the routing-plan lock, which also bumps `autoRoutingGeneration`.
+     */
+    autoRoutingEnabled: boolean("auto_routing_enabled")
+      .notNull()
+      .default(false),
+    autoRoutingBudgetUsdPerDay: numeric("auto_routing_budget_usd_per_day", {
+      precision: 12,
+      scale: 2,
+    }),
+    autoRoutingFastModelId: uuid("auto_routing_fast_model_id").references(
+      () => modelsTable.id,
+      { onDelete: "set null" },
+    ),
+    autoRoutingNormalModelId: uuid("auto_routing_normal_model_id").references(
+      () => modelsTable.id,
+      { onDelete: "set null" },
+    ),
+    autoRoutingSmartModelId: uuid("auto_routing_smart_model_id").references(
+      () => modelsTable.id,
+      { onDelete: "set null" },
+    ),
+    autoRoutingScorerVersionId: uuid(
+      "auto_routing_scorer_version_id",
+    ).references(() => routingScorerVersionsTable.id),
+    autoRoutingGeneration: bigint("auto_routing_generation", { mode: "number" })
+      .notNull()
+      .default(0),
+    autoRoutingPlannedGeneration: bigint("auto_routing_planned_generation", {
+      mode: "number",
+    })
+      .notNull()
+      .default(0),
 
     /** Optional Identity Provider for JWKS-based JWT validation on MCP Gateway requests */
     identityProviderId: text("identity_provider_id").references(

@@ -85,6 +85,7 @@ import {
   UserModel,
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
+import type { A2AOAuthExecution } from "@/routes/mcp-gateway/utils";
 import { discoverOAuthEndpoints, refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
 import { llmProxyTiming } from "@/server/llm-proxy-timing";
@@ -321,6 +322,7 @@ function isTransientResourceReadError(error: unknown): boolean {
  * Token authentication context for dynamic credential resolution
  */
 export type TokenAuthContext = {
+  oauthExecution?: A2AOAuthExecution;
   tokenId: string;
   teamId: string | null;
   isOrganizationToken: boolean;

@@ -25,6 +25,10 @@
       "dependsOn": ["^build"],
       "cache": false
     },
+    "@archestra/router-rs#build": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "dev": {
       "persistent": true,
       "cache": false,

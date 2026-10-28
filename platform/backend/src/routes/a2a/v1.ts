@@ -350,6 +350,14 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
               organizationId,
               userId,
               sessionId,
+              oauthExecution:
+                tokenAuth.oauthClientId && !tokenAuth.userId
+                  ? {
+                      tokenId: tokenAuth.tokenId,
+                      clientId: tokenAuth.oauthClientId,
+                      serviceAccountId: tokenAuth.serviceAccountId,
+                    }
+                  : undefined,
               parentDelegationChain: undefined, // This is the root call, chain starts with agentId
             });
           },

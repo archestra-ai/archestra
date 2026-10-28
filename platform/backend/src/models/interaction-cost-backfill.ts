@@ -13,19 +13,21 @@ import db, { type Transaction } from "@/database";
 class InteractionCostBackfillModel {
   /**
    * Eligible requests per calendar day (in `timeZone`) over the model's whole
-   * history, with their recorded cost and token sums. Price-independent, so
-   * the preview prices these sums for any prices the admin types.
+   * history, with their recorded cost and token sums per price tier.
+   * Price-independent, so the preview prices these sums for any prices the
+   * admin types.
    */
   static async getDailyHistory(params: {
     scope: BackfillScope;
     timeZone: string;
+    longContextThreshold: number | null;
   }): Promise<CostHistoryDay[]> {
     return withStatementTimeout(PREVIEW_STATEMENT_TIMEOUT_MS, async (tx) => {
       const day = sql`to_char(date_trunc('day', (i.created_at at time zone 'UTC') at time zone ${params.timeZone}), 'YYYY-MM-DD')`;
       const result = await tx.execute<CostHistoryDayRow>(sql`
         select ${day} as day,
           count(*)::integer as requests,
-          ${tokenSums()},
+          ${tieredTokenSums(params.longContextThreshold)},
           coalesce(sum(i.cost), 0)::text as recorded_cost
         from interactions i
         where ${eligible(params.scope)}
@@ -35,7 +37,7 @@ class InteractionCostBackfillModel {
         day: row.day,
         requests: row.requests,
         recordedCost: Number(row.recorded_cost),
-        tokens: toTokenSums(row),
+        tokens: toTieredTokenSums(row),
       }));
     });
   }
@@ -49,6 +51,7 @@ class InteractionCostBackfillModel {
     scope: BackfillScope;
     since: Date;
     until: Date;
+    longContextThreshold: number | null;
   }): Promise<CostWindowTotals> {
     return withStatementTimeout(PREVIEW_STATEMENT_TIMEOUT_MS, async (tx) => {
       // One pass over the model's window: each row probes its own receipt,
@@ -59,13 +62,10 @@ class InteractionCostBackfillModel {
           count(*) filter (where ${open})::integer as requests,
           count(*) filter (where ${open} and i.billing_mode = 'subscription')::integer as subscription_requests,
           count(distinct i.user_id) filter (where ${open})::integer as users,
-          ${tokenSums(open)},
+          ${tieredTokenSums(params.longContextThreshold, open)},
           coalesce(sum(i.cost) filter (where ${open}), 0)::text as recorded_cost,
           count(*) filter (where not ${open})::integer as settled_requests,
-          coalesce(max(i.input_tokens) filter (where ${open}), 0)::text as max_input_tokens,
-          coalesce(max(i.output_tokens) filter (where ${open}), 0)::text as max_output_tokens,
-          coalesce(max(i.cache_read_tokens) filter (where ${open}), 0)::text as max_cache_read_tokens,
-          coalesce(max(i.cache_write_tokens) filter (where ${open}), 0)::text as max_cache_write_tokens
+          ${tieredMaxTokens(params.longContextThreshold, open)}
         from interactions i
         left join interaction_billing b
           on b.interaction_id = i.id and ${ENFORCE_RECEIPT}
@@ -78,16 +78,13 @@ class InteractionCostBackfillModel {
         subscriptionRequests: row.subscription_requests,
         users: row.users,
         recordedCost: Number(row.recorded_cost),
-        tokens: toTokenSums(row),
+        tokens: toTieredTokenSums(row),
         settledRequests: row.settled_requests,
-        // Each count's largest value, from whichever request: together they
-        // bound what any one request can be charged.
+        // Each count's largest value per tier, from whichever request:
+        // together they bound what any one request of that tier is charged.
         largestRequestBound: {
-          inputTokens: Number(row.max_input_tokens),
-          outputTokens: Number(row.max_output_tokens),
-          cacheReadTokens: Number(row.max_cache_read_tokens),
-          cacheWriteTokens: Number(row.max_cache_write_tokens),
-          cacheWrite1hTokens: Number(row.max_cache_write_tokens),
+          base: toBound(row, "base"),
+          long: toBound(row, "long"),
         },
       };
     });
@@ -200,12 +197,21 @@ export interface TokenSums {
   cacheWrite1hTokens: number;
 }
 
+/**
+ * Sums split by price tier: `long` holds requests whose prompt exceeds the
+ * model's long-context threshold, `base` the rest. Each tier prices linearly.
+ */
+export interface TieredTokenSums {
+  base: TokenSums;
+  long: TokenSums;
+}
+
 export interface CostHistoryDay {
   /** YYYY-MM-DD in the requested time zone. */
   day: string;
   requests: number;
   recordedCost: number;
-  tokens: TokenSums;
+  tokens: TieredTokenSums;
 }
 
 export interface CostWindowTotals {
@@ -213,10 +219,10 @@ export interface CostWindowTotals {
   subscriptionRequests: number;
   users: number;
   recordedCost: number;
-  tokens: TokenSums;
+  tokens: TieredTokenSums;
   settledRequests: number;
-  /** Token counts no single request in the window exceeds. */
-  largestRequestBound: TokenSums;
+  /** Token counts no single request of each tier in the window exceeds. */
+  largestRequestBound: TieredTokenSums;
 }
 
 interface BatchCursor {
@@ -251,16 +257,61 @@ const BATCH_STATEMENT_TIMEOUT = "15s";
 
 const ENFORCE_RECEIPT = sql`b.usage->>'mode' = 'enforce'`;
 
-/** Token sums, with the 1h cache writes clamped per row as pricing does. */
-function tokenSums(filter?: SQL): SQL {
-  const only = filter ? sql` filter (where ${filter})` : sql``;
-  return sql`
-    coalesce(sum(i.input_tokens)${only}, 0)::bigint::text as input_tokens,
-    coalesce(sum(i.output_tokens)${only}, 0)::bigint::text as output_tokens,
-    coalesce(sum(i.cache_read_tokens)${only}, 0)::bigint::text as cache_read_tokens,
-    coalesce(sum(i.cache_write_tokens)${only}, 0)::bigint::text as cache_write_tokens,
-    coalesce(sum(least(greatest(coalesce(i.cache_write_1h_tokens, 0), 0), coalesce(i.cache_write_tokens, 0)))${only}, 0)::bigint::text as cache_write_1h_tokens`;
+type Tier = keyof TieredTokenSums;
+
+/**
+ * Whether a row's prompt (input + cache read + cache write, as `promptTokens`
+ * counts it) exceeds the threshold; the SQL form of `isLongContextPrompt`.
+ */
+function longContextPrompt(threshold: number | null): SQL {
+  return threshold === null
+    ? sql`false`
+    : sql`(coalesce(i.input_tokens, 0)::bigint + coalesce(i.cache_read_tokens, 0) + coalesce(i.cache_write_tokens, 0)) > ${threshold}`;
 }
+
+function tierFilters(
+  threshold: number | null,
+  filter?: SQL,
+): Record<Tier, SQL> {
+  const long = longContextPrompt(threshold);
+  const and = (tier: SQL) => (filter ? sql`${filter} and ${tier}` : tier);
+  return { base: and(sql`not ${long}`), long: and(long) };
+}
+
+/** Token sums per tier, with the 1h cache writes clamped per row as pricing does. */
+function tieredTokenSums(threshold: number | null, filter?: SQL): SQL {
+  const tiers = tierFilters(threshold, filter);
+  return sql.join(
+    TIERS.map((tier) => {
+      const only = sql` filter (where ${tiers[tier]})`;
+      return sql`
+    coalesce(sum(i.input_tokens)${only}, 0)::bigint::text as ${sql.raw(`${tier}_input_tokens`)},
+    coalesce(sum(i.output_tokens)${only}, 0)::bigint::text as ${sql.raw(`${tier}_output_tokens`)},
+    coalesce(sum(i.cache_read_tokens)${only}, 0)::bigint::text as ${sql.raw(`${tier}_cache_read_tokens`)},
+    coalesce(sum(i.cache_write_tokens)${only}, 0)::bigint::text as ${sql.raw(`${tier}_cache_write_tokens`)},
+    coalesce(sum(least(greatest(coalesce(i.cache_write_1h_tokens, 0), 0), coalesce(i.cache_write_tokens, 0)))${only}, 0)::bigint::text as ${sql.raw(`${tier}_cache_write_1h_tokens`)}`;
+    }),
+    sql`,`,
+  );
+}
+
+/** Each token count's largest value per tier. */
+function tieredMaxTokens(threshold: number | null, filter: SQL): SQL {
+  const tiers = tierFilters(threshold, filter);
+  return sql.join(
+    TIERS.map((tier) => {
+      const only = sql` filter (where ${tiers[tier]})`;
+      return sql`
+    coalesce(max(i.input_tokens)${only}, 0)::text as ${sql.raw(`${tier}_max_input_tokens`)},
+    coalesce(max(i.output_tokens)${only}, 0)::text as ${sql.raw(`${tier}_max_output_tokens`)},
+    coalesce(max(i.cache_read_tokens)${only}, 0)::text as ${sql.raw(`${tier}_max_cache_read_tokens`)},
+    coalesce(max(i.cache_write_tokens)${only}, 0)::text as ${sql.raw(`${tier}_max_cache_write_tokens`)}`;
+    }),
+    sql`,`,
+  );
+}
+
+const TIERS: Tier[] = ["base", "long"];
 
 /**
  * The requests a backfill recomputes:
@@ -309,41 +360,54 @@ async function withStatementTimeout<T>(
   });
 }
 
-function toTokenSums(row: TokenSumColumns): TokenSums {
+function toTieredTokenSums(row: TokenSumColumns): TieredTokenSums {
+  const sums = (tier: Tier): TokenSums => ({
+    inputTokens: Number(row[`${tier}_input_tokens`]),
+    outputTokens: Number(row[`${tier}_output_tokens`]),
+    cacheReadTokens: Number(row[`${tier}_cache_read_tokens`]),
+    cacheWriteTokens: Number(row[`${tier}_cache_write_tokens`]),
+    cacheWrite1hTokens: Number(row[`${tier}_cache_write_1h_tokens`]),
+  });
+  return { base: sums("base"), long: sums("long") };
+}
+
+function toBound(row: CostWindowRow, tier: Tier): TokenSums {
   return {
-    inputTokens: Number(row.input_tokens),
-    outputTokens: Number(row.output_tokens),
-    cacheReadTokens: Number(row.cache_read_tokens),
-    cacheWriteTokens: Number(row.cache_write_tokens),
-    cacheWrite1hTokens: Number(row.cache_write_1h_tokens),
+    inputTokens: Number(row[`${tier}_max_input_tokens`]),
+    outputTokens: Number(row[`${tier}_max_output_tokens`]),
+    cacheReadTokens: Number(row[`${tier}_max_cache_read_tokens`]),
+    cacheWriteTokens: Number(row[`${tier}_max_cache_write_tokens`]),
+    cacheWrite1hTokens: Number(row[`${tier}_max_cache_write_tokens`]),
   };
 }
 
-interface TokenSumColumns extends Record<string, unknown> {
-  input_tokens: string;
-  output_tokens: string;
-  cache_read_tokens: string;
-  cache_write_tokens: string;
-  cache_write_1h_tokens: string;
-}
+type TokenColumn =
+  | "input_tokens"
+  | "output_tokens"
+  | "cache_read_tokens"
+  | "cache_write_tokens"
+  | "cache_write_1h_tokens";
 
-interface CostHistoryDayRow extends TokenSumColumns {
+type TokenSumColumns = Record<string, unknown> &
+  Record<`${Tier}_${TokenColumn}`, string>;
+
+type CostHistoryDayRow = TokenSumColumns & {
   day: string;
   requests: number;
   recorded_cost: string;
-}
+};
 
-interface CostWindowRow extends TokenSumColumns {
-  requests: number;
-  subscription_requests: number;
-  users: number;
-  recorded_cost: string;
-  settled_requests: number;
-  max_input_tokens: string;
-  max_output_tokens: string;
-  max_cache_read_tokens: string;
-  max_cache_write_tokens: string;
-}
+type CostWindowRow = TokenSumColumns &
+  Record<
+    `${Tier}_max_${Exclude<TokenColumn, "cache_write_1h_tokens">}`,
+    string
+  > & {
+    requests: number;
+    subscription_requests: number;
+    users: number;
+    recorded_cost: string;
+    settled_requests: number;
+  };
 
 interface CostBackfillDbRow extends Record<string, unknown> {
   id: string;

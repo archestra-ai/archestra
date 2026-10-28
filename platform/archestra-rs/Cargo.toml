@@ -1,5 +1,5 @@
 [workspace]
-members = ["app-runtime-core", "app-runtime-rs", "image-core", "image-rs", "sandbox-core", "sandbox-rs", "openappa-rs"]
+members = ["app-runtime-core", "app-runtime-rs", "image-core", "image-rs", "sandbox-core", "sandbox-rs", "openappa-rs", "router-core", "router-rs"]
 exclude = ["vendor/dagger-sdk-0.21.9"]
 resolver = "2"
 

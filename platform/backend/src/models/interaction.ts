@@ -76,6 +76,7 @@ import {
   normalizeInteractionResponse,
 } from "@/types";
 import type { AttributionLabels } from "@/types/attribution-label";
+import type { InsertRoutingUsage } from "@/types/auto-routing";
 import {
   type InteractionSessionPreview,
   InteractionSessionPreviewSchema,
@@ -97,6 +98,7 @@ import InteractionUserActivityModel from "./interaction-user-activity";
 import LimitModel from "./limit";
 import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import { interactionBelongsToOrganization } from "./log-organization";
+import RoutingUsageModel from "./routing-usage";
 import VirtualApiKeyModel from "./virtual-api-key";
 
 /**
@@ -314,6 +316,26 @@ function computeRequestType(
   }
 
   return "main";
+}
+
+/**
+ * Whether a stored request is one of its session's own turns, by the rules
+ * the sessions list picks its tip with: not a guardrail's call, a title or
+ * prompt-suggestion request, nor a sub-agent or side turn.
+ */
+export function isSessionMainTurn(row: {
+  request: unknown;
+  sessionSource: string | null;
+  source: string | null;
+}): boolean {
+  if (isGuardrailSource(row.source)) return false;
+  const text = JSON.stringify(row.request) ?? "";
+  if (SESSION_PREVIEW_MARKERS.some((marker) => text.includes(marker))) {
+    return false;
+  }
+  return (
+    computeRequestType(row.request, row.sessionSource, row.source) === "main"
+  );
 }
 
 const CLAUDE_SUBAGENT_SYSTEM_MARKERS = [
@@ -3496,7 +3518,12 @@ class InteractionModel {
     // stable under later agent reassignment. The agent is authoritative: when a
     // profile is present its current environment wins over any caller-supplied
     // value. Only profile-less system interactions may set it explicitly.
-    const { billingUsage, billingAttribution, ...columns } = data;
+    const {
+      billingUsage,
+      billingAttribution,
+      autoRoutingDecisionId,
+      ...columns
+    } = data;
     if (billingUsage && !billingAttribution)
       throw new Error("Billing attribution is required for settlement");
     const environmentId = billingAttribution
@@ -3596,6 +3623,11 @@ class InteractionModel {
       }
       return created;
     };
+    const routingUsage = routingUsageFor({
+      interactionId,
+      decisionId: autoRoutingDecisionId,
+      columns,
+    });
     const write = (tx?: Transaction) =>
       insertValues.userId == null
         ? insert(tx)
@@ -3642,6 +3674,8 @@ class InteractionModel {
                         "Cannot settle an interaction already written without a billing receipt",
                       );
                   }
+                  if (routingUsage)
+                    await RoutingUsageModel.record(tx, routingUsage);
                   const created = await write(tx);
                   if (claimed && data.billingMode !== "subscription") {
                     if (billingUsage.mode === "enforce") {
@@ -3668,7 +3702,12 @@ class InteractionModel {
                 }),
               ),
           })
-        : await write();
+        : routingUsage
+          ? await withDbTransaction(async (tx) => {
+              await RoutingUsageModel.record(tx, routingUsage);
+              return write(tx);
+            })
+          : await write();
     // The RETURNING row is create's public return value, so callers never
     // see envelopes. Safe for encrypted-chat rows too: this caller supplied the
     // very key that just encrypted them.
@@ -3727,6 +3766,35 @@ class InteractionModel {
 }
 
 export default InteractionModel;
+
+/** Usage an auto-routed interaction contributes to its decision; none without usage. */
+function routingUsageFor(params: {
+  interactionId: string;
+  decisionId: string | undefined;
+  columns: Pick<
+    InsertInteraction,
+    | "inputTokens"
+    | "inputTokensEstimated"
+    | "outputTokens"
+    | "cacheReadTokens"
+    | "cacheWriteTokens"
+    | "cacheWrite1hTokens"
+  >;
+}): InsertRoutingUsage | null {
+  const { interactionId, decisionId, columns } = params;
+  if (!decisionId) return null;
+  if (columns.inputTokens == null && columns.outputTokens == null) return null;
+  return {
+    interactionId,
+    decisionId,
+    input: columns.inputTokens ?? 0,
+    cacheRead: columns.cacheReadTokens ?? 0,
+    cacheWrite: columns.cacheWriteTokens ?? 0,
+    cacheWrite1h: columns.cacheWrite1hTokens ?? 0,
+    output: columns.outputTokens ?? 0,
+    estimated: columns.inputTokensEstimated ?? false,
+  };
+}
 
 /** One interaction row sampled for a session's list entry. */
 type SessionWindowRow = {

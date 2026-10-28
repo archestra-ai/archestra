@@ -66,6 +66,7 @@ import {
 import { remedyCallNeedsHumanReview } from "@/openappa/a2a-hitl-review";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
+import type { A2AOAuthExecution } from "@/routes/mcp-gateway/utils";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import type { Tool as CatalogTool } from "@/types";
 import { agentOwner } from "@/types";
@@ -80,6 +81,8 @@ export interface McpGatewayToken {
   isUserToken?: boolean;
   /** Set when the caller acts as a service account */
   serviceAccountId?: string;
+  oauthClientId?: string;
+  oauthExecution?: A2AOAuthExecution;
 }
 
 /**
@@ -268,7 +271,11 @@ export function buildMcpGatewayTool(params: {
                 chatOpsBindingId: ctx.chatOpsBindingId,
                 chatOpsThreadId: ctx.chatOpsThreadId,
                 chatOpsPinnedAgentId: ctx.chatOpsPinnedAgentId,
-                userId: ctx.userId,
+                userId:
+                  ctx.mcpGwToken?.oauthClientId &&
+                  !ctx.mcpGwToken.serviceAccountId
+                    ? undefined
+                    : ctx.userId,
                 agentId: ctx.agentId,
                 organizationId: ctx.organizationId,
                 sessionId: ctx.sessionId,
@@ -432,7 +439,10 @@ export function buildAgentDelegationTool(params: {
     agent: { id: ctx.agentId, name: ctx.agentName },
     agentId: ctx.agentId,
     organizationId: ctx.organizationId,
-    userId: ctx.userId,
+    userId:
+      ctx.mcpGwToken?.oauthClientId && !ctx.mcpGwToken.serviceAccountId
+        ? undefined
+        : ctx.userId,
     conversationId: ctx.conversationId,
     isolationKey: ctx.scopeKey,
     chatOpsBindingId: ctx.chatOpsBindingId,
@@ -981,7 +991,12 @@ interface ToolExecutionContext {
   isolationKey?: string;
   mcpGwToken: Pick<
     McpGatewayToken,
-    "tokenId" | "teamId" | "isOrganizationToken" | "serviceAccountId"
+    | "tokenId"
+    | "teamId"
+    | "isOrganizationToken"
+    | "serviceAccountId"
+    | "oauthClientId"
+    | "oauthExecution"
   > | null;
   abortSignal?: AbortSignal;
   elicitation?: ChatMcpElicitationBridge;
@@ -1119,8 +1134,10 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
         teamId: mcpGwToken.teamId,
         isOrganizationToken: mcpGwToken.isOrganizationToken,
         serviceAccountId: mcpGwToken.serviceAccountId,
+        oauthClientId: mcpGwToken.oauthClientId,
+        oauthExecution: mcpGwToken.oauthExecution,
         organizationId,
-        userId,
+        userId: mcpGwToken.oauthClientId ? undefined : userId,
         // Exact links to the LLM turn: the run's own session id and the
         // model's id for this call (the row's tool_call.id stays our own).
         ...(llmSessionId && { llmSessionId }),
@@ -1488,6 +1505,8 @@ function buildTokenAuthContext({
     isUserToken: mcpGwToken.isUserToken,
     userId: mcpGwToken.isUserToken ? userId : undefined,
     serviceAccountId: mcpGwToken.serviceAccountId,
+    oauthClientId: mcpGwToken.oauthClientId,
+    oauthExecution: mcpGwToken.oauthExecution,
     ...(llmSessionId && { llmSessionId }),
     ...(llmToolCallId && { llmToolCallId }),
   };

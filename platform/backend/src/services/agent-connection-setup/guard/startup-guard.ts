@@ -332,6 +332,16 @@ export function buildStartupGuardContext(
   };
 }
 
+/** Shared, credential-free outage context for the local launch checks. */
+export function startupGuardUnreachableWarning(
+  ctx: StartupGuardContext,
+  client: StartupGuardClient,
+): string {
+  // Only the origin is safe to display: resource paths may contain tokens.
+  const address = ctx.healthUrl ? ` at ${new URL(ctx.healthUrl).origin}` : "";
+  return `${ctx.appName} is unreachable${address}. ${client.label} may report a connection error while its ${ctx.appName} connections remain configured. Check that the instance is running and reachable (including your network or VPN), then retry. To disconnect, run ${client.binary} interactively and use [C] to reconfigure.`;
+}
+
 /**
  * The standalone guard script body (the file at ~/.archestra/…).
  *
@@ -510,6 +520,12 @@ probe_reachable() {
 # health URL (per-resource fallback).
 HEALTH_STATE=''
 
+warn_unreachable() {
+  [ "$HEALTH_STATE" = "down" ] || return 0
+  [ "$GUARD_UNINSTALLED" != "1" ] || return 0
+  printf '%s\\n' ${sh(startupGuardUnreachableWarning(ctx, client))} >&2
+}
+
 resource_down() { # $1 index; 0 = down
   if [ -z "$HEALTH_URL" ]; then
     probe_reachable "\${GUARD_URLS[$1]}" && return 1
@@ -585,6 +601,7 @@ if [ "$INTERACTIVE" = "0" ] && [ "$ARCH_DISCONNECT_ALL" = "0" ]; then
     fetch_health || HEALTH_STATE='down'
   fi
   launch_refreshed_guard "$@"
+  warn_unreachable
   i=0
   while [ "$i" -lt "\${#GUARD_URLS[@]}" ]; do
     if [ "\${GUARD_ACTIVE[$i]}" = "1" ] && resource_down "$i"; then
@@ -1165,15 +1182,14 @@ wait_for_health() {
 }
 
 # The whole pre-loader draws on the terminal's alternate screen — the same
-# way claude itself does — so nothing lingers in the scrollback after claude
-# exits. When the launch needed attention, the outcome is held briefly
-# before the alternate screen closes over it.
+# way claude itself does. Keep an unreachable-instance warning on the normal
+# screen so the client's later connection error still has useful context.
 draw_guard_screen() {
 printf '\\033[?1049h\\033[H\\033[2J'
 # Echo off for the whole interactive run: keys pressed while the probes animate
 # (before any read) would otherwise smudge the screen. Restored on exit.
 stty -echo </dev/tty 2>/dev/null || true
-trap 'stop_frame_key_reader; stty echo </dev/tty 2>/dev/null; printf "\\033[?1049l"' EXIT
+trap 'stop_frame_key_reader; stty echo </dev/tty 2>/dev/null; printf "\\033[?1049l"; warn_unreachable' EXIT
 ${guardHeader(ctx)}
 ${client.disconnectNote ? `printf '%s\\n' ${sh(client.disconnectNote)}` : ""}
 # Every row is on screen from the start: probed rows keep their glyph, the

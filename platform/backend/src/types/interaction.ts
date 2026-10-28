@@ -933,6 +933,8 @@ export const InsertInteractionSchema = createInsertSchema(
   billingUsage: z
     .custom<import("@/utils/billable-usage").PricedBillingUsage>()
     .optional(),
+  /** The auto-routing decision this request was routed by; its usage is recorded with the row. */
+  autoRoutingDecisionId: z.string().uuid().optional(),
 });
 
 export type UserInfo = z.infer<typeof UserInfoSchema>;

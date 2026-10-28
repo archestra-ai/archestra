@@ -112,7 +112,7 @@ type LimitPrefetch = {
   usageByLimitId: Map<string, LimitModelUsageRecord[]>;
   pricingByModelId: Map<string, Model>;
 };
-type LimitViolationResponse = [
+export type LimitViolationResponse = [
   refusalMessage: string,
   contentMessage: string,
   metadata?: {

@@ -1,15 +1,15 @@
 "use client";
 
-import { Check, CircleAlert, Github } from "lucide-react";
+import { Check, CircleAlert } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { notifyGithubAppSetup } from "@/app/openappa/_parts/github-app-channel";
 import { AuthCallbackLayout } from "@/components/auth-callback-layout";
-import { notifyGithubAppSetup } from "@/components/github-app-setup/github-app-window";
 import { LoadingState } from "@/components/loading";
 import { OpenAppaSolidIcon } from "@/components/openappa-icon";
 import { Button } from "@/components/ui/button";
-import { useCompleteGithubAppSetup } from "@/lib/github-app-setup.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useCompleteAppaGithubApp } from "@/lib/openappa-github-sync.query";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils/tailwind";
 export default function OpenAppaGithubAppSetupReturn() {
   const appName = useAppName();
   const started = useRef(false);
-  const complete = useCompleteGithubAppSetup();
+  const complete = useCompleteAppaGithubApp();
   const [step, setStep] = useState<"created" | "installed" | "invalid" | null>(
     null,
   );
@@ -71,15 +71,8 @@ export default function OpenAppaGithubAppSetupReturn() {
           }
         : {
             title: "GitHub App installed",
-            body: `Head back to ${appName} to finish setting it up.`,
+            body: `Head back to ${appName} to choose the policy repository.`,
           };
-  // Which setup started it, once GitHub's code is traded: its page to go back to.
-  const back =
-    complete.data?.flow === "copilot"
-      ? { href: "/llm/model-providers", label: "Open Model Providers" }
-      : complete.data?.flow === "openappa"
-        ? { href: "/settings/guardrails", label: "Open Git sync settings" }
-        : null;
 
   return (
     <AuthCallbackLayout>
@@ -90,11 +83,7 @@ export default function OpenAppaGithubAppSetupReturn() {
       >
         <div className="relative mb-6">
           <div className="flex size-16 items-center justify-center rounded-2xl bg-[#161413] shadow-sm">
-            {complete.data?.flow === "copilot" ? (
-              <Github className="size-8 text-[#EFEEEB]" aria-hidden />
-            ) : (
-              <OpenAppaSolidIcon className="w-9 text-[#EFEEEB]" />
-            )}
+            <OpenAppaSolidIcon className="w-9 text-[#EFEEEB]" />
           </div>
           {pending ? null : (
             <span
@@ -120,16 +109,14 @@ export default function OpenAppaGithubAppSetupReturn() {
             <LoadingState variant="inline" label="Saving the GitHub App" />
           ) : failed ? (
             <Button asChild>
-              <Link href={back?.href ?? "/"}>Start again in {appName}</Link>
+              <Link href="/settings/guardrails">Start again in {appName}</Link>
             </Button>
           ) : (
             <>
               <Button onClick={() => window.close()}>Close this tab</Button>
-              {back ? (
-                <Button variant="ghost" asChild>
-                  <Link href={back.href}>{back.label}</Link>
-                </Button>
-              ) : null}
+              <Button variant="ghost" asChild>
+                <Link href="/settings/guardrails">Open Git sync settings</Link>
+              </Button>
             </>
           )}
         </div>
@@ -139,7 +126,6 @@ export default function OpenAppaGithubAppSetupReturn() {
 }
 
 function finish(step: "created" | "installed") {
-  // Every setup that registers a GitHub App listens; only the open one acts.
   notifyGithubAppSetup(step);
   // Only a tab the setup dialog opened can close itself; otherwise it stays.
   window.close();

@@ -36,7 +36,6 @@ import {
 import { GithubAppChoice } from "@/components/github-app-setup/github-app-choice";
 import { GithubAppPicker } from "@/components/github-app-setup/github-app-picker";
 import {
-  onGithubAppSetup,
   openGithubWindow,
   postManifest,
 } from "@/components/github-app-setup/github-app-window";
@@ -93,6 +92,7 @@ import {
 } from "@/lib/openappa-github-sync.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
+import { onGithubAppSetup } from "./github-app-channel";
 import { OpenAppaSetupPullRequestDialog } from "./setup-pull-request-dialog";
 
 /**
@@ -342,13 +342,13 @@ export function GithubSyncSetupDialog({
   function createApp() {
     if (!github || !ready) return;
     // Open the tab inside the click so the browser does not block it.
-    const tab = openGithubWindow("about:blank");
+    const tab = openGithubWindow("about:blank", GITHUB_WINDOW);
     setWaiting("create");
     start.mutate(
-      { organization: `${github.web}/${owner}` },
+      { githubUrl: github.web, owner },
       {
         onSuccess: (manifest) => {
-          if (manifest) postManifest(manifest);
+          if (manifest) postManifest(manifest, GITHUB_WINDOW);
           else tab?.close();
         },
         onError: () => {
@@ -362,7 +362,7 @@ export function GithubSyncSetupDialog({
   function installApp() {
     if (!createdApp) return;
     install.reset();
-    openGithubWindow(createdApp.installUrl);
+    openGithubWindow(createdApp.installUrl, GITHUB_WINDOW);
     setWaiting("install");
   }
 
@@ -1662,6 +1662,8 @@ const PROJECT_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,99}$/;
 
 const TEMPLATE = { owner: "archestra-ai", name: "openappa-config" };
 const DOT_COM_API = "https://api.github.com";
+/** The tab Guardrails works with GitHub in. */
+const GITHUB_WINDOW = "openappa-github-app";
 const FRESH_NAME = "openappa-policy";
 const USABLE = new Set<RepositoryStatus>([
   "template",

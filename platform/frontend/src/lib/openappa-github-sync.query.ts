@@ -191,6 +191,22 @@ export function useStartAppaGithubApp() {
     },
   });
 }
+export function useCompleteAppaGithubApp() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      body: archestraApiTypes.CompleteAppaGithubAppData["body"],
+    ) => {
+      const { data, error } = await archestraApiSdk.completeAppaGithubApp({
+        body,
+      });
+      if (error) throw toApiError(error);
+      return data;
+    },
+    onSuccess: (data) =>
+      client.setQueryData(pendingAppaGithubAppQueryKey, data ?? null),
+  });
+}
 export function useInstallAppaGithubApp() {
   const client = useQueryClient();
   return useMutation({

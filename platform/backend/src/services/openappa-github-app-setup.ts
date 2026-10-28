@@ -22,14 +22,13 @@ import {
   deleteRuntimeCredentialDefinition,
   setRuntimeCredentialConnection,
 } from "@/services/agent-runtime/runtime-credentials";
-import {
-  githubAppManifestSetup,
-  isAppGone,
-} from "@/services/github-app-manifest-setup";
 import { resolveOpenAppaGitlabAccess } from "@/services/openappa-github-access";
 import { openappaGitlab } from "@/services/openappa-gitlab";
 import { ApiError } from "@/types";
-import type { AppaGithubRepositoryStatus } from "@/types/openappa-github-app-setup";
+import type {
+  AppaGithubRepositoryStatus,
+  PendingAppaGithubApp,
+} from "@/types/openappa-github-app-setup";
 import { decryptSecretValue, encryptSecretValue } from "@/utils/crypto";
 
 /**
@@ -43,42 +42,202 @@ import { decryptSecretValue, encryptSecretValue } from "@/utils/crypto";
  *    as an organization credential the sync can use.
  */
 class OpenAppaGithubAppSetup {
-  /** Start the shared manifest setup for the account that owns the policy repository. */
-  start(params: Owner & { organization: string }) {
-    return githubAppManifestSetup.start({ ...params, flow: "openappa" });
+  async start(params: Owner & { githubUrl: string; owner: string }) {
+    await this.assertAllowed(params);
+    const { web, api } = parseGithubUrl(params.githubUrl);
+    const account = await lookupAccount({ api, login: params.owner });
+    const state = randomBytes(32).toString("base64url");
+    const identifier = flowIdentifier(params, "start");
+    await VerificationModel.deleteByIdentifier(identifier);
+    await VerificationModel.create({
+      identifier,
+      expiresAt: new Date(Date.now() + START_TTL_MS),
+      value: JSON.stringify({
+        stateHash: hash(state),
+        owner: account.login,
+        web,
+        api,
+      }),
+    });
+    // A personal App can only be registered by that user, while signed in.
+    const url = new URL(
+      account.type === "Organization"
+        ? `${web}/organizations/${encodeURIComponent(account.login)}/settings/apps/new`
+        : `${web}/settings/apps/new`,
+    );
+    url.searchParams.set("state", state);
+    return {
+      url: url.toString(),
+      manifest: JSON.stringify(
+        manifest({
+          appName: await OrganizationModel.getAppName(),
+          // Off github.com there is no template; setup writes the workflow itself.
+          seedsWorkflow: api !== GITHUB_API_URL,
+        }),
+      ),
+    };
+  }
+
+  async complete(params: Owner & { code: string; state: string }) {
+    await this.assertAllowed(params);
+    const record = await VerificationModel.consume(
+      flowIdentifier(params, "start"),
+    );
+    const flow = record
+      ? StartFlowSchema.safeParse(JSON.parse(record.value))
+      : null;
+    if (!flow?.success || flow.data.stateHash !== hash(params.state))
+      throw new ApiError(
+        400,
+        "GitHub App setup expired or was started elsewhere. Start again.",
+      );
+    const response = await fetch(
+      `${flow.data.api}/app-manifests/${encodeURIComponent(params.code)}/conversions`,
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+        redirect: "error",
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    const app = response.ok
+      ? ConversionSchema.safeParse(await response.json())
+      : null;
+    if (!app?.success) {
+      logger.warn(
+        { status: response.status },
+        "OpenAPPA GitHub App manifest conversion failed",
+      );
+      throw new ApiError(
+        502,
+        "GitHub didn't return the new App. Start again; codes expire after an hour.",
+      );
+    }
+    if (app.data.owner.login.toLowerCase() !== flow.data.owner.toLowerCase())
+      throw new ApiError(
+        400,
+        `The App was created for ${app.data.owner.login}, not ${flow.data.owner}. Sign in to GitHub as ${flow.data.owner} and start again.`,
+      );
+    const pending: StoredPendingApp = {
+      appId: String(app.data.id),
+      name: app.data.name,
+      slug: app.data.slug,
+      clientId: app.data.client_id,
+      account: app.data.owner.login,
+      accountId: app.data.owner.id,
+      accountType: app.data.owner.type === "User" ? "User" : "Organization",
+      htmlUrl: app.data.html_url,
+      web: flow.data.web,
+      api: flow.data.api,
+      secret: encryptSecretValue({
+        privateKey: app.data.pem,
+        clientSecret: app.data.client_secret,
+      }),
+    };
+    const identifier = flowIdentifier(params, "pending");
+    await VerificationModel.deleteByIdentifier(identifier);
+    await VerificationModel.create({
+      identifier,
+      expiresAt: new Date(Date.now() + PENDING_TTL_MS),
+      value: JSON.stringify(pending),
+    });
+    return toPublic(pending);
   }
 
   /** The App created earlier in this setup, while it still awaits installation. */
-  pending(params: Owner) {
-    return githubAppManifestSetup.pending({ ...params, flow: "openappa" });
+  async pending(params: Owner): Promise<PendingAppaGithubApp | null> {
+    const pending = await this.loadPending(params);
+    if (!pending) return null;
+    // Someone may have deleted the App on GitHub before installing it.
+    try {
+      await this.fetchAsPending(pending, "/app");
+    } catch (error) {
+      if (isAppGone(error)) {
+        await this.discard(params);
+        return null;
+      }
+    }
+    return toPublic(pending);
   }
 
   /** Forgets the App created in this setup, so the next attempt starts over. */
-  discard(params: Owner) {
-    return githubAppManifestSetup.discard(params);
+  async discard(params: Owner) {
+    await VerificationModel.deleteByIdentifier(
+      flowIdentifier(params, "pending"),
+    );
   }
 
   async install(params: Owner) {
-    const found = await githubAppManifestSetup.installation({
-      ...params,
-      flow: "openappa",
+    await this.assertAllowed(params);
+    const pending = await this.loadPending(params);
+    if (!pending)
+      throw new ApiError(
+        400,
+        "GitHub App setup expired. Create the App again.",
+      );
+    const secret = SecretSchema.parse(decryptSecretValue(pending.secret));
+    let installations: Installation[];
+    try {
+      installations = await this.fetchAsPending<Installation[]>(
+        pending,
+        "/app/installations",
+      );
+    } catch (error) {
+      if (!isAppGone(error)) throw error;
+      await this.discard(params);
+      throw new ApiError(
+        410,
+        `${pending.name} no longer exists on GitHub. Create the App again.`,
+      );
+    }
+    const installation = installations.find(
+      (entry) => entry.account?.id === pending.accountId,
+    );
+    if (!installation) return { status: "waiting" as const };
+    const definition = await createRuntimeCredentialDefinition({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      definition: {
+        key: await this.freeKey(params.organizationId, pending.slug),
+        kind: "github_app",
+        name: pending.name,
+        description: `Syncs the OpenAPPA policy with ${pending.account} on GitHub.`,
+        icon: "logo:openappa",
+        allowPersonal: false,
+        allowOrganization: true,
+        githubUrl: pending.api,
+        appId: pending.appId,
+        installationId: String(installation.id),
+        githubClientId: pending.clientId,
+      },
     });
-    if (found.status === "waiting") return found;
-    const { app, installation } = found;
-    const definition = await githubAppManifestSetup.saveCredential({
-      ...params,
-      app,
-      installationId: String(installation.id),
-      description: `Syncs the OpenAPPA policy with ${app.account} on GitHub.`,
-      icon: "logo:openappa",
-      value: JSON.stringify(app.secret),
-    });
-    await githubAppManifestSetup.discard(params);
+    try {
+      await setRuntimeCredentialConnection({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        credentialId: definition.key,
+        scope: "organization",
+        value: JSON.stringify(secret),
+      });
+    } catch (error) {
+      // Without its key the credential cannot sign in; don't leave it behind.
+      await deleteRuntimeCredentialDefinition({
+        organizationId: params.organizationId,
+        key: definition.key,
+      }).catch(() => undefined);
+      throw error;
+    }
+    await VerificationModel.deleteByIdentifier(
+      flowIdentifier(params, "pending"),
+    );
     return {
       status: "installed" as const,
       id: definition.id,
       name: definition.name,
-      account: app.account,
+      account: pending.account,
     };
   }
 
@@ -236,6 +395,59 @@ class OpenAppaGithubAppSetup {
     );
     return apps.filter((app) => app !== null);
   }
+
+  private async assertAllowed(owner: Owner) {
+    if (!enterpriseTier.isOpenappaActive())
+      throw new ApiError(
+        409,
+        "Enable OpenAPPA on the server before configuring Git sync",
+      );
+    if (isByosEnabled())
+      throw new ApiError(
+        400,
+        "Creating a GitHub App requires writable secret storage. Add an existing App instead.",
+      );
+    if (
+      !(await userHasPermission(
+        owner.userId,
+        owner.organizationId,
+        "credential",
+        "create",
+      ))
+    )
+      throw new ApiError(403, "You do not have access to create credentials");
+  }
+
+  private fetchAsPending<T>(pending: StoredPendingApp, path: `/app${string}`) {
+    const secret = SecretSchema.parse(decryptSecretValue(pending.secret));
+    return fetchAsGithubApp<T>({
+      githubUrl: pending.api,
+      appId: pending.appId,
+      privateKey: secret.privateKey,
+      path,
+    });
+  }
+
+  private async loadPending(owner: Owner) {
+    const record = await VerificationModel.getByIdentifier(
+      flowIdentifier(owner, "pending"),
+    );
+    if (!record || record.expiresAt <= new Date()) return null;
+    const parsed = StoredPendingAppSchema.safeParse(JSON.parse(record.value));
+    return parsed.success ? parsed.data : null;
+  }
+
+  private async freeKey(organizationId: string, slug: string) {
+    const base = `github-app-${slug}`.slice(0, 120);
+    for (let suffix = 0; suffix < 100; suffix++) {
+      const key = suffix ? `${base}-${suffix + 1}` : base;
+      if (
+        !(await RuntimeCredentialDefinitionModel.find({ organizationId, key }))
+      )
+        return key;
+    }
+    throw new ApiError(409, "Too many credentials share this App's name");
+  }
 }
 
 export const openappaGithubAppSetup = new OpenAppaGithubAppSetup();
@@ -258,40 +470,51 @@ async function gitlabAccess(params: {
 
 // ===================== Internals =====================
 
-githubAppManifestSetup.register("openappa", {
-  allowPersonal: true,
-  organizationRequired: "",
-  authorize: assertAllowed,
-  manifest: ({ appName, api }) =>
-    // Off github.com there is no template; setup writes the workflow itself.
-    manifest({ appName, seedsWorkflow: api !== GITHUB_API_URL }),
-});
-
-async function assertAllowed(owner: Owner) {
-  if (!enterpriseTier.isOpenappaActive())
-    throw new ApiError(
-      409,
-      "Enable OpenAPPA on the server before configuring Git sync",
-    );
-  if (isByosEnabled())
-    throw new ApiError(
-      400,
-      "Creating a GitHub App requires writable secret storage. Add an existing App instead.",
-    );
-  if (
-    !(await userHasPermission(
-      owner.userId,
-      owner.organizationId,
-      "credential",
-      "create",
-    ))
-  )
-    throw new ApiError(403, "You do not have access to create credentials");
-}
-
 type Owner = { organizationId: string; userId: string };
 
 const GITHUB_API_URL = "https://api.github.com";
+const START_TTL_MS = 30 * 60_000;
+// GitHub's manifest code lives an hour; installing usually follows within minutes.
+const PENDING_TTL_MS = 60 * 60_000;
+
+const StartFlowSchema = z.object({
+  stateHash: z.string(),
+  owner: z.string(),
+  web: z.string(),
+  api: z.string(),
+});
+const ConversionSchema = z.object({
+  id: z.number().int().positive(),
+  slug: z.string().min(1),
+  name: z.string().min(1),
+  client_id: z.string().min(1),
+  client_secret: z.string().min(1),
+  pem: z.string().min(1),
+  html_url: z.string().url(),
+  owner: z.object({
+    login: z.string(),
+    id: z.number().int(),
+    type: z.string(),
+  }),
+});
+const SecretSchema = z.object({
+  privateKey: z.string().min(1),
+  clientSecret: z.string().min(1),
+});
+const StoredPendingAppSchema = z.object({
+  appId: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  clientId: z.string(),
+  account: z.string(),
+  accountId: z.number().int(),
+  accountType: z.enum(["User", "Organization"]),
+  htmlUrl: z.string(),
+  web: z.string(),
+  api: z.string(),
+  secret: z.object({ __encrypted: z.string() }),
+});
+type StoredPendingApp = z.infer<typeof StoredPendingAppSchema>;
 type Installation = {
   id: number;
   html_url?: string;
@@ -321,6 +544,98 @@ function manifest(params: { appName: string; seedsWorkflow: boolean }) {
     default_events: [],
     // No webhook: sync polls GitHub, and GitHub rejects hook URLs it cannot reach.
   };
+}
+
+function toPublic(pending: StoredPendingApp): PendingAppaGithubApp {
+  return {
+    name: pending.name,
+    slug: pending.slug,
+    account: pending.account,
+    appId: pending.appId,
+    accountUrl: `${pending.web}/${pending.account}`,
+    htmlUrl: pending.htmlUrl,
+    // GitHub's own App page: /apps/<slug> on github.com, /github-apps/<slug> on Enterprise Server.
+    installUrl: installUrl(pending),
+    settingsUrl:
+      pending.accountType === "Organization"
+        ? `${pending.web}/organizations/${encodeURIComponent(pending.account)}/settings/apps/${encodeURIComponent(pending.slug)}`
+        : `${pending.web}/settings/apps/${encodeURIComponent(pending.slug)}`,
+  };
+}
+
+/**
+ * Opens the install page on the owning account. GitHub can pre-tick
+ * repositories only by numeric ID (`suggested_target_id` + `repository_ids[]`),
+ * and a private repository's ID stays hidden until the App is installed, so
+ * the admin picks "Only select repositories" there.
+ */
+function installUrl(pending: StoredPendingApp) {
+  const url = new URL(
+    `${pending.htmlUrl.replace(/\/+$/, "")}/installations/new/permissions`,
+  );
+  url.searchParams.set("target_id", String(pending.accountId));
+  return url.toString();
+}
+
+function hash(value: string) {
+  return createHash("sha256").update(value).digest("base64url");
+}
+
+function flowIdentifier(owner: Owner, step: "start" | "pending") {
+  return `openappa-github-app:${step}:${JSON.stringify([owner.organizationId, owner.userId])}`;
+}
+
+function isAppGone(error: unknown) {
+  return (
+    error instanceof ApiError && error.internalCode === GITHUB_APP_NOT_FOUND
+  );
+}
+
+/** A GitHub address becomes its web and API bases; any path is ignored. */
+function parseGithubUrl(value: string) {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new ApiError(
+      400,
+      "Use your GitHub's address, such as https://github.com.",
+    );
+  }
+  if (!["https:", "http:"].includes(url.protocol))
+    throw new ApiError(
+      400,
+      "Use your GitHub's address, such as https://github.com.",
+    );
+  const api = getGithubApiBaseUrl(url.origin);
+  return { web: getGithubWebOrigin(api), api };
+}
+
+/** The GitHub account that will own the App, from GitHub's public profile. */
+async function lookupAccount(params: { api: string; login: string }) {
+  const { login } = params;
+  const response = await fetch(
+    `${params.api}/users/${encodeURIComponent(login)}`,
+    {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      redirect: "error",
+      signal: AbortSignal.timeout(15_000),
+    },
+  );
+  // Private Enterprise Server instances need a sign-in to read profiles.
+  if (response.status === 401 || response.status === 403)
+    return { login, type: "Organization" as const };
+  if (response.status === 404)
+    throw new ApiError(400, `GitHub has no account named ${login}.`);
+  const account = response.ok
+    ? AccountSchema.safeParse(await response.json())
+    : null;
+  if (!account?.success)
+    throw new ApiError(502, `GitHub didn't return the ${login} account.`);
+  return account.data;
 }
 
 async function listRepositories(params: {

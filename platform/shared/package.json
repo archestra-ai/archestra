@@ -33,7 +33,8 @@
     "./system-prompt-template": "./system-prompt-template.ts",
     "./test-mcp-server": "./test-mcp-server.ts",
     "./types": "./types.ts",
-    "./websocket": "./websocket.ts"
+    "./websocket": "./websocket.ts",
+    "./version": "./version.ts"
   },
   "scripts": {
     "lint": "biome check",

@@ -44,6 +44,10 @@ export default defineConfig({
         __dirname,
         "../shared/model-price.ts",
       ),
+      "@archestra/shared/version": path.resolve(
+        __dirname,
+        "../shared/version.ts",
+      ),
       "@archestra/shared": path.resolve(__dirname, "../shared/index.ts"),
     },
   },

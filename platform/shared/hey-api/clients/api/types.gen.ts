@@ -50,6 +50,9 @@ export type OpenAiChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'developer';
         name?: string;
@@ -57,6 +60,9 @@ export type OpenAiChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'system';
         name?: string;
@@ -64,8 +70,14 @@ export type OpenAiChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -75,6 +87,9 @@ export type OpenAiChatCompletionRequestInput = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -84,6 +99,9 @@ export type OpenAiChatCompletionRequestInput = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -103,6 +121,9 @@ export type OpenAiChatCompletionRequestInput = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -146,8 +167,14 @@ export type OpenAiChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -357,6 +384,13 @@ export type OpenAiChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in-memory' | '24h';
+    prompt_cache_options?: {
+        mode?: 'implicit' | 'explicit';
+        ttl?: string;
+        [key: string]: unknown;
+    };
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
@@ -1640,6 +1674,9 @@ export type CerebrasChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'developer';
         name?: string;
@@ -1647,6 +1684,9 @@ export type CerebrasChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'system';
         name?: string;
@@ -1654,8 +1694,14 @@ export type CerebrasChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -1665,6 +1711,9 @@ export type CerebrasChatCompletionRequestInput = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -1674,6 +1723,9 @@ export type CerebrasChatCompletionRequestInput = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -1693,6 +1745,9 @@ export type CerebrasChatCompletionRequestInput = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -1736,8 +1791,14 @@ export type CerebrasChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -1947,6 +2008,13 @@ export type CerebrasChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in-memory' | '24h';
+    prompt_cache_options?: {
+        mode?: 'implicit' | 'explicit';
+        ttl?: string;
+        [key: string]: unknown;
+    };
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
@@ -2154,6 +2222,9 @@ export type MistralChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'developer';
         name?: string;
@@ -2161,6 +2232,9 @@ export type MistralChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'system';
         name?: string;
@@ -2168,8 +2242,14 @@ export type MistralChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -2179,6 +2259,9 @@ export type MistralChatCompletionRequestInput = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -2188,6 +2271,9 @@ export type MistralChatCompletionRequestInput = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -2207,6 +2293,9 @@ export type MistralChatCompletionRequestInput = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -2250,8 +2339,14 @@ export type MistralChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -2461,6 +2556,13 @@ export type MistralChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in-memory' | '24h';
+    prompt_cache_options?: {
+        mode?: 'implicit' | 'explicit';
+        ttl?: string;
+        [key: string]: unknown;
+    };
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
@@ -2548,6 +2650,9 @@ export type PerplexityChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'developer';
         name?: string;
@@ -2555,6 +2660,9 @@ export type PerplexityChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'system';
         name?: string;
@@ -2562,8 +2670,14 @@ export type PerplexityChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -2573,6 +2687,9 @@ export type PerplexityChatCompletionRequestInput = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -2582,6 +2699,9 @@ export type PerplexityChatCompletionRequestInput = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -2601,6 +2721,9 @@ export type PerplexityChatCompletionRequestInput = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -2644,8 +2767,14 @@ export type PerplexityChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -2855,6 +2984,13 @@ export type PerplexityChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in-memory' | '24h';
+    prompt_cache_options?: {
+        mode?: 'implicit' | 'explicit';
+        ttl?: string;
+        [key: string]: unknown;
+    };
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
@@ -2943,6 +3079,9 @@ export type GroqChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'developer';
         name?: string;
@@ -2950,6 +3089,9 @@ export type GroqChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'system';
         name?: string;
@@ -2957,8 +3099,14 @@ export type GroqChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -2968,6 +3116,9 @@ export type GroqChatCompletionRequestInput = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -2977,6 +3128,9 @@ export type GroqChatCompletionRequestInput = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -2996,6 +3150,9 @@ export type GroqChatCompletionRequestInput = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -3039,8 +3196,14 @@ export type GroqChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -3250,6 +3413,13 @@ export type GroqChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in-memory' | '24h';
+    prompt_cache_options?: {
+        mode?: 'implicit' | 'explicit';
+        ttl?: string;
+        [key: string]: unknown;
+    };
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
@@ -3334,6 +3504,9 @@ export type OpenrouterChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             cache_control?: {
                 type: 'ephemeral';
                 ttl?: '5m' | '1h';
@@ -3349,6 +3522,9 @@ export type OpenrouterChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             cache_control?: {
                 type: 'ephemeral';
                 ttl?: '5m' | '1h';
@@ -3364,12 +3540,18 @@ export type OpenrouterChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             cache_control?: {
                 type: 'ephemeral';
                 ttl?: '5m' | '1h';
             };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -3379,6 +3561,9 @@ export type OpenrouterChatCompletionRequestInput = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -3388,6 +3573,9 @@ export type OpenrouterChatCompletionRequestInput = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -3411,6 +3599,9 @@ export type OpenrouterChatCompletionRequestInput = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             cache_control?: {
                 type: 'ephemeral';
                 ttl?: '5m' | '1h';
@@ -3462,12 +3653,18 @@ export type OpenrouterChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             cache_control?: {
                 type: 'ephemeral';
                 ttl?: '5m' | '1h';
             };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -3681,6 +3878,13 @@ export type OpenrouterChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in-memory' | '24h';
+    prompt_cache_options?: {
+        mode?: 'implicit' | 'explicit';
+        ttl?: string;
+        [key: string]: unknown;
+    };
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
@@ -4802,6 +5006,9 @@ export type DeepSeekChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'developer';
         name?: string;
@@ -4809,6 +5016,9 @@ export type DeepSeekChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'system';
         name?: string;
@@ -4816,8 +5026,14 @@ export type DeepSeekChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -4827,6 +5043,9 @@ export type DeepSeekChatCompletionRequestInput = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -4836,6 +5055,9 @@ export type DeepSeekChatCompletionRequestInput = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -4855,6 +5077,9 @@ export type DeepSeekChatCompletionRequestInput = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -4898,8 +5123,14 @@ export type DeepSeekChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -5109,6 +5340,13 @@ export type DeepSeekChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in-memory' | '24h';
+    prompt_cache_options?: {
+        mode?: 'implicit' | 'explicit';
+        ttl?: string;
+        [key: string]: unknown;
+    };
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
@@ -5197,6 +5435,9 @@ export type ArchestraChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'developer';
         name?: string;
@@ -5204,6 +5445,9 @@ export type ArchestraChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'system';
         name?: string;
@@ -5211,8 +5455,14 @@ export type ArchestraChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -5222,6 +5472,9 @@ export type ArchestraChatCompletionRequestInput = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -5231,6 +5484,9 @@ export type ArchestraChatCompletionRequestInput = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -5250,6 +5506,9 @@ export type ArchestraChatCompletionRequestInput = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -5293,8 +5552,14 @@ export type ArchestraChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -5504,6 +5769,13 @@ export type ArchestraChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in-memory' | '24h';
+    prompt_cache_options?: {
+        mode?: 'implicit' | 'explicit';
+        ttl?: string;
+        [key: string]: unknown;
+    };
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
@@ -5593,6 +5865,9 @@ export type MinimaxChatCompletionRequestInput = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -5638,6 +5913,9 @@ export type MinimaxChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'developer';
         name?: string;
@@ -5645,6 +5923,9 @@ export type MinimaxChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'system';
         name?: string;
@@ -5652,8 +5933,14 @@ export type MinimaxChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -5663,6 +5950,9 @@ export type MinimaxChatCompletionRequestInput = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -5672,6 +5962,9 @@ export type MinimaxChatCompletionRequestInput = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -5691,6 +5984,9 @@ export type MinimaxChatCompletionRequestInput = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -5734,8 +6030,14 @@ export type MinimaxChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -6029,6 +6331,9 @@ export type XaiChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'developer';
         name?: string;
@@ -6036,6 +6341,9 @@ export type XaiChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'system';
         name?: string;
@@ -6043,8 +6351,14 @@ export type XaiChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -6054,6 +6368,9 @@ export type XaiChatCompletionRequestInput = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -6063,6 +6380,9 @@ export type XaiChatCompletionRequestInput = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -6082,6 +6402,9 @@ export type XaiChatCompletionRequestInput = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -6125,8 +6448,14 @@ export type XaiChatCompletionRequestInput = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -6336,6 +6665,13 @@ export type XaiChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in-memory' | '24h';
+    prompt_cache_options?: {
+        mode?: 'implicit' | 'explicit';
+        ttl?: string;
+        [key: string]: unknown;
+    };
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
@@ -6492,6 +6828,9 @@ export type OpenAiChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'developer';
         name?: string;
@@ -6499,6 +6838,9 @@ export type OpenAiChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'system';
         name?: string;
@@ -6506,8 +6848,14 @@ export type OpenAiChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -6517,6 +6865,9 @@ export type OpenAiChatCompletionRequest = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -6526,6 +6877,9 @@ export type OpenAiChatCompletionRequest = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -6545,6 +6899,9 @@ export type OpenAiChatCompletionRequest = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -6588,8 +6945,14 @@ export type OpenAiChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -6799,6 +7162,13 @@ export type OpenAiChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in-memory' | '24h';
+    prompt_cache_options?: {
+        mode?: 'implicit' | 'explicit';
+        ttl?: string;
+        [key: string]: unknown;
+    };
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
@@ -8082,6 +8452,9 @@ export type CerebrasChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'developer';
         name?: string;
@@ -8089,6 +8462,9 @@ export type CerebrasChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'system';
         name?: string;
@@ -8096,8 +8472,14 @@ export type CerebrasChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -8107,6 +8489,9 @@ export type CerebrasChatCompletionRequest = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -8116,6 +8501,9 @@ export type CerebrasChatCompletionRequest = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -8135,6 +8523,9 @@ export type CerebrasChatCompletionRequest = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -8178,8 +8569,14 @@ export type CerebrasChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -8389,6 +8786,13 @@ export type CerebrasChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in-memory' | '24h';
+    prompt_cache_options?: {
+        mode?: 'implicit' | 'explicit';
+        ttl?: string;
+        [key: string]: unknown;
+    };
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
@@ -8596,6 +9000,9 @@ export type MistralChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'developer';
         name?: string;
@@ -8603,6 +9010,9 @@ export type MistralChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'system';
         name?: string;
@@ -8610,8 +9020,14 @@ export type MistralChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -8621,6 +9037,9 @@ export type MistralChatCompletionRequest = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -8630,6 +9049,9 @@ export type MistralChatCompletionRequest = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -8649,6 +9071,9 @@ export type MistralChatCompletionRequest = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -8692,8 +9117,14 @@ export type MistralChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -8903,6 +9334,13 @@ export type MistralChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in-memory' | '24h';
+    prompt_cache_options?: {
+        mode?: 'implicit' | 'explicit';
+        ttl?: string;
+        [key: string]: unknown;
+    };
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
@@ -8990,6 +9428,9 @@ export type PerplexityChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'developer';
         name?: string;
@@ -8997,6 +9438,9 @@ export type PerplexityChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'system';
         name?: string;
@@ -9004,8 +9448,14 @@ export type PerplexityChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -9015,6 +9465,9 @@ export type PerplexityChatCompletionRequest = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -9024,6 +9477,9 @@ export type PerplexityChatCompletionRequest = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -9043,6 +9499,9 @@ export type PerplexityChatCompletionRequest = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -9086,8 +9545,14 @@ export type PerplexityChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -9297,6 +9762,13 @@ export type PerplexityChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in-memory' | '24h';
+    prompt_cache_options?: {
+        mode?: 'implicit' | 'explicit';
+        ttl?: string;
+        [key: string]: unknown;
+    };
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
@@ -9385,6 +9857,9 @@ export type GroqChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'developer';
         name?: string;
@@ -9392,6 +9867,9 @@ export type GroqChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'system';
         name?: string;
@@ -9399,8 +9877,14 @@ export type GroqChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -9410,6 +9894,9 @@ export type GroqChatCompletionRequest = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -9419,6 +9906,9 @@ export type GroqChatCompletionRequest = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -9438,6 +9928,9 @@ export type GroqChatCompletionRequest = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -9481,8 +9974,14 @@ export type GroqChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -9692,6 +10191,13 @@ export type GroqChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in-memory' | '24h';
+    prompt_cache_options?: {
+        mode?: 'implicit' | 'explicit';
+        ttl?: string;
+        [key: string]: unknown;
+    };
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
@@ -9776,6 +10282,9 @@ export type OpenrouterChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             cache_control?: {
                 type: 'ephemeral';
                 ttl?: '5m' | '1h';
@@ -9791,6 +10300,9 @@ export type OpenrouterChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             cache_control?: {
                 type: 'ephemeral';
                 ttl?: '5m' | '1h';
@@ -9806,12 +10318,18 @@ export type OpenrouterChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             cache_control?: {
                 type: 'ephemeral';
                 ttl?: '5m' | '1h';
             };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -9821,6 +10339,9 @@ export type OpenrouterChatCompletionRequest = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -9830,6 +10351,9 @@ export type OpenrouterChatCompletionRequest = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -9853,6 +10377,9 @@ export type OpenrouterChatCompletionRequest = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             cache_control?: {
                 type: 'ephemeral';
                 ttl?: '5m' | '1h';
@@ -9904,12 +10431,18 @@ export type OpenrouterChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             cache_control?: {
                 type: 'ephemeral';
                 ttl?: '5m' | '1h';
             };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -10123,6 +10656,13 @@ export type OpenrouterChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in-memory' | '24h';
+    prompt_cache_options?: {
+        mode?: 'implicit' | 'explicit';
+        ttl?: string;
+        [key: string]: unknown;
+    };
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
@@ -11244,6 +11784,9 @@ export type DeepSeekChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'developer';
         name?: string;
@@ -11251,6 +11794,9 @@ export type DeepSeekChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'system';
         name?: string;
@@ -11258,8 +11804,14 @@ export type DeepSeekChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -11269,6 +11821,9 @@ export type DeepSeekChatCompletionRequest = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -11278,6 +11833,9 @@ export type DeepSeekChatCompletionRequest = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -11297,6 +11855,9 @@ export type DeepSeekChatCompletionRequest = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -11340,8 +11901,14 @@ export type DeepSeekChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -11551,6 +12118,13 @@ export type DeepSeekChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in-memory' | '24h';
+    prompt_cache_options?: {
+        mode?: 'implicit' | 'explicit';
+        ttl?: string;
+        [key: string]: unknown;
+    };
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
@@ -11639,6 +12213,9 @@ export type ArchestraChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'developer';
         name?: string;
@@ -11646,6 +12223,9 @@ export type ArchestraChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'system';
         name?: string;
@@ -11653,8 +12233,14 @@ export type ArchestraChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -11664,6 +12250,9 @@ export type ArchestraChatCompletionRequest = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -11673,6 +12262,9 @@ export type ArchestraChatCompletionRequest = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -11692,6 +12284,9 @@ export type ArchestraChatCompletionRequest = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -11735,8 +12330,14 @@ export type ArchestraChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -11946,6 +12547,13 @@ export type ArchestraChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in-memory' | '24h';
+    prompt_cache_options?: {
+        mode?: 'implicit' | 'explicit';
+        ttl?: string;
+        [key: string]: unknown;
+    };
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
@@ -12035,6 +12643,9 @@ export type MinimaxChatCompletionRequest = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -12080,6 +12691,9 @@ export type MinimaxChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'developer';
         name?: string;
@@ -12087,6 +12701,9 @@ export type MinimaxChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'system';
         name?: string;
@@ -12094,8 +12711,14 @@ export type MinimaxChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -12105,6 +12728,9 @@ export type MinimaxChatCompletionRequest = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -12114,6 +12740,9 @@ export type MinimaxChatCompletionRequest = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -12133,6 +12762,9 @@ export type MinimaxChatCompletionRequest = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -12176,8 +12808,14 @@ export type MinimaxChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -12471,6 +13109,9 @@ export type XaiChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'developer';
         name?: string;
@@ -12478,6 +13119,9 @@ export type XaiChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }>;
         role: 'system';
         name?: string;
@@ -12485,8 +13129,14 @@ export type XaiChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -12496,6 +13146,9 @@ export type XaiChatCompletionRequest = {
             };
         } | {
             type: 'input_audio';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
              */
@@ -12505,6 +13158,9 @@ export type XaiChatCompletionRequest = {
             };
         } | {
             type: 'file';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
              */
@@ -12524,6 +13180,9 @@ export type XaiChatCompletionRequest = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -12567,8 +13226,14 @@ export type XaiChatCompletionRequest = {
         content: string | Array<{
             type: 'text';
             text: string;
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
         } | {
             type: 'image_url';
+            prompt_cache_breakpoint?: {
+                mode: 'explicit';
+            };
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
              */
@@ -12778,6 +13443,13 @@ export type XaiChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
+    prompt_cache_key?: string | null;
+    prompt_cache_retention?: 'in-memory' | '24h';
+    prompt_cache_options?: {
+        mode?: 'implicit' | 'explicit';
+        ttl?: string;
+        [key: string]: unknown;
+    };
     reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
@@ -31337,6 +32009,13 @@ export type BedrockConverseWithDefaultAgentData = {
                         };
                     };
                 };
+                cachePoint?: unknown;
+            } | {
+                cachePoint: {
+                    type: 'default';
+                    ttl?: string;
+                };
+                toolSpec?: unknown;
             }>;
             toolChoice?: {
                 tool: {
@@ -31692,6 +32371,13 @@ export type BedrockConverseWithAgentData = {
                         };
                     };
                 };
+                cachePoint?: unknown;
+            } | {
+                cachePoint: {
+                    type: 'default';
+                    ttl?: string;
+                };
+                toolSpec?: unknown;
             }>;
             toolChoice?: {
                 tool: {
@@ -32049,6 +32735,13 @@ export type BedrockConverseStreamWithDefaultAgentData = {
                         };
                     };
                 };
+                cachePoint?: unknown;
+            } | {
+                cachePoint: {
+                    type: 'default';
+                    ttl?: string;
+                };
+                toolSpec?: unknown;
             }>;
             toolChoice?: {
                 tool: {
@@ -32259,6 +32952,13 @@ export type BedrockConverseStreamWithAgentData = {
                         };
                     };
                 };
+                cachePoint?: unknown;
+            } | {
+                cachePoint: {
+                    type: 'default';
+                    ttl?: string;
+                };
+                toolSpec?: unknown;
             }>;
             toolChoice?: {
                 tool: {
@@ -32471,6 +33171,13 @@ export type BedrockConverseWithAgentAndModelData = {
                         };
                     };
                 };
+                cachePoint?: unknown;
+            } | {
+                cachePoint: {
+                    type: 'default';
+                    ttl?: string;
+                };
+                toolSpec?: unknown;
             }>;
             toolChoice?: {
                 tool: {
@@ -32829,6 +33536,13 @@ export type BedrockConverseStreamWithAgentAndModelData = {
                         };
                     };
                 };
+                cachePoint?: unknown;
+            } | {
+                cachePoint: {
+                    type: 'default';
+                    ttl?: string;
+                };
+                toolSpec?: unknown;
             }>;
             toolChoice?: {
                 tool: {
@@ -47828,6 +48542,9 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             }>;
             role: 'developer';
             name?: string;
@@ -47835,6 +48552,9 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             }>;
             role: 'system';
             name?: string;
@@ -47842,8 +48562,14 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             } | {
                 type: 'image_url';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                  */
@@ -47853,6 +48579,9 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                 };
             } | {
                 type: 'input_audio';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
                  */
@@ -47862,6 +48591,9 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                 };
             } | {
                 type: 'file';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
                  */
@@ -47881,6 +48613,9 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
             content?: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             }> | Array<{
                 type: 'refusal';
                 refusal: string;
@@ -47924,8 +48659,14 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             } | {
                 type: 'image_url';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                  */
@@ -48135,6 +48876,13 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in-memory' | '24h';
+        prompt_cache_options?: {
+            mode?: 'implicit' | 'explicit';
+            ttl?: string;
+            [key: string]: unknown;
+        };
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
@@ -48313,6 +49061,9 @@ export type GithubCopilotChatCompletionsWithAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             }>;
             role: 'developer';
             name?: string;
@@ -48320,6 +49071,9 @@ export type GithubCopilotChatCompletionsWithAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             }>;
             role: 'system';
             name?: string;
@@ -48327,8 +49081,14 @@ export type GithubCopilotChatCompletionsWithAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             } | {
                 type: 'image_url';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                  */
@@ -48338,6 +49098,9 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                 };
             } | {
                 type: 'input_audio';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
                  */
@@ -48347,6 +49110,9 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                 };
             } | {
                 type: 'file';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
                  */
@@ -48366,6 +49132,9 @@ export type GithubCopilotChatCompletionsWithAgentData = {
             content?: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             }> | Array<{
                 type: 'refusal';
                 refusal: string;
@@ -48409,8 +49178,14 @@ export type GithubCopilotChatCompletionsWithAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             } | {
                 type: 'image_url';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                  */
@@ -48620,6 +49395,13 @@ export type GithubCopilotChatCompletionsWithAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in-memory' | '24h';
+        prompt_cache_options?: {
+            mode?: 'implicit' | 'explicit';
+            ttl?: string;
+            [key: string]: unknown;
+        };
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
@@ -52558,6 +53340,13 @@ export type GetInteractionsResponses = {
                                 };
                             };
                         };
+                        cachePoint?: unknown;
+                    } | {
+                        cachePoint: {
+                            type: 'default';
+                            ttl?: string;
+                        };
+                        toolSpec?: unknown;
                     }>;
                     toolChoice?: {
                         tool: {
@@ -52744,6 +53533,13 @@ export type GetInteractionsResponses = {
                                 };
                             };
                         };
+                        cachePoint?: unknown;
+                    } | {
+                        cachePoint: {
+                            type: 'default';
+                            ttl?: string;
+                        };
+                        toolSpec?: unknown;
                     }>;
                     toolChoice?: {
                         tool: {
@@ -54573,6 +55369,9 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     }>;
                     role: 'developer';
                     name?: string;
@@ -54580,6 +55379,9 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     }>;
                     role: 'system';
                     name?: string;
@@ -54587,8 +55389,14 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     } | {
                         type: 'image_url';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                          */
@@ -54598,6 +55406,9 @@ export type GetInteractionsResponses = {
                         };
                     } | {
                         type: 'input_audio';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
                          */
@@ -54607,6 +55418,9 @@ export type GetInteractionsResponses = {
                         };
                     } | {
                         type: 'file';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
                          */
@@ -54626,6 +55440,9 @@ export type GetInteractionsResponses = {
                     content?: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     }> | Array<{
                         type: 'refusal';
                         refusal: string;
@@ -54669,8 +55486,14 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     } | {
                         type: 'image_url';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                          */
@@ -54880,6 +55703,13 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in-memory' | '24h';
+                prompt_cache_options?: {
+                    mode?: 'implicit' | 'explicit';
+                    ttl?: string;
+                    [key: string]: unknown;
+                };
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
@@ -54899,6 +55729,9 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     }>;
                     role: 'developer';
                     name?: string;
@@ -54906,6 +55739,9 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     }>;
                     role: 'system';
                     name?: string;
@@ -54913,8 +55749,14 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     } | {
                         type: 'image_url';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                          */
@@ -54924,6 +55766,9 @@ export type GetInteractionsResponses = {
                         };
                     } | {
                         type: 'input_audio';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
                          */
@@ -54933,6 +55778,9 @@ export type GetInteractionsResponses = {
                         };
                     } | {
                         type: 'file';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
                          */
@@ -54952,6 +55800,9 @@ export type GetInteractionsResponses = {
                     content?: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     }> | Array<{
                         type: 'refusal';
                         refusal: string;
@@ -54995,8 +55846,14 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     } | {
                         type: 'image_url';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                          */
@@ -55206,6 +56063,13 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in-memory' | '24h';
+                prompt_cache_options?: {
+                    mode?: 'implicit' | 'explicit';
+                    ttl?: string;
+                    [key: string]: unknown;
+                };
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
@@ -55370,6 +56234,9 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     }>;
                     role: 'developer';
                     name?: string;
@@ -55377,6 +56244,9 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     }>;
                     role: 'system';
                     name?: string;
@@ -55384,8 +56254,14 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     } | {
                         type: 'image_url';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                          */
@@ -55395,6 +56271,9 @@ export type GetInteractionsResponses = {
                         };
                     } | {
                         type: 'input_audio';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
                          */
@@ -55404,6 +56283,9 @@ export type GetInteractionsResponses = {
                         };
                     } | {
                         type: 'file';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
                          */
@@ -55423,6 +56305,9 @@ export type GetInteractionsResponses = {
                     content?: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     }> | Array<{
                         type: 'refusal';
                         refusal: string;
@@ -55466,8 +56351,14 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     } | {
                         type: 'image_url';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                          */
@@ -55677,6 +56568,13 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in-memory' | '24h';
+                prompt_cache_options?: {
+                    mode?: 'implicit' | 'explicit';
+                    ttl?: string;
+                    [key: string]: unknown;
+                };
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
@@ -55696,6 +56594,9 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     }>;
                     role: 'developer';
                     name?: string;
@@ -55703,6 +56604,9 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     }>;
                     role: 'system';
                     name?: string;
@@ -55710,8 +56614,14 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     } | {
                         type: 'image_url';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                          */
@@ -55721,6 +56631,9 @@ export type GetInteractionsResponses = {
                         };
                     } | {
                         type: 'input_audio';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
                          */
@@ -55730,6 +56643,9 @@ export type GetInteractionsResponses = {
                         };
                     } | {
                         type: 'file';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
                          */
@@ -55749,6 +56665,9 @@ export type GetInteractionsResponses = {
                     content?: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     }> | Array<{
                         type: 'refusal';
                         refusal: string;
@@ -55792,8 +56711,14 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     } | {
                         type: 'image_url';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                          */
@@ -56003,6 +56928,13 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in-memory' | '24h';
+                prompt_cache_options?: {
+                    mode?: 'implicit' | 'explicit';
+                    ttl?: string;
+                    [key: string]: unknown;
+                };
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
@@ -56167,6 +57099,9 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     }>;
                     role: 'developer';
                     name?: string;
@@ -56174,6 +57109,9 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     }>;
                     role: 'system';
                     name?: string;
@@ -56181,8 +57119,14 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     } | {
                         type: 'image_url';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                          */
@@ -56192,6 +57136,9 @@ export type GetInteractionsResponses = {
                         };
                     } | {
                         type: 'input_audio';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
                          */
@@ -56201,6 +57148,9 @@ export type GetInteractionsResponses = {
                         };
                     } | {
                         type: 'file';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
                          */
@@ -56220,6 +57170,9 @@ export type GetInteractionsResponses = {
                     content?: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     }> | Array<{
                         type: 'refusal';
                         refusal: string;
@@ -56263,8 +57216,14 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     } | {
                         type: 'image_url';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                          */
@@ -56474,6 +57433,13 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in-memory' | '24h';
+                prompt_cache_options?: {
+                    mode?: 'implicit' | 'explicit';
+                    ttl?: string;
+                    [key: string]: unknown;
+                };
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
@@ -56493,6 +57459,9 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     }>;
                     role: 'developer';
                     name?: string;
@@ -56500,6 +57469,9 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     }>;
                     role: 'system';
                     name?: string;
@@ -56507,8 +57479,14 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     } | {
                         type: 'image_url';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                          */
@@ -56518,6 +57496,9 @@ export type GetInteractionsResponses = {
                         };
                     } | {
                         type: 'input_audio';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
                          */
@@ -56527,6 +57508,9 @@ export type GetInteractionsResponses = {
                         };
                     } | {
                         type: 'file';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
                          */
@@ -56546,6 +57530,9 @@ export type GetInteractionsResponses = {
                     content?: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     }> | Array<{
                         type: 'refusal';
                         refusal: string;
@@ -56589,8 +57576,14 @@ export type GetInteractionsResponses = {
                     content: string | Array<{
                         type: 'text';
                         text: string;
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                     } | {
                         type: 'image_url';
+                        prompt_cache_breakpoint?: {
+                            mode: 'explicit';
+                        };
                         /**
                          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                          */
@@ -56800,6 +57793,13 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
+                prompt_cache_key?: string | null;
+                prompt_cache_retention?: 'in-memory' | '24h';
+                prompt_cache_options?: {
+                    mode?: 'implicit' | 'explicit';
+                    ttl?: string;
+                    [key: string]: unknown;
+                };
                 reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
@@ -59539,6 +60539,13 @@ export type GetInteractionResponses = {
                             };
                         };
                     };
+                    cachePoint?: unknown;
+                } | {
+                    cachePoint: {
+                        type: 'default';
+                        ttl?: string;
+                    };
+                    toolSpec?: unknown;
                 }>;
                 toolChoice?: {
                     tool: {
@@ -59725,6 +60732,13 @@ export type GetInteractionResponses = {
                             };
                         };
                     };
+                    cachePoint?: unknown;
+                } | {
+                    cachePoint: {
+                        type: 'default';
+                        ttl?: string;
+                    };
+                    toolSpec?: unknown;
                 }>;
                 toolChoice?: {
                     tool: {
@@ -61554,6 +62568,9 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 }>;
                 role: 'developer';
                 name?: string;
@@ -61561,6 +62578,9 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 }>;
                 role: 'system';
                 name?: string;
@@ -61568,8 +62588,14 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 } | {
                     type: 'image_url';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                      */
@@ -61579,6 +62605,9 @@ export type GetInteractionResponses = {
                     };
                 } | {
                     type: 'input_audio';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
                      */
@@ -61588,6 +62617,9 @@ export type GetInteractionResponses = {
                     };
                 } | {
                     type: 'file';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
                      */
@@ -61607,6 +62639,9 @@ export type GetInteractionResponses = {
                 content?: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 }> | Array<{
                     type: 'refusal';
                     refusal: string;
@@ -61650,8 +62685,14 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 } | {
                     type: 'image_url';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                      */
@@ -61861,6 +62902,13 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in-memory' | '24h';
+            prompt_cache_options?: {
+                mode?: 'implicit' | 'explicit';
+                ttl?: string;
+                [key: string]: unknown;
+            };
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
@@ -61880,6 +62928,9 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 }>;
                 role: 'developer';
                 name?: string;
@@ -61887,6 +62938,9 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 }>;
                 role: 'system';
                 name?: string;
@@ -61894,8 +62948,14 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 } | {
                     type: 'image_url';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                      */
@@ -61905,6 +62965,9 @@ export type GetInteractionResponses = {
                     };
                 } | {
                     type: 'input_audio';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
                      */
@@ -61914,6 +62977,9 @@ export type GetInteractionResponses = {
                     };
                 } | {
                     type: 'file';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
                      */
@@ -61933,6 +62999,9 @@ export type GetInteractionResponses = {
                 content?: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 }> | Array<{
                     type: 'refusal';
                     refusal: string;
@@ -61976,8 +63045,14 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 } | {
                     type: 'image_url';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                      */
@@ -62187,6 +63262,13 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in-memory' | '24h';
+            prompt_cache_options?: {
+                mode?: 'implicit' | 'explicit';
+                ttl?: string;
+                [key: string]: unknown;
+            };
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
@@ -62351,6 +63433,9 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 }>;
                 role: 'developer';
                 name?: string;
@@ -62358,6 +63443,9 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 }>;
                 role: 'system';
                 name?: string;
@@ -62365,8 +63453,14 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 } | {
                     type: 'image_url';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                      */
@@ -62376,6 +63470,9 @@ export type GetInteractionResponses = {
                     };
                 } | {
                     type: 'input_audio';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
                      */
@@ -62385,6 +63482,9 @@ export type GetInteractionResponses = {
                     };
                 } | {
                     type: 'file';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
                      */
@@ -62404,6 +63504,9 @@ export type GetInteractionResponses = {
                 content?: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 }> | Array<{
                     type: 'refusal';
                     refusal: string;
@@ -62447,8 +63550,14 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 } | {
                     type: 'image_url';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                      */
@@ -62658,6 +63767,13 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in-memory' | '24h';
+            prompt_cache_options?: {
+                mode?: 'implicit' | 'explicit';
+                ttl?: string;
+                [key: string]: unknown;
+            };
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
@@ -62677,6 +63793,9 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 }>;
                 role: 'developer';
                 name?: string;
@@ -62684,6 +63803,9 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 }>;
                 role: 'system';
                 name?: string;
@@ -62691,8 +63813,14 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 } | {
                     type: 'image_url';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                      */
@@ -62702,6 +63830,9 @@ export type GetInteractionResponses = {
                     };
                 } | {
                     type: 'input_audio';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
                      */
@@ -62711,6 +63842,9 @@ export type GetInteractionResponses = {
                     };
                 } | {
                     type: 'file';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
                      */
@@ -62730,6 +63864,9 @@ export type GetInteractionResponses = {
                 content?: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 }> | Array<{
                     type: 'refusal';
                     refusal: string;
@@ -62773,8 +63910,14 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 } | {
                     type: 'image_url';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                      */
@@ -62984,6 +64127,13 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in-memory' | '24h';
+            prompt_cache_options?: {
+                mode?: 'implicit' | 'explicit';
+                ttl?: string;
+                [key: string]: unknown;
+            };
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
@@ -63148,6 +64298,9 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 }>;
                 role: 'developer';
                 name?: string;
@@ -63155,6 +64308,9 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 }>;
                 role: 'system';
                 name?: string;
@@ -63162,8 +64318,14 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 } | {
                     type: 'image_url';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                      */
@@ -63173,6 +64335,9 @@ export type GetInteractionResponses = {
                     };
                 } | {
                     type: 'input_audio';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
                      */
@@ -63182,6 +64347,9 @@ export type GetInteractionResponses = {
                     };
                 } | {
                     type: 'file';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
                      */
@@ -63201,6 +64369,9 @@ export type GetInteractionResponses = {
                 content?: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 }> | Array<{
                     type: 'refusal';
                     refusal: string;
@@ -63244,8 +64415,14 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 } | {
                     type: 'image_url';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                      */
@@ -63455,6 +64632,13 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in-memory' | '24h';
+            prompt_cache_options?: {
+                mode?: 'implicit' | 'explicit';
+                ttl?: string;
+                [key: string]: unknown;
+            };
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
@@ -63474,6 +64658,9 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 }>;
                 role: 'developer';
                 name?: string;
@@ -63481,6 +64668,9 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 }>;
                 role: 'system';
                 name?: string;
@@ -63488,8 +64678,14 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 } | {
                     type: 'image_url';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                      */
@@ -63499,6 +64695,9 @@ export type GetInteractionResponses = {
                     };
                 } | {
                     type: 'input_audio';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
                      */
@@ -63508,6 +64707,9 @@ export type GetInteractionResponses = {
                     };
                 } | {
                     type: 'file';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
                      */
@@ -63527,6 +64729,9 @@ export type GetInteractionResponses = {
                 content?: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 }> | Array<{
                     type: 'refusal';
                     refusal: string;
@@ -63570,8 +64775,14 @@ export type GetInteractionResponses = {
                 content: string | Array<{
                     type: 'text';
                     text: string;
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                 } | {
                     type: 'image_url';
+                    prompt_cache_breakpoint?: {
+                        mode: 'explicit';
+                    };
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                      */
@@ -63781,6 +64992,13 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
+            prompt_cache_key?: string | null;
+            prompt_cache_retention?: 'in-memory' | '24h';
+            prompt_cache_options?: {
+                mode?: 'implicit' | 'explicit';
+                ttl?: string;
+                [key: string]: unknown;
+            };
             reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
@@ -69002,6 +70220,9 @@ export type KimiChatCompletionsWithDefaultAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             }>;
             role: 'developer';
             name?: string;
@@ -69009,6 +70230,9 @@ export type KimiChatCompletionsWithDefaultAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             }>;
             role: 'system';
             name?: string;
@@ -69016,8 +70240,14 @@ export type KimiChatCompletionsWithDefaultAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             } | {
                 type: 'image_url';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                  */
@@ -69027,6 +70257,9 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                 };
             } | {
                 type: 'input_audio';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
                  */
@@ -69036,6 +70269,9 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                 };
             } | {
                 type: 'file';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
                  */
@@ -69055,6 +70291,9 @@ export type KimiChatCompletionsWithDefaultAgentData = {
             content?: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             }> | Array<{
                 type: 'refusal';
                 refusal: string;
@@ -69098,8 +70337,14 @@ export type KimiChatCompletionsWithDefaultAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             } | {
                 type: 'image_url';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                  */
@@ -69309,6 +70554,13 @@ export type KimiChatCompletionsWithDefaultAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in-memory' | '24h';
+        prompt_cache_options?: {
+            mode?: 'implicit' | 'explicit';
+            ttl?: string;
+            [key: string]: unknown;
+        };
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
@@ -69487,6 +70739,9 @@ export type KimiChatCompletionsWithAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             }>;
             role: 'developer';
             name?: string;
@@ -69494,6 +70749,9 @@ export type KimiChatCompletionsWithAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             }>;
             role: 'system';
             name?: string;
@@ -69501,8 +70759,14 @@ export type KimiChatCompletionsWithAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             } | {
                 type: 'image_url';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                  */
@@ -69512,6 +70776,9 @@ export type KimiChatCompletionsWithAgentData = {
                 };
             } | {
                 type: 'input_audio';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
                  */
@@ -69521,6 +70788,9 @@ export type KimiChatCompletionsWithAgentData = {
                 };
             } | {
                 type: 'file';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
                  */
@@ -69540,6 +70810,9 @@ export type KimiChatCompletionsWithAgentData = {
             content?: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             }> | Array<{
                 type: 'refusal';
                 refusal: string;
@@ -69583,8 +70856,14 @@ export type KimiChatCompletionsWithAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             } | {
                 type: 'image_url';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                  */
@@ -69794,6 +71073,13 @@ export type KimiChatCompletionsWithAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in-memory' | '24h';
+        prompt_cache_options?: {
+            mode?: 'implicit' | 'explicit';
+            ttl?: string;
+            [key: string]: unknown;
+        };
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
@@ -84940,6 +86226,9 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             }>;
             role: 'developer';
             name?: string;
@@ -84947,6 +86236,9 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             }>;
             role: 'system';
             name?: string;
@@ -84954,8 +86246,14 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             } | {
                 type: 'image_url';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                  */
@@ -84965,6 +86263,9 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                 };
             } | {
                 type: 'input_audio';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
                  */
@@ -84974,6 +86275,9 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                 };
             } | {
                 type: 'file';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
                  */
@@ -84993,6 +86297,9 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
             content?: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             }> | Array<{
                 type: 'refusal';
                 refusal: string;
@@ -85036,8 +86343,14 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             } | {
                 type: 'image_url';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                  */
@@ -85247,6 +86560,13 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in-memory' | '24h';
+        prompt_cache_options?: {
+            mode?: 'implicit' | 'explicit';
+            ttl?: string;
+            [key: string]: unknown;
+        };
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
@@ -85425,6 +86745,9 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             }>;
             role: 'developer';
             name?: string;
@@ -85432,6 +86755,9 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             }>;
             role: 'system';
             name?: string;
@@ -85439,8 +86765,14 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             } | {
                 type: 'image_url';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                  */
@@ -85450,6 +86782,9 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                 };
             } | {
                 type: 'input_audio';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
                  */
@@ -85459,6 +86794,9 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                 };
             } | {
                 type: 'file';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
                  */
@@ -85478,6 +86816,9 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
             content?: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             }> | Array<{
                 type: 'refusal';
                 refusal: string;
@@ -85521,8 +86862,14 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
             content: string | Array<{
                 type: 'text';
                 text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
             } | {
                 type: 'image_url';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
                  */
@@ -85732,6 +87079,13 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in-memory' | '24h';
+        prompt_cache_options?: {
+            mode?: 'implicit' | 'explicit';
+            ttl?: string;
+            [key: string]: unknown;
+        };
         reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {

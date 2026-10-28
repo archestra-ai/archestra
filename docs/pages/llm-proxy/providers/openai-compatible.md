@@ -2,7 +2,7 @@
 title: OpenAI-compatible Servers
 description: Connect vLLM, llama.cpp, LM Studio, or another OpenAI-compatible server
 order: 5
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -27,3 +27,9 @@ Proxy clients use `https://<archestra-host>/v1/vllm`. Through the [Model Router]
 Set [`ARCHESTRA_VLLM_BASE_URL`](/docs/reference/configuration#ARCHESTRA_VLLM_BASE_URL) to configure a default endpoint. A Base URL set on a provider key takes precedence. [`ARCHESTRA_CHAT_VLLM_API_KEY`](/docs/reference/configuration#ARCHESTRA_CHAT_VLLM_API_KEY) supplies its default credential when needed.
 
 The API key variable alone does not create a provider key at startup: the Base URL variable must also be set. If connection testing fails, check that the backend can reach the server and that `/models` is available under the configured API root.
+
+## Prompt Caching
+
+OpenAI-compatible servers manage their own prompt or prefix caches, and support depends on the server and model. The `/v1/vllm` endpoint currently does not forward explicit `prompt_cache_key`, `prompt_cache_retention`, `prompt_cache_options`, or content-block `prompt_cache_breakpoint` fields; the native OpenAI endpoint has separate request validation.
+
+Archestra does not configure the server's cache, insert cache breakpoints, or guarantee cache hits. Check your server's documentation for automatic prefix caching and the usage fields it reports.

@@ -18,9 +18,16 @@ export const ToolSpecSchema = z.object({
 });
 
 // Tool definition
-export const ToolSchema = z.object({
-  toolSpec: ToolSpecSchema,
-});
+export const ToolSchema = z.union([
+  z.object({ toolSpec: ToolSpecSchema, cachePoint: z.never().optional() }),
+  z.object({
+    cachePoint: z.object({
+      type: z.literal("default"),
+      ttl: z.string().optional(),
+    }),
+    toolSpec: z.never().optional(),
+  }),
+]);
 
 // Tool choice configurations
 // Using .passthrough() so Zod doesn't strip keys from the discriminated union.

@@ -255,16 +255,17 @@ test("workflow selects release updates and benchmark changes without loading unr
       parents: [{ sha: "f".repeat(40) }],
       files: [
         {
-          filename: "docs/pages/admin/observability/performance-benchmarks.md",
+          filename: "docs/pages/admin/performance-benchmarks.md",
           status: "modified",
         },
       ],
     },
   });
-  // Release PRs can contain benchmark code changes from before the docs commit.
+  // The coordinator owns loop prevention. A selected legacy generated head
+  // still needs a measurement artifact; skipping here would strand publication.
   f.github.paginate = async () => [{ filename: "platform/benchmarks/run.mjs" }];
   await execute(f.github, f.context, core);
-  assert.deepEqual(output, { run: "false", release: "true" });
+  assert.deepEqual(output, { run: "true", release: "true" });
   const generatedCommit = await f.github.rest.repos.getCommit();
   generatedCommit.data.files.push({
     filename: "platform/backend/src/server.ts",
@@ -399,7 +400,7 @@ test("generated docs may follow a measurement, but changed execution inputs and 
                       ? "platform/backend/src/server.ts"
                       : mode === "workflow"
                         ? ".github/workflows/llm-proxy-benchmark.yml"
-                        : "docs/pages/admin/observability/performance-benchmarks.md",
+                        : "docs/pages/admin/performance-benchmarks.md",
                   ...(mode === "renamed"
                     ? { previous_filename: "platform/backend/src/server.ts" }
                     : {}),
@@ -487,7 +488,12 @@ test("a release squashed on top of later commits still supplies its measured bas
   const trees = { [f.previousPr.head.sha]: "1".repeat(40) };
   f.github.rest.repos.getCommit = async ({ ref }) => {
     f.lookups.push(ref);
-    return { data: { sha: "e".repeat(40), commit: { tree: { sha: trees[ref] ?? "2".repeat(40) } } } };
+    return {
+      data: {
+        sha: "e".repeat(40),
+        commit: { tree: { sha: trees[ref] ?? "2".repeat(40) } },
+      },
+    };
   };
   f.github.rest.git.getTree = async ({ tree_sha }) => ({
     data: {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CacheControlSchema } from "./messages";
 
 export const FunctionDefinitionParametersSchema = z
   .record(z.string(), z.unknown())
@@ -16,6 +17,7 @@ export const FunctionDefinitionParametersSchema = z
 
 const FunctionDefinitionSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     name: z.string(),
     description: z.string().optional(),
     parameters: FunctionDefinitionParametersSchema,
@@ -27,6 +29,7 @@ const FunctionDefinitionSchema = z
 
 const FunctionToolSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     type: z.enum(["function"]),
     function: FunctionDefinitionSchema,
   })
@@ -36,6 +39,7 @@ const FunctionToolSchema = z
 
 const CustomToolSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     type: z.enum(["custom"]),
     custom: z.object({
       name: z

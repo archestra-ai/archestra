@@ -66,7 +66,6 @@ import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import type { RegistryInstallRow } from "@/models/mcp-server";
 import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import { propagateAppCatalogChange } from "@/services/apps/app-mcp-backing";
 import { CredentialAccess } from "@/services/credential-access";
@@ -85,7 +84,6 @@ import {
 import {
   assertCatalogCredentialRecovery,
   extractLocalConfigSecrets,
-  getCatalogClientSecretValues,
   upsertCatalogClientSecretValue,
 } from "@/services/mcp-catalog-secrets";
 import { refreshCatalogImage } from "@/services/mcp-image-refresh";
@@ -953,14 +951,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .array(ResourcePermissionGrantSchema)
             .max(200)
             .optional(),
-          // BYOS: External Vault path for OAuth client secret
-          oauthClientSecretVaultPath: z.string().optional(),
-          // BYOS: External Vault key for OAuth client secret
-          oauthClientSecretVaultKey: z.string().optional(),
-          // BYOS: External Vault path for local config secret env vars
-          localConfigVaultPath: z.string().optional(),
-          // BYOS: External Vault key for local config secret env vars
-          localConfigVaultKey: z.string().optional(),
         }),
         response: constructResponseSchema(SelectInternalMcpCatalogSchema),
       },
@@ -969,10 +959,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { body } = request;
       const {
         initialGrants,
-        oauthClientSecretVaultPath,
-        oauthClientSecretVaultKey,
-        localConfigVaultPath,
-        localConfigVaultKey,
+
         ...restBodyInput
       } = body;
       // Downstream secret extraction removes plaintext values from the payload
@@ -1060,38 +1047,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let clientSecretId: string | undefined;
       let localConfigSecretId: string | undefined;
 
-      // Handle OAuth client secret - either via BYOS or direct value
-      if (oauthClientSecretVaultPath && oauthClientSecretVaultKey) {
-        // BYOS flow for OAuth client secret
-        if (!isByosEnabled()) {
-          throw new ApiError(
-            400,
-            "Readonly Vault is not enabled. " +
-              "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-          );
-        }
-
-        // Store as { client_secret: "path#key" } format
-        const vaultReference = `${oauthClientSecretVaultPath}#${oauthClientSecretVaultKey}`;
-        const secret = await secretManager().createSecret(
-          { client_secret: vaultReference },
-          `${restBody.name}-oauth-client-secret-vault`,
-        );
-        clientSecretId = secret.id;
-        restBody.clientSecretId = clientSecretId;
-
-        // Remove client_secret from oauthConfig if present
-        if (restBody.oauthConfig && "client_secret" in restBody.oauthConfig) {
-          delete restBody.oauthConfig.client_secret;
-        }
-
-        logger.info(
-          "Created Readonly Vault external vault secret reference for OAuth client secret",
-        );
-      } else if (
-        restBody.oauthConfig &&
-        "client_secret" in restBody.oauthConfig
-      ) {
+      if (restBody.oauthConfig && "client_secret" in restBody.oauthConfig) {
         // Direct client_secret value
         const clientSecret = restBody.oauthConfig.client_secret;
         if (clientSecret) {
@@ -1124,40 +1080,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         delete restBody.enterpriseManagedConfig?.clientSecretOverride;
       }
 
-      // Handle local config secrets - either via Readonly Vault or direct values
-      if (localConfigVaultPath && localConfigVaultKey) {
-        // Readonly Vault flow for local config secrets
-        if (!isByosEnabled()) {
-          throw new ApiError(
-            400,
-            "Readonly Vault is not enabled. " +
-              "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-          );
-        }
-
-        // Store as { vaultKey: "path#vaultKey" } format
-        // The vault key becomes both the Archestra key and references itself in the vault
-        const vaultReference = `${localConfigVaultPath}#${localConfigVaultKey}`;
-        const secret = await secretManager().createSecret(
-          { [localConfigVaultKey]: vaultReference },
-          `${restBody.name}-local-config-env-vault`,
-        );
-        localConfigSecretId = secret.id;
-        restBody.localConfigSecretId = localConfigSecretId;
-
-        // Remove values from secret env vars in catalog template
-        if (restBody.localConfig?.environment) {
-          for (const envVar of restBody.localConfig.environment) {
-            if (envVar.type === "secret" && !envVar.promptOnInstallation) {
-              delete envVar.value;
-            }
-          }
-        }
-
-        logger.info(
-          "Created Readonly Vault external vault secret reference for local config secrets",
-        );
-      } else if (
+      if (
         restBody.localConfig?.environment ||
         restBody.localConfig?.imagePullSecrets ||
         restBody.userConfig
@@ -1474,10 +1397,15 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       await requireCatalogRead({ request, id });
+      const reader = {
+        kind: "caller",
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      } as const;
       const tools =
         request.query.view === "picker"
-          ? await ToolModel.findPickerToolsByCatalogId(id)
-          : await ToolModel.findByCatalogId(id);
+          ? await ToolModel.findPickerToolsByCatalogId(id, reader)
+          : await ToolModel.findByCatalogId(id, reader);
       return reply.send(tools);
     },
   );
@@ -1501,14 +1429,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // refused with a 400 instead of silently dropped; the unchanged
           // value is fine, since edit forms send it back.
           multitenant: z.boolean().optional(),
-          // BYOS: External Vault path for OAuth client secret
-          oauthClientSecretVaultPath: z.string().optional(),
-          // BYOS: External Vault key for OAuth client secret
-          oauthClientSecretVaultKey: z.string().optional(),
-          // BYOS: External Vault path for local config secret env vars
-          localConfigVaultPath: z.string().optional(),
-          // BYOS: External Vault key for local config secret env vars
-          localConfigVaultKey: z.string().optional(),
         }),
         response: constructResponseSchema(SelectInternalMcpCatalogSchema),
       },
@@ -1521,10 +1441,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const {
-        oauthClientSecretVaultPath,
-        oauthClientSecretVaultKey,
-        localConfigVaultPath,
-        localConfigVaultKey,
         multitenant: requestedMultitenant,
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -1702,12 +1618,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         catalogId: id,
         requested: { ...restBody, multitenant: requestedMultitenant },
         current: originalCatalogItemForGate,
-        requestedVaultReferences: {
-          oauthClientSecretVaultPath,
-          oauthClientSecretVaultKey,
-          localConfigVaultPath,
-          localConfigVaultKey,
-        },
       });
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -1838,53 +1748,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // catalog row). Track here as we write to an EXISTING bag so the
       // cascade can force the auto-restart path on rotation. Covers
       // direct OAuth client_secret, enterprise-managed client-secret
-      // override, non-prompted secret env-var values, and image-pull-
-      // secret credential passwords. The Readonly-Vault flows always
-      // delete+create the bag — that swaps the `clientSecretId` /
-      // `localConfigSecretId` on the row itself, so the normal gate
-      // already detects them; no override needed there.
+      // override, non-prompted secret env-var values, and image-pull-secret
+      // credential passwords.
       let catalogSharedSecretValuesRotated = false;
 
-      // Handle OAuth client secret - either via Readonly Vault or direct value
-      if (oauthClientSecretVaultPath && oauthClientSecretVaultKey) {
-        // Readonly Vault flow for OAuth client secret
-        if (!isByosEnabled()) {
-          throw new ApiError(
-            400,
-            "Readonly Vault is not enabled. " +
-              "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-          );
-        }
-
-        const existingSecretValues =
-          await getCatalogClientSecretValues(clientSecretId);
-
-        // Delete existing secret if any
-        if (clientSecretId) {
-          await secretManager().deleteSecret(clientSecretId);
-        }
-
-        // Store as { client_secret: "path#key" } format
-        const vaultReference = `${oauthClientSecretVaultPath}#${oauthClientSecretVaultKey}`;
-        const secret = await secretManager().createSecret(
-          { ...existingSecretValues, client_secret: vaultReference },
-          `${originalCatalogItem.name}-oauth-client-secret-vault`,
-        );
-        clientSecretId = secret.id;
-        restBody.clientSecretId = clientSecretId;
-
-        // Remove client_secret from oauthConfig if present
-        if (restBody.oauthConfig && "client_secret" in restBody.oauthConfig) {
-          delete restBody.oauthConfig.client_secret;
-        }
-
-        logger.info(
-          "Created Readonly Vault external vault secret reference for OAuth client secret",
-        );
-      } else if (
-        restBody.oauthConfig &&
-        "client_secret" in restBody.oauthConfig
-      ) {
+      if (restBody.oauthConfig && "client_secret" in restBody.oauthConfig) {
         // Direct client_secret value
         const clientSecret = restBody.oauthConfig.client_secret;
         if (clientSecret) {
@@ -1925,44 +1793,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // SPDX-SnippetEnd
 
-      // Handle local config secrets - either via Readonly Vault or direct values
-      if (localConfigVaultPath && localConfigVaultKey) {
-        // Readonly Vault flow for local config secrets
-        if (!isByosEnabled()) {
-          throw new ApiError(
-            400,
-            "Readonly Vault is not enabled. " +
-              "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-          );
-        }
-
-        // Delete existing secret if any
-        if (localConfigSecretId) {
-          await secretManager().deleteSecret(localConfigSecretId);
-        }
-
-        // Store as { vaultKey: "path#vaultKey" } format
-        const vaultReference = `${localConfigVaultPath}#${localConfigVaultKey}`;
-        const secret = await secretManager().createSecret(
-          { [localConfigVaultKey]: vaultReference },
-          `${originalCatalogItem.name}-local-config-env-vault`,
-        );
-        localConfigSecretId = secret.id;
-        restBody.localConfigSecretId = localConfigSecretId;
-
-        // Remove values from secret env vars in catalog template
-        if (restBody.localConfig?.environment) {
-          for (const envVar of restBody.localConfig.environment) {
-            if (envVar.type === "secret" && !envVar.promptOnInstallation) {
-              delete envVar.value;
-            }
-          }
-        }
-
-        logger.info(
-          "Created Readonly Vault external vault secret reference for local config secrets",
-        );
-      } else if (
+      if (
         restBody.localConfig?.environment ||
         restBody.localConfig?.imagePullSecrets ||
         restBody.userConfig

@@ -55,7 +55,7 @@ describe.each([
       const executable = path.join(bin, command);
       await writeFile(
         executable,
-        '#!/bin/sh\nprintf "%s\\n" "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/args"\n',
+        '#!/bin/sh\nif [ "$1" = "debug" ]; then touch "$ARCHESTRA_AGENT_RUNTIME_DIR/catalog-queried"; printf \'{"models":[]}\'; exit 0; fi\nprintf "%s\\n" "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/args"\n',
       );
       await chmod(executable, 0o755);
       if (state !== "missing")
@@ -122,6 +122,9 @@ describe.each([
         });
         await expect(
           readFile(path.join(runtime, "args")),
+        ).rejects.toMatchObject({ code: "ENOENT" });
+        await expect(
+          readFile(path.join(runtime, "catalog-queried")),
         ).rejects.toMatchObject({ code: "ENOENT" });
       }
     } finally {

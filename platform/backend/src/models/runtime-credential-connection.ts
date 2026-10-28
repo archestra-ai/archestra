@@ -210,6 +210,69 @@ export default class RuntimeCredentialConnectionModel {
     return roster;
   }
 
+  /**
+   * Personal connections of this GitHub account, held by current organization
+   * members, through a GitHub sign-in credential of the named GitHub.com App:
+   * who holds each, and under which credential. More than one distinct user
+   * means the account is linked to several people.
+   */
+  static async findGitHubAppConnections(params: {
+    organizationId: string;
+    githubAppCredentialKey: string;
+    githubId: GitHubUserId;
+  }): Promise<Array<{ userId: string; credentialKey: string }>> {
+    const connections = schema.runtimeCredentialConnectionsTable;
+    const userCredential = alias(
+      schema.runtimeCredentialDefinitionsTable,
+      "user_credential",
+    );
+    const githubApp = alias(
+      schema.runtimeCredentialDefinitionsTable,
+      "github_app",
+    );
+    return db
+      .selectDistinct({
+        userId: schema.membersTable.userId,
+        credentialKey: userCredential.key,
+      })
+      .from(connections)
+      .innerJoin(
+        userCredential,
+        and(
+          eq(userCredential.organizationId, connections.organizationId),
+          eq(userCredential.key, connections.credentialId),
+          eq(userCredential.kind, "github_app_user"),
+          eq(
+            userCredential.githubAppCredentialKey,
+            params.githubAppCredentialKey,
+          ),
+        ),
+      )
+      .innerJoin(
+        githubApp,
+        and(
+          eq(githubApp.organizationId, connections.organizationId),
+          eq(githubApp.key, userCredential.githubAppCredentialKey),
+          eq(githubApp.kind, "github_app"),
+          eq(githubApp.githubUrl, GITHUB_COM_API_URL),
+        ),
+      )
+      .innerJoin(
+        schema.membersTable,
+        and(
+          eq(schema.membersTable.organizationId, connections.organizationId),
+          eq(schema.membersTable.userId, connections.userId),
+        ),
+      )
+      .where(
+        and(
+          eq(connections.organizationId, params.organizationId),
+          eq(connections.scope, "personal"),
+          eq(connections.githubId, params.githubId),
+        ),
+      );
+  }
+
   static async findForAudit(params: {
     organizationId: string;
     scope: RuntimeCredentialConnectionScope;

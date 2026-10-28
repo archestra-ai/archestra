@@ -36,7 +36,6 @@ import {
   setOAuthTeamId,
   setOAuthUserConfigValues,
 } from "@/lib/auth/oauth-session";
-import { useFeature } from "@/lib/config/config.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import {
   clearPendingEnterpriseManagedInstall,
@@ -131,7 +130,6 @@ export function useCatalogInstall(opts?: {
   const installMutation = useInstallMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
   const queryClient = useQueryClient();
-  const byosEnabled = useFeature("byosEnabled");
 
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
     "remote-install" | "local-install" | "oauth" | "no-auth"
@@ -825,7 +823,6 @@ export function useCatalogInstall(opts?: {
         Object.keys(installResult.environmentValues).length > 0
       ) {
         // Security: filter out secret-type env vars from sessionStorage.
-        // In BYOS mode values are vault references (safe). In non-BYOS mode
         // actual secret values are excluded — they are handled server-side
         // via secretId or re-prompted on install.
         const secretKeys = new Set(
@@ -833,13 +830,11 @@ export function useCatalogInstall(opts?: {
             .filter((e) => e.type === "secret")
             .map((e) => e.key),
         );
-        const safeValues = installResult.isByosVault
-          ? installResult.environmentValues
-          : Object.fromEntries(
-              Object.entries(installResult.environmentValues).filter(
-                ([key]) => !secretKeys.has(key),
-              ),
-            );
+        const safeValues = Object.fromEntries(
+          Object.entries(installResult.environmentValues).filter(
+            ([key]) => !secretKeys.has(key),
+          ),
+        );
         if (Object.keys(safeValues).length > 0) {
           setOAuthEnvironmentValues(safeValues);
         }
@@ -851,13 +846,11 @@ export function useCatalogInstall(opts?: {
         setOAuthUserConfigValues({
           values: installResult.userConfigValues,
           userConfig: localServerCatalogItem.userConfig,
-          isByosVault: installResult.isByosVault,
         });
       }
       closeDialog("local-install");
       // The local-install dialog already collected the install target, so the
       // OAuth confirmation has nothing further to ask — start the flow
-      // directly (unless BYOS keeps the dialog for its storage warning).
       const directTarget = resolveFixedInstallTarget(
         installResult.scope,
         installResult.scope === "team" ? installResult.teamId : undefined,
@@ -884,7 +877,7 @@ export function useCatalogInstall(opts?: {
       catalogId: installResult.catalogId,
       environmentValues: installResult.environmentValues,
       userConfigValues: installResult.userConfigValues,
-      isByosVault: installResult.isByosVault,
+
       scope: installResult.scope,
       teamId:
         installResult.scope === "team"
@@ -985,13 +978,11 @@ export function useCatalogInstall(opts?: {
   // team already chosen), the OAuth confirmation dialog has no choices left to
   // offer and renders an empty body — so the flow should start immediately
   // instead of showing it. Returns null when the dialog is still needed:
-  // either the scope is not fixed yet, or BYOS is enabled (the dialog then
   // carries the OAuth-credentials-stored-in-database warning).
   const resolveFixedInstallTarget = (
     scope: McpServerInstallScope | undefined,
     teamId: string | null | undefined,
   ): { scope: McpServerInstallScope; teamId?: string | null } | null => {
-    if (byosEnabled) return null;
     if (!scope) return null;
     if (scope === "team") return teamId ? { scope, teamId } : null;
     return { scope };

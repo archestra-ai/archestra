@@ -79,11 +79,11 @@ export async function hiddenKnowledgeConnectorViolation(params: {
  * request, so they resolve the organization themselves rather than being
  * handed one.
  */
-export async function getHiddenMessagingChannels(): Promise<
-  Set<MessagingChannelId>
-> {
+export async function getHiddenMessagingChannels(
+  organizationId?: string,
+): Promise<Set<MessagingChannelId>> {
   const { messagingChannelOverrides } =
-    await OrganizationModel.getIntegrationOverrides(null);
+    await OrganizationModel.getIntegrationOverrides(organizationId ?? null);
   const hidden = new Set<MessagingChannelId>();
   for (const [channel, override] of Object.entries(
     messagingChannelOverrides ?? {},

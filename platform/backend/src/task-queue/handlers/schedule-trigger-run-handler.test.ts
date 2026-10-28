@@ -1,4 +1,4 @@
-import type { UIMessageChunk } from "ai";
+import type { UIMessage, UIMessageChunk } from "ai";
 import { vi } from "vitest";
 import type { executeA2AMessage } from "@/agents/a2a-executor";
 
@@ -103,6 +103,83 @@ describe("handleScheduleTriggerRunExecution", () => {
     const updated = await ScheduleTriggerRunModel.findById(run.id);
     expect(updated?.status).toBe("success");
     expect(updated?.error).toBeNull();
+  });
+
+  test("fails an unattended run when human review is unavailable and preserves its transcript", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
+    const project = await ProjectModel.create({
+      organizationId: org.id,
+      userId: actor.id,
+      name: "Guarded report",
+    });
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const trigger = await makeScheduleTrigger({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorUserId: actor.id,
+      projectId: project.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id);
+    const responseUiMessage: UIMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      parts: [
+        {
+          type: "dynamic-tool",
+          toolName: "archestra__execute_remedy_plan",
+          toolCallId: "review-call",
+          state: "output-available",
+          input: { offer_id: "review-1", plan: "Submit for approval" },
+          output: {
+            content: JSON.stringify({
+              ok: false,
+              outcome: "review_unavailable",
+              offer_id: "review-1",
+            }),
+          },
+        },
+        { type: "text", text: "Analysis completed; delivery remains blocked." },
+      ],
+    };
+    mockExecuteA2AMessage.mockResolvedValue({
+      ...A2A_RESULT,
+      responseUiMessage,
+    });
+
+    await handleScheduleTriggerRunExecution({ runId: run.id });
+
+    const updated = await ScheduleTriggerRunModel.findById(run.id);
+    expect(updated?.status).toBe("failed");
+    expect(updated?.error).toContain("review_unavailable");
+    expect(updated?.error).toContain("did not run and remains blocked");
+    expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
+    const conversationId = updated?.chatConversationId;
+    if (!conversationId) throw new Error("Missing run conversation");
+    const messages = await MessageModel.findByConversation(conversationId);
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
+    expect(messages[1].content).toEqual(responseUiMessage);
+    expect(mockRecordRunConversationError).toHaveBeenCalledWith({
+      conversationId,
+      error: expect.objectContaining({ isRetryable: false }),
+    });
+    expect(
+      await ActiveChatRunModel.findRunningByConversation(conversationId),
+    ).toBeNull();
+    // A repeated queue delivery must not reopen review or replay the agent.
+    await handleScheduleTriggerRunExecution({ runId: run.id });
+    expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
   });
 
   test("marks run as failed when trigger no longer exists", async ({

@@ -14,6 +14,7 @@ import {
   type UserSystemPromptContext,
 } from "@archestra/shared/system-prompt-template";
 import Handlebars from "handlebars";
+import { getAppSourceRef, getAppVersion } from "@/app-version";
 import logger from "@/logging";
 
 /**
@@ -49,6 +50,16 @@ Handlebars.registerHelper(SYSTEM_PROMPT_HELPER_NAMES.currentDate, () => {
 Handlebars.registerHelper(SYSTEM_PROMPT_HELPER_NAMES.currentTime, () => {
   return `${new Date().toISOString().split("T")[1].split(".")[0]} UTC`;
 });
+
+Handlebars.registerHelper(
+  SYSTEM_PROMPT_HELPER_NAMES.archestraVersion,
+  getAppVersion,
+);
+
+/** Internal to built-in prompts, so not listed among the UI's helpers. */
+const ARCHESTRA_SOURCE_REF_HELPER = "archestraSourceRef";
+export const ARCHESTRA_SOURCE_REF_EXPRESSION = `{{${ARCHESTRA_SOURCE_REF_HELPER}}}`;
+Handlebars.registerHelper(ARCHESTRA_SOURCE_REF_HELPER, getAppSourceRef);
 
 /**
  * Check if any of the given prompt strings contain Handlebars syntax (`{{`).

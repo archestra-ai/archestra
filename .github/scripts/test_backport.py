@@ -122,6 +122,18 @@ class BackportTests(unittest.TestCase):
         self.assertEqual(self.git("branch", "--show-current"), "main")
         self.assertEqual(len(self.git("worktree", "list", "--porcelain").split("worktree ")) - 1, 1)
 
+    def test_backport_inherits_configured_committer_and_preserves_source_author(self):
+        configure = Path(__file__).resolve().parents[1] / "actions/configure-git-identity/configure.sh"
+        subprocess.run(["bash", str(configure)], cwd=self.repo, check=True)
+        self.bot.run(42)
+        self.git("fetch", "origin")
+        ref = "origin/backport/release-1.3/pr-42"
+        self.assertEqual(self.git("show", "-s", "--format=%an <%ae>", ref), "Test <test@example.com>")
+        self.assertEqual(
+            self.git("show", "-s", "--format=%cn <%ce>", ref),
+            "archestra-ci[bot] <222894074+archestra-ci[bot]@users.noreply.github.com>",
+        )
+
     def test_duplicate_event_and_closed_pr_do_not_create_duplicates(self):
         self.bot.run(42)
         self.bot.pulls[0]["state"] = "closed"

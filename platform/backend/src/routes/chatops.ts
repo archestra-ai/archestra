@@ -85,6 +85,7 @@ import {
   TelegramChatOpsConfigViewSchema,
 } from "@/types";
 import {
+  type ChatOpsChannelBinding,
   ChatOpsChannelBindingResponseSchema,
   UpdateChatOpsChannelBindingSchema,
 } from "@/types/chatops-channel-binding";
@@ -1358,11 +1359,13 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(ChatOpsStatusResponseSchema),
       },
     },
-    async (_, reply) => {
+    async (request, reply) => {
       // Iterate through all provider types - automatically includes new providers
       // TypeScript exhaustiveness in getProviderInfo() ensures new providers are handled
       const providers = await Promise.all(
-        ChatOpsProviderTypeSchema.options.map(getProviderInfo),
+        ChatOpsProviderTypeSchema.options.map((provider) =>
+          getProviderInfo(provider, request.organizationId),
+        ),
       );
 
       return reply.send({ providers });
@@ -1526,6 +1529,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Binding not found");
       }
 
+      await validateJiraBindingUpdate({
+        binding: existing,
+        nextAgentId: request.body.agentId,
+      });
+
       // Validate personal agent assignment
       if (request.body.agentId) {
         await validateAgentChannelAssignment({
@@ -1594,6 +1602,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { provider, agentId, requireNoExistingBinding } = request.body;
+      if (provider === "jira")
+        throw new ApiError(
+          400,
+          "Jira uses project bindings, not direct messages",
+        );
       await assertMessagingChannelAllowed({
         organizationId: request.organizationId,
         channel: provider,
@@ -1721,6 +1734,27 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      if (
+        request.body.directMessages.some(({ provider }) => provider === "jira")
+      ) {
+        throw new ApiError(
+          400,
+          "Jira uses project bindings, not direct messages",
+        );
+      }
+      const jiraPlanBindings = await ChatOpsChannelBindingModel.findByIds(
+        request.body.updates.map(({ bindingId }) => bindingId),
+        request.organizationId,
+      );
+      for (const binding of jiraPlanBindings) {
+        const update = request.body.updates.find(
+          ({ bindingId }) => bindingId === binding.id,
+        );
+        await validateJiraBindingUpdate({
+          binding,
+          nextAgentId: update?.nextAgentId,
+        });
+      }
       const targetAgent = await AgentModel.findById(request.body.targetAgentId);
       if (
         !targetAgent ||
@@ -1861,14 +1895,17 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { ids, agentId, expectedAgentAssignments } = request.body;
+      const bindings = await ChatOpsChannelBindingModel.findByIds(
+        ids,
+        request.organizationId,
+      );
+      for (const binding of bindings) {
+        await validateJiraBindingUpdate({ binding, nextAgentId: agentId });
+      }
 
       // Validate personal agent cannot be assigned to channel bindings
       if (agentId) {
         // Fetch all bindings to check which are DMs
-        const bindings = await ChatOpsChannelBindingModel.findByIds(
-          ids,
-          request.organizationId,
-        );
         const hasChannelBindings = bindings.some((b) => !b.isDm);
         if (hasChannelBindings) {
           await validateAgentChannelAssignment({
@@ -3328,7 +3365,10 @@ const SlackAgentBotSummarySchema = z.object({
   teamId: z.string().nullable(),
 });
 
-async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
+async function getProviderInfo(
+  providerType: ChatOpsProviderType,
+  organizationId: string,
+): Promise<{
   id: ChatOpsProviderType;
   displayName: string;
   configured: boolean;
@@ -3349,6 +3389,21 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
   };
 }> {
   switch (providerType) {
+    case "jira": {
+      const stored = await ChatOpsConfigModel.getJiraConfig();
+      return {
+        id: "jira",
+        displayName: "Jira",
+        configured: Boolean(
+          stored?.organizationId === organizationId &&
+            stored.enabled &&
+            (stored.ingressMode === "poll" || stored.webhookSecret) &&
+            stored.bots.some(
+              (bot) => bot.enabled && bot.apiToken && bot.accountId,
+            ),
+        ),
+      };
+    }
     case "ms-teams": {
       const provider = chatOpsManager.getMSTeamsProvider();
       const dbConfig = await ChatOpsConfigModel.getMsTeamsConfig();
@@ -3420,6 +3475,30 @@ function maskValue(value: string): string {
   if (!value) return "";
   if (value.length <= 3) return "•".repeat(value.length);
   return value.slice(0, 3) + "•".repeat(Math.min(value.length - 3, 8));
+}
+
+async function validateJiraBindingUpdate(params: {
+  binding: ChatOpsChannelBinding;
+  nextAgentId?: string | null;
+}): Promise<void> {
+  if (params.binding.provider !== "jira") return;
+  const value = await ChatOpsConfigModel.getJiraConfig();
+  const bot = value?.bots.find((item) =>
+    params.binding.channelId.startsWith(`${item.id}:`),
+  );
+  if (
+    !value ||
+    value.organizationId !== params.binding.organizationId ||
+    value.id !== params.binding.workspaceId ||
+    !bot ||
+    params.binding.agentId !== bot.agentId ||
+    (params.nextAgentId !== undefined && params.nextAgentId !== bot.agentId)
+  ) {
+    throw new ApiError(
+      409,
+      "Jira project bindings stay pinned to their connected bot's agent. Remove the binding or connect a different Jira bot instead.",
+    );
+  }
 }
 
 /**

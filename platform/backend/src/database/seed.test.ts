@@ -11,7 +11,7 @@ import {
   OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
   SUBSCRIPTION_CREDENTIALS,
 } from "@archestra/shared";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { afterEach } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
@@ -154,7 +154,7 @@ describe("syncBuiltInAgents", () => {
     const originalToolIds = await AgentToolModel.findToolIdsByAgent(
       agent?.id ?? "",
     );
-    expect(originalToolIds).toHaveLength(30);
+    expect(originalToolIds).toHaveLength(35);
     const [resolveYellTool] = await ToolModel.findBuiltInToolIdsByNames([
       archestraMcpBranding.getToolName("resolve_openappa_yell"),
     ]);
@@ -423,7 +423,7 @@ Be neurodiversity friendly.
     ).toHaveLength(1);
     expect(
       await AgentToolModel.findToolIdsByAgent(agent?.id ?? ""),
-    ).toHaveLength(30);
+    ).toHaveLength(35);
     await syncOpenAppaConfigAgentCapabilities();
     expect(
       (
@@ -542,7 +542,7 @@ Be neurodiversity friendly.
     const managedToolIds = (
       await AgentToolModel.findToolIdsByAgent(guidedAgentId)
     ).sort();
-    expect(managedToolIds).toHaveLength(30);
+    expect(managedToolIds).toHaveLength(35);
     expect((await AgentToolModel.findToolIdsByAgent(agentId)).sort()).toEqual(
       managedToolIds,
     );
@@ -588,7 +588,7 @@ Be neurodiversity friendly.
     expect(await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames)).toEqual(
       [],
     );
-    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(27);
+    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(32);
 
     config.skillsSandbox.enabled = true;
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
@@ -598,8 +598,70 @@ Be neurodiversity friendly.
       await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames);
     expect(sandboxToolIds).toHaveLength(3);
     const assigned = await AgentToolModel.findToolIdsByAgent(agentId);
-    expect(assigned).toHaveLength(30);
+    expect(assigned).toHaveLength(35);
     expect(assigned).toEqual(expect.arrayContaining(sandboxToolIds));
+  });
+
+  test("adds the read-only scheduled run tools to an existing OpenAPPA agent", async ({
+    makeOrganization,
+  }) => {
+    config.openappa.enabled = true;
+    config.skillsSandbox.enabled = true;
+    const organization = await makeOrganization();
+    await syncBuiltInSkills();
+    await syncBuiltInAgents();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await syncOpenAppaConfigAgentCapabilities();
+    const agentId =
+      (
+        await AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+          organization.id,
+        )
+      )?.id ?? "";
+    const scheduleToolIds = await ToolModel.findBuiltInToolIdsByNames(
+      (
+        [
+          "list_schedule_triggers",
+          "get_schedule_trigger",
+          "list_schedule_trigger_runs",
+          "get_schedule_trigger_run",
+          "get_schedule_trigger_run_transcript",
+        ] as const
+      ).map((shortName) => archestraMcpBranding.getToolName(shortName)),
+    );
+    expect(scheduleToolIds).toHaveLength(5);
+    const current = await AgentToolModel.findToolIdsByAgent(agentId);
+    // An agent provisioned before these tools existed.
+    await db
+      .delete(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          inArray(schema.agentToolsTable.toolId, scheduleToolIds),
+        ),
+      );
+
+    await syncOpenAppaConfigAgentCapabilities();
+    await syncOpenAppaConfigAgentCapabilities();
+
+    const assigned = await AgentToolModel.findToolIdsByAgent(agentId);
+    expect(assigned.sort()).toEqual(current.sort());
+    expect(assigned).toEqual(expect.arrayContaining(scheduleToolIds));
+    const writeToolIds = await ToolModel.findBuiltInToolIdsByNames(
+      (
+        [
+          "create_schedule_trigger",
+          "update_schedule_trigger",
+          "delete_schedule_trigger",
+          "enable_schedule_trigger",
+          "disable_schedule_trigger",
+          "run_schedule_trigger_now",
+        ] as const
+      ).map((shortName) => archestraMcpBranding.getToolName(shortName)),
+    );
+    expect(writeToolIds).toHaveLength(6);
+    expect(assigned.filter((id) => writeToolIds.includes(id))).toEqual([]);
   });
 
   test("leaves the OpenAPPA agent's tools alone while OpenAPPA is disabled", async ({

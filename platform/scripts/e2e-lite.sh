@@ -43,6 +43,7 @@ PLATFORM_DIR="$(dirname "${SCRIPT_DIR}")"
 REPO_ROOT="$(dirname "${PLATFORM_DIR}")"
 
 REGISTRY="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public"
+CI_REGISTRY="ghcr.io/archestra-ai/ci"
 MCP_SERVER_BASE_IMAGE="${MCP_SERVER_BASE_IMAGE:-${REGISTRY}/mcp-server-base:latest}"
 
 NETWORK="archestra-lite-net"
@@ -95,7 +96,7 @@ resolve_platform_image() {
       .github/scripts/e2e-image-input-hash.sh)" ]]; then
     local input_hash image
     input_hash=$(cd "${REPO_ROOT}" && bash .github/scripts/e2e-image-input-hash.sh platform)
-    image="${REGISTRY}/platform:input-${input_hash}-slim"
+    image="${CI_REGISTRY}/platform:input-${input_hash}-slim"
     if pull_public "${image}" 2> /dev/null; then
       echo "${image}"
       return

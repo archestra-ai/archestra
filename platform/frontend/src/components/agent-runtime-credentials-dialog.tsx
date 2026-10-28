@@ -6,7 +6,6 @@ import { type ReactNode, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { AgentRuntimeConfig } from "@/components/agent-runtime-fields";
 import { ClaudeCodeAccount } from "@/components/claude-code-account";
-import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
 
 import { GitHubConnectButton } from "@/components/github-connect-button";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -121,12 +120,12 @@ export function AgentRuntimeCredentialsDialog({
   const { data: canManageOrganization, isPending: permissionsPending } =
     useHasPermissions({ organizationSettings: ["update"] });
   const config = useConfig();
-  const byosEnabled = config.data?.features.byosEnabled;
+
   const save = useSetMissingAgentRuntimeCredentials(agentId);
   const form = useForm<{ values: Record<string, string> }>({
     defaultValues: { values: {} },
   });
-  const [externalKey, setExternalKey] = useState<string | null>(null);
+
   const [failedKeys, setFailedKeys] = useState<string[]>([]);
   const configuredKeys = new Set(preflight.data?.configured ?? []);
   const missingKeys = new Set(
@@ -277,17 +276,7 @@ export function AgentRuntimeCredentialsDialog({
               </div>
             )}
             <FormControl>
-              {byosEnabled ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={cn(!single && "h-8")}
-                  disabled={save.isPending}
-                  onClick={() => setExternalKey(credential.key)}
-                >
-                  {field.value ? "Change Vault secret" : "Select Vault secret"}
-                </Button>
-              ) : (
+              {
                 <SecretInput
                   {...field}
                   className={cn(!single && "h-8")}
@@ -297,7 +286,7 @@ export function AgentRuntimeCredentialsDialog({
                   revealable
                   placeholder="Paste secret"
                 />
-              )}
+              }
             </FormControl>
             <FormMessage />
             {failedKeys.includes(credential.key) && (
@@ -480,23 +469,6 @@ export function AgentRuntimeCredentialsDialog({
         <p role="alert" className="mt-4 text-sm text-muted-foreground">
           {preflight.data.incompatible}
         </p>
-      )}
-      {externalKey && (
-        <ExternalSecretReferenceDialog
-          fieldLabel={
-            declarations.find(({ key }) => key === externalKey)?.label ??
-            externalKey
-          }
-          initialValue={form.getValues(`values.${externalKey}`)}
-          onClose={() => setExternalKey(null)}
-          onConfirm={(reference) => {
-            form.setValue(`values.${externalKey}`, reference, {
-              shouldDirty: true,
-              shouldValidate: true,
-            });
-            setExternalKey(null);
-          }}
-        />
       )}
     </StandardFormDialog>
   );

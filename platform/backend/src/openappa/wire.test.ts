@@ -647,6 +647,112 @@ describe("denial notice restoration", () => {
     });
   });
 
+  test("restores a Bedrock Converse denial to the original call, leaving signed reasoning untouched", () => {
+    const reasoning = {
+      reasoningContent: {
+        reasoningText: { text: "read the policy first", signature: "sig-abc" },
+      },
+    };
+    const body = {
+      toolConfig: {
+        tools: [
+          { toolSpec: { name: NOTICE } },
+          { toolSpec: { name: CONTROL } },
+          { toolSpec: { name: "Bash" } },
+        ],
+      },
+      messages: [
+        { role: "user", content: [{ text: "clean the build" }] },
+        {
+          role: "assistant",
+          content: [
+            reasoning,
+            {
+              toolUse: {
+                toolUseId: "tooluse_1",
+                name: NOTICE,
+                input: notice("Bash", { command: "rm -rf build" }, "tooluse_1"),
+              },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              toolResult: {
+                toolUseId: "tooluse_1",
+                content: [{ text: "whatever the client recorded" }],
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: "bedrock:converse",
+      identity,
+    });
+
+    expect(prepared.restoredNoticeCallIds).toEqual(new Set(["tooluse_1"]));
+    const assistant = body.messages[1].content as Record<string, unknown>[];
+    expect(assistant[0]).toBe(reasoning);
+    expect(assistant[1]).toEqual({
+      toolUse: {
+        toolUseId: "tooluse_1",
+        name: "Bash",
+        input: { command: "rm -rf build" },
+      },
+    });
+    expect(body.messages[2].content[0]).toEqual({
+      toolResult: {
+        toolUseId: "tooluse_1",
+        content: [{ text: "[appa] Blocked: this call cannot run yet." }],
+        status: "error",
+      },
+    });
+  });
+
+  test("answers an unanswered Bedrock Converse notice with its ruling, first in the next user message", () => {
+    const body = {
+      toolConfig: { tools: [{ toolSpec: { name: NOTICE } }] },
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            {
+              toolUse: {
+                toolUseId: "tooluse_1",
+                name: NOTICE,
+                input: notice("Bash", { command: "ls" }, "tooluse_1"),
+              },
+            },
+          ],
+        },
+        { role: "user", content: [{ text: "go on" }] },
+      ],
+    };
+
+    prepareAppaRequest({
+      body,
+      interactionType: "bedrock:converse",
+      identity,
+    });
+
+    expect(body.messages[1].content).toEqual([
+      {
+        toolResult: {
+          toolUseId: "tooluse_1",
+          content: [{ text: "[appa] Blocked: this call cannot run yet." }],
+          status: "error",
+        },
+      },
+      { text: "go on" },
+    ]);
+  });
+
   test("restores the same bytes on every request, so the turn stays cacheable", () => {
     const build = () => ({
       tools: [{ name: NOTICE }, { name: CONTROL }],
@@ -2952,6 +3058,145 @@ describe("APPA request preflight", () => {
     ]);
   });
 
+  test("governs Claude Code 2.1.310's inline remedy declarations, and hides only the notice's from the provider", async () => {
+    // Claude Code loads the gateway tools mid-conversation in a system message
+    // of tool_addition blocks, while `tools` keeps only its deferred set.
+    const definition = (name: string, advertisedName: string) => ({
+      ...attestedTool({ name, advertisedName }),
+      input_schema: { type: "object", properties: {} },
+    });
+    const addition = (tool: Record<string, unknown>) => ({
+      type: "tool_addition",
+      tool: { type: "tool_definition", definition: tool },
+    });
+    const announcement = {
+      type: "text",
+      text: "The following tools just became available",
+    };
+    const body = {
+      tools: [
+        { name: "Bash" },
+        { name: "ToolSearch" },
+        { name: "DeferredToolPlaceholder", defer_loading: true },
+      ],
+      messages: [
+        { role: "user", content: "hi" },
+        {
+          role: "system",
+          content: [
+            announcement,
+            addition(definition(CONTROL, ADVERTISED_CONTROL)),
+          ],
+        },
+        {
+          role: "system",
+          content: [addition(definition(NOTICE, ADVERTISED_NOTICE))],
+        },
+        { role: "user", content: "go on" },
+      ],
+    };
+
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      identity: await attestedIdentity(body),
+    });
+
+    expect(prepared.tools).toMatchObject({
+      control: { name: CONTROL },
+      notice: { name: NOTICE },
+    });
+    expect(prepared.defersTools).toBe(true);
+    expect(prepared.heldTools ?? []).toEqual([]);
+    expect(body.messages).toEqual([
+      { role: "user", content: "hi" },
+      {
+        role: "system",
+        content: [
+          announcement,
+          addition({
+            name: CONTROL,
+            input_schema: { type: "object", properties: {} },
+          }),
+        ],
+      },
+      { role: "user", content: "go on" },
+    ]);
+  });
+
+  describe("Anthropic inline tool changes", () => {
+    const addition = (name: string, description?: string) => ({
+      type: "tool_addition",
+      tool: {
+        type: "tool_definition",
+        definition: {
+          name,
+          ...(description ? { description } : {}),
+          input_schema: { type: "object" },
+        },
+      },
+    });
+    const removal = (name: string) => ({
+      type: "tool_removal",
+      tool: { type: "tool_reference", name },
+    });
+    const declared = (changes: unknown[]) =>
+      declaredToolEntries({
+        tools: [{ name: "Bash" }],
+        messages: changes.map((change) => ({
+          role: "system",
+          content: [change],
+        })),
+      }).map((entry) => entry.name);
+
+    test.each([
+      {
+        case: "an addition declares",
+        changes: [addition("probe")],
+        names: ["Bash", "probe"],
+      },
+      {
+        case: "a later removal takes it back",
+        changes: [addition("probe"), removal("probe")],
+        names: ["Bash"],
+      },
+      {
+        case: "a re-addition declares it once",
+        changes: [addition("probe"), removal("probe"), addition("probe")],
+        names: ["Bash", "probe"],
+      },
+      {
+        case: "a removal leaves a tools declaration declared",
+        changes: [removal("Bash")],
+        names: ["Bash"],
+      },
+    ])("$case", ({ changes, names }) => {
+      expect(declared(changes)).toEqual(names);
+    });
+
+    test("a removed attested tool verifies no declaration", async () => {
+      const name = "mcp__archestra__github__apply";
+      const attested = () =>
+        addition(
+          name,
+          attestedTool({ name, advertisedName: "github__apply" }).description,
+        );
+      const verifiedNames = async (changes: unknown[]) =>
+        (
+          await attestedIdentity({
+            tools: [{ name: "Bash" }],
+            messages: changes.map((change) => ({
+              role: "system",
+              content: [change],
+            })),
+          })
+        ).verified.map((declaration) => declaration.name);
+
+      expect(await verifiedNames([attested()])).toEqual([name]);
+      expect(await verifiedNames([attested(), removal(name)])).toEqual([]);
+    });
+  });
+
   test("keeps tool_reference results of a Claude Code ToolSearch in history untouched", () => {
     // Claude Code 2.1.285 after a search: the loaded tool is declared with
     // `defer_loading` and the search result holds a `tool_reference` block.
@@ -4297,32 +4542,6 @@ describe("provider-bound sanitizer", () => {
       },
     },
     {
-      label: "a Bedrock Converse notice proven by a record naming its own call",
-      interactionType: "bedrock:converse",
-      identity: undefined,
-      args: {
-        ...buildNoticeArguments({
-          id: "tooluse_1",
-          tool: "read_file",
-          arguments: { path: "/etc/hosts" },
-          result: RULING,
-        }),
-        offers: [legacyOffer()],
-      },
-      build: (args: NoticeArgs) => {
-        const toolUse: Record<string, unknown> = {
-          toolUseId: "tooluse_1",
-          name: NOTICE,
-          input: args,
-        };
-        return {
-          body: { messages: [{ role: "assistant", content: [{ toolUse }] }] },
-          holder: toolUse,
-          key: "input",
-        };
-      },
-    },
-    {
       label: "a Gemini notice without a call id, named by Chat's identity",
       interactionType: "gemini:generateContent",
       identity: chatIdentity,
@@ -4375,6 +4594,54 @@ describe("provider-bound sanitizer", () => {
     const sent = withJsonTextDecoded(body);
     expect(sent).not.toContain('"offers"');
     expect(sent).not.toContain('"notice"');
+  });
+
+  test("restores a Bedrock Converse notice proven by a record naming its own call", () => {
+    const toolUse: Record<string, unknown> = {
+      toolUseId: "tooluse_1",
+      name: NOTICE,
+      input: {
+        ...buildNoticeArguments({
+          id: "tooluse_1",
+          tool: "read_file",
+          arguments: { path: "/etc/hosts" },
+          result: RULING,
+        }),
+        offers: [legacyOffer()],
+      },
+    };
+    const body = {
+      messages: [{ role: "assistant", content: [{ toolUse }] }],
+    };
+
+    sanitizeProviderBoundRequest({ body, interactionType: "bedrock:converse" });
+
+    expect(body.messages).toEqual([
+      {
+        role: "assistant",
+        content: [
+          {
+            toolUse: {
+              toolUseId: "tooluse_1",
+              name: "read_file",
+              input: { path: "/etc/hosts" },
+            },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            toolResult: {
+              toolUseId: "tooluse_1",
+              content: [{ text: RULING }],
+              status: "error",
+            },
+          },
+        ],
+      },
+    ]);
   });
 
   test("puts a remedy call back to the model's bytes, or drops a receipt its call no longer matches", () => {

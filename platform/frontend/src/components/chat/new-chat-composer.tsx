@@ -12,7 +12,7 @@ import {
   runtimePreflightDisabledReason,
   useAgentRuntimePreflight,
 } from "@/lib/agent-runtime.query";
-import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
+import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state";
 import { useFeature } from "@/lib/config/config.query";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";

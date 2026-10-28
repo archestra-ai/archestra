@@ -65,6 +65,8 @@ import {
   githubCopilotAdapterFactory,
   githubCopilotResponsesAdapterFactory,
   groqAdapterFactory,
+  kimiAdapterFactory,
+  kimiCodeAdapterFactory,
   minimaxAdapterFactory,
   mistralAdapterFactory,
   ollamaAdapterFactory,
@@ -323,6 +325,8 @@ async function linkAllProviderModelsToApiKey(
 const ROUTABLE_PROVIDER_CASES: Array<{
   provider: SupportedProvider;
   modelId: string;
+  /** `false` when the router serves the provider over Chat Completions only. */
+  responses?: false;
 }> = [
   { provider: "anthropic", modelId: "claude-opus-4-6-20250918" },
   { provider: "azure", modelId: "gpt-4.1" },
@@ -336,6 +340,11 @@ const ROUTABLE_PROVIDER_CASES: Array<{
   // separately below.
   { provider: "github-copilot", modelId: "gpt-4o" },
   { provider: "groq", modelId: "llama-3.1-8b-instant" },
+  // Kimi's platform and Kimi Code plan ids, served over the same chat
+  // completions wire. The Responses translation cannot replay Kimi's
+  // reasoning, so that surface is refused; see the dedicated test below.
+  { provider: "kimi", modelId: "kimi-k3.1-pro", responses: false },
+  { provider: "kimi-code", modelId: "k3.1-pro", responses: false },
   { provider: "minimax", modelId: "MiniMax-M1" },
   { provider: "mistral", modelId: "mistral-large-latest" },
   { provider: "ollama", modelId: "llama3.1" },
@@ -618,6 +627,8 @@ describe("model router proxy routes", () => {
       cerebrasAdapterFactory,
       deepseekAdapterFactory,
       groqAdapterFactory,
+      kimiAdapterFactory,
+      kimiCodeAdapterFactory,
       minimaxAdapterFactory,
       mistralAdapterFactory,
       ollamaAdapterFactory,
@@ -669,7 +680,7 @@ describe("model router proxy routes", () => {
     vi.restoreAllMocks();
   });
 
-  for (const { provider, modelId } of ROUTABLE_PROVIDER_CASES) {
+  for (const { provider, modelId, responses } of ROUTABLE_PROVIDER_CASES) {
     test(`routes ${provider} models through chat completions`, async ({
       makeAgent,
       makeOrganization,
@@ -714,57 +725,59 @@ describe("model router proxy routes", () => {
       });
     });
 
-    test(`routes ${provider} models through responses`, async ({
-      makeAgent,
-      makeOrganization,
-      makeUser,
-      makeSecret,
-      makeLlmProviderApiKey,
-    }) => {
-      const app = createFastifyApp();
-      await app.register(modelRouterProxyRoutes);
-      await upsertModel({ provider, modelId });
-      const organization = await makeOrganization();
-      const { value } = await createModelRouterVirtualKey({
-        organizationId: organization.id,
-        provider,
+    if (responses !== false) {
+      test(`routes ${provider} models through responses`, async ({
+        makeAgent,
+        makeOrganization,
         makeUser,
         makeSecret,
         makeLlmProviderApiKey,
-      });
-      const agent = await makeAgent({
-        organizationId: organization.id,
-        name: `${provider} Model Router Agent`,
-        agentType: "llm_proxy",
-      });
+      }) => {
+        const app = createFastifyApp();
+        await app.register(modelRouterProxyRoutes);
+        await upsertModel({ provider, modelId });
+        const organization = await makeOrganization();
+        const { value } = await createModelRouterVirtualKey({
+          organizationId: organization.id,
+          provider,
+          makeUser,
+          makeSecret,
+          makeLlmProviderApiKey,
+        });
+        const agent = await makeAgent({
+          organizationId: organization.id,
+          name: `${provider} Model Router Agent`,
+          agentType: "llm_proxy",
+        });
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/v1/model-router/${agent.id}/responses`,
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${value}`,
-          "user-agent": "test-client",
-        },
-        payload: {
-          model: `${provider}:${modelId}`,
-          input: "Hello",
-        },
-      });
+        const response = await app.inject({
+          method: "POST",
+          url: `/v1/model-router/${agent.id}/responses`,
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${value}`,
+            "user-agent": "test-client",
+          },
+          payload: {
+            model: `${provider}:${modelId}`,
+            input: "Hello",
+          },
+        });
 
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toMatchObject({
-        object: "response",
-        // OpenAI and Azure OpenAI deployments use native Responses, which
-        // reports the upstream model rather than the router alias.
-        model:
-          provider === "openai" || provider === "azure"
-            ? modelId
-            : `${provider}:${modelId}`,
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toMatchObject({
+          object: "response",
+          // OpenAI and Azure OpenAI deployments use native Responses, which
+          // reports the upstream model rather than the router alias.
+          model:
+            provider === "openai" || provider === "azure"
+              ? modelId
+              : `${provider}:${modelId}`,
+        });
       });
-    });
+    }
 
-    test(`streams ${provider} models through chat completions and responses`, async ({
+    test(`streams ${provider} models through chat completions${responses === false ? "" : " and responses"}`, async ({
       makeAgent,
       makeOrganization,
       makeUser,
@@ -802,6 +815,15 @@ describe("model router proxy routes", () => {
           messages: [{ role: "user", content: "Hello" }],
         },
       });
+      expect(chatResponse.statusCode, chatResponse.body).toBe(200);
+      expect(chatResponse.headers["content-type"]).toContain(
+        "text/event-stream",
+      );
+      expect(chatResponse.body).toContain("data: [DONE]");
+
+      // A Chat Completions-only provider is refused on Responses; the
+      // dedicated test below covers that refusal.
+      if (responses === false) return;
       const responsesResponse = await app.inject({
         method: "POST",
         url: `/v1/model-router/${agent.id}/responses`,
@@ -817,12 +839,6 @@ describe("model router proxy routes", () => {
         },
       });
 
-      expect(chatResponse.statusCode, chatResponse.body).toBe(200);
-      expect(chatResponse.headers["content-type"]).toContain(
-        "text/event-stream",
-      );
-      expect(chatResponse.body).toContain("data: [DONE]");
-
       expect(responsesResponse.statusCode, responsesResponse.body).toBe(200);
       expect(responsesResponse.headers["content-type"]).toContain(
         "text/event-stream",
@@ -833,6 +849,67 @@ describe("model router proxy routes", () => {
       );
     });
   }
+
+  test.for([
+    ["kimi", "kimi-k3.1-pro"],
+    ["kimi-code", "k3.1-pro"],
+  ] as const)("refuses %s on the Responses endpoint, which cannot replay its reasoning", async ([
+    provider,
+    modelId,
+  ], {
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({ provider, modelId });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider,
+      makeUser,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Kimi Responses Agent",
+      agentType: "llm_proxy",
+    });
+    const headers = {
+      "content-type": "application/json",
+      authorization: `Bearer ${value}`,
+      "user-agent": "test-client",
+    };
+
+    const refused = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/responses`,
+      headers,
+      payload: { model: `${provider}:${modelId}`, input: "Hello" },
+    });
+
+    expect(refused.statusCode).toBe(501);
+    expect(refused.json().error.message).toContain(
+      "Chat Completions endpoint only",
+    );
+
+    // The same model still answers on the surface Kimi supports.
+    const served = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers,
+      payload: {
+        model: `${provider}:${modelId}`,
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+
+    expect(served.statusCode).toBe(200);
+  });
 
   test("collects a delegation marker from the Responses wire before flattening a two-part prompt", async ({
     makeAgent,

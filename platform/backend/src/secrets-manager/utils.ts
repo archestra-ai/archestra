@@ -38,7 +38,6 @@ export function extractVaultErrorMessage(error: unknown): string {
 export function computeSecretStorageType(
   secretId: string | null,
   isVault: boolean | null,
-  isByosVault: boolean | null,
 ): SecretStorageType {
   if (!secretId) {
     return "none";
@@ -46,8 +45,6 @@ export function computeSecretStorageType(
   if (isVault) {
     return "vault";
   }
-  if (isByosVault) {
-    return "external_vault";
-  }
+
   return "database";
 }

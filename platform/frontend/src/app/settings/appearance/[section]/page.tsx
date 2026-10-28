@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { APPEARANCE_PAGES } from "../_components/appearance-pages";
+import { APPEARANCE_PAGES } from "../_parts/appearance-pages";
 
 export default async function AppearanceSectionPage({
   params,

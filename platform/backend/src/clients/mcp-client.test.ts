@@ -445,6 +445,66 @@ describe("McpClient", () => {
     expect(mockConnect).toHaveBeenCalledTimes(2);
   });
 
+  test("disabled browser policy rejects assigned tools, discovery, and direct inspection before opening a connection", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    const catalog = await InternalMcpCatalogModel.create({
+      id: PLAYWRIGHT_MCP_CATALOG_ID,
+      name: "playwright",
+      serverType: "remote",
+      serverUrl: "https://browser.example/mcp",
+    });
+    await PlaywrightRuntimeModel.reconcileAll();
+    const server = mustExist(
+      await PlaywrightRuntimeModel.findForEnvironment(null),
+    );
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "playwright__browser_navigate",
+      description: "Navigate",
+      parameters: {},
+      catalogId: catalog.id,
+    });
+    await AgentToolModel.create(agentId, tool.id, { mcpServerId: server.id });
+    await OrganizationModel.patch(organization.id, {
+      playwrightMcpEnabled: false,
+    });
+    mockConnect.mockClear();
+    mockCallTool.mockClear();
+    const result = await mcpClient.executeToolCallForOwner(
+      { id: "disabled-call", name: tool.name, arguments: {} },
+      agentOwner(agentId),
+      {
+        tokenId: "browser-test-token",
+        userId: user.id,
+        teamId: null,
+        isOrganizationToken: false,
+      },
+    );
+    expect(result.isError).toBe(true);
+    await expect(
+      mcpClient.connectAndGetTools({
+        catalogItem: catalog,
+        mcpServerId: server.id,
+        secrets: {},
+      }),
+    ).rejects.toThrow("disabled");
+    await expect(
+      mcpClient.inspectServer({
+        caller: { kind: "caller" },
+        catalogItem: catalog,
+        mcpServerId: server.id,
+        secrets: {},
+        method: "tools/call",
+        toolName: "browser_navigate",
+      }),
+    ).rejects.toThrow("disabled");
+    expect(mockConnect).not.toHaveBeenCalled();
+    expect(mockCallTool).not.toHaveBeenCalled();
+  });
+
   test("isolates a shared Playwright connection per caller and reuses it for that caller", async ({
     makeUser,
     makeApp,
@@ -869,6 +929,7 @@ describe("McpClient", () => {
     mockClose.mockResolvedValueOnce(undefined);
 
     await mcpClient.inspectServer({
+      caller: { kind: "caller" },
       catalogItem: {
         ...catalogItem,
         serverType: "remote",
@@ -921,6 +982,7 @@ describe("McpClient", () => {
       .mockResolvedValueOnce({ tools: [{ name: "list_repos" }] });
 
     const result = await mcpClient.inspectServer({
+      caller: { kind: "caller" },
       catalogItem: {
         ...catalogItem,
         serverType: "remote",
@@ -944,6 +1006,7 @@ describe("McpClient", () => {
 
     await expect(
       mcpClient.inspectServer({
+        caller: { kind: "caller" },
         catalogItem: {
           ...catalogItem,
           serverType: "remote",
@@ -2734,6 +2797,7 @@ describe("McpClient", () => {
         });
 
         await mcpClient.callToolForServer({
+          caller: { kind: "caller" },
           mcpServerId: localMcpServerId,
           name: "test_tool",
         });
@@ -10512,6 +10576,7 @@ describe("readResource (assignment + all-tools dynamic access, end to end)", () 
       try {
         await expect(
           mcpClient.readResourceForServer({
+            caller: { kind: "caller" },
             mcpServerId: randomUUID(),
             uri: RESOURCE_URI,
           }),
@@ -10542,6 +10607,7 @@ describe("readResource (assignment + all-tools dynamic access, end to end)", () 
 
       try {
         const read = mcpClient.readResourceForServer({
+          caller: { kind: "caller" },
           mcpServerId: randomUUID(),
           uri: RESOURCE_URI,
         });

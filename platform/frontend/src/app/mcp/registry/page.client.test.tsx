@@ -6,7 +6,7 @@ vi.mock("@/lib/mcp/mcp-registry.query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/mcp/mcp-registry.query")>()),
   startMcpRegistryEarlyRequests: startEarlyMock,
 }));
-vi.mock("./_parts/InternalMCPCatalog", () => ({
+vi.mock("./_parts/internal-mcp-catalog", () => ({
   InternalMCPCatalog: () => null,
 }));
 

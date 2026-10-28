@@ -95,8 +95,12 @@ def capture_frame(frame_file: Path) -> None:
     pane = os.environ.get("TMUX_PANE")
     if not pane:
         return
+    # -N keeps the spaces a client wrote at a line's end, so a highlighted
+    # prompt written out to the pane's edge keeps its background. tmux still
+    # drops cells that an erase to the line's end cleared; the run page's
+    # player restores those.
     result = subprocess.run(
-        ["tmux", "capture-pane", "-p", "-e", "-t", pane],
+        ["tmux", "capture-pane", "-p", "-e", "-N", "-t", pane],
         check=False,
         stdout=subprocess.PIPE,
     )
@@ -132,10 +136,17 @@ def stop_process_group(child_pid: int) -> int:
     except ProcessLookupError:
         pass
 
+    # The whole group must end, not only its leader: a client's backend can
+    # outlive its front end and keep writing the client's state (Hermes's
+    # backend waits on its MCP requests while shutting down).
+    status = None
     deadline = time.monotonic() + 2
     while time.monotonic() < deadline:
-        exited_pid, status = os.waitpid(child_pid, os.WNOHANG)
-        if exited_pid == child_pid:
+        if status is None:
+            exited_pid, exited_status = os.waitpid(child_pid, os.WNOHANG)
+            if exited_pid == child_pid:
+                status = exited_status
+        if status is not None and not process_group_alive(child_pid):
             return status
         time.sleep(0.05)
 
@@ -143,7 +154,21 @@ def stop_process_group(child_pid: int) -> int:
         os.killpg(child_pid, signal.SIGKILL)
     except ProcessLookupError:
         pass
-    return os.waitpid(child_pid, 0)[1]
+    if status is None:
+        status = os.waitpid(child_pid, 0)[1]
+    # SIGKILL arrives asynchronously: return once nothing in the group runs.
+    deadline = time.monotonic() + 2
+    while process_group_alive(child_pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    return status
+
+
+def process_group_alive(group: int) -> bool:
+    try:
+        os.killpg(group, 0)
+    except ProcessLookupError:
+        return False
+    return True
 
 
 if __name__ == "__main__":

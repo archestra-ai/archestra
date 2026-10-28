@@ -1,8 +1,213 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { transformConfigArrayFields } from "./transform-config-array-fields";
+import {
+  githubRepositoryDraftFingerprint,
+  githubRepositoryEntriesDraft,
+  githubRepositorySettingsDraft,
+  githubRepositoryStandardSettingsDraft,
+  transformConfigArrayFields,
+} from "./transform-config-array-fields";
 
 describe("transformConfigArrayFields", () => {
+  it("preserves unchanged actual flat legacy settings and raw identities", () => {
+    const config = {
+      type: "github",
+      owner: "org",
+      repos: ["repo-a"],
+      includeIssues: false,
+      includeRepositoryFiles: true,
+      labelsToSkip: ["skip"],
+      includePaths: ["docs", "guides"],
+    };
+    const entries = githubRepositoryEntriesDraft(config);
+    expect(entries[0]).toEqual({
+      repository: "org/repo-a",
+      settings: {
+        includeIssues: false,
+        includePullRequests: true,
+        includeRepositoryFiles: true,
+        labelsToSkip: "skip",
+        fileTypes: "",
+        includePaths: "docs, guides",
+        excludePaths: "",
+      },
+    });
+    const draft = {
+      ...config,
+      repositoryEntries: entries,
+      repositoryLegacyBaseline: {
+        owner: "org",
+        fingerprint: githubRepositoryDraftFingerprint(entries),
+      },
+    };
+    expect(transformConfigArrayFields(draft)).toEqual(config);
+    entries[0].settings.includePaths = " guides, docs, ";
+    expect(transformConfigArrayFields(draft)).toEqual(config);
+  });
+  it("materializes modified complete rows without broadening legacy settings", () => {
+    const config = {
+      type: "github",
+      owner: "org",
+      repos: ["repo-a"],
+      includeIssues: false,
+      includePaths: ["docs"],
+    };
+    const entries = githubRepositoryEntriesDraft(config);
+    const baseline = {
+      owner: "org",
+      fingerprint: githubRepositoryDraftFingerprint(entries),
+    };
+    entries[0].settings.excludePaths = "docs/private";
+    const result = transformConfigArrayFields({
+      ...config,
+      repositoryEntries: entries,
+      repositoryLegacyBaseline: baseline,
+    });
+    expect(result.repos).toEqual(["org/repo-a"]);
+    expect(result.repositoryOverrides).toEqual([
+      {
+        repository: "org/repo-a",
+        includeIssues: false,
+        includePullRequests: true,
+        includeRepositoryFiles: false,
+        labelsToSkip: [],
+        fileTypes: [],
+        includePaths: ["docs"],
+        excludePaths: ["docs/private"],
+      },
+    ]);
+    expect(result).not.toHaveProperty("repositoryLegacyBaseline");
+  });
+  it("keeps qualified identities and complete settings when owner changes", () => {
+    const config = {
+      type: "github",
+      owner: "org",
+      repos: ["repo-a"],
+      includeIssues: false,
+    };
+    const entries = githubRepositoryEntriesDraft(config);
+    const result = transformConfigArrayFields({
+      ...config,
+      owner: "other",
+      repositoryEntries: entries,
+      repositoryLegacyBaseline: {
+        owner: "org",
+        fingerprint: githubRepositoryDraftFingerprint(entries),
+      },
+    });
+    expect(result.repos).toEqual(["org/repo-a"]);
+    expect(result.repositoryOverrides).toEqual([
+      {
+        repository: "org/repo-a",
+        includeIssues: false,
+        includePullRequests: true,
+        includeRepositoryFiles: false,
+        labelsToSkip: [],
+        fileTypes: [],
+        includePaths: [],
+        excludePaths: [],
+      },
+    ]);
+  });
+  it("hydrates only exact qualified canonical policies into their complete rows", () => {
+    const rows = githubRepositoryEntriesDraft({
+      owner: "alpha",
+      repos: ["alpha/docs", "beta/docs"],
+      includeIssues: true,
+      repositoryOverrides: [
+        { repository: "alpha/docs", includeIssues: false, includePaths: ["a"] },
+        {
+          repository: "beta/docs",
+          includePullRequests: false,
+          includePaths: [],
+        },
+      ],
+    });
+    expect(rows[0].settings).toMatchObject({
+      includeIssues: false,
+      includePullRequests: true,
+      includePaths: "a",
+    });
+    expect(rows[1].settings).toMatchObject({
+      includeIssues: true,
+      includePullRequests: false,
+      includePaths: "",
+    });
+  });
+  it("serializes only active Selected rows with explicit false and empty values", () => {
+    const result = transformConfigArrayFields({
+      type: "github",
+      owner: "org",
+      repos: [],
+      includeIssues: false,
+      repositorySelectionMode: "selected",
+      repositoryEntries: [
+        {
+          repository: " org/new ",
+          settings: {
+            ...githubRepositoryStandardSettingsDraft(),
+            includePullRequests: false,
+            includePaths: "",
+            unexpected: "draft",
+          },
+        },
+      ],
+      repositoryOverrides: [{ repository: "org/inactive" }],
+      repositoryApplyShared: true,
+      repositorySharedSettings: { includeIssues: false },
+    });
+    expect(result.repositoryOverrides).toEqual([
+      {
+        repository: "org/new",
+        includeIssues: true,
+        includePullRequests: false,
+        includeRepositoryFiles: false,
+        labelsToSkip: [],
+        fileTypes: [],
+        includePaths: [],
+        excludePaths: [],
+      },
+    ]);
+    expect(result.repos).toEqual(["org/new"]);
+    expect(result).not.toHaveProperty("repositorySharedSettings");
+  });
+  it("applies only active All settings and strips inactive drafts", () => {
+    const result = transformConfigArrayFields({
+      type: "github",
+      owner: "org",
+      repos: ["org/manual"],
+      includeIssues: true,
+      repositorySelectionMode: "all",
+      repositoryApplyShared: true,
+      repositorySharedSettings: githubRepositorySettingsDraft({
+        includeIssues: false,
+        includePaths: ["shared"],
+      }),
+      repositoryEntries: [
+        {
+          repository: "org/manual",
+          settings: githubRepositoryStandardSettingsDraft(),
+        },
+      ],
+      repositoryOverrides: [
+        { repository: "org/manual", includePaths: ["manual"] },
+      ],
+    });
+    expect(result).toEqual({
+      type: "github",
+      owner: "org",
+      repos: [],
+      includeIssues: false,
+      includePullRequests: true,
+      includeRepositoryFiles: false,
+      labelsToSkip: [],
+      fileTypes: [],
+      includePaths: ["shared"],
+      excludePaths: [],
+      repositoryOverrides: [],
+    });
+  });
+
   it("converts comma-separated string fields to arrays", () => {
     const config = {
       type: "github",

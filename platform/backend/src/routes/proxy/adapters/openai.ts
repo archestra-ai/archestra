@@ -50,6 +50,7 @@ import {
 } from "../utils/mcp-image";
 import { stripBrowserToolsResults } from "../utils/summarize-tool-results";
 import { withOpenAiChatToolCallIds } from "../utils/tool-call-ids";
+import { streamChatCompletionChunks } from "./chat-completions-stream";
 import { createOpenAiCodexClient } from "./openai-codex-client";
 import { toOpenAiStreamUsageWithCache } from "./openai-sse-chunk";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
@@ -945,14 +946,14 @@ export class OpenAIResponseAdapter
         cacheWriteTokens: 0,
       };
     }
-    const { input, output, cacheRead, cacheWrite, reasoning } = getUsageTokens(
-      this.response.usage,
-    );
+    const { input, output, cacheRead, cacheWrite, cacheWrite1h, reasoning } =
+      getUsageTokens(this.response.usage);
     return {
       inputTokens: input,
       outputTokens: output,
       cacheReadTokens: cacheRead,
       cacheWriteTokens: cacheWrite,
+      cacheWrite1hTokens: cacheWrite1h,
       reasoningTokens: reasoning,
     };
   }
@@ -1123,27 +1124,14 @@ export class OpenAIStreamAdapter
     // Handle usage first - OpenAI sends usage in a final chunk with empty choices[]
     // when stream_options.include_usage is true
     if (chunk.usage) {
-      const cacheReadTokens =
-        (
-          chunk.usage.prompt_tokens_details as
-            | { cached_tokens?: number }
-            | undefined
-        )?.cached_tokens ?? 0;
-      const reasoningTokens =
-        (
-          chunk.usage.completion_tokens_details as
-            | { reasoning_tokens?: number }
-            | undefined
-        )?.reasoning_tokens ?? 0;
+      const tokens = getUsageTokens(chunk.usage);
       this.state.usage = {
-        inputTokens: Math.max(
-          0,
-          (chunk.usage.prompt_tokens ?? 0) - cacheReadTokens,
-        ),
-        outputTokens: chunk.usage.completion_tokens ?? 0,
-        cacheReadTokens,
-        cacheWriteTokens: 0,
-        reasoningTokens,
+        inputTokens: tokens.input,
+        outputTokens: tokens.output,
+        cacheReadTokens: tokens.cacheRead,
+        cacheWriteTokens: tokens.cacheWrite,
+        cacheWrite1hTokens: tokens.cacheWrite1h,
+        reasoningTokens: tokens.reasoning,
       };
     }
 
@@ -1475,6 +1463,10 @@ export function getUsageTokens(usage: OpenAi.Types.Usage) {
   const cacheRead =
     (usage.prompt_tokens_details as { cached_tokens?: number } | undefined)
       ?.cached_tokens ?? 0;
+  const details = usage.prompt_tokens_details as
+    | { cache_write_tokens?: number; cache_write_1h_tokens?: number }
+    | undefined;
+  const cacheWrite = details?.cache_write_tokens ?? 0;
   const reasoning =
     (
       usage.completion_tokens_details as
@@ -1482,10 +1474,11 @@ export function getUsageTokens(usage: OpenAi.Types.Usage) {
         | undefined
     )?.reasoning_tokens ?? 0;
   return {
-    input: Math.max(0, usage.prompt_tokens - cacheRead),
-    output: usage.completion_tokens,
+    input: Math.max(0, (usage.prompt_tokens ?? 0) - cacheRead - cacheWrite),
+    output: usage.completion_tokens ?? 0,
     cacheRead,
-    cacheWrite: 0,
+    cacheWrite,
+    cacheWrite1h: details?.cache_write_1h_tokens,
     reasoning,
   };
 }
@@ -1651,15 +1644,9 @@ export const openaiAdapterFactory: LLMProvider<
       stream: true,
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
-    const stream = await openaiClient.chat.completions.create(openaiRequest);
-
-    return {
-      [Symbol.asyncIterator]: async function* () {
-        for await (const chunk of stream) {
-          yield chunk as OpenAiStreamChunk;
-        }
-      },
-    };
+    return streamChatCompletionChunks<OpenAiStreamChunk>(
+      openaiClient.chat.completions.create(openaiRequest),
+    );
   },
 
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {

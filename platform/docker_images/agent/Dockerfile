@@ -139,17 +139,18 @@ RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/workspace-files.py \
  && python3 /tmp/agent-image-tests/interactive-resume.py \
+ && python3 /tmp/agent-image-tests/tui-exec.py \
  && python3 /tmp/agent-image-tests/development-tools.py \
  && node /tmp/agent-image-tests/npm-http.cjs
 
 FROM agent-base AS agent-claude-code
 USER root
-RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.285 \
+RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.304 \
  && CLAUDE_PACKAGE_DIR=$(pnpm list --global --json @anthropic-ai/claude-code | jq -r '.[0].dependencies["@anthropic-ai/claude-code"].path') \
  && node "$CLAUDE_PACKAGE_DIR/install.cjs" \
  && claude --version \
  && mkdir -p /home/node/.claude \
- && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.285","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
+ && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.304","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
  && printf '%s\n' '{"skipDangerousModePermissionPrompt":true}' > /home/node/.claude/settings.json \
  && chmod 0600 /home/node/.claude.json /home/node/.claude/settings.json \
  && chown -R 1000:1000 /home/node
@@ -171,7 +172,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-codex
 USER root
-RUN pnpm add --global @openai/codex@0.153.0 \
+RUN pnpm add --global @openai/codex@0.163.0 \
  && codex --version \
  && chown -R 1000:1000 /home/node
 USER 1000:1000
@@ -185,7 +186,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-opencode
 USER root
-RUN pnpm add --global opencode-ai@1.18.23 \
+RUN pnpm add --global opencode-ai@1.19.3 \
  && OPENCODE_PACKAGE_DIR="$(pnpm list --global --json opencode-ai | jq -r '.[0].dependencies["opencode-ai"].path')" \
  && node "${OPENCODE_PACKAGE_DIR}/postinstall.mjs" \
  && opencode --version \
@@ -249,6 +250,7 @@ ENV HERMES_NODE=/usr/local/bin/node
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
     /opt/hermes/.venv/bin/python /tmp/agent-image-patches/hermes-tui-mcp-discovery.py \
+ && /opt/hermes/.venv/bin/python /tmp/agent-image-patches/hermes-mcp-sdk-import.py \
  && /opt/hermes/.venv/bin/python /tmp/agent-image-patches/hermes-no-first-contact-note.py
 USER 1000:1000
 RUN --network=none \
@@ -270,6 +272,15 @@ RUN pnpm --dir /opt/agent-openclaw install --frozen-lockfile \
  && chown -R 1000:1000 /home/node
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
+    # npm 12.2.1 fixes its bundled brace-expansion, but still bundles undici 6.29.0.
+    # Reuse the checksummed 6.29.1 copy already installed for the global npm CLI.
+    npm_dir=/opt/agent-openclaw/node_modules/.pnpm/npm@12.2.1/node_modules/npm && \
+    test "$(node -p "require('${npm_dir}/package.json').version")" = 12.2.1 && \
+    test "$(node -p "require('/usr/local/lib/node_modules/npm/node_modules/undici/package.json').version")" = 6.29.1 && \
+    rm -rf "${npm_dir}/node_modules/undici" && \
+    cp -a /usr/local/lib/node_modules/npm/node_modules/undici "${npm_dir}/node_modules/undici" && \
+    node /tmp/agent-image-tests/npm-http.cjs "${npm_dir}/node_modules/undici" && \
     python3 /tmp/agent-image-patches/openclaw-mcp-required.py
 USER 1000:1000
 RUN --network=none \
@@ -307,3 +318,33 @@ USER 1000:1000
 RUN --network=none \
     --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/mcp-startup.py grok
+
+# The npm package's postinstall only renames a previous Python kimi shim on
+# global installs. Install the checksummed tarball without lifecycle scripts.
+# Kimi finds ripgrep and fd on PATH instead of downloading its own copies.
+FROM agent-base AS agent-kimi
+USER root
+# Set before the version check below so no Kimi process looks for updates.
+ENV KIMI_CODE_NO_AUTO_UPDATE=1 KIMI_CLI_NO_AUTO_UPDATE=1 KIMI_DISABLE_TELEMETRY=1
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends fd-find \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /tmp/kimi \
+ && cd /tmp/kimi \
+ && mv "$(npm pack --silent @moonshot-ai/kimi-code@2.3.3)" kimi-code.tgz \
+ && echo "dd5f1bc9cb9c7fd2a03d11f6ed2f037b6bb48a9f38fd1cb7169367ea08b9cfd266a041edf6fc626071d9aa231dc837f99cf9b86eff98286c0a1102f8a18a514f  kimi-code.tgz" | sha512sum -c - \
+ && npm install --global --prefix /opt/kimi --ignore-scripts --no-audit --no-fund ./kimi-code.tgz \
+ && ln -s /opt/kimi/bin/kimi /usr/local/bin/kimi \
+ && cd / && rm -rf /tmp/kimi /root/.npm \
+ && HOME=/tmp/kimi-version KIMI_CODE_HOME=/tmp/kimi-version kimi --version \
+ && rm -rf /tmp/kimi-version \
+ && chown -R 1000:1000 /home/node
+RUN --network=none \
+    --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
+    python3 /tmp/agent-image-patches/kimi-user-mcp-only.py \
+ && python3 /tmp/agent-image-patches/kimi-long-tool-call-ids.py
+USER 1000:1000
+
+RUN --network=none \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
+    python3 /tmp/agent-image-tests/mcp-startup.py kimi

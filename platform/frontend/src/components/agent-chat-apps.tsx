@@ -20,7 +20,7 @@ import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import {
   ChannelDetailsDialog,
   channelDisplayName,
-} from "@/app/settings/messaging-channels/_components/channel-details-dialog";
+} from "@/app/settings/messaging-channels/_parts/channel-details-dialog";
 import { AgentEmailSettingsDialog } from "@/app/settings/messaging-channels/email/agent-email-settings-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentSlackBotSection } from "@/components/agent-slack-bot-section";
@@ -58,6 +58,7 @@ type Agent = archestraApiTypes.GetAgentResponses["200"];
 type Binding =
   archestraApiTypes.ListChatOpsBindingsResponses["200"]["data"][number];
 type ChatProvider = "ms-teams" | "slack" | "telegram";
+type AssignableBinding = Binding & { provider: ChatProvider };
 type AgentReferenceData = {
   id: string;
   name: string;
@@ -196,9 +197,9 @@ export function AgentChatAppsEditor({
       (provider !== "slack" || !slackHasAgentBots),
   );
   const visibleProviderIds = new Set(visibleProviders);
-  const bindings = (data?.bindings ?? []).filter((binding) =>
-    visibleProviderIds.has(binding.provider),
-  );
+  const bindings = (data?.bindings ?? [])
+    .filter(isAssignableBinding)
+    .filter((binding) => visibleProviderIds.has(binding.provider));
   // Before the record exists its id is null, and a null-to-null comparison
   // would claim every UNASSIGNED channel in the organization as this agent's.
   const subjectId = subject.id;
@@ -369,6 +370,7 @@ export function AgentChatAppsEditor({
     setAssignmentRefreshFailed(false);
     setSelectedIds(
       result.data.bindings
+        .filter(isAssignableBinding)
         .filter(
           (binding) =>
             visibleProviderIds.has(binding.provider) && isOurs(binding.agentId),
@@ -528,9 +530,9 @@ export function AgentChatAppsEditor({
         resolveSave(false);
         return;
       }
-      const latestBindings = result.data.bindings.filter((binding) =>
-        visibleProviderIds.has(binding.provider),
-      );
+      const latestBindings = result.data.bindings
+        .filter(isAssignableBinding)
+        .filter((binding) => visibleProviderIds.has(binding.provider));
       const assignmentChanged = pendingPlan.reassignments.some(
         (reassignment) =>
           latestBindings.find(
@@ -1404,6 +1406,10 @@ function orderAssignmentOptions(
   ];
 }
 
+function isAssignableBinding(binding: Binding): binding is AssignableBinding {
+  return binding.provider !== "jira";
+}
+
 function buildAssignmentOptions({
   subject,
   agentNames,
@@ -1414,7 +1420,7 @@ function buildAssignmentOptions({
 }: {
   subject: ChannelSubject;
   agentNames: Map<string, string>;
-  bindings: Binding[];
+  bindings: AssignableBinding[];
   configuredDmProviders: ChatProvider[];
   currentUserId: string | undefined;
   /** Where this agent's permissions are edited, named as its host names it. */

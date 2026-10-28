@@ -1,11 +1,9 @@
-import {
-  type AgentScope,
-  type archestraApiTypes,
-  type archestraCatalogTypes,
-  type ImagePullPolicy,
-  type ImagePullSecretConfig,
-  isVaultReference,
-  parseVaultReference,
+import type {
+  AgentScope,
+  archestraApiTypes,
+  archestraCatalogTypes,
+  ImagePullPolicy,
+  ImagePullSecretConfig,
 } from "@archestra/shared";
 import { parseDockerArgsToLocalConfig } from "./docker-args-parser";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
@@ -107,12 +105,6 @@ export function transformFormToApiData(
           return false;
         }) || undefined,
     };
-
-    // BYOS: Include local config vault path and key if set
-    if (values.localConfigVaultPath && values.localConfigVaultKey) {
-      data.localConfigVaultPath = values.localConfigVaultPath;
-      data.localConfigVaultKey = values.localConfigVaultKey;
-    }
   }
 
   // Handle OAuth configuration
@@ -159,12 +151,9 @@ export function transformFormToApiData(
         values.oauthConfig.resourceMetadataUrl || undefined,
       token_endpoint: values.oauthConfig.tokenEndpoint || undefined,
       client_id: isClientCredentials ? "" : values.oauthConfig.client_id || "",
-      // Only include client_secret if no BYOS vault path is set
-      client_secret: values.oauthClientSecretVaultPath
+      client_secret: isClientCredentials
         ? undefined
-        : isClientCredentials
-          ? undefined
-          : values.oauthConfig.client_secret || undefined,
+        : values.oauthConfig.client_secret || undefined,
       audience: values.oauthConfig.audience || undefined,
       resource: isClientCredentials
         ? undefined
@@ -187,12 +176,6 @@ export function transformFormToApiData(
       supports_resource_metadata: values.oauthConfig.supports_resource_metadata,
       additional_scopes: isClientCredentials ? undefined : additionalScopesList,
     };
-
-    // BYOS: Include OAuth client secret vault path and key if set
-    if (values.oauthClientSecretVaultPath && values.oauthClientSecretVaultKey) {
-      data.oauthClientSecretVaultPath = values.oauthClientSecretVaultPath;
-      data.oauthClientSecretVaultKey = values.oauthClientSecretVaultKey;
-    }
 
     data.userConfig = isClientCredentials
       ? {
@@ -296,9 +279,6 @@ export function buildCloneFormValues(
 // Transform catalog item to form values
 export function transformCatalogItemToFormValues(
   item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
-  localConfigSecret?: {
-    secret: Record<string, unknown>;
-  } | null,
 ): McpCatalogFormValues {
   // Determine auth method
   let authMethod: McpCatalogFormValues["authMethod"] = "none";
@@ -336,16 +316,6 @@ export function transformCatalogItemToFormValues(
     authMethod = "auth_header";
   }
 
-  // Check if OAuth client_secret is a BYOS vault reference
-  let oauthClientSecretVaultPath: string | undefined;
-  let oauthClientSecretVaultKey: string | undefined;
-  const clientSecretValue = item.oauthConfig?.client_secret;
-  if (isVaultReference(clientSecretValue)) {
-    const parsed = parseVaultReference(clientSecretValue);
-    oauthClientSecretVaultPath = parsed.path;
-    oauthClientSecretVaultKey = parsed.key;
-  }
-
   // Extract OAuth config if present
   let oauthConfig:
     | {
@@ -369,10 +339,7 @@ export function transformCatalogItemToFormValues(
   if (item.oauthConfig) {
     oauthConfig = {
       client_id: item.oauthConfig.client_id || "",
-      // Don't include vault reference as client_secret - it will be handled via BYOS fields
-      client_secret: oauthClientSecretVaultPath
-        ? ""
-        : item.oauthConfig.client_secret || "",
+      client_secret: item.oauthConfig.client_secret || "",
       audience:
         typeof item.userConfig?.audience?.default === "string"
           ? item.userConfig.audience.default
@@ -447,20 +414,6 @@ export function transformCatalogItemToFormValues(
           description: env.description ?? "",
         };
 
-        // If we have a secret and the secret contains a value for this env var key, use it
-        if (
-          !env.credentialId &&
-          localConfigSecret?.secret &&
-          env.key in localConfigSecret.secret
-        ) {
-          const secretValue = localConfigSecret.secret[env.key];
-          // Convert the value to string if it's not already
-          envVar.value =
-            secretValue !== null && secretValue !== undefined
-              ? String(secretValue)
-              : undefined;
-        }
-
         return envVar;
       }) || [];
 
@@ -476,19 +429,10 @@ export function transformCatalogItemToFormValues(
       serviceAccount: config.serviceAccount || undefined,
       imagePullPolicy: config.imagePullPolicy || undefined,
       // Normalize imagePullSecrets: legacy { name } → { source: "existing", name }
-      // Also hydrate passwords from localConfigSecret for credentials entries
       imagePullSecrets: (item.localConfig.imagePullSecrets || []).map(
         (s: ImagePullSecretConfig | { name: string }) => {
           if (!("source" in s)) {
             return { source: "existing" as const, name: s.name };
-          }
-          if (s.source === "credentials" && localConfigSecret?.secret) {
-            const passwordKey = `__regcred_password:${s.server}:${s.username}`;
-            const password = localConfigSecret.secret[passwordKey];
-            return {
-              ...s,
-              password: password != null ? String(password) : undefined,
-            };
           }
           return s;
         },
@@ -536,9 +480,7 @@ export function transformCatalogItemToFormValues(
     deploymentSpecYaml: item.deploymentSpecYaml || undefined,
     // Store original to detect user modifications
     originalDeploymentSpecYaml: item.deploymentSpecYaml || undefined,
-    // BYOS: Include parsed vault path and key if OAuth secret is a vault reference
-    oauthClientSecretVaultPath,
-    oauthClientSecretVaultKey,
+
     // Labels
     labels: item.labels ?? [],
     // Scope

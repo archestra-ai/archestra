@@ -8,8 +8,6 @@ import logger from "@/logging";
 import {
   SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
   type VaultConfig,
-  type VaultFolderConnectivityResult,
-  type VaultSecretListItem,
 } from "@/types/secrets-manager";
 import { extractVaultErrorMessage } from "./utils";
 
@@ -22,7 +20,7 @@ import { extractVaultErrorMessage } from "./utils";
  * standalone scripts (e.g. vault-env-injector init container) that run
  * before the database URL is available.
  *
- * ReadonlyVaultSecretManager and VaultSecretManager extend this class
+ * VaultSecretManager extends this class
  * to add the DB-dependent ISecretManager interface methods.
  */
 export class VaultClient {
@@ -57,67 +55,9 @@ export class VaultClient {
   } {
     return {
       meta: {
-        description: "External Vault (BYOS - Bring Your Own Secrets)",
+        description: "Vault",
       },
     };
-  }
-
-  /**
-   * List secrets in a Vault folder.
-   * Requires LIST permission on the folder path.
-   */
-  async listSecretsInFolder(
-    folderPath: string,
-  ): Promise<VaultSecretListItem[]> {
-    logger.debug(
-      { folderPath },
-      "VaultClient.listSecretsInFolder: listing secrets",
-    );
-
-    try {
-      await this.ensureInitialized();
-    } catch (error) {
-      this.handleVaultError(error, "listSecretsInFolder", { folderPath });
-    }
-
-    const listPath = this.getListPath(folderPath);
-
-    try {
-      const result = await this.executeWithTokenRefresh(
-        () => this.client.list(listPath),
-        "listSecretsInFolder",
-      );
-      const keys = (result?.data?.keys as string[] | undefined) ?? [];
-
-      // Filter out folder entries (they end with /)
-      const secretKeys = keys.filter((key) => !key.endsWith("/"));
-
-      // Normalize folder path by removing trailing slashes to avoid double slashes in the path
-      const normalizedFolderPath = folderPath.replace(/\/+$/, "");
-
-      const items: VaultSecretListItem[] = secretKeys.map((name) => ({
-        name,
-        path: `${normalizedFolderPath}/${name}`,
-      }));
-
-      logger.info(
-        { folderPath, count: items.length },
-        "VaultClient.listSecretsInFolder: completed",
-      );
-      return items;
-    } catch (error) {
-      // Vault returns 404 when the path doesn't exist (no secrets)
-      const vaultError = error as { response?: { statusCode?: number } };
-      if (vaultError.response?.statusCode === 404) {
-        logger.debug(
-          { folderPath },
-          "VaultClient.listSecretsInFolder: folder empty or not found",
-        );
-        return [];
-      }
-
-      this.handleVaultError(error, "listSecretsInFolder", { folderPath });
-    }
   }
 
   /**
@@ -158,77 +98,6 @@ export class VaultClient {
         );
       }
       this.handleVaultError(error, "getSecretFromPath", { vaultPath });
-    }
-  }
-
-  /**
-   * Check connectivity to a Vault folder path.
-   * Returns connection status and secret count.
-   */
-  async checkFolderConnectivity(
-    folderPath: string,
-  ): Promise<VaultFolderConnectivityResult> {
-    logger.debug(
-      { folderPath },
-      "VaultClient.checkFolderConnectivity: checking connectivity",
-    );
-
-    try {
-      await this.ensureInitialized();
-    } catch (error) {
-      const errorMessage = extractVaultErrorMessage(error);
-      return {
-        connected: false,
-        secretCount: 0,
-        error: `Authentication failed: ${errorMessage}`,
-      };
-    }
-
-    const listPath = this.getListPath(folderPath);
-
-    try {
-      const result = await this.executeWithTokenRefresh(
-        () => this.client.list(listPath),
-        "checkFolderConnectivity",
-      );
-      const keys = (result?.data?.keys as string[] | undefined) ?? [];
-      const secretCount = keys.filter((key) => !key.endsWith("/")).length;
-
-      logger.info(
-        { folderPath, secretCount },
-        "VaultClient.checkFolderConnectivity: connected",
-      );
-
-      return {
-        connected: true,
-        secretCount,
-      };
-    } catch (error) {
-      const vaultError = error as { response?: { statusCode?: number } };
-
-      // 404 means path exists but is empty - still connected
-      if (vaultError.response?.statusCode === 404) {
-        logger.info(
-          { folderPath },
-          "VaultClient.checkFolderConnectivity: connected (empty folder)",
-        );
-        return {
-          connected: true,
-          secretCount: 0,
-        };
-      }
-
-      const errorMessage = extractVaultErrorMessage(error);
-      logger.warn(
-        { folderPath, error: errorMessage },
-        "VaultClient.checkFolderConnectivity: failed",
-      );
-
-      return {
-        connected: false,
-        secretCount: 0,
-        error: errorMessage,
-      };
     }
   }
 
@@ -362,13 +231,6 @@ export class VaultClient {
    * Get the list path for a folder based on KV version.
    * KV v2 requires using the metadata path for list operations.
    */
-  protected getListPath(folderPath: string): string {
-    if (this.config.kvVersion === "1") {
-      return folderPath;
-    }
-    // For KV v2, replace /data/ with /metadata/ in the path
-    return folderPath.replace("/data/", "/metadata/");
-  }
 
   /**
    * Extract secret data from Vault read response based on KV version.

@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+"""Submit the task only after this Kimi Code TUI has loaded its MCP catalog.
+
+Kimi starts its MCP servers when the TUI opens and holds the first model
+request until their catalogs are in. A gateway whose initialize or tools/list
+fails is only logged, and the turn runs without the gateway's tools. The
+gateway bridge records the answer Kimi's own catalog request received
+(archestra-kimi-gateway-state); wait for that record and for the input box
+before sending the task. No separate connection or sleep establishes
+readiness. The UserPromptSubmit hook applies the same check to every prompt.
+
+Agent Runtime steers a delegated run by typing a message and Enter. While a
+turn runs, Kimi queues that message for the next turn and offers Ctrl-S to send
+it into the running turn instead; in delegated runs this script presses it
+while a turn runs (the hooks mark that in `kimi-turn-running`). An interactive
+session keeps Kimi's own queue: the person chooses when to steer.
+"""
+
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import threading
+import time
+
+# Longer than Kimi's own 30-second MCP startup timeout.
+DISCOVERY_TIMEOUT_SECONDS = 40
+# The hint the TUI shows under a message queued during a turn.
+STEER_HINT = "ctrl-s to steer immediately"
+
+
+def screen(pane: str) -> str:
+    return subprocess.check_output(["tmux", "capture-pane", "-p", "-t", pane], text=True)
+
+
+def gateway_state() -> str:
+    command = [str(Path(__file__).with_name("archestra-kimi-gateway-state"))]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    return result.stdout.strip() or "pending"
+
+
+def submit_task(pane: str, task: str) -> None:
+    # A tmux command is limited to about 16 KB, so `send-keys -l` refuses
+    # long tasks. A buffer has no such limit. -p keeps bracketed paste so a
+    # multiline task stays one submitted prompt; -r keeps its line feeds.
+    buffer = f"archestra-task-{os.getpid()}"
+    subprocess.run(["tmux", "load-buffer", "-b", buffer, "-"], input=task.encode(), check=True)
+    try:
+        subprocess.run(["tmux", "paste-buffer", "-p", "-r", "-b", buffer, "-t", pane], check=True)
+    finally:
+        subprocess.run(["tmux", "delete-buffer", "-b", buffer], stderr=subprocess.DEVNULL, check=False)
+    time.sleep(0.5)
+    subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], check=True)
+
+
+def steer_queued_messages(pane: str, child: subprocess.Popen) -> None:
+    runtime_dir = Path(os.environ.get("ARCHESTRA_AGENT_RUNTIME_DIR", "/var/run/archestra"))
+    running = runtime_dir / "kimi-turn-running"
+    while child.poll() is None:
+        # Between turns nothing can be queued; the pane is read only mid-turn.
+        if running.exists():
+            try:
+                if STEER_HINT in screen(pane):
+                    subprocess.run(["tmux", "send-keys", "-t", pane, "C-s"], check=False)
+            except (OSError, subprocess.SubprocessError):
+                pass
+        time.sleep(0.5)
+
+
+def main() -> int:
+    pane = os.environ.get("TMUX_PANE")
+    child = None
+    failure = "archestra-mcp-startup-failure"
+    try:
+        if not pane:
+            raise RuntimeError("The Kimi Code TUI requires the runtime tmux pane")
+        child = subprocess.Popen(sys.argv[1:])
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(signum, lambda number, _frame: child.send_signal(number))
+        if os.environ.get("ARCHESTRA_AGENT_RUNTIME_MODE", "one_shot") == "one_shot":
+            threading.Thread(target=steer_queued_messages, args=(pane, child), daemon=True).start()
+        task = os.environ.get("ARCHESTRA_AGENT_RUNTIME_TASK", "")
+        if not task:
+            # An interactive restore opens the saved session for input; the
+            # prompt hook gates whatever the person types.
+            return child.wait()
+        deadline = time.monotonic() + DISCOVERY_TIMEOUT_SECONDS
+        ready = False
+        while child.poll() is None and time.monotonic() < deadline:
+            state = gateway_state()
+            if state == "failed":
+                break
+            if state.startswith("ready "):
+                tools = int(state.split()[1])
+                # OpenAPPA always lists its recovery tools; an empty catalog
+                # is a failure. Without OpenAPPA an Agent may have no tools.
+                if tools == 0 and os.environ.get("ARCHESTRA_AGENT_RUNTIME_OPENAPPA") == "1":
+                    break
+                if "│ >" in screen(pane):
+                    ready = True
+                    break
+            time.sleep(0.2)
+        if ready:
+            try:
+                submit_task(pane, task)
+            except (OSError, subprocess.SubprocessError) as error:
+                print(f"archestra: task submission failed: {error}", file=sys.stderr)
+                failure = "archestra-task-submission-failure"
+            else:
+                return child.wait()
+    except (OSError, subprocess.SubprocessError, RuntimeError, ValueError) as error:
+        # The run fails through the startup-failure helper below; say why here.
+        print(f"archestra: Kimi Code terminal start failed: {type(error).__name__}: {error}", file=sys.stderr)
+    finally:
+        if child and child.poll() is None:
+            child.terminate()
+            try:
+                child.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait()
+    subprocess.run([str(Path(__file__).with_name(failure))], check=False)
+    return 78
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

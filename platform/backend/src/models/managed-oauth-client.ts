@@ -181,6 +181,7 @@ class ManagedOauthClientModel {
     initialGrants?: ResourcePermissionGrant[];
     /** Team a client-credentials client's spend is charged to. */
     billingTeamId?: string | null;
+    modelPoolIds?: string[];
   }) {
     const grantType = params.grantType ?? "client_credentials";
     const isAuthorizationCode = grantType === "authorization_code";
@@ -215,6 +216,8 @@ class ManagedOauthClientModel {
       billingTeamId: isAuthorizationCode
         ? null
         : (params.billingTeamId ?? null),
+      // Like provider keys, pools only apply to client-credentials clients.
+      modelPoolIds: isAuthorizationCode ? [] : (params.modelPoolIds ?? []),
     };
 
     const client = await withDbTransaction(async (tx) => {
@@ -391,6 +394,8 @@ class ManagedOauthClientModel {
     redirectUris?: string[];
     /** Omit to keep the current billing team. */
     billingTeamId?: string | null;
+    /** Omit to keep the current pools. */
+    modelPoolIds?: string[];
   }) {
     // The grant type is fixed at creation; reload the client to preserve it and
     // to apply only the fields that grant type actually uses.
@@ -429,6 +434,9 @@ class ManagedOauthClientModel {
         : params.billingTeamId !== undefined
           ? params.billingTeamId
           : existing.billingTeamId,
+      modelPoolIds: isAuthorizationCode
+        ? []
+        : (params.modelPoolIds ?? existing.modelPoolIds),
     };
 
     const client = await withDbTransaction(async (tx) => {
@@ -735,6 +743,7 @@ async function hydrateOauthClients(
         organizationId: metadata.organizationId,
         grantType: metadata.grantType,
         includeFutureProviders: metadata.includeFutureProviders,
+        modelPoolIds: metadata.modelPoolIds,
         scopes: clientScopes(client),
         allowedGatewayIds: metadata.allowedGatewayIds,
         providerApiKeys: metadata.providerApiKeys

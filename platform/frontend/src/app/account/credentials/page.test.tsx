@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useCredentialsPage } from "@/app/_parts/use-credentials-page";
-import { ClaudeCodeSubscription } from "@/app/account/_components/claude-code-subscription";
+import { ClaudeCodeSubscription } from "@/app/account/_parts/claude-code-subscription";
 import AccountLayout from "@/app/account/layout";
 import { useAgentOptionsPage } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";

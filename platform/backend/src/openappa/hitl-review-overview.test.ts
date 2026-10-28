@@ -374,6 +374,93 @@ describe("hitlReviewCard", () => {
     expect(preview).not.toContain("cmd:");
   });
 
+  test("shows a command's description above the command", () => {
+    const command = "git push origin HEAD";
+    const { card } = cardFor({
+      tool: "Bash",
+      arguments: JSON.stringify({
+        command,
+        description: "Push the branch",
+        timeout: 60000,
+        cmd: command,
+      }),
+      text: COVERAGE,
+    });
+    const values = [
+      "description: Push the branch",
+      "command: git push origin HEAD",
+      "timeout: 60000",
+    ].join("\n");
+    expect(card.callPreview).toBe(values);
+    expect(previewOf(card, "Allow")).toBe(
+      `${values}\n\nAlso accepts:\n  the readers must be the public\n    audience`,
+    );
+  });
+
+  test("shortens a long description before the command it describes", () => {
+    const description = `Push ${"the branch ".repeat(30)}now`;
+    const command = `echo ${"payload ".repeat(180)}end`;
+    const { card, approve } = cardFor({
+      tool: "Bash",
+      arguments: JSON.stringify({ command, description, cmd: command }),
+      text: COVERAGE,
+    });
+    expect(approve).toBe(true);
+    const preview = previewOf(card, "Allow");
+    expect(fitsThePane(preview)).toBe(true);
+    expect(
+      preview.startsWith(
+        `description: (${description.length} characters, see\n    Inspect)\ncommand: echo payload`,
+      ),
+    ).toBe(true);
+    expect(preview).not.toContain("command: (");
+  });
+
+  test("shortens a description of a few lines before a long command", () => {
+    const description = "Rebuild and push the branch. ".repeat(6).trim();
+    const command = `echo ${"payload ".repeat(195)}end`;
+    const { card, approve } = cardFor({
+      tool: "Bash",
+      arguments: JSON.stringify({ command, description, cmd: command }),
+      text: COVERAGE,
+    });
+    expect(approve).toBe(true);
+    const preview = previewOf(card, "Allow");
+    expect(fitsThePane(preview)).toBe(true);
+    expect(
+      preview.startsWith(
+        `description: (${description.length} characters, see\n    Inspect)\ncommand: echo payload`,
+      ),
+    ).toBe(true);
+    expect(preview).not.toContain("command: (");
+  });
+
+  test("hides a description before the command and counts it where it was", () => {
+    const options = Object.fromEntries(
+      Array.from({ length: 120 }, (_, index) => [
+        `option_${index}`,
+        "x".repeat(40),
+      ]),
+    );
+    const { card, approve } = cardFor({
+      tool: "Bash",
+      arguments: JSON.stringify({
+        command: "ls",
+        description: "List files",
+        ...options,
+      }),
+      text: COVERAGE,
+    });
+    expect(approve).toBe(false);
+    const preview = card.callPreview ?? "";
+    expect(fitsThePane(preview)).toBe(true);
+    expect(
+      preview.startsWith("(1 more argument, see Inspect)\ncommand: ls\n"),
+    ).toBe(true);
+    expect(preview).not.toContain("List files");
+    expect(preview).toMatch(/\(\d+ more arguments, see Inspect\)$/);
+  });
+
   test("keeps a value that looks like a markdown fence literal", () => {
     const { card } = cardFor({
       tool: "Write",

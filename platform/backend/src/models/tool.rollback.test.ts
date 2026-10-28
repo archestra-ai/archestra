@@ -1216,7 +1216,9 @@ describe("ToolModel", () => {
       await AgentToolModel.create(agent2.id, tool1.id);
       await AgentToolModel.create(agent1.id, tool2.id);
 
-      const result = await ToolModel.findByCatalogId(catalogItem.id);
+      const result = await ToolModel.findByCatalogId(catalogItem.id, {
+        kind: "caller",
+      });
 
       expect(result).toHaveLength(2);
 
@@ -1246,7 +1248,9 @@ describe("ToolModel", () => {
         serverUrl: "https://api.empty.com/mcp/",
       });
 
-      const result = await ToolModel.findByCatalogId(catalogItem.id);
+      const result = await ToolModel.findByCatalogId(catalogItem.id, {
+        kind: "caller",
+      });
       expect(result).toHaveLength(0);
     });
 
@@ -1272,7 +1276,9 @@ describe("ToolModel", () => {
         catalogId: catalogItem.id,
       });
 
-      const result = await ToolModel.findByCatalogId(catalogItem.id);
+      const result = await ToolModel.findByCatalogId(catalogItem.id, {
+        kind: "caller",
+      });
 
       expect(
         result.find((t) => t.name === getArchestraToolFullName("list_skills"))
@@ -2348,7 +2354,9 @@ describe("ToolModel", () => {
       await seedAndAssignArchestraTools(agent.id);
 
       const { ARCHESTRA_MCP_CATALOG_ID } = await import("@archestra/shared");
-      const tools = await ToolModel.findByCatalogId(ARCHESTRA_MCP_CATALOG_ID);
+      const tools = await ToolModel.findByCatalogId(ARCHESTRA_MCP_CATALOG_ID, {
+        kind: "caller",
+      });
       const toolNames = tools.map((t) => t.name);
 
       expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
@@ -2390,6 +2398,7 @@ describe("ToolModel", () => {
       const visibleMcpTools = await ToolModel.getMcpToolsByAgent(agent.id);
       const catalogTools = await ToolModel.findByCatalogId(
         ARCHESTRA_MCP_CATALOG_ID,
+        { kind: "caller" },
       );
 
       expect(visibleTools.map((tool) => tool.name)).not.toContain(
@@ -4332,7 +4341,7 @@ describe("provisional tools are gated from assignment", () => {
       clonedPendingDiscovery: true,
     });
 
-    const tools = await ToolModel.findByCatalogId(cat.id);
+    const tools = await ToolModel.findByCatalogId(cat.id, { kind: "caller" });
     const names = tools.map((t) => t.name);
     expect(names).toContain(ToolModel.slugifyName(cat.name, "real"));
     expect(names).not.toContain(ToolModel.slugifyName(cat.name, "provisional"));

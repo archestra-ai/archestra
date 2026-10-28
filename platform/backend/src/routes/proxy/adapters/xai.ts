@@ -35,6 +35,7 @@ import {
   type StreamAccumulatorState,
   type Xai,
 } from "@/types";
+import { streamChatCompletionChunks } from "./chat-completions-stream";
 import {
   OpenAIRequestAdapter,
   OpenAIResponseAdapter,
@@ -343,15 +344,9 @@ export const xaiAdapterFactory: LLMProvider<
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
 
-    const stream = await xaiClient.chat.completions.create(xaiRequest);
-
-    return {
-      [Symbol.asyncIterator]: async function* () {
-        for await (const chunk of stream) {
-          yield chunk as XaiStreamChunk;
-        }
-      },
-    };
+    return streamChatCompletionChunks<XaiStreamChunk>(
+      xaiClient.chat.completions.create(xaiRequest),
+    );
   },
 
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {

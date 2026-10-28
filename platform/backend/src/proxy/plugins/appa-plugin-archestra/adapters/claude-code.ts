@@ -1,3 +1,5 @@
+import { EXTERNAL_AGENT_ID_HEADER } from "@archestra/shared/consts";
+import { isClaudeDesktopClientAgentId } from "@archestra/shared/interactions/client";
 import { verifyChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import { parseClaudeMetadataSessionId } from "@/routes/proxy/utils/headers/session-id";
@@ -42,6 +44,13 @@ export function claudeCodeNativeChildIds(context: AppaMatchContext): {
   };
 }
 
+/** Whether an adapter id belongs to the Claude Code / Claude Desktop family. */
+export function isClaudeCodeFamilyAdapter(
+  id: string | undefined,
+): id is "claude-code" | "claude-desktop" {
+  return id === "claude-code" || id === "claude-desktop";
+}
+
 /** A skill runs in the spawner's trajectory. An agent opens a new child trajectory. */
 const CHILD_SPAWN_TOOLS = new Set(["Agent", "Task"]);
 const HANDBACK_TOOLS = new Set(["SubagentHandback"]);
@@ -79,8 +88,15 @@ const MAX_CHILD_ID_LENGTH = 128;
 
 /** Identifies Claude Code Messages requests and normalizes local tool names. */
 export class AppaClaudeCodeAdapter implements AppaClientAdapter {
-  readonly id = "claude-code" as const;
-  readonly trajectoryPrefix = "cc";
+  readonly id: "claude-code" | "claude-desktop" = "claude-code";
+  readonly trajectoryPrefix: string = "cc";
+  protected readonly provenance: {
+    header: NonNullable<AppaSessionIdentity["provenance"]>;
+    metadata: NonNullable<AppaSessionIdentity["provenance"]>;
+  } = {
+    header: "claude-code-header",
+    metadata: "claude-code-metadata",
+  };
   readonly childTranscriptPaths = CHILD_PATHS;
   readonly nativeQuestion = {
     toolName: "AskUserQuestion",
@@ -113,12 +129,15 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   // Claude Code connects MCP servers in the background and declares this tool
   // in the requests it sends before they are ready.
   readonly pendingServersTool = "WaitForMcpServers";
+  // Observed on 2.1.310: "No such tool available" comes back as an error result.
+  readonly answersUndeclaredCalls = true;
   // A gateway that needs a sign-in is not pending, so the wait tool is not
   // declared and never carries the denial: /mcp is where the person sees that.
   gatewayToolsHint(serverName: string): string {
     return `Run /mcp in Claude Code. If "${serverName}" is still connecting, wait for it. If it needs authentication, select it and sign in. If it is not listed, connect Claude Code again and start a new session. Then send your message again.`;
   }
   matches(context: AppaMatchContext): boolean {
+    if (isClaudeDesktopSignal(context)) return false;
     const userAgent = (
       readHeader(context.headers, "user-agent") ?? ""
     ).toLowerCase();
@@ -152,13 +171,13 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     context: AppaMatchContext,
   ): AppaSessionIdentity | undefined {
     const sessionId = readHeader(context.headers, "x-claude-code-session-id");
-    if (sessionId) return { sessionId, provenance: "claude-code-header" };
+    if (sessionId) return { sessionId, provenance: this.provenance.header };
     const userId = stringField(
       asRecord(asRecord(context.requestBody)?.metadata)?.user_id,
     );
     const metadataSession = parseClaudeMetadataSessionId(userId);
     return metadataSession
-      ? { sessionId: metadataSession, provenance: "claude-code-metadata" }
+      ? { sessionId: metadataSession, provenance: this.provenance.metadata }
       : undefined;
   }
 
@@ -415,6 +434,116 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
       return;
     }
   }
+}
+
+/**
+ * Identifies Claude Desktop requests. Claude Desktop's Code and Cowork tabs
+ * share Claude Code's runtime, tool names (`Bash`, `Agent`, `SendMessage`,
+ * `AskUserQuestion`, `WaitForMcpServers`), and session/subagent wire format.
+ * Only its identity and gateway setup instructions differ: the
+ * `anthropic_claude_desktop` agent id header set by Desktop's setup, a
+ * `claude-desktop` User-Agent, or a `cowork`/`claude-desktop` Anthropic billing
+ * entrypoint in the system prompt.
+ */
+export class AppaClaudeDesktopAdapter extends AppaClaudeCodeAdapter {
+  override readonly id = "claude-desktop" as const;
+  override readonly trajectoryPrefix = "claude-desktop";
+  protected override readonly provenance = {
+    header: "claude-desktop-header",
+    metadata: "claude-desktop-metadata",
+  } as const;
+
+  override gatewayToolsHint(serverName: string): string {
+    return `In Claude Desktop, open Settings → Connectors, select "${serverName}", and complete sign-in if needed. In your conversation, open + → Connectors and enable "${serverName}" if it is off. If it is not listed, connect Claude Desktop again and start a new session. Then send your message again.`;
+  }
+
+  override matches(context: AppaMatchContext): boolean {
+    return (
+      isClaudeDesktopSignal(context) &&
+      (context.trustedContext !== undefined ||
+        this.extractSessionIdentity(context) !== undefined)
+    );
+  }
+
+  override extractSessionIdentity(
+    context: AppaMatchContext,
+  ): AppaSessionIdentity | undefined {
+    const headerSession =
+      readHeader(context.headers, "x-claude-code-session-id")?.trim() ??
+      readHeader(context.headers, "x-claude-desktop-session-id")?.trim() ??
+      readHeader(context.headers, "x-claude-desktop-conversation-id")?.trim();
+    if (headerSession) {
+      return { sessionId: headerSession, provenance: this.provenance.header };
+    }
+    const conversationId = extractDesktopConversationId(context);
+    return conversationId
+      ? { sessionId: conversationId, provenance: this.provenance.metadata }
+      : undefined;
+  }
+}
+
+const CLAUDE_DESKTOP_BILLING_ENTRYPOINT_RE =
+  /cc_entrypoint=(?:cowork|claude-desktop(?:-3p)?|local[-_]agent|remote[-_](?:cowork(?:_trigger)?|desktop)|claude-coworker(?:-terminal)?)(?=[;\s]|$)/i;
+
+function isClaudeDesktopSignal(context: AppaMatchContext): boolean {
+  const userAgent = (
+    readHeader(context.headers, "user-agent") ?? ""
+  ).toLowerCase();
+  return (
+    isClaudeDesktopClientAgentId(
+      readHeader(context.headers, EXTERNAL_AGENT_ID_HEADER),
+    ) ||
+    userAgent.includes("claude-desktop") ||
+    userAgent.includes("claudedesktop") ||
+    hasClaudeDesktopBillingEntrypoint(context.requestBody)
+  );
+}
+
+function hasClaudeDesktopBillingEntrypoint(requestBody: unknown): boolean {
+  const system = asRecord(requestBody)?.system;
+  const text =
+    typeof system === "string"
+      ? system
+      : Array.isArray(system)
+        ? system
+            .map((block) => stringField(asRecord(block)?.text) ?? "")
+            .join("\n")
+        : "";
+  return (
+    text.toLowerCase().includes("x-anthropic-billing-header") &&
+    CLAUDE_DESKTOP_BILLING_ENTRYPOINT_RE.test(text)
+  );
+}
+
+/**
+ * Extracts a client-supplied per-conversation or per-session identifier from
+ * a Claude Desktop request body without deriving identity from prompt content.
+ * Rejects contradictory conversation metadata claims.
+ */
+function extractDesktopConversationId(
+  context: AppaMatchContext,
+): string | undefined {
+  const body = asRecord(context.requestBody);
+  if (!body) return undefined;
+  const metadata = asRecord(body.metadata);
+  const userMetadata = claudeUserMetadata(context);
+  const candidates = [
+    parseClaudeMetadataSessionId(stringField(metadata?.user_id)) ?? undefined,
+    stringField(userMetadata?.conversation_id)?.trim(),
+    stringField(metadata?.session_id)?.trim(),
+    stringField(metadata?.conversation_id)?.trim(),
+    stringField(body.conversation_id)?.trim(),
+    stringField(body.conversation)?.trim(),
+  ].filter((value): value is string => Boolean(value));
+  const [first] = candidates;
+  if (!first) return undefined;
+  if (candidates.some((candidate) => candidate !== first)) {
+    throw new ApiError(
+      400,
+      "OpenAPPA cannot bind contradictory Claude Desktop conversation metadata",
+    );
+  }
+  return first;
 }
 
 /**

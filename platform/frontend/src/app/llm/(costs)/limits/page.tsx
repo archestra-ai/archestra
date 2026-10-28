@@ -14,6 +14,7 @@ import {
   Key,
   KeyRound,
   type LucideIcon,
+  MessageSquareText,
   Plus,
   Trash2,
   User,
@@ -48,7 +49,6 @@ import {
 import { LlmModelPicker } from "@/components/llm-model-picker";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RemoteUserSelect } from "@/components/remote-user-select";
-import { WithPermissions } from "@/components/roles/with-permissions";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
@@ -61,6 +61,7 @@ import {
   DialogForm,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
+import { FieldDescription } from "@/components/ui/field-description";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -244,6 +245,7 @@ import {
   type LimitFilterModel,
   LimitModelFilter,
 } from "./_parts/limit-model-filter";
+import { UserLimitsOverview } from "./_parts/user-limits-overview";
 
 export default function LimitsPage() {
   const setActionButton = useSetCostsAction();
@@ -316,6 +318,7 @@ export default function LimitsPage() {
   const [formState, setFormState] =
     useState<LimitFormState>(DEFAULT_FORM_STATE);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  const limitValueRef = useRef<HTMLInputElement>(null);
 
   const editId = searchParams.get("edit");
   // The list is unfiltered and unpaginated, so every limit the `edit` param can
@@ -634,6 +637,19 @@ export default function LimitsPage() {
                     {getEntityScopeLabel(limit)}
                   </div>
                 )}
+                {limit.reason ? (
+                  <div
+                    title={limit.reason}
+                    className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
+                  >
+                    <MessageSquareText
+                      aria-hidden
+                      className="size-3 shrink-0"
+                    />
+                    <span className="sr-only">Reason: </span>
+                    <span className="truncate">{limit.reason}</span>
+                  </div>
+                ) : null}
               </div>
             </div>
           );
@@ -828,243 +844,233 @@ export default function LimitsPage() {
 
   return (
     <div className="-mt-3">
-      <WithPermissions
-        permissions={{ llmLimit: ["read"] }}
-        noPermissionHandle="hide"
-      >
-        <details className="mb-3 text-xs text-muted-foreground">
-          <summary className="mb-2 cursor-pointer">
-            Default user spend limits
-          </summary>
-          <InlineNotice variant="info">
-            <Info />
-            <InlineNoticeText>
-              {defaultUserLimits.length > 0
-                ? "A default user spend limit applies to every user. Custom per-user spend limits override it. Set it in "
-                : "No default user spend limit is set. Set one for every user in "}
-              <Link
-                href="/settings/llm"
-                className="font-medium underline underline-offset-4"
+      <UserLimitsOverview
+        limitsTable={
+          <BulkActionsScope>
+            <CollectionFilters>
+              <FilterBar
+                onClearFilters={hasActiveFilters ? clearFilters : undefined}
               >
-                LLM settings
-              </Link>
-              .
-            </InlineNoticeText>
-          </InlineNotice>
-        </details>
-      </WithPermissions>
+                <FilterSelect
+                  value={statusFilter}
+                  onValueChange={(value) =>
+                    updateQueryParams({
+                      status: value === "all" ? null : value,
+                      page: null,
+                    })
+                  }
+                  placeholder="All statuses"
+                  showSearch={false}
+                  items={[
+                    { value: "all", label: "All statuses" },
+                    ...USAGE_STATUSES.map((status) => ({
+                      value: status,
+                      label: USAGE_STATUS_META[status].label,
+                      content: (
+                        <FilterOptionLabel
+                          icon={<UsageStatusDot status={status} />}
+                          label={USAGE_STATUS_META[status].label}
+                          hint={USAGE_STATUS_META[status].hint}
+                          count={statusCounts[status]}
+                        />
+                      ),
+                      selectedContent: (
+                        <span className="flex items-center gap-2">
+                          <UsageStatusDot status={status} />
+                          {USAGE_STATUS_META[status].label}
+                        </span>
+                      ),
+                    })),
+                  ]}
+                />
+                <FilterSelect
+                  value={appliedToFilter}
+                  onValueChange={(value) =>
+                    updateQueryParams({
+                      appliedTo: value === "all" ? null : value,
+                      entityId: null,
+                      page: null,
+                    })
+                  }
+                  placeholder="All applied to"
+                  showSearch={false}
+                  items={[
+                    { value: "all", label: "All applied to" },
+                    ...APPLIED_TO_OPTIONS.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                      content: (
+                        <FilterOptionLabel
+                          icon={
+                            <option.icon className="size-4 text-muted-foreground" />
+                          }
+                          label={option.label}
+                          count={appliedToCounts[option.value] ?? 0}
+                        />
+                      ),
+                      selectedContent: (
+                        <span className="flex items-center gap-2">
+                          <option.icon className="size-4" />
+                          {option.label}
+                        </span>
+                      ),
+                    })),
+                  ]}
+                />
+                {entityIdFilter && (
+                  <FilterSelect
+                    value={entityIdFilter}
+                    onValueChange={(value) =>
+                      updateQueryParams({
+                        entityId: value === "all" ? null : value,
+                        page: null,
+                      })
+                    }
+                    placeholder="All entities"
+                    ariaLabel="Filter by entity"
+                    items={[
+                      { value: "all", label: "All entities" },
+                      ...Array.from(
+                        new Map([
+                          ...llmLimits
+                            .filter(
+                              (limit) => limit.entityType === appliedToFilter,
+                            )
+                            .map(
+                              (limit) =>
+                                [
+                                  limit.entityId,
+                                  getEntityLabel(limit),
+                                ] as const,
+                            ),
+                          [
+                            entityIdFilter,
+                            getEntityLabel({
+                              entityType:
+                                appliedToFilter as LimitData["entityType"],
+                              entityId: entityIdFilter,
+                            }),
+                          ] as const,
+                        ]),
+                        ([value, label]) => ({ value, label }),
+                      ),
+                    ]}
+                  />
+                )}
+                <LimitModelFilter
+                  value={modelFilter}
+                  onValueChange={(value) =>
+                    updateQueryParams({
+                      model: value === "all" ? null : value,
+                      page: null,
+                    })
+                  }
+                  models={filterModels}
+                  limitCountByModel={limitCountByModel}
+                />
+                <EntityLabelFilter
+                  useLabelKeys={useLimitLabelKeys}
+                  useLabelValues={useLimitLabelValues}
+                  className={filterControlClass({
+                    active: Boolean(selectedLabels),
+                  })}
+                />
+                <FilterSelect
+                  value={unitsFilter}
+                  onValueChange={(value) =>
+                    updateQueryParams({
+                      units: value === "all" ? null : value,
+                      page: null,
+                    })
+                  }
+                  placeholder="All kinds"
+                  ariaLabel="Filter by limit kind"
+                  showSearch={false}
+                  items={[
+                    { value: "all", label: "All kinds" },
+                    {
+                      value: "token_cost",
+                      label: "Spend",
+                      content: <LimitKindLabel limitType="token_cost" />,
+                      selectedContent: (
+                        <LimitKindLabel limitType="token_cost" />
+                      ),
+                    },
+                    {
+                      value: "tokens",
+                      label: "Tokens",
+                      content: <LimitKindLabel limitType="tokens" />,
+                      selectedContent: <LimitKindLabel limitType="tokens" />,
+                    },
+                    {
+                      value: "requests",
+                      label: "Requests",
+                      content: <LimitKindLabel limitType="requests" />,
+                      selectedContent: <LimitKindLabel limitType="requests" />,
+                    },
+                  ]}
+                />
+              </FilterBar>
+            </CollectionFilters>
 
-      <BulkActionsScope>
-        <CollectionFilters>
-          <FilterBar
-            onClearFilters={hasActiveFilters ? clearFilters : undefined}
-          >
-            <FilterSelect
-              value={statusFilter}
-              onValueChange={(value) =>
-                updateQueryParams({
-                  status: value === "all" ? null : value,
-                  page: null,
-                })
-              }
-              placeholder="All statuses"
-              showSearch={false}
-              items={[
-                { value: "all", label: "All statuses" },
-                ...USAGE_STATUSES.map((status) => ({
-                  value: status,
-                  label: USAGE_STATUS_META[status].label,
-                  content: (
-                    <FilterOptionLabel
-                      icon={<UsageStatusDot status={status} />}
-                      label={USAGE_STATUS_META[status].label}
-                      hint={USAGE_STATUS_META[status].hint}
-                      count={statusCounts[status]}
-                    />
-                  ),
-                  selectedContent: (
-                    <span className="flex items-center gap-2">
-                      <UsageStatusDot status={status} />
-                      {USAGE_STATUS_META[status].label}
-                    </span>
-                  ),
-                })),
-              ]}
-            />
-            <FilterSelect
-              value={appliedToFilter}
-              onValueChange={(value) =>
-                updateQueryParams({
-                  appliedTo: value === "all" ? null : value,
-                  entityId: null,
-                  page: null,
-                })
-              }
-              placeholder="All applied to"
-              showSearch={false}
-              items={[
-                { value: "all", label: "All applied to" },
-                ...APPLIED_TO_OPTIONS.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  content: (
-                    <FilterOptionLabel
-                      icon={
-                        <option.icon className="size-4 text-muted-foreground" />
-                      }
-                      label={option.label}
-                      count={appliedToCounts[option.value] ?? 0}
-                    />
-                  ),
-                  selectedContent: (
-                    <span className="flex items-center gap-2">
-                      <option.icon className="size-4" />
-                      {option.label}
-                    </span>
-                  ),
-                })),
-              ]}
-            />
-            {entityIdFilter && (
-              <FilterSelect
-                value={entityIdFilter}
-                onValueChange={(value) =>
-                  updateQueryParams({
-                    entityId: value === "all" ? null : value,
-                    page: null,
-                  })
-                }
-                placeholder="All entities"
-                ariaLabel="Filter by entity"
-                items={[
-                  { value: "all", label: "All entities" },
-                  ...Array.from(
-                    new Map([
-                      ...llmLimits
-                        .filter((limit) => limit.entityType === appliedToFilter)
-                        .map(
-                          (limit) =>
-                            [limit.entityId, getEntityLabel(limit)] as const,
-                        ),
-                      [
-                        entityIdFilter,
-                        getEntityLabel({
-                          entityType:
-                            appliedToFilter as LimitData["entityType"],
-                          entityId: entityIdFilter,
-                        }),
-                      ] as const,
-                    ]),
-                    ([value, label]) => ({ value, label }),
-                  ),
-                ]}
-              />
-            )}
-            <LimitModelFilter
-              value={modelFilter}
-              onValueChange={(value) =>
-                updateQueryParams({
-                  model: value === "all" ? null : value,
-                  page: null,
-                })
-              }
-              models={filterModels}
-              limitCountByModel={limitCountByModel}
-            />
-            <EntityLabelFilter
-              useLabelKeys={useLimitLabelKeys}
-              useLabelValues={useLimitLabelValues}
-              className={filterControlClass({
-                active: Boolean(selectedLabels),
-              })}
-            />
-            <FilterSelect
-              value={unitsFilter}
-              onValueChange={(value) =>
-                updateQueryParams({
-                  units: value === "all" ? null : value,
-                  page: null,
-                })
-              }
-              placeholder="All kinds"
-              ariaLabel="Filter by limit kind"
-              showSearch={false}
-              items={[
-                { value: "all", label: "All kinds" },
-                {
-                  value: "token_cost",
-                  label: "Spend",
-                  content: <LimitKindLabel limitType="token_cost" />,
-                  selectedContent: <LimitKindLabel limitType="token_cost" />,
-                },
-                {
-                  value: "tokens",
-                  label: "Tokens",
-                  content: <LimitKindLabel limitType="tokens" />,
-                  selectedContent: <LimitKindLabel limitType="tokens" />,
-                },
-                {
-                  value: "requests",
-                  label: "Requests",
-                  content: <LimitKindLabel limitType="requests" />,
-                  selectedContent: <LimitKindLabel limitType="requests" />,
-                },
-              ]}
-            />
-          </FilterBar>
-        </CollectionFilters>
-
-        {/* The table reports its own first load, rather than a centred loader
+            {/* The table reports its own first load, rather than a centred loader
             standing in for it: swapping a full-height indicator out for the
             table put the toolbar, headers and pagination on screen a beat
             after the wait had already visibly ended, so one navigation read as
             loader, then chrome, then rows. The table keeps its shape from the
             first frame and fills in. */}
-        <BulkActions
-          count={selectedLimits.length}
-          noun="limit"
-          onClear={clearSelection}
-          busy={bulkDeleteLimits.isPending}
-          selectAllMatching={selectAllMatching}
-        >
-          <PermissionButton
-            permissions={{ llmLimit: ["delete"] }}
-            variant="destructive"
-            size="sm"
-            onClick={() => setIsBulkDeleteDialogOpen(true)}
-          >
-            <Trash2 className="h-4 w-4" />
-            <span>Delete</span>
-          </PermissionButton>
-        </BulkActions>
-        <DataTable
-          columns={columns}
-          data={filteredLimits}
-          pagination={{
-            pageIndex: Number.isFinite(pageIndex) ? pageIndex : 0,
-            pageSize: Number.isFinite(pageSize) ? pageSize : 10,
-            total: filteredLimits.length,
-          }}
-          onPaginationChange={setPagination}
-          getRowId={(limit) => limit.id}
-          rowSelection={rowSelection}
-          onRowSelectionChange={setRowSelection}
-          onPageRowIdsChange={onPageRowIdsChange}
-          hideSelectedCount
-          emptyIcon={CircleDollarSign}
-          emptyMessage="No limits configured"
-          hasActiveFilters={hasActiveFilters}
-          filteredEmptyMessage="No limits match your filters"
-          onClearFilters={clearFilters}
-          isLoading={(isPending || isFetching) && limits.length === 0}
-        />
-      </BulkActionsScope>
+            <BulkActions
+              count={selectedLimits.length}
+              noun="limit"
+              onClear={clearSelection}
+              busy={bulkDeleteLimits.isPending}
+              selectAllMatching={selectAllMatching}
+            >
+              <PermissionButton
+                permissions={{ llmLimit: ["delete"] }}
+                variant="destructive"
+                size="sm"
+                onClick={() => setIsBulkDeleteDialogOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>Delete</span>
+              </PermissionButton>
+            </BulkActions>
+            <DataTable
+              columns={columns}
+              data={filteredLimits}
+              pagination={{
+                pageIndex: Number.isFinite(pageIndex) ? pageIndex : 0,
+                pageSize: Number.isFinite(pageSize) ? pageSize : 10,
+                total: filteredLimits.length,
+              }}
+              onPaginationChange={setPagination}
+              getRowId={(limit) => limit.id}
+              rowSelection={rowSelection}
+              onRowSelectionChange={setRowSelection}
+              onPageRowIdsChange={onPageRowIdsChange}
+              hideSelectedCount
+              emptyIcon={CircleDollarSign}
+              emptyMessage="No limits configured"
+              hasActiveFilters={hasActiveFilters}
+              filteredEmptyMessage="No limits match your filters"
+              onClearFilters={clearFilters}
+              isLoading={(isPending || isFetching) && limits.length === 0}
+            />
+          </BulkActionsScope>
+        }
+      />
 
       <FormDialog
         open={isCreateDialogOpen || !!editingLimit}
         onOpenChange={(open) => !open && closeDialog()}
         title={editingLimit ? "Edit limit" : "Create limit"}
-        description="Choose an amount, limit kind and interval for each limit."
+        initialFocusRef={editingLimit ? limitValueRef : undefined}
+        description={
+          editingLimit
+            ? "Adjust the amount, models or interval."
+            : "Choose who this limit applies to and how much they can use."
+        }
         size="medium"
       >
         <DialogForm
@@ -1074,12 +1080,13 @@ export default function LimitsPage() {
             void handleSubmit();
           }}
         >
-          <DialogBody className="space-y-5">
-            <InlineNotice variant="neutral">
+          <DialogBody className="space-y-4">
+            <InlineNotice variant="warning">
               <Info aria-hidden="true" />
               <InlineNoticeText>
-                Every matching limit must allow the request. A key's allowance
-                does not override its team or organization cap.
+                Requests are blocked when any applicable limit is reached. For
+                example, a virtual key with remaining allowance is still blocked
+                if its team or organization has reached a limit.
               </InlineNoticeText>
             </InlineNotice>
 
@@ -1093,22 +1100,16 @@ export default function LimitsPage() {
               </InlineNotice>
             )}
 
-            <section
-              className="space-y-4"
-              aria-labelledby="limit-scope-heading"
-            >
-              <div className="space-y-1">
-                <h3 id="limit-scope-heading" className="text-sm font-medium">
-                  What this rule applies to
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  {editingLimit
-                    ? "Limit kind and scope stay fixed. Create another rule to change them."
-                    : "Choose who the limit applies to, then set its value and interval."}
-                </p>
-              </div>
-              <fieldset disabled={Boolean(editingLimit)} className="space-y-2">
-                <Label>Apply to</Label>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex h-5 items-center gap-1.5">
+                  <Label>Apply to</Label>
+                  {editingLimit && (
+                    <LimitFieldHelp label="Apply to help">
+                      Create a new limit to change who it applies to.
+                    </LimitFieldHelp>
+                  )}
+                </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <SearchableSelect
                     value={formState.entityType}
@@ -1188,6 +1189,7 @@ export default function LimitsPage() {
                         }))
                       }
                       placeholder="Select user"
+                      disabled={Boolean(editingLimit)}
                       className="w-full sm:flex-1"
                     />
                   )}
@@ -1202,6 +1204,7 @@ export default function LimitsPage() {
                         }))
                       }
                       virtualKeys={virtualKeys}
+                      disabled={Boolean(editingLimit)}
                       placeholder="Select virtual key"
                       className="w-full sm:flex-1"
                     />
@@ -1211,6 +1214,7 @@ export default function LimitsPage() {
                     <AgentSelector
                       mode="single"
                       flat
+                      disabled={Boolean(editingLimit)}
                       remote={{
                         filters: {
                           agentType: "agent",
@@ -1239,6 +1243,7 @@ export default function LimitsPage() {
                         }))
                       }
                       placeholder="Select OAuth client"
+                      disabled={Boolean(editingLimit)}
                       items={oauthClients.map((client) => ({
                         value: client.id,
                         label: client.name,
@@ -1252,6 +1257,7 @@ export default function LimitsPage() {
                     <EnvironmentSelector
                       mode="scope"
                       value={formState.entityId}
+                      disabled={Boolean(editingLimit)}
                       onChange={(value) =>
                         setFormState((current) => ({
                           ...current,
@@ -1262,77 +1268,52 @@ export default function LimitsPage() {
                     />
                   )}
                 </div>
-              </fieldset>
+              </div>
 
               <div className="space-y-2">
                 <Label>Select models</Label>
-                <LlmModelPicker
-                  multiple
-                  sortDirection="desc"
-                  value={formState.isAllModels ? ["all"] : formState.models}
-                  onValueChange={(values) => {
-                    const isAllModels = values.includes("all");
-                    setFormState((current) => ({
-                      ...current,
-                      models: isAllModels ? [] : values,
-                      isAllModels,
-                    }));
-                  }}
-                  models={modelOptions}
-                  editable
-                  includeAllOption
-                />
-              </div>
-            </section>
-
-            <section
-              className="space-y-4 border-t pt-4"
-              aria-labelledby="limit-allowance-heading"
-            >
-              <h3 id="limit-allowance-heading" className="text-sm font-medium">
-                Limit settings
-              </h3>
-              <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_8rem_minmax(0,1.4fr)]">
-                <div className="space-y-2">
-                  <div className="flex h-5 items-center">
-                    <Label htmlFor="limit-value">Limit value</Label>
-                  </div>
-                  <Input
-                    id="limit-value"
-                    aria-label="Limit value"
-                    aria-describedby="limit-value-help"
-                    aria-invalid={Boolean(formState.limitValue) && !validAmount}
-                    required
-                    value={formState.limitValue}
-                    onChange={(event) =>
+                {modelOptions.length === 0 ? (
+                  <FieldDescription>
+                    No model pricing configured.{" "}
+                    <Link
+                      href="/llm/models"
+                      className="underline underline-offset-4"
+                    >
+                      Add pricing
+                    </Link>
+                  </FieldDescription>
+                ) : (
+                  <LlmModelPicker
+                    multiple
+                    sortDirection="desc"
+                    value={formState.isAllModels ? ["all"] : formState.models}
+                    onValueChange={(values) => {
+                      const isAllModels = values.includes("all");
                       setFormState((current) => ({
                         ...current,
-                        limitValue: /^\d{1,3}(,\d{3})+$/.test(
-                          event.target.value,
-                        )
-                          ? event.target.value.replace(/,/g, "")
-                          : event.target.value,
-                      }))
-                    }
-                    placeholder={getLimitValuePlaceholder(
-                      formState.limitType,
-                      formState.cleanupInterval,
-                    )}
-                    inputMode="numeric"
+                        models: isAllModels ? [] : values,
+                        isAllModels,
+                      }));
+                    }}
+                    models={modelOptions}
+                    editable
+                    includeAllOption
                   />
-                  <p
-                    id="limit-value-help"
-                    className="text-xs text-muted-foreground"
-                  >
-                    {formState.limitValue && !validAmount
-                      ? "Enter a whole number from 1 to 2,147,483,647. Decimal and negative amounts are not supported."
-                      : "Choose a whole-number allowance for your workload and interval."}
-                  </p>
-                </div>
+                )}
+              </div>
+            </div>
 
-                <div className="space-y-2">
-                  <div className="flex h-5 items-center">
+            <div className="space-y-4 border-t pt-4">
+              <div className="grid items-start gap-4 sm:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1.4fr)]">
+                <div className="flex flex-col gap-2">
+                  <div className="flex h-5 items-center gap-1.5">
                     <Label htmlFor="limit-kind">Limit kind</Label>
+                    {editingLimit && (
+                      <LimitFieldHelp label="Limit kind help">
+                        Create a new limit to change between spend, tokens and
+                        requests.
+                      </LimitFieldHelp>
+                    )}
                   </div>
                   <Select
                     value={formState.limitType}
@@ -1371,6 +1352,49 @@ export default function LimitsPage() {
                   </Select>
                 </div>
 
+                <div className="flex flex-col gap-2">
+                  <div className="flex h-5 items-center">
+                    <Label htmlFor="limit-value">Limit value</Label>
+                  </div>
+                  <Input
+                    id="limit-value"
+                    ref={limitValueRef}
+                    aria-label="Limit value"
+                    aria-describedby={
+                      formState.limitValue && !validAmount
+                        ? "limit-value-error"
+                        : undefined
+                    }
+                    aria-invalid={Boolean(formState.limitValue) && !validAmount}
+                    required
+                    value={formState.limitValue}
+                    onChange={(event) =>
+                      setFormState((current) => ({
+                        ...current,
+                        limitValue: /^\d{1,3}(,\d{3})+$/.test(
+                          event.target.value,
+                        )
+                          ? event.target.value.replace(/,/g, "")
+                          : event.target.value,
+                      }))
+                    }
+                    placeholder={getLimitValuePlaceholder(
+                      formState.limitType,
+                      formState.cleanupInterval,
+                    )}
+                    inputMode="numeric"
+                  />
+                  {formState.limitValue && !validAmount ? (
+                    <p
+                      id="limit-value-error"
+                      className="text-xs text-destructive"
+                    >
+                      Enter a whole number from 1 to 2,147,483,647. Decimal and
+                      negative amounts are not supported.
+                    </p>
+                  ) : null}
+                </div>
+
                 <div className="grid grid-cols-[auto_1fr] grid-rows-[1.25rem_auto] content-start items-center gap-x-1.5 gap-y-2">
                   <Label htmlFor="limit-interval">Interval</Label>
                   <div className="col-span-2 row-start-2">
@@ -1400,28 +1424,14 @@ export default function LimitsPage() {
                       }
                     />
                   </div>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        className="col-start-2 row-start-1 justify-self-start text-muted-foreground hover:text-foreground"
-                        aria-label="Interval help"
-                      >
-                        <Info className="h-3.5 w-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="top"
-                      align="start"
-                      className="max-w-72"
-                    >
-                      Per-minute allowance recovers continuously. Rolling
-                      intervals reset after elapsed time; calendar intervals
-                      reset at the next day, week or month boundary.
-                    </TooltipContent>
-                  </Tooltip>
+                  <LimitFieldHelp
+                    label="Interval help"
+                    className="col-start-2 row-start-1 justify-self-start"
+                  >
+                    Per-minute allowance recovers continuously. Rolling
+                    intervals reset after elapsed time; calendar intervals reset
+                    at the next day, week or month boundary.
+                  </LimitFieldHelp>
                 </div>
               </div>
               {!(
@@ -1445,9 +1455,10 @@ export default function LimitsPage() {
                   flight can exceed this limit.
                 </p>
               )}
-            </section>
+            </div>
 
             <AdvancedLabelsSection
+              collapsible
               ref={labelsRef}
               labels={formState.labels}
               onLabelsChange={(labels) =>
@@ -1920,4 +1931,36 @@ function getLimitInterval(limit: LimitData): LimitCleanupInterval {
     return "minute";
   }
   return limit.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL;
+}
+
+function LimitFieldHelp({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className={cn(
+            "text-muted-foreground hover:text-foreground",
+            className,
+          )}
+          aria-label={label}
+        >
+          <Info aria-hidden="true" className="h-3.5 w-3.5" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent align="start" className="max-w-60 text-wrap">
+        {children}
+      </TooltipContent>
+    </Tooltip>
+  );
 }

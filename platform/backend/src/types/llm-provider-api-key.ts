@@ -116,8 +116,7 @@ export const LlmProviderApiKeyWithScopeInfoSchema =
     createdBy: CreatedByNullableSchema,
     teamName: z.string().nullable().optional(),
     userName: z.string().nullable().optional(),
-    vaultSecretPath: z.string().nullable().optional(),
-    vaultSecretKey: z.string().nullable().optional(),
+
     secretStorageType: SecretStorageTypeSchema.optional(),
     bestModelId: z.string().nullable().optional(),
     isAgentKey: z.boolean().optional(),

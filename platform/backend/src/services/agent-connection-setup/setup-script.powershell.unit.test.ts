@@ -1063,6 +1063,90 @@ $out | ConvertTo-Json -Compress
 });
 
 describe.skipIf(!powershellAvailable)(
+  "PowerShell managed runtime stdin encoding",
+  () => {
+    test.each([
+      0, 23,
+    ])("preserves Unicode and restores session state after Node exits %s", async (exitCode) => {
+      const root = await mkdtemp(
+        path.join(tmpdir(), "archestra-runtime-encoding-"),
+      );
+      const artifact = path.join(root, "artifact.txt");
+      const content = "routing → café";
+      const rendered = renderSetupScript({
+        clientId: "opencode",
+        platform: "windows",
+        appName: "Archestra",
+        mcp: {
+          serverName: "gateway",
+          toolPrefix: "archestra__",
+          url: "https://example.com/v1/mcp/gateway",
+        },
+        proxy: null,
+        skills: null,
+        managedRuntimeSource: {
+          url: "https://example.com/api/managed-runtime",
+          token: "test-runtime-token",
+          installation: "test-installation",
+        },
+      });
+      const boundary = rendered.match(
+        /\$archRuntimeInstall = @'\r?\n[\s\S]*?\r?\n'@([\s\S]*?if \(\$LASTEXITCODE -ne 0\) \{ throw 'Could not install managed launcher updates' \})/,
+      );
+      expect(boundary).not.toBeNull();
+      const probe = `require("node:fs").writeFileSync(process.env.ARCHESTRA_TEST_ARTIFACT, ${JSON.stringify(content)}); process.exit(${exitCode});`;
+      const driver = path.join(root, "driver.ps1");
+      try {
+        await writeFile(
+          driver,
+          `$ErrorActionPreference = 'Stop'
+$originalEncoding = [System.Text.Encoding]::ASCII
+$OutputEncoding = $originalEncoding
+$env:ARCHESTRA_OC_RUNTIME_API_MAJOR = 'before-test'
+$archOcMajor = 1
+$archRuntimeInstall = @'
+${probe}
+'@
+$failure = $null
+try {
+${boundary?.[1]}
+} catch { $failure = $_.Exception.Message }
+[pscustomobject]@{
+  encodingRestored = [object]::ReferenceEquals($OutputEncoding, $originalEncoding)
+  runtimeMajor = $env:ARCHESTRA_OC_RUNTIME_API_MAJOR
+  failure = $failure
+} | ConvertTo-Json -Compress
+`,
+        );
+        const { stdout } = await execFileAsync(
+          "pwsh",
+          ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", driver],
+          {
+            env: {
+              ...process.env,
+              PATH: `${path.dirname(process.execPath)}${path.delimiter}${process.env.PATH ?? ""}`,
+              ARCHESTRA_TEST_ARTIFACT: artifact,
+            },
+            timeout: 30_000,
+          },
+        );
+        expect(await readFile(artifact, "utf8")).toBe(content);
+        expect(JSON.parse(stdout.trim())).toEqual({
+          encodingRestored: true,
+          runtimeMajor: "before-test",
+          failure:
+            exitCode === 0
+              ? null
+              : "Could not install managed launcher updates",
+        });
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+  },
+);
+
+describe.skipIf(!powershellAvailable)(
   "Windows PowerShell 5.1 native argument passing",
   () => {
     test("OpenCode primary-providers setup and its guard disconnect run when quotes in native arguments are dropped", async () => {

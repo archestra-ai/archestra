@@ -2,11 +2,7 @@
 
 import { useMemo } from "react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-
-/** The viewer's IANA timezone, falling back to UTC. */
-export function browserTimezone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-}
+import { browserTimeZone } from "@/lib/utils/time-zone";
 
 function supportedTimezones(): string[] {
   // Intl.supportedValuesOf is widely available but not yet in the TS lib types.
@@ -23,7 +19,7 @@ function supportedTimezones(): string[] {
 /**
  * Searchable IANA timezone dropdown. Reuses the shared {@link SearchableSelect}
  * rather than introducing another combobox. Callers default `value` to
- * {@link browserTimezone}.
+ * {@link browserTimeZone}.
  */
 export function TimezonePicker({
   value,
@@ -40,7 +36,7 @@ export function TimezonePicker({
 }) {
   const items = useMemo(() => {
     const zones = supportedTimezones();
-    const list = zones.length > 0 ? zones : [browserTimezone()];
+    const list = zones.length > 0 ? zones : [browserTimeZone()];
     // Keep a non-standard stored value selectable instead of silently dropping it.
     const withValue = value && !list.includes(value) ? [value, ...list] : list;
     return withValue.map((zone) => ({ value: zone, label: zone }));

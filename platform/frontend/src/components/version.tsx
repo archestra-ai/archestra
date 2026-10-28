@@ -1,6 +1,7 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 "use client";
 
+import { normalizeVersion } from "@archestra/shared/version";
 import Link from "next/link";
 import { memo, type ReactNode, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
@@ -82,7 +83,7 @@ export const Version = memo(function Version({ inline = false }: VersionProps) {
   const footerString = useMemo(() => {
     // Wait for version to load before rendering to avoid layout shift
     if (!version) return null;
-    if (footerText) return `${footerText} (v${displayVersion})`;
+    if (footerText) return `${footerText} (${displayVersion})`;
     return `Version: ${displayVersion}`;
   }, [footerText, version, displayVersion]);
 
@@ -160,7 +161,7 @@ export const Version = memo(function Version({ inline = false }: VersionProps) {
             rel="noopener noreferrer"
             className="underline hover:text-foreground transition-colors"
           >
-            {latestRelease.tag_name.replace(/^platform-/, "")}
+            {normalizeVersion(latestRelease.tag_name)}
           </Link>
         </>
       )}

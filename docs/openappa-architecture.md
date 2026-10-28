@@ -542,10 +542,11 @@ flowchart TD
   Fork --> Start
 ```
 
-Adapters match in precedence order: Claude Code, Codex, OpenCode, then Chat. `X-Appa-Session-ID` overrides native extraction. `X-Appa-Parent-ID` overrides extracted parent metadata. Verified child bindings reject explicit claims that contradict known parents or child IDs.
+Adapters match in precedence order: Pi, Claude Desktop, Claude Code, Codex, Kilo Code, OpenCode, then Chat. `X-Appa-Session-ID` overrides native extraction. `X-Appa-Parent-ID` overrides extracted parent metadata. Verified child bindings reject explicit claims that contradict known parents or child IDs.
 
 | Client | Match Rule | Session Source | Notes |
 | --- | --- | --- | --- |
+| Claude Desktop | `anthropic_claude_desktop` agent ID header, `claude-desktop` user agent, or `cowork` / `claude-desktop` billing entrypoint | `x-claude-code-session-id`, otherwise session parsed from `metadata.user_id` | Shares Claude Code's runtime, tool names, subagent spawns, relays, and `AskUserQuestion` reviews in Code and Cowork tabs. Native Desktop background probes and title requests pass through without opening a session. |
 | Claude Code | `claude-code` / `claude-cli` user agent, or native session header | `x-claude-code-session-id`, otherwise session parsed from `metadata.user_id` | Stable across resume and native compaction. `Agent` and `Task` are child-spawn tools. A skill stays in the caller's trajectory. |
 | Codex | User agent/originator, `x-codex-turn-metadata`, or recognized `client_metadata` | Reconcile body `client_metadata`, its nested turn metadata, the turn-metadata header, and `session-id`. Prefer `thread_id` over session ID. | Contradictory claims return 400. A `forked_from_thread_id` alone does not establish a child. |
 | OpenCode | User agent/originator or `x-opencode-session` | Reconcile `x-session-id`, `x-session-affinity`, and `session-id`, plus hosted `x-opencode-session`. Contradictory claims are refused. | A differing `x-session-id` can identify the parent of the hosted session. Parent metadata still requires child-binding checks. |
@@ -842,7 +843,7 @@ On resubmission, the runtime replays a committed decision or continues work it d
 
 Completed receipts return saved decisions without re-running the engine. Reusing IDs with modified arguments causes an immediate rejection. The `(root, seq)` key of `openappa_events` rejects a write at a taken position. The runtime keeps each family's decoded log and validated view, so a step reads and validates only the batches written since.
 
-Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. Other protocols evaluate calls and results, but notices remain in history as notice calls. The proxy still removes their record, legacy signed offers, and execution frames before forwarding. Model Router routes that translate to Gemini, Bedrock Converse, or Cohere keep the client's session and subagent checks, because the proxy reads them from the client's wire before the translation. Azure Responses tool traffic is refused while OpenAPPA is enabled.
+Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, OpenAI Chat Completions, and Bedrock Converse. Other protocols evaluate calls and results, but notices remain in history as notice calls. The proxy still removes their record, legacy signed offers, and execution frames before forwarding. Model Router routes that translate to Gemini, Bedrock Converse, or Cohere keep the client's session and subagent checks, because the proxy reads them from the client's wire before the translation. Azure Responses tool traffic is refused while OpenAPPA is enabled.
 
 Subscription Responses translated to Chat Completions retain each tool's argument snapshots and deltas until completion. Conflicting identities or argument bytes fail closed. Incomplete generations do not release held tool calls. The translator does not replace malformed arguments with empty objects.
 

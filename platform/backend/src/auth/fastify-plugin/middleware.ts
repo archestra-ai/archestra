@@ -26,6 +26,7 @@ import {
   CONNECTION_RUNTIME_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
   CONNECTION_STARTUP_GUARD_PATH,
+  GITHUB_ACTIONS_TOKEN_PATH,
   GUARDRAILS_NOOP_ANNOTATOR_PATH,
   HEALTH_PATH,
   INCOMING_EMAIL_WEBHOOK_PREFIX,
@@ -237,6 +238,9 @@ export class Authnz {
       (isGetOrHead && url === CONNECTION_RUNTIME_PATH) ||
       // Pure public code rendering: accepts no credential and grants no access.
       (method === "POST" && url === CONNECTION_STARTUP_GUARD_PATH) ||
+      // GitHub Actions token exchange: the OIDC token in the body is the
+      // proof, verified in-route against the gateway's GitHub Actions setting.
+      (method === "POST" && url === GITHUB_ACTIONS_TOKEN_PATH) ||
       // Public existence check for connected remotes (Claude Code startup
       // guard) — the querystring rides along on request.url
       (isGetOrHead &&

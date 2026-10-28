@@ -13,6 +13,7 @@ import {
   ensureFailedRunErrorVisible,
   persistRunConversationMessages,
   persistRunUserMessage,
+  readRunTranscript,
   recordRunConversationError,
 } from "@/services/scheduled-run-conversation";
 import { expect, test } from "@/test";
@@ -566,6 +567,7 @@ test("recordRunConversationError records a failed run's error on its kept conver
     await ConversationModel.findByIdInOrganization({
       id: conversation.id,
       organizationId: org.id,
+      viewer: { kind: "internal", purpose: "scheduled-run" },
     }),
   ).not.toBeNull();
   const errors = await ConversationChatErrorModel.findByConversation(
@@ -759,4 +761,261 @@ test("ensureFailedRunErrorVisible leaves a run that already has a transcript unt
   expect(
     await ConversationChatErrorModel.findByConversation(conversation.id),
   ).toHaveLength(0);
+});
+
+test("readRunTranscript prefers the run's interactions over a prompt-only chat, without writing", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+  makeScheduleTrigger,
+  makeScheduleTriggerRun,
+}) => {
+  const org = await makeOrganization();
+  const actor = await makeUser();
+  await makeMember(actor.id, org.id, { role: "admin" });
+  const agent = await makeAgent({ organizationId: org.id, authorId: actor.id });
+  const project = await projectService.create({
+    organizationId: org.id,
+    userId: actor.id,
+    name: "runs",
+    description: null,
+  });
+  const trigger = await makeScheduleTrigger({
+    organizationId: org.id,
+    actorUserId: actor.id,
+    agentId: agent.id,
+    projectId: project.id,
+    messageTemplate: "write a joke",
+  });
+  const run = await makeScheduleTriggerRun(trigger.id, {
+    organizationId: org.id,
+    runKind: "due",
+  });
+  const conversation = await createAndLinkRunConversation({
+    run,
+    trigger,
+    ownerUserId: actor.id,
+    organizationId: org.id,
+  });
+  // The handler seeds the prompt before execution; the final turn never landed.
+  await persistRunUserMessage({ conversation, userText: "write a joke" });
+  const linkedRun = await ScheduleTriggerRunModel.findById(run.id);
+  if (!linkedRun) throw new Error("run missing");
+
+  const promptOnly = await readRunTranscript({
+    userId: actor.id,
+    trigger,
+    run: linkedRun,
+    organizationId: org.id,
+  });
+  expect(promptOnly.source).toBe("conversation");
+  expect(promptOnly.messages.map((message) => message.role)).toEqual(["user"]);
+
+  await InteractionModel.create({
+    profileId: agent.id,
+    userId: actor.id,
+    sessionId: `scheduled-${run.id}`,
+    request: {
+      model: "gpt-4",
+      messages: [{ role: "user", content: "write a joke" }],
+    },
+    response: {
+      id: "resp-1",
+      object: "chat.completion",
+      created: Date.now(),
+      model: "gpt-4",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: "Why did the chicken cross the road?",
+            refusal: null,
+          },
+          finish_reason: "stop",
+          logprobs: null,
+        },
+      ],
+    },
+    type: "openai:chatCompletions",
+  });
+
+  // While the run is live, an intermediate interaction is not its transcript.
+  expect(
+    (
+      await readRunTranscript({
+        userId: actor.id,
+        trigger,
+        run: { ...linkedRun, status: "running" },
+        organizationId: org.id,
+      })
+    ).source,
+  ).toBe("conversation");
+
+  // Later guardrail checks and tool-call repairs in the same session are not
+  // the agent's turn, however many follow it.
+  for (let index = 0; index < 22; index++) {
+    await InteractionModel.create({
+      profileId: agent.id,
+      userId: actor.id,
+      sessionId: `scheduled-${run.id}`,
+      source: index === 21 ? "a2a:tool_call_repair" : "guardrail:annotator",
+      request: {
+        model: "gpt-4",
+        messages: [{ role: "user", content: "classify this call" }],
+      },
+      response: {
+        id: "resp-2",
+        object: "chat.completion",
+        created: Date.now(),
+        model: "gpt-4",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: "label: internal",
+              refusal: null,
+            },
+            finish_reason: "stop",
+            logprobs: null,
+          },
+        ],
+      },
+      type: "openai:chatCompletions",
+    });
+  }
+
+  const transcript = await readRunTranscript({
+    userId: actor.id,
+    trigger,
+    run: { ...linkedRun, status: "failed" },
+    organizationId: org.id,
+  });
+  expect(transcript.source).toBe("interactions");
+  expect(JSON.stringify(transcript.messages)).toContain(
+    "Why did the chicken cross the road?",
+  );
+  expect(JSON.stringify(transcript.messages)).not.toContain("label: internal");
+  expect(await MessageModel.findByConversation(conversation.id)).toHaveLength(
+    1,
+  );
+});
+
+test("readRunTranscript says when a run's record is on the runtime or not written yet", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+  makeScheduleTrigger,
+  makeScheduleTriggerRun,
+}) => {
+  const org = await makeOrganization();
+  const actor = await makeUser();
+  await makeMember(actor.id, org.id, { role: "admin" });
+  const agent = await makeAgent({ organizationId: org.id, authorId: actor.id });
+  const trigger = await makeScheduleTrigger({
+    organizationId: org.id,
+    actorUserId: actor.id,
+    agentId: agent.id,
+  });
+  const run = await makeScheduleTriggerRun(trigger.id, {
+    organizationId: org.id,
+    runKind: "due",
+  });
+  const read = (overrides: Partial<typeof run>) =>
+    readRunTranscript({
+      userId: actor.id,
+      trigger,
+      run: { ...run, ...overrides },
+      organizationId: org.id,
+    });
+
+  expect(
+    (await read({ status: "failed", runtimeTaskId: crypto.randomUUID() }))
+      .source,
+  ).toBe("runtime");
+  expect(
+    (await read({ status: "failed", completedAt: new Date() })).source,
+  ).toBe("pending");
+  expect(
+    (
+      await read({
+        status: "failed",
+        completedAt: new Date(Date.now() - 5 * 60_000),
+      })
+    ).source,
+  ).toBe("none");
+});
+
+test("readRunTranscript keeps only the run's own turn of a chat that was continued", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+  makeScheduleTrigger,
+  makeScheduleTriggerRun,
+}) => {
+  const org = await makeOrganization();
+  const actor = await makeUser();
+  await makeMember(actor.id, org.id, { role: "admin" });
+  const agent = await makeAgent({ organizationId: org.id, authorId: actor.id });
+  const project = await projectService.create({
+    organizationId: org.id,
+    userId: actor.id,
+    name: "runs",
+    description: null,
+  });
+  const trigger = await makeScheduleTrigger({
+    organizationId: org.id,
+    actorUserId: actor.id,
+    agentId: agent.id,
+    projectId: project.id,
+    messageTemplate: "post the digest",
+  });
+  const run = await makeScheduleTriggerRun(trigger.id, {
+    organizationId: org.id,
+    runKind: "due",
+  });
+  const conversation = await createAndLinkRunConversation({
+    run,
+    trigger,
+    ownerUserId: actor.id,
+    organizationId: org.id,
+  });
+  const linkedRun = await ScheduleTriggerRunModel.findById(run.id);
+  if (!linkedRun) throw new Error("run missing");
+  await persistRunUserMessage({ conversation, userText: "post the digest" });
+
+  // Settled seconds ago with only the prompt: its turn may still be written.
+  const settling = await readRunTranscript({
+    userId: actor.id,
+    trigger,
+    run: { ...linkedRun, status: "failed", completedAt: new Date() },
+    organizationId: org.id,
+  });
+  expect(settling.source).toBe("pending");
+
+  const message = (role: "user" | "assistant", text: string) => ({
+    conversationId: conversation.id,
+    role,
+    content: { id: crypto.randomUUID(), role, parts: [{ type: "text", text }] },
+  });
+  await MessageModel.bulkCreate([
+    message("assistant", "Posting needs approval."),
+    message("user", "a later follow-up question"),
+    message("assistant", "a later follow-up answer"),
+  ]);
+
+  const transcript = await readRunTranscript({
+    userId: actor.id,
+    trigger,
+    run: { ...linkedRun, status: "failed" },
+    organizationId: org.id,
+  });
+  expect(transcript.source).toBe("conversation");
+  const text = JSON.stringify(transcript.messages);
+  expect(text).toContain("Posting needs approval.");
+  expect(text).not.toContain("follow-up");
 });

@@ -36,7 +36,7 @@ import {
   useMcpServerCategories,
 } from "@/lib/mcp/external-mcp-catalog.query";
 import { useMcpRegistryIssueIndex } from "@/lib/mcp/mcp-registry.query";
-import type { SelectedCategory } from "./CatalogFilters";
+import type { SelectedCategory } from "./catalog-filters";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { transformExternalCatalogToFormValues } from "./mcp-catalog-form.utils";
 

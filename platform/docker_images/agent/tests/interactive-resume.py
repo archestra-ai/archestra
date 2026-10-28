@@ -19,6 +19,25 @@ CLIENTS = {
 }
 
 
+def finish_tmux_session(tmux):
+    # The fake CLI is waiting for terminal input. Let it exit normally before
+    # TemporaryDirectory removes its runtime files: killing the pane can close
+    # stdin while its child is still writing the final input/status record.
+    subprocess.run(tmux + ["send-keys", "-t", "agent", "Enter"],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    try:
+        deadline = time.monotonic() + 10
+        while subprocess.run(tmux + ["has-session", "-t", "agent"],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+            if time.monotonic() >= deadline:
+                raise AssertionError("Fake native CLI did not exit before runtime cleanup")
+            time.sleep(0.05)
+    finally:
+        # This server belongs only to this test's unique socket.
+        subprocess.run(tmux + ["kill-server"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+
+
 class InteractiveResumeTest(unittest.TestCase):
     def launch(self, client, prompt):
         executable, protocol, session_file = CLIENTS[client]
@@ -29,7 +48,12 @@ class InteractiveResumeTest(unittest.TestCase):
             if session_file:
                 (runtime / session_file).write_text("saved-session")
             fake = root / executable
-            fake.write_text("#!/usr/bin/env python3\nimport json,sys\nprint(json.dumps(sys.argv[1:]))\n")
+            fake.write_text(
+                "#!/usr/bin/env python3\nimport json,sys\n"
+                'if sys.argv[1:] == ["debug", "models", "--bundled"]:\n'
+                '    print(json.dumps({"models": []}))\n'
+                "else:\n    print(json.dumps(sys.argv[1:]))\n"
+            )
             fake.chmod(0o755)
             env = {
                 **os.environ,
@@ -149,11 +173,85 @@ class GrokInteractiveResumeTest(unittest.TestCase):
                 pasted = (runtime / "fake-input.txt").read_text() if (runtime / "fake-input.txt").exists() else None
                 return args, pasted
             finally:
-                subprocess.run(tmux + ["kill-session", "-t", "agent"], stderr=subprocess.DEVNULL, check=False)
+                finish_tmux_session(tmux)
 
     def test_resume_opens_saved_session_without_submitting_a_prompt(self):
         args, pasted = self.launch("")
         self.assertEqual(args, ["--trust", "--always-approve", "--resume", "saved-session"])
+        self.assertIsNone(pasted)
+
+    def test_follow_up_instructions_reach_the_resumed_session(self):
+        args, pasted = self.launch("Review the saved change")
+        self.assertIn("saved-session", args)
+        self.assertEqual(pasted, "Review the saved change")
+
+
+FAKE_KIMI = """#!/usr/bin/env python3
+import json, os, select, sys
+from pathlib import Path
+runtime = Path(os.environ["ARCHESTRA_AGENT_RUNTIME_DIR"])
+(runtime / "fake-args.json").write_text(json.dumps(sys.argv[1:]))
+# The outcome the gateway bridge records once Kimi's tools/list returned.
+Path(os.environ["ARCHESTRA_KIMI_GATEWAY_STATE"]).write_text(json.dumps({"state": "ready", "tools": 3}))
+print("\\u256d\\u2500\\n\\u2502 >", flush=True)
+if select.select([sys.stdin], [], [], 15)[0]:
+    (runtime / "fake-input.txt").write_text(sys.stdin.readline().strip())
+"""
+
+
+class KimiInteractiveResumeTest(unittest.TestCase):
+    """Kimi receives follow-ups as terminal input once its MCP gate passes."""
+
+    def launch(self, prompt):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runtime = root / "runtime"
+            runtime.mkdir()
+            (runtime / "kimi-main-session").write_text("saved-session")
+            fake = root / "kimi"
+            fake.write_text(FAKE_KIMI)
+            fake.chmod(0o755)
+            env = {
+                **os.environ,
+                "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                "HOME": str(root),
+                "TERM": "xterm-256color",
+                "ARCHESTRA_AGENT_RUNTIME_DIR": str(runtime),
+                "ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR": str(runtime),
+                "ARCHESTRA_AGENT_RUNTIME_MODE": "interactive",
+                "ARCHESTRA_AGENT_RUNTIME_CONTINUE": "1",
+                "ARCHESTRA_AGENT_RUNTIME_OPENAPPA": "0",
+                "ARCHESTRA_AGENT_RUNTIME_TASK": prompt,
+                "ARCHESTRA_AGENT_RUNTIME_TASK_ID": "test-turn",
+                "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID": "saved-session",
+                "ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL": "test-model",
+                "ARCHESTRA_LLM_PROXY_PROTOCOL": "openai_chat",
+                "ARCHESTRA_MCP_GATEWAY_URL": "http://localhost:1/mcp",
+                "ARCHESTRA_MCP_GATEWAY_TOKEN": "fixture",
+                "OPENAI_BASE_URL": "http://localhost:1/v1",
+                "OPENAI_API_KEY": "fixture",
+            }
+            env.pop("TMUX", None)
+            socket = f"kimi-resume-{root.name}"
+            tmux = ["tmux", "-L", socket]
+            subprocess.run(tmux + ["new-session", "-d", "-s", "agent", "-x", "120", "-y", "30", "-c", str(root), "bash", str(BIN / "archestra-kimi")], env=env, check=True)
+            try:
+                deadline = time.monotonic() + 30
+                done = runtime / ("fake-input.txt" if prompt else "fake-args.json")
+                while time.monotonic() < deadline and not done.exists():
+                    time.sleep(0.2)
+                if not prompt:
+                    # Give the gate time to (wrongly) submit something.
+                    time.sleep(2)
+                args = json.loads((runtime / "fake-args.json").read_text())
+                pasted = (runtime / "fake-input.txt").read_text() if (runtime / "fake-input.txt").exists() else None
+                return args, pasted
+            finally:
+                finish_tmux_session(tmux)
+
+    def test_resume_opens_saved_session_without_submitting_a_prompt(self):
+        args, pasted = self.launch("")
+        self.assertEqual(args, ["--yolo", "--session", "saved-session"])
         self.assertIsNone(pasted)
 
     def test_follow_up_instructions_reach_the_resumed_session(self):

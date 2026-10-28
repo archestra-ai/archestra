@@ -83,12 +83,7 @@ export const LocalMcpServerInstallationStatusSchema = z.enum(
   LOCAL_MCP_INSTALLATION_STATES,
 );
 
-export const SecretStorageTypeSchema = z.enum([
-  "vault",
-  "external_vault",
-  "database",
-  "none",
-]);
+export const SecretStorageTypeSchema = z.enum(["vault", "database", "none"]);
 
 export type SecretStorageType = z.infer<typeof SecretStorageTypeSchema>;
 

@@ -1,9 +1,8 @@
-import { isVaultReference } from "@archestra/shared";
 import { userHasPermission } from "@/auth";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import { AgentModel, SecretModel, UserCredentialModel } from "@/models";
-import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { secretManager } from "@/secrets-manager";
 import {
   deleteRuntimeCredentialConnection,
   setRuntimeCredentialConnection,
@@ -421,11 +420,6 @@ export async function declarePersonalRuntimeCredential(params: {
   };
 }
 
-/**
- * Store one declared credential at the scope chosen by the Agent Runtime configuration.
- * A read-only Vault runtime expects `value` to be a `path#key` reference;
- * the configured secrets manager resolves it only when a session launches.
- */
 export async function setAgentRuntimeCredential(params: {
   runtime: ResolvedAgentRuntime;
   organizationId: string;
@@ -440,7 +434,7 @@ export async function setAgentRuntimeCredential(params: {
     );
   }
   const declaration = requireDeclaration(params.runtime, params.key);
-  assertCredentialValue(params.value);
+
   // A value stored here is a value of the saved credential, so it takes the
   // same grant the Credentials page asks for: `use` to add your own,
   // `update` to set the organization's.
@@ -566,16 +560,6 @@ function requireDeclaration(
     );
   }
   return declaration;
-}
-
-function assertCredentialValue(value: string): void {
-  if (!isByosEnabled()) return;
-  if (!isVaultReference(value)) {
-    throw new ApiError(
-      400,
-      "Readonly Vault credentials must select a secret and key",
-    );
-  }
 }
 
 async function replaceSharedBag(params: {

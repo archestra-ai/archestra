@@ -2,10 +2,13 @@ import { describe, expect, test } from "vitest";
 import { OPENCODE_FAMILY } from "../opencode-family";
 import {
   ARCHESTRA_CODEX_CONNECTION_ORIGINATOR,
+  CLAUDE_CODE_CLIENT_ID,
+  CLAUDE_DESKTOP_CLIENT_ID,
   CLIENT_FILTER_OPTIONS,
   ClientFilterSchema,
   clientFilterToAgentIds,
   clientForExternalAgentIds,
+  isClaudeDesktopClientAgentId,
   isCodexOriginator,
   isCodexUserAgent,
   isKiloClientAgentId,
@@ -140,5 +143,17 @@ describe("Kilo Code client attribution", () => {
     });
     expect(ClientFilterSchema.parse("kilo")).toBe("kilo");
     expect(clientFilterToAgentIds("kilo")).toEqual([KILO_CLIENT_ID]);
+  });
+});
+
+describe("Claude Desktop client attribution", () => {
+  test("recognizes the normalized Desktop client id and rejects other Claude ids", () => {
+    expect(isClaudeDesktopClientAgentId(CLAUDE_DESKTOP_CLIENT_ID)).toBe(true);
+    expect(isClaudeDesktopClientAgentId("  ANTHROPIC_CLAUDE_DESKTOP ")).toBe(
+      true,
+    );
+    expect(isClaudeDesktopClientAgentId(CLAUDE_CODE_CLIENT_ID)).toBe(false);
+    expect(isClaudeDesktopClientAgentId("anthropic_claude")).toBe(false);
+    expect(isClaudeDesktopClientAgentId(undefined)).toBe(false);
   });
 });

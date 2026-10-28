@@ -510,6 +510,32 @@ describe("mergeUpdatedConversationIntoCache", () => {
     expect(merged.chatApiKeyId).toBe("key-anthropic");
   });
 
+  test("applies a pool pick with its member, and a key pick that leaves it", () => {
+    const oldConversation = makeConversation();
+    const pooled = mergeUpdatedConversationIntoCache(
+      oldConversation,
+      {
+        ...oldConversation,
+        modelPoolId: "pool-1",
+        modelId: "model-member",
+        chatApiKeyId: "key-member",
+      },
+      { id: "conversation-1", modelPoolId: "pool-1" },
+    );
+    expect(pooled).toMatchObject({
+      modelPoolId: "pool-1",
+      modelId: "model-member",
+      chatApiKeyId: "key-member",
+    });
+
+    const left = mergeUpdatedConversationIntoCache(
+      pooled,
+      { ...pooled, modelPoolId: null },
+      { id: "conversation-1", chatApiKeyId: "key-member" },
+    );
+    expect(left.modelPoolId).toBeNull();
+  });
+
   test("keeps unrelated fields stable for a model-only update", () => {
     const oldConversation = makeConversation();
     const updatedConversation = {
@@ -657,6 +683,7 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     selectedModel: "gpt-4o",
     selectedProvider: "openai",
     modelId: null,
+    modelPoolId: null,
     hasCustomToolSelection: false,
     hooksDebugEnabled: false,
     todoList: null,

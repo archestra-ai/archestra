@@ -115,6 +115,7 @@ function makeSessionSummary(
     sources: ["api"],
     interactionId: null,
     requestCount: 1,
+    failedOverCount: 0,
     totalInputTokens: 100,
     totalOutputTokens: 50,
     totalCacheReadTokens: 0,

@@ -26,6 +26,7 @@ import {
   Groq,
   Jev,
   Kimi,
+  KimiCode,
   Microsoft365Copilot,
   Minimax,
   Mistral,
@@ -199,6 +200,7 @@ export const InteractionRequestSchema = z.union([
   DeepSeek.API.ChatCompletionRequestSchema,
   GithubCopilot.API.ChatCompletionRequestSchema,
   Kimi.API.ChatCompletionRequestSchema,
+  KimiCode.API.ChatCompletionRequestSchema,
   Microsoft365Copilot.API.ChatCompletionRequestSchema,
   Minimax.API.ChatCompletionRequestSchema,
   OpenAi.API.ResponsesRequestSchema,
@@ -252,6 +254,7 @@ export const InteractionResponseSchema = z.union([
   DeepSeek.API.ChatCompletionResponseSchema,
   GithubCopilot.API.ChatCompletionResponseSchema,
   Kimi.API.ChatCompletionResponseSchema,
+  KimiCode.API.ChatCompletionResponseSchema,
   Microsoft365Copilot.API.ChatCompletionResponseSchema,
   Minimax.API.ChatCompletionResponseSchema,
   OpenAi.API.ResponsesResponseSchema,
@@ -399,6 +402,7 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
   baselineModel: true,
   billingMode: true,
   inputTokens: true,
+  inputTokensEstimated: true,
   outputTokens: true,
   cacheReadTokens: true,
   cacheWriteTokens: true,
@@ -406,6 +410,11 @@ export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
   baselineCost: true,
   durationMs: true,
   createdAt: true,
+  providerApiKeyId: true,
+  modelPoolId: true,
+  attempt: true,
+  attemptOutcome: true,
+  failureReason: true,
 }).extend({
   attributionLabels: AttributionLabelsSchema.nullish(),
   type: SupportedProvidersDiscriminatorSchema,
@@ -716,6 +725,17 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["kimi-code:chatCompletions"]),
+    request: withReadFallback(KimiCode.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(KimiCode.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(KimiCode.API.ChatCompletionResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["github-copilot:chatCompletions"]),
     request: withReadFallback(GithubCopilot.API.ChatCompletionRequestSchema),
     processedRequest: withReadFallback(
@@ -957,6 +977,11 @@ export const SessionSummarySchema = z.object({
   sources: z.array(InteractionSourceSchema),
   interactionId: z.string().nullable(), // Only set for single interactions (null session)
   requestCount: z.number(),
+  failedOverCount: z
+    .number()
+    .describe(
+      "Requests a model pool retried on another member. Each is also counted in requestCount. Only one cut off by a timeout carries tokens or cost: an estimate of the input it read.",
+    ),
   totalInputTokens: z.number(),
   totalOutputTokens: z.number(),
   totalCacheReadTokens: z.number(),

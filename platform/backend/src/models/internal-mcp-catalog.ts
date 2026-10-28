@@ -1087,30 +1087,6 @@ class InternalMcpCatalogModel {
     return rows.map((row) => row.id);
   }
 
-  /** Live catalog entries in an organization whose local configuration is this secret. */
-  static async findIdsByLocalConfigSecretId(params: {
-    secretId: string;
-    organizationId: string;
-  }): Promise<string[]> {
-    const rows = await db
-      .select({ id: schema.internalMcpCatalogTable.id })
-      .from(schema.internalMcpCatalogTable)
-      .where(
-        and(
-          eq(
-            schema.internalMcpCatalogTable.localConfigSecretId,
-            params.secretId,
-          ),
-          eq(
-            schema.internalMcpCatalogTable.organizationId,
-            params.organizationId,
-          ),
-          notDeleted(schema.internalMcpCatalogTable),
-        ),
-      );
-    return rows.map((row) => row.id);
-  }
-
   /**
    * Whether a catalog of this name would give its tools the prefix the built-in
    * server's tools carry in every organization.
@@ -1870,25 +1846,16 @@ class InternalMcpCatalogModel {
       name,
       secret: source.bag,
       isVault: false,
-      isByosVault: false,
     });
     return copy.id;
   }
 
-  /**
-   * Resolve a source secret's value bag for cloning, or null if missing or
-   * BYOS-backed. BYOS secrets store `path#key` references into the customer's
-   * own vault; copying or resolving them would either share or materialize a
-   * secret we don't own, so they are skipped. Archestra-managed Vault secrets
-   * are read through secretManager() so the clone copy is written back to Vault
-   * rather than the DB; plain DB secrets carry their decrypted bag.
-   */
   private static async readClonableSecret(
     secretId: string | null,
   ): Promise<{ bag: SecretValue; isVault: boolean } | null> {
     if (!secretId) return null;
     const source = await SecretModel.findById(secretId);
-    if (!source || source.isByosVault) return null;
+    if (!source) return null;
     if (source.isVault) {
       const resolved = await secretManager().getSecret(secretId);
       if (!resolved) return null;
@@ -1897,11 +1864,6 @@ class InternalMcpCatalogModel {
     return { bag: source.secret, isVault: false };
   }
 
-  /**
-   * Expands secrets and adds them to the catalog items, mutating the items.
-   * For BYOS secrets (isByosVault=true), returns vault references / paths as-is.
-   * For non-BYOS secrets, resolves actual values via secretManager().
-   */
   private static async expandSecrets(
     catalogItems: InternalMcpCatalog[],
   ): Promise<void> {
@@ -1914,33 +1876,7 @@ class InternalMcpCatalogModel {
 
     if (secretIds.size === 0) return;
 
-    // Fetch raw secret records e.g. vault paths, not resolved to actual value)
-    const unresolvedSecretPromises = Array.from(secretIds).map((id) =>
-      SecretModel.findById(id)
-        .then((secret) => [id, secret] as const)
-        .catch((error): readonly [string, null] => {
-          logger.error(
-            { err: error, secretId: id },
-            "[InternalMcpCatalog] failed to read secret during catalog expansion; continuing without it",
-          );
-          return [id, null] as const;
-        }),
-    );
-    const unresolvedSecretEntries = await Promise.all(unresolvedSecretPromises);
-    const unresolvedSecretMap = new Map(
-      unresolvedSecretEntries.filter(
-        (entry): entry is [string, NonNullable<(typeof entry)[1]>] =>
-          entry[1] !== null,
-      ),
-    );
-
-    // For non-BYOS secrets, resolve them using secretManager
-    const nonByosSecretIds = Array.from(secretIds).filter(
-      (id) =>
-        unresolvedSecretMap.has(id) &&
-        !unresolvedSecretMap.get(id)?.isByosVault,
-    );
-    const resolvedSecretPromises = nonByosSecretIds.map((id) =>
+    const resolvedSecretPromises = Array.from(secretIds).map((id) =>
       secretManager()
         .getSecret(id)
         .then((secret) => [id, secret] as const)
@@ -1971,13 +1907,7 @@ class InternalMcpCatalogModel {
     for (const catalogItem of catalogItems) {
       // Enrich OAuth client_secret
       if (catalogItem.clientSecretId && catalogItem.oauthConfig) {
-        const unresolvedSecret = unresolvedSecretMap.get(
-          catalogItem.clientSecretId,
-        );
-        // For BYOS: use raw vault reference, for non-BYOS: use resolved value
-        const secret = unresolvedSecret?.isByosVault
-          ? unresolvedSecret
-          : resolvedSecretMap.get(catalogItem.clientSecretId);
+        const secret = resolvedSecretMap.get(catalogItem.clientSecretId);
         const value = secret?.secret.client_secret;
         if (value) {
           catalogItem.oauthConfig.client_secret = String(value);
@@ -1985,12 +1915,7 @@ class InternalMcpCatalogModel {
       }
 
       if (catalogItem.clientSecretId && catalogItem.enterpriseManagedConfig) {
-        const unresolvedSecret = unresolvedSecretMap.get(
-          catalogItem.clientSecretId,
-        );
-        const secret = unresolvedSecret?.isByosVault
-          ? unresolvedSecret
-          : resolvedSecretMap.get(catalogItem.clientSecretId);
+        const secret = resolvedSecretMap.get(catalogItem.clientSecretId);
         const value =
           secret?.secret[ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY];
         if (value) {
@@ -2004,13 +1929,7 @@ class InternalMcpCatalogModel {
         catalogItem.localConfigSecretId &&
         catalogItem.localConfig?.environment
       ) {
-        const unresolvedSecret = unresolvedSecretMap.get(
-          catalogItem.localConfigSecretId,
-        );
-        // For BYOS: use raw vault reference, for non-BYOS: use resolved value
-        const secret = unresolvedSecret?.isByosVault
-          ? unresolvedSecret
-          : resolvedSecretMap.get(catalogItem.localConfigSecretId);
+        const secret = resolvedSecretMap.get(catalogItem.localConfigSecretId);
         if (secret) {
           for (const envVar of catalogItem.localConfig.environment) {
             const value = secret.secret[envVar.key];
@@ -2038,7 +1957,6 @@ class InternalMcpCatalogModel {
 
     if (secretIds.size === 0) return;
 
-    // Always resolve using secretManager (resolves BYOS vault references to actual values)
     const secretPromises = Array.from(secretIds).map((id) =>
       secretManager()
         .getSecret(id)

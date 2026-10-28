@@ -2,29 +2,19 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import { AlertTriangle, Info, KeyRound, ShieldCheck, User } from "lucide-react";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { useState } from "react";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FieldDescription } from "@/components/ui/field-description";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkifiedText } from "@/components/ui/linkified-text";
 import { SecretInput } from "@/components/ui/secret-input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useDefaultEnvironment } from "@/lib/organization.query";
-import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
 import {
   compileValidationRegex,
   toFieldValueType,
@@ -35,11 +25,6 @@ import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
 } from "./select-mcp-server-credential-type-and-teams";
-
-const InlineVaultSecretSelector = lazy(
-  // biome-ignore lint/style/noRestrictedImports: lazy loading
-  () => import("@/components/inline-vault-secret-selector.ee"),
-);
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -68,8 +53,6 @@ export interface RemoteServerInstallResult {
   scope: McpServerInstallScope;
   /** Team ID to assign the MCP server to (only when scope is "team") */
   teamId?: string | null;
-  /** Whether metadata contains BYOS vault references in path#key format */
-  isByosVault?: boolean;
 }
 
 interface RemoteServerInstallDialogProps {
@@ -126,61 +109,12 @@ export function RemoteServerInstallDialog({
   );
   const [canInstall, setCanInstall] = useState(true);
 
-  // Vault team selection (separate from install team for personal + BYOS)
-  const [vaultTeamId, setVaultTeamId] = useState<string | null>(null);
-
-  // BYOS (Bring Your Own Secrets) state - per-field vault references
-  const [vaultSecrets, setVaultSecrets] = useState<
-    Record<string, { path: string | null; key: string | null }>
-  >({});
-
-  const byosEnabled = useFeature("byosEnabled");
-  const { data: teamsWithVault } = useTeamsWithVaultFolders({
-    enabled: isOpen,
-  });
-  const vaultTeams = teamsWithVault?.filter((t) => t.vaultPath);
   const { data: environmentList } = useEnvironments();
   const defaultEnvironment = useDefaultEnvironment();
   const userConfig =
     (catalogItem?.userConfig as UserConfigType | null | undefined) || {};
-  const hasPromptSensitiveFields = Object.values(userConfig).some(
-    (config) => config.sensitive && config.promptOnInstallation !== false,
-  );
-
-  // Helper to update vault secret for a specific field
-  const updateVaultSecret = (
-    fieldName: string,
-    prop: "path" | "key",
-    value: string | null,
-  ) => {
-    setVaultSecrets((prev) => ({
-      ...prev,
-      [fieldName]: {
-        ...prev[fieldName],
-        [prop]: value,
-        // Reset key when path changes
-        ...(prop === "path" ? { key: null } : {}),
-      },
-    }));
-  };
 
   // Sync vaultTeamId from selectedTeamId when in team mode, reset otherwise
-  useEffect(() => {
-    if (scope === "team") {
-      setVaultTeamId(selectedTeamId);
-    } else {
-      setVaultTeamId(null);
-    }
-    setVaultSecrets({});
-  }, [scope, selectedTeamId]);
-
-  const handleVaultTeamChange = (teamId: string) => {
-    setVaultTeamId(teamId);
-    setVaultSecrets({});
-  };
-
-  // Show vault selector only when BYOS is enabled and sensitive fields exist.
-  const useVaultSecrets = byosEnabled && hasPromptSensitiveFields;
 
   const handleConfirm = async () => {
     if (!catalogItem) {
@@ -195,27 +129,17 @@ export function RemoteServerInstallDialog({
           continue;
         }
 
-        // For BYOS mode, sensitive fields use vault references
-        if (useVaultSecrets && fieldConfig.sensitive) {
-          const vaultRef = vaultSecrets[fieldName];
-          if (vaultRef?.path && vaultRef?.key) {
-            // Store as path#key format for BYOS vault resolution
-            metadata[fieldName] = `${vaultRef.path}#${vaultRef.key}`;
-          }
-        } else {
-          // Non-sensitive fields or non-BYOS mode: use manual value
-          const value = configValues[fieldName];
-          if (value !== undefined && value !== "") {
-            switch (fieldConfig.type) {
-              case "number":
-                metadata[fieldName] = Number(value);
-                break;
-              case "boolean":
-                metadata[fieldName] = value === "true";
-                break;
-              default:
-                metadata[fieldName] = value;
-            }
+        const value = configValues[fieldName];
+        if (value !== undefined && value !== "") {
+          switch (fieldConfig.type) {
+            case "number":
+              metadata[fieldName] = Number(value);
+              break;
+            case "boolean":
+              metadata[fieldName] = value === "true";
+              break;
+            default:
+              metadata[fieldName] = value;
           }
         }
       }
@@ -225,7 +149,6 @@ export function RemoteServerInstallDialog({
         metadata,
         scope,
         teamId: selectedTeamId,
-        isByosVault: useVaultSecrets,
       });
       resetForm();
       onClose();
@@ -238,8 +161,6 @@ export function RemoteServerInstallDialog({
     setConfigValues({});
     setSelectedTeamId(null);
     setScope(orgOnly ? "org" : "personal");
-    setVaultTeamId(null);
-    setVaultSecrets({});
   };
 
   const handleClose = () => {
@@ -275,16 +196,10 @@ export function RemoteServerInstallDialog({
   );
 
   // Check if sensitive required fields are valid:
-  // - BYOS mode: vault path AND key must be selected for each
   // - Normal mode: manual values must be filled
-  const isSensitiveValid = useVaultSecrets
-    ? sensitiveRequiredFields.every(
-        ([fieldName]) =>
-          vaultSecrets[fieldName]?.path && vaultSecrets[fieldName]?.key,
-      )
-    : sensitiveRequiredFields.every(([fieldName]) =>
-        configValues[fieldName]?.trim(),
-      );
+  const isSensitiveValid = sensitiveRequiredFields.every(([fieldName]) =>
+    configValues[fieldName]?.trim(),
+  );
 
   const isValid = !hasConfig || (isNonSensitiveValid && isSensitiveValid);
 
@@ -415,30 +330,6 @@ export function RemoteServerInstallDialog({
         orgOnly={orgOnly}
       />
 
-      {useVaultSecrets && scope !== "team" && (
-        <div className="space-y-2">
-          <Label>Pull Vault secrets from:</Label>
-          <FieldDescription>
-            Only folders associated with your teams are shown.
-          </FieldDescription>
-          <Select
-            value={vaultTeamId ?? ""}
-            onValueChange={handleVaultTeamChange}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="-- Select Vault folder --" />
-            </SelectTrigger>
-            <SelectContent>
-              {vaultTeams?.map((team) => (
-                <SelectItem key={team.id} value={team.id}>
-                  {team.vaultPath}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
       {canInstall && hasOAuth && usesBrowserOAuth && (
         <InlineNotice variant="info">
           <Info />
@@ -499,35 +390,8 @@ export function RemoteServerInstallDialog({
                   </p>
                 )}
 
-                {/* BYOS mode: vault selector for sensitive fields */}
                 {fieldConfig.type ===
-                "boolean" ? null : fieldConfig.sensitive && useVaultSecrets ? (
-                  <Suspense
-                    fallback={
-                      <div className="text-sm text-muted-foreground">
-                        Loading...
-                      </div>
-                    }
-                  >
-                    <InlineVaultSecretSelector
-                      teamId={vaultTeamId}
-                      selectedSecretPath={vaultSecrets[fieldName]?.path ?? null}
-                      selectedSecretKey={vaultSecrets[fieldName]?.key ?? null}
-                      onSecretPathChange={(path) =>
-                        updateVaultSecret(fieldName, "path", path)
-                      }
-                      onSecretKeyChange={(key) =>
-                        updateVaultSecret(fieldName, "key", key)
-                      }
-                      disabled={isInstalling}
-                      noTeamMessage={
-                        scope !== "team"
-                          ? "Select a vault folder to pull secrets from"
-                          : undefined
-                      }
-                    />
-                  </Suspense>
-                ) : fieldConfig.sensitive ? (
+                "boolean" ? null : fieldConfig.sensitive ? (
                   <SecretInput
                     id={fieldName}
                     placeholder={

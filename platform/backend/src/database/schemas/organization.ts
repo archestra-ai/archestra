@@ -79,10 +79,14 @@ const organizationsTable = pgTable("organization", {
   skillMarketplaceAnonymousAccess: boolean("skill_marketplace_anonymous_access")
     .notNull()
     .default(false),
+  /** Controls only the managed built-in browser MCP runtime. */
+  playwrightMcpEnabled: boolean("playwright_mcp_enabled")
+    .notNull()
+    .default(true),
+
   /**
-   * Whether file uploads are allowed in chat.
-   * Defaults to true. Security policies currently only work on text-based content,
-   * so admins may want to disable this until file-based policy support is added.
+   * Whether users can attach files in chat. Enabled by default.
+   * Uploaded files or extracted content may be sent to the chat's AI provider.
    */
   allowChatFileUploads: boolean("allow_chat_file_uploads")
     .notNull()

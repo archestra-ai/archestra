@@ -143,6 +143,8 @@ const RETRIABLE_IMAGE_ENVELOPE_CODES = new Set([
   "claude_unavailable",
   // Grok Build StopFailure or ACP driver failure: provider or CLI, not the model.
   "grok_unavailable",
+  // Kimi Code StopFailure or print-mode failure: provider or CLI, not the model.
+  "kimi_unavailable",
   // Shared initialization could not reach the platform proxy.
   "proxy_unavailable",
   // The MCP gateway tools did not load at startup.

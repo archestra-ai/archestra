@@ -991,11 +991,18 @@ async function makeInteraction(
       | "runId"
       | "cacheReadTokens"
       | "cacheWriteTokens"
+      | "cacheWrite1hTokens"
+      | "baselineModel"
       | "externalAgentId"
       | "userId"
       | "serviceAccountId"
       | "appId"
       | "source"
+      | "providerApiKeyId"
+      | "modelPoolId"
+      | "attempt"
+      | "attemptOutcome"
+      | "failureReason"
       | "createdAt"
     >
   > = {},

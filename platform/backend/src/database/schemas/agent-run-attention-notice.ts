@@ -8,7 +8,7 @@ import {
 } from "drizzle-orm/pg-core";
 import agentRunsTable from "./agent-run";
 
-/** One Slack message per input-required episode; never contains runtime input. */
+/** One ChatOps notice per input-required episode; never contains runtime input. */
 const agentRunAttentionNoticesTable = pgTable(
   "agent_run_attention_notices",
   {

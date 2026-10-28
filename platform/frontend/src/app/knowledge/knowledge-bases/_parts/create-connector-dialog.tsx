@@ -72,6 +72,7 @@ import {
   NotionAutoSyncPermissionsNote,
 } from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { hasOnlyGithubRepositorySettingsErrors } from "./github-repository-settings-errors";
 import { PerforcePermissionSyncFields } from "./perforce-config-fields";
 import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
 import { SchedulePicker } from "./schedule-picker";
@@ -429,8 +430,13 @@ export function CreateConnectorDialog({
         { id: "advanced", label: "Advanced" },
       ]}
       onActiveSectionChange={setActiveSection}
-      onSubmit={form.handleSubmit(handleSubmit, () =>
-        setActiveSection("general"),
+      onSubmit={form.handleSubmit(handleSubmit, (errors) =>
+        setActiveSection(
+          connectorType === "github" &&
+            hasOnlyGithubRepositorySettingsErrors(errors)
+            ? "advanced"
+            : "general",
+        ),
       )}
       wrapForm={(children) => <Form {...form}>{children}</Form>}
       headerExtra={

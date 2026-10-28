@@ -2,11 +2,16 @@
 
 import { usePathname } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils/tailwind";
 import {
   MessagingProvidersRow,
   useMessagingProviders,
-} from "./_components/messaging-providers";
+} from "./_parts/messaging-providers";
 
 /**
  * A provider's page. The settings sidebar lists the providers under
@@ -41,8 +46,20 @@ export default function MessagingChannelSettingsLayout({
       <MessagingProvidersRow />
       {current && (
         <div className="flex items-center gap-2">
-          <h2 className="text-2xl font-semibold tracking-tight">
-            {current.label}
+          <h2 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+            <span>{current.label}</span>{" "}
+            {current.id === "jira" && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" tabIndex={0}>
+                    Beta
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Jira messaging channels are under active development.
+                </TooltipContent>
+              </Tooltip>
+            )}
           </h2>
           <Badge
             variant="secondary"

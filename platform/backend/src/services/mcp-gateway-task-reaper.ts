@@ -63,6 +63,11 @@ class McpGatewayTaskReaper {
       await cacheManager.deleteExpiredByPrefix(CacheKey.LegacySseMessages);
       await cacheManager.deleteExpiredByPrefix(CacheKey.LegacySseSession);
       await cacheManager.deleteExpiredByPrefix(CacheKey.OAuthTokenRateLimit);
+      // An exchanged OIDC token id and an idle IP budget are never read again.
+      await cacheManager.deleteExpiredByPrefix(CacheKey.GitHubActionsTokenJti);
+      await cacheManager.deleteExpiredByPrefix(
+        CacheKey.GitHubActionsTokenRateLimit,
+      );
       await LlmThroughputModel.deleteExpired();
       await cacheManager.deleteExpiredByPrefix(
         CacheKey.OpenAppaHitlReviewHistory,

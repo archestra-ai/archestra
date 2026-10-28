@@ -63,7 +63,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
   useOpenappaStatus: () => ({ data: null }),
 }));
 
-vi.mock("@/lib/chat/use-initial-chat-model-state.hook", () => ({
+vi.mock("@/lib/chat/use-initial-chat-model-state", () => ({
   useInitialChatModelState: () => ({
     agentId: "runtime-agent",
     modelId: "model-1",

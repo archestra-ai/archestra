@@ -18,6 +18,29 @@ failure_notified=0
 bench_pid=
 log_tail_pid=
 
+# A killed or crashed run (e.g. activeDeadlineSeconds) would otherwise lose bench.log and the per-rollout
+# JSON with the pod. Best-effort and capped so the Slack notice still fits the termination grace period.
+upload_partial_run() {
+  [ -n "${GCS_BUCKET:-}" ] && [ -n "$(ls -A "${run_dir}" 2>/dev/null)" ] || return 0
+  tar czf /work/partial.tgz -C /work run 2>/dev/null || return 0
+  remote="runs/${GITHUB_RUN_NUMBER:-unknown}-${GITHUB_RUN_ATTEMPT:-unknown}/partial.tgz"
+  if python3 - "${remote}" <<'PY'
+import os
+import sys
+
+from google.cloud import storage
+
+bucket = os.environ["GCS_BUCKET"].removeprefix("gs://").split("/")[0]
+storage.Client().bucket(bucket).blob(sys.argv[1]).upload_from_filename("/work/partial.tgz", timeout=60)
+print(f"uploaded partial run to gs://{bucket}/{sys.argv[1]}", flush=True)
+PY
+  then
+    export BENCH_PARTIAL_URL="https://storage.cloud.google.com/${GCS_BUCKET#gs://}/${remote}"
+  else
+    printf 'warning: could not upload partial run\n' >&2
+  fi
+}
+
 # The normal publisher uploads the full run and posts its own summary. A hard failure before that
 # point used to leave no signal at all: the Job's one-hour TTL deletes the only copy of stderr. Keep
 # this deliberately dependency-free so it can report an RBAC/bootstrap/archive failure too.
@@ -25,6 +48,7 @@ notify_early_failure() {
   [ "${publish_finished}" -eq 0 ] || return 0
   [ "${failure_notified}" -eq 0 ] || return 0
   failure_notified=1
+  upload_partial_run
 
   webhook="${SLACK_BENCH_WEBHOOK_URL:-}"
   [ -n "${webhook}" ] || return 0
@@ -43,6 +67,8 @@ text = (
 )
 if url := os.environ.get("BENCH_FAILURE_URL"):
     text += f"\n<{url}|run>"
+if partial := os.environ.get("BENCH_PARTIAL_URL"):
+    text += f" · <{partial}|partial run>"
 request = urllib.request.Request(
     os.environ["SLACK_BENCH_WEBHOOK_URL"],
     data=json.dumps({"text": text}).encode(),

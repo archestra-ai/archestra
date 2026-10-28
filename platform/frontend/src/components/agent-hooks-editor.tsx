@@ -28,8 +28,8 @@ import {
   generateHookFileName,
   type HookLanguage,
   languageFromFileName,
-} from "@/lib/agent-hooks-editor.file-name";
-import { parseRequirementsInput } from "@/lib/agent-hooks-editor.requirements";
+} from "@/lib/agent-hooks-editor-file-name";
+import { parseRequirementsInput } from "@/lib/agent-hooks-editor-requirements";
 import { useFeature } from "@/lib/config/config.query";
 import {
   type AgentHook,

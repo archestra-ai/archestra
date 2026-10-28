@@ -297,35 +297,6 @@ it("gives each variable of a two-token battery its own secret", async () => {
   );
 });
 
-it("asks for a Vault reference instead of a secret when the secrets manager is external", async () => {
-  const user = userEvent.setup();
-  definitions = [
-    ...definitions,
-    definition({
-      id: "earlier",
-      key: "credential-github-token",
-      name: "GitHub token",
-      organizationConfigured: false,
-    }),
-  ];
-  renderCard({
-    request: { batteries: [request.batteries[1]] },
-    onSendMessage: vi.fn(),
-    byosEnabled: true,
-  });
-
-  await waitFor(() => expect(definitionsLoaded()).toBe(true));
-  await user.click(screen.getByRole("combobox"));
-  await user.click(
-    await screen.findByRole("option", { name: "Add new token" }),
-  );
-
-  expect(
-    await screen.findByRole("dialog", { name: /Set external secret/ }),
-  ).toBeInTheDocument();
-  expect(screen.queryByRole("dialog", { name: /^Connect/ })).toBeNull();
-});
-
 it("reads the card's batteries from the tool result only when they are well formed", () => {
   expect(parseBatteryCredentialRequest({ structuredContent: request })).toEqual(
     request,
@@ -347,7 +318,6 @@ function definitionsLoaded() {
 function renderCard(params: {
   request: BatteryCredentialRequest;
   onSendMessage: (text: string) => void;
-  byosEnabled?: boolean;
 }) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -355,7 +325,7 @@ function renderCard(params: {
   latestClient = queryClient;
   // The config query waits for a session; the cache stands in for its answer.
   queryClient.setQueryData(["config"], {
-    features: { byosEnabled: params.byosEnabled ?? false },
+    features: {},
   });
   return render(
     <QueryClientProvider client={queryClient}>

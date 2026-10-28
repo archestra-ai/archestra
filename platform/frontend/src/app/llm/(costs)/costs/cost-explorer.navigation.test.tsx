@@ -6,6 +6,10 @@ import CostExplorer from "./cost-explorer";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
+vi.mock("@/lib/config/config.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/config/config.query")>()),
+  useFeature: () => false,
+}));
 vi.mock("@/lib/proxy-label-costs.query", () => ({
   useProxyLabelKeys: () => ({ data: [] }),
 }));

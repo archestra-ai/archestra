@@ -22,6 +22,13 @@ import {
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import {
+  dropHiddenAgents,
+  gatedAgentsFence,
+  gatedCatalogToolsFence,
+  gatedDelegationToolsFence,
+  hiddenAgentsAmong,
+} from "@/auth/permission-gated";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
@@ -179,6 +186,7 @@ class AgentToolModel {
     const results = await db
       .select({
         id: schema.agentsTable.id,
+        organizationId: schema.agentsTable.organizationId,
         name: schema.agentsTable.name,
         description: schema.agentsTable.description,
         systemPrompt: schema.agentsTable.systemPrompt,
@@ -207,7 +215,7 @@ class AgentToolModel {
       return results.filter((r) => userAccessibleAgentIds.includes(r.id));
     }
 
-    return results;
+    return userId ? dropHiddenAgents(results, userId) : results;
   }
 
   /**
@@ -311,11 +319,19 @@ class AgentToolModel {
     }
 
     const results = await query;
+    const hidden = userId
+      ? await hiddenAgentsAmong(
+          results.flatMap((r) => [r.sourceAgentId, r.targetAgentId]),
+          { kind: "caller", userId, organizationId },
+        )
+      : new Set();
 
     // Filter out null targetAgentIds (shouldn't happen but TypeScript needs this)
     return results.filter(
       (r): r is typeof r & { targetAgentId: string } =>
-        r.targetAgentId !== null,
+        r.targetAgentId !== null &&
+        !hidden.has(r.targetAgentId) &&
+        !hidden.has(r.sourceAgentId),
     );
   }
 
@@ -1249,6 +1265,17 @@ class AgentToolModel {
     } = params;
     // Build WHERE conditions
     const whereConditions: SQL[] = [notDeleted(schema.agentsTable)];
+    if (userId) {
+      for (const fence of await Promise.all([
+        gatedAgentsFence({
+          userId,
+          organizationIds: organizationId ? [organizationId] : [],
+        }),
+        gatedCatalogToolsFence({ userId, organizationId }),
+        gatedDelegationToolsFence({ userId, organizationId }),
+      ]))
+        if (fence) whereConditions.push(fence);
+    }
 
     // Apply access control filtering for users that are not agent admins
     if (userId && !isAgentAdmin) {

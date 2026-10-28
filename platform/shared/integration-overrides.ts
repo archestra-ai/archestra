@@ -16,6 +16,7 @@ export const MessagingChannelIdSchema = z.enum([
   "slack",
   "ms-teams",
   "telegram",
+  "jira",
   "email",
   "a2a",
 ]);
@@ -25,6 +26,7 @@ export const MESSAGING_CHANNEL_LABELS: Record<MessagingChannelId, string> = {
   slack: "Slack",
   "ms-teams": "MS Teams",
   telegram: "Telegram",
+  jira: "Jira",
   email: "Email",
   a2a: "A2A",
 };
@@ -124,6 +126,7 @@ export const PopularAgentOverridesSchema = z.strictObject({
   hermes: PopularAgentOverrideSchema.optional(),
   openclaw: PopularAgentOverrideSchema.optional(),
   grok: PopularAgentOverrideSchema.optional(),
+  kimi: PopularAgentOverrideSchema.optional(),
 } satisfies Record<
   AgentCatalogId,
   z.ZodOptional<typeof PopularAgentOverrideSchema>

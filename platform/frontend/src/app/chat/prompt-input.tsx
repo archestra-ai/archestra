@@ -57,12 +57,12 @@ import {
   type QueuedChatFile,
   useConversationMessageQueue,
 } from "@/lib/chat/chat-message-queue";
-import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
 import {
   chatDraftStorageKey,
   migrateLegacyNewChatDraft,
 } from "@/lib/chat/chat-utils";
 import { isActionAvailableForConversation } from "@/lib/chat/encrypted-chat";
+import { useChatPlaceholder } from "@/lib/chat/use-chat-placeholder";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useToolbarCollapse } from "@/lib/hooks/use-toolbar-collapse";
@@ -172,6 +172,10 @@ export interface ArchestraPromptInputProps
    * onSubmit queues rather than sends.
    */
   onStop?: () => void;
+  /** Stop the current turn, then send the oldest queued message. */
+  onInterruptQueue?: () => void;
+  interruptQueueDisabledReason?: string;
+  isInterruptingQueue?: boolean;
   status: ChatStatus;
   // Tools integration props
   /**
@@ -261,6 +265,9 @@ const COMPACT_COMMAND: SlashCommand = {
 const PromptInputContent = ({
   onSubmit,
   onStop,
+  onInterruptQueue,
+  interruptQueueDisabledReason,
+  isInterruptingQueue = false,
   status,
   selectedModel,
   onModelChange,
@@ -296,6 +303,8 @@ const PromptInputContent = ({
   onResetModelOverride,
   thinkingEffort,
   onThinkingEffortChange,
+  modelPoolId,
+  onModelPoolChange,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
   subscriptionProvider,
@@ -351,6 +360,7 @@ const PromptInputContent = ({
   const footerRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const trailingRef = useRef<HTMLDivElement>(null);
+  const [isDictating, setIsDictating] = useState(false);
   const isNarrow = useToolbarCollapse({
     availableRef: footerRef,
     contentRef: toolbarRef,
@@ -904,6 +914,11 @@ const PromptInputContent = ({
   // Messages queued while a response was in-flight; sent automatically (in
   // order) by the conversation's chat session once each turn settles.
   const queuedMessages = useConversationMessageQueue(conversationId);
+  const interruptBlockedReason =
+    interruptQueueDisabledReason ??
+    (queuedMessages.some((message) => message.sandboxCommand)
+      ? "Send sandbox commands separately."
+      : undefined);
 
   // Composer keyboard shortcuts layered on top of the primitive textarea:
   //   • Esc — stop the in-flight response (mirrors the Stop button).
@@ -1159,6 +1174,8 @@ const PromptInputContent = ({
           onResetModelOverride={onResetModelOverride}
           thinkingEffort={thinkingEffort}
           onThinkingEffortChange={onThinkingEffortChange}
+          modelPoolId={modelPoolId}
+          onModelPoolChange={onModelPoolChange}
           agentRequiresPerUserConnect={agentRequiresPerUserConnect}
           subscriptionConnectRequired={subscriptionConnectRequired}
           subscriptionProvider={subscriptionProvider}
@@ -1179,8 +1196,12 @@ const PromptInputContent = ({
         <div ref={trailingRef} className="flex shrink-0 items-center gap-2">
           {!runtimeMode && (
             <PromptInputSpeechButton
+              key={conversationId ?? "new-chat"}
               textareaRef={textareaRef}
               onTranscriptionChange={handleTranscriptionChange}
+              onActiveChange={setIsDictating}
+              disabled={composerLocked}
+              sendDisabled={isSendBlocked}
             />
           )}
           <Tooltip>
@@ -1188,7 +1209,7 @@ const PromptInputContent = ({
                 hangs off a wrapper that still does — otherwise a blocked
                 Send gives no hint why. */}
             <TooltipTrigger asChild>
-              <span className="inline-flex">
+              <span className={cn("inline-flex", isDictating && "hidden")}>
                 <PromptInputSubmit
                   className="!h-8"
                   aria-label={
@@ -1254,6 +1275,39 @@ const PromptInputContent = ({
           className="mb-2 flex max-h-40 flex-col gap-1 overflow-y-auto"
           data-testid={E2eTestId.ChatMessageQueue}
         >
+          {onInterruptQueue && (isResponseInFlight || isInterruptingQueue) && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-muted-foreground">
+                Queued messages · {queuedMessages.length}
+              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={interruptBlockedReason ? 0 : undefined}>
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      type="button"
+                      disabled={
+                        !!interruptBlockedReason ||
+                        isInterruptingQueue ||
+                        isContextCompacting
+                      }
+                      onClick={onInterruptQueue}
+                    >
+                      <span>
+                        {isInterruptingQueue
+                          ? "Interrupting…"
+                          : "Interrupt & send"}
+                      </span>
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-60 text-wrap" align="end">
+                  {interruptBlockedReason ?? "Stop and send queued messages."}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          )}
           {queuedMessages.map((queued) => (
             <div
               key={queued.id}
@@ -1373,6 +1427,9 @@ const PromptInputContent = ({
 const ArchestraPromptInput = ({
   onSubmit,
   onStop,
+  onInterruptQueue,
+  interruptQueueDisabledReason,
+  isInterruptingQueue,
   status,
   selectedModel,
   onModelChange,
@@ -1409,6 +1466,8 @@ const ArchestraPromptInput = ({
   onResetModelOverride,
   thinkingEffort,
   onThinkingEffortChange,
+  modelPoolId,
+  onModelPoolChange,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
   subscriptionProvider,
@@ -1495,6 +1554,9 @@ const ArchestraPromptInput = ({
         <PromptInputContent
           onSubmit={onSubmit}
           onStop={onStop}
+          onInterruptQueue={onInterruptQueue}
+          interruptQueueDisabledReason={interruptQueueDisabledReason}
+          isInterruptingQueue={isInterruptingQueue}
           status={status}
           selectedModel={selectedModel}
           onModelChange={onModelChange}
@@ -1531,6 +1593,8 @@ const ArchestraPromptInput = ({
           onResetModelOverride={onResetModelOverride}
           thinkingEffort={thinkingEffort}
           onThinkingEffortChange={onThinkingEffortChange}
+          modelPoolId={modelPoolId}
+          onModelPoolChange={onModelPoolChange}
           agentRequiresPerUserConnect={agentRequiresPerUserConnect}
           agentModelDisplayName={agentModelDisplayName}
           sandboxAvailable={sandboxAvailable}

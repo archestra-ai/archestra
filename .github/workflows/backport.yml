@@ -55,6 +55,9 @@ jobs:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
+      - name: Configure Git identity
+        uses: $/.github/actions/configure-git-identity
+
       - name: Open backport pull requests
         working-directory: ./platform
         env:

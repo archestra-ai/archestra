@@ -1,12 +1,14 @@
-import { CacheKey, cacheManager } from "@/cache-manager";
+import { CacheKey, type CacheKeyPrefix, cacheManager } from "@/cache-manager";
 
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS = 100;
 
-class OAuthTokenRateLimiter {
-  /** One budget per trusted client IP, shared by every grant and web replica. */
+class TokenEndpointRateLimiter {
+  constructor(private readonly prefix: CacheKeyPrefix) {}
+
+  /** One budget per trusted client IP, shared by every web replica. */
   async consume(ip: string): Promise<{ allowed: boolean; retryAfter: number }> {
-    const key = `${CacheKey.OAuthTokenRateLimit}-${ip}` as const;
+    const key = `${this.prefix}-${ip}` as const;
     return cacheManager.withLock(key, async (cache) => {
       const now = Date.now();
       const existing = await cache.get<{ count: number; windowEndsAt: number }>(
@@ -31,4 +33,12 @@ class OAuthTokenRateLimiter {
   }
 }
 
-export const oauthTokenRateLimiter = new OAuthTokenRateLimiter();
+/** The OAuth token endpoint, shared by every grant. */
+export const oauthTokenRateLimiter = new TokenEndpointRateLimiter(
+  CacheKey.OAuthTokenRateLimit,
+);
+
+/** The GitHub Actions token exchange, a budget of its own. */
+export const githubActionsTokenRateLimiter = new TokenEndpointRateLimiter(
+  CacheKey.GitHubActionsTokenRateLimit,
+);

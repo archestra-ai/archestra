@@ -25,7 +25,7 @@ import {
 import { alias } from "drizzle-orm/pg-core";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
-import db, { schema, type Transaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import { constructFrozenMcpDeploymentName } from "@/k8s/shared";
@@ -623,7 +623,6 @@ class McpServerModel {
         catalogName: schema.internalMcpCatalogTable.name,
         teamName: schema.teamsTable.name,
         secretIsVault: schema.secretsTable.isVault,
-        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
@@ -748,7 +747,6 @@ class McpServerModel {
       const secretStorageType = computeSecretStorageType(
         row.server.secretId,
         row.secretIsVault,
-        row.secretIsByosVault,
       );
 
       serversMap.set(row.server.id, {
@@ -1523,7 +1521,6 @@ class McpServerModel {
         ownerEmail: schema.usersTable.email,
         teamName: schema.teamsTable.name,
         secretIsVault: schema.secretsTable.isVault,
-        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
@@ -1567,7 +1564,6 @@ class McpServerModel {
     const secretStorageType = computeSecretStorageType(
       result.server.secretId,
       result.secretIsVault,
-      result.secretIsByosVault,
     );
 
     return {
@@ -1997,7 +1993,14 @@ class McpServerModel {
     return updatedServer || null;
   }
 
-  static async delete(id: string, opts?: { at?: Date }): Promise<boolean> {
+  static async delete(
+    id: string,
+    opts?: {
+      at?: Date;
+      strictCleanup?: boolean;
+      requirePlaywrightDisabled?: boolean;
+    },
+  ): Promise<boolean> {
     // Fetch the (active) server for teardown context. Idempotent: an
     // already-soft-deleted server is not found (findById filters notDeleted),
     // so a repeat delete is a no-op and returns false.
@@ -2016,6 +2019,7 @@ class McpServerModel {
         { err: error },
         `Failed to clean up MCP HTTP sessions for MCP server ${mcpServer.name}:`,
       );
+      if (opts?.strictCleanup) throw error;
       // Continue with deletion even if session cleanup fails
     }
 
@@ -2034,7 +2038,14 @@ class McpServerModel {
         "@/k8s/mcp-server-runtime"
       );
       try {
-        await McpServerRuntimeManager.removeMcpServer(id);
+        if (opts?.strictCleanup) {
+          await McpServerRuntimeManager.removeMcpServer(id, {
+            strictCleanup: true,
+            requirePlaywrightDisabled: opts.requirePlaywrightDisabled,
+          });
+        } else {
+          await McpServerRuntimeManager.removeMcpServer(id);
+        }
         logger.info(
           `Cleaned up K8s deployment for MCP server: ${mcpServer.name}`,
         );
@@ -2043,6 +2054,7 @@ class McpServerModel {
           { err: error },
           `Failed to clean up K8s deployment for MCP server ${mcpServer.name}:`,
         );
+        if (opts?.strictCleanup) throw error;
         // Continue with deletion even if pod cleanup fails
       }
     }
@@ -2053,12 +2065,29 @@ class McpServerModel {
     // secret. `opts.at` lets a catalog cascade stamp this install (with its
     // siblings and tools) with one shared timestamp — the restore correlation key.
     logger.info(`Soft-deleting MCP server: ${mcpServer.name} with id: ${id}`);
-    const count = await softDelete(
-      db,
-      schema.mcpServersTable,
-      eq(schema.mcpServersTable.id, id),
-      opts?.at,
-    );
+    const count = opts?.requirePlaywrightDisabled
+      ? await withDbTransaction(async (tx) => {
+          // Serialize final retirement with enable/provision transactions. A
+          // late cleanup cannot soft-delete a runtime that was just revived.
+          const [organization] = await tx
+            .select({ enabled: schema.organizationsTable.playwrightMcpEnabled })
+            .from(schema.organizationsTable)
+            .limit(1)
+            .for("update");
+          if (organization?.enabled !== false) return 0;
+          return softDelete(
+            tx,
+            schema.mcpServersTable,
+            eq(schema.mcpServersTable.id, id),
+            opts.at,
+          );
+        })
+      : await softDelete(
+          db,
+          schema.mcpServersTable,
+          eq(schema.mcpServersTable.id, id),
+          opts?.at,
+        );
     return count > 0;
   }
 
@@ -2147,18 +2176,7 @@ class McpServerModel {
    * Best-effort per install: a failed K8s teardown or secret delete is logged
    * and the purge continues, so one wedged install can't block the deletion.
    */
-  /**
-   * Transaction-scoped variant of {@link purgePersonalServersForUser} for
-   * callers already inside a database transaction (temp-user cleanup in auth
-   * flows). SQL only, on the caller's executor: base-db queries under an open
-   * transaction deadlock the single-connection test database, and the full
-   * purge's runtime/secret-manager side effects cannot join a transaction
-   * anyway. Mirrors the backfill migration's semantics — install rows go,
-   * plain secret rows go with them, Vault/BYOS secret rows are RETAINED (SQL
-   * cannot reach the backing store; the row is the only pointer left for a
-   * manual sweep). No K8s teardown: these auth-flow shell users cannot have
-   * running local installs.
-   */
+
   static async purgePersonalServersForUserInTransaction(
     userId: string,
     tx: Transaction,
@@ -2168,7 +2186,6 @@ class McpServerModel {
         id: schema.mcpServersTable.id,
         secretId: schema.mcpServersTable.secretId,
         secretIsVault: schema.secretsTable.isVault,
-        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
@@ -2196,10 +2213,7 @@ class McpServerModel {
     );
 
     const plainSecretIds = servers
-      .filter(
-        (server) =>
-          server.secretId && !server.secretIsVault && !server.secretIsByosVault,
-      )
+      .filter((server) => server.secretId && !server.secretIsVault)
       .map((server) => server.secretId as string);
     if (plainSecretIds.length > 0) {
       await tx
@@ -2791,13 +2805,6 @@ class McpServerModel {
     }));
   }
 
-  /**
-   * Shared body of the personal-install purges: tear down the K8s deployment
-   * for local installs, hard-delete each row, and delete its credential secret
-   * through the secret manager (so Vault/BYOS-backed material is removed from
-   * the backing store too). Best-effort per install — a wedged deployment or
-   * secret must not block the rest of the purge.
-   */
   private static async purgeInstallRows(
     userId: string,
     servers: {

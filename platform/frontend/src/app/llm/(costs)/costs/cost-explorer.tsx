@@ -11,6 +11,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useProxyLabelKeys } from "@/lib/proxy-label-costs.query";
 import { cn } from "@/lib/utils/tailwind";
@@ -55,9 +56,12 @@ export default function CostExplorer() {
   const appName = useAppName();
   const { data: canReadApps } = useHasPermissions({ app: ["read"] });
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
+  const poolsEnabled = useFeature("llmModelPoolsEnabled") === true;
   const { data: canReadLimits } = useHasPermissions({ llmLimit: ["read"] });
   const canGroup = (group: DimId) =>
-    (group !== "app" || canReadApps) && (group !== "skill" || canReadSkills);
+    (group !== "app" || canReadApps) &&
+    (group !== "skill" || canReadSkills) &&
+    (group !== "pool" || poolsEnabled);
   const [q, setQ] = useState<PivotQuery>(SAVED_VIEWS[0].q);
   const [focus, setFocus] = useState<Set<string>>(new Set());
   const [view, setView] = useState<"summary" | "pivot">("summary");
@@ -125,7 +129,9 @@ export default function CostExplorer() {
         ? "Inference attributed to app sessions. This does not mean every app itself runs a model."
         : q.group === "key"
           ? "Key names and recorded IDs are shown in full. Calls without an individual key ID cannot be distinguished further."
-          : null;
+          : q.group === "providerKey" || q.group === "pool"
+            ? "A request a model pool failed over counts once per attempt. A failed attempt is free unless a timeout cut it off, which bills an estimate of the input it read. Pick Requests to see how many there were."
+            : null;
 
   const headline = useMemo(() => {
     const top = cube.rows[0];
@@ -364,17 +370,23 @@ export default function CostExplorer() {
             </div>
             {!cube.isLoading && headline.top && (
               <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
-                <Stat label={`Top ${dim.label.toLowerCase()}`}>
-                  <span className="max-w-48 truncate">
-                    {headline.top.label}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {(headline.topShare * 100).toFixed(0)}%
-                  </span>
-                </Stat>
-                <Stat label={dim.plural.replace(/^./, (c) => c.toUpperCase())}>
-                  {cube.rows.length}
-                </Stat>
+                {q.group !== "time" && (
+                  <>
+                    <Stat label={`Top ${dim.label.toLowerCase()}`}>
+                      <span className="max-w-48 truncate">
+                        {headline.top.label}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {(headline.topShare * 100).toFixed(0)}%
+                      </span>
+                    </Stat>
+                    <Stat
+                      label={dim.plural.replace(/^./, (c) => c.toUpperCase())}
+                    >
+                      {cube.rows.length}
+                    </Stat>
+                  </>
+                )}
                 {headline.trend !== null && (
                   <Stat label="2nd half vs 1st">
                     <span
@@ -534,7 +546,7 @@ export default function CostExplorer() {
               <SummaryTable
                 cube={cube}
                 metric={q.metric}
-                dimLabel={dim.label}
+                dimLabel={q.group === "time" ? "Scope" : dim.label}
                 splitLabel={hasSplit ? DIMS[q.split as DimId].label : null}
                 focus={focus}
                 onToggle={toggleFocus}
@@ -543,7 +555,7 @@ export default function CostExplorer() {
               <PivotTable
                 cube={cube}
                 metric={q.metric}
-                dimLabel={dim.label}
+                dimLabel={q.group === "time" ? "Scope" : dim.label}
                 bySplit={pivotBySplit}
                 focus={focus}
                 onToggle={toggleFocus}

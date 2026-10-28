@@ -3,7 +3,7 @@ title: LLM Proxy Authentication
 sidebarTitle: Authentication
 description: How apps, agents, and people sign in to the LLM Proxy, and whose provider key each call uses
 order: 1
-lastUpdated: 2026-10-17
+lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -48,7 +48,8 @@ The request shows under **Logs → LLM Proxy**, with the key's name.
 - Choose **Current and future providers** to automatically use each provider's shared **Primary** API key, including providers added later. Personal and subscription keys are excluded. You can optionally select a different key for an existing provider. Connect settings apply this option to newly issued keys.
 - After you confirm, deleting a provider key or disconnecting a subscription also deletes the virtual keys and OAuth clients that map only that key. A key or client that also maps other providers keeps those. Knowledge base settings that used the key are cleared.
 - **To share a key** with a team, add the team under its permissions, when you create the key or later.
-- To bill a team, pick it as the payer. The key's spend then counts toward that team's [costs](/docs/llm-proxy/costs-and-limits#track-spending) and [limits](/docs/llm-proxy/costs-and-limits#set-a-budget), not its creator's. A spend cap there limits the key itself.
+- To bill a team, pick it as the payer. The key's spend then counts toward that team's [costs](/docs/llm-proxy/costs-and-limits/costs) and [limits](/docs/llm-proxy/costs-and-limits/limits), not its creator's. A spend cap there limits the key itself.
+- A key reaches a [model pool](/docs/llm-proxy/model-pools) when it maps one of the pool's members. To give it a pool without mapping a member, add the pool under **Model pools**.
 
 <span id="creating-passthrough-virtual-keys"></span><span id="configuring-claude-code-and-claude-desktop"></span>
 
@@ -103,9 +104,10 @@ For a bot or a nightly job with no person behind it. Select **Service account (o
 5. Send `Authorization: Bearer <access_token>` on a provider route or the Model Router.
 
 - When editing a client, use **Access** to change capabilities and provider keys, and **Budget** to change its payer or spend cap.
-- The billing team's [costs](/docs/llm-proxy/costs-and-limits#track-spending) and [limits](/docs/llm-proxy/costs-and-limits#set-a-budget) count the client's spend. A spend cap limits the client itself.
+- The billing team's [costs](/docs/llm-proxy/costs-and-limits/costs) and [limits](/docs/llm-proxy/costs-and-limits/limits) count the client's spend. A spend cap limits the client itself.
 - **Current and future providers** uses shared **Primary** keys at request time, including later providers and changes to the Primary key. Personal and subscription keys are excluded. Under **LLM API keys**, you can override the key for a provider. Enabling this mode requires a [**Can use** grant](/docs/admin/access-control#granular-access-control) on all current and future provider keys (`*`); access to each current key separately is insufficient.
 - Existing OAuth clients keep **Selected providers** until you change their mode.
+- To let the client use a [model pool](/docs/llm-proxy/model-pools) without mapping one of its members, add the pool under **Model pools** on **Access**.
 - Map a metered API key. A personal subscription cannot serve an app.
 - See the [complete example app](https://github.com/archestra-ai/examples/tree/main/model-router-client-credentials).
 

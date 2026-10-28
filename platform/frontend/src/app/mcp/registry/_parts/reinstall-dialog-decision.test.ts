@@ -7,7 +7,7 @@ describe("decideReinstallDialog", () => {
     expect(
       decideReinstallDialog({
         hasPromptedFields: false,
-        byosCollectsSecrets: false,
+
         flaggedInstalls: [
           { reinstallRequired: true, reinstallReason: "new-input" },
         ],
@@ -19,7 +19,7 @@ describe("decideReinstallDialog", () => {
     expect(
       decideReinstallDialog({
         hasPromptedFields: true,
-        byosCollectsSecrets: false,
+
         flaggedInstalls: [
           { reinstallRequired: true, reinstallReason: "restart" },
         ],
@@ -31,7 +31,7 @@ describe("decideReinstallDialog", () => {
     expect(
       decideReinstallDialog({
         hasPromptedFields: true,
-        byosCollectsSecrets: false,
+
         flaggedInstalls: [
           { reinstallRequired: true, reinstallReason: "new-input" },
         ],
@@ -43,7 +43,7 @@ describe("decideReinstallDialog", () => {
     expect(
       decideReinstallDialog({
         hasPromptedFields: true,
-        byosCollectsSecrets: false,
+
         flaggedInstalls: [
           { reinstallRequired: true, reinstallReason: "restart" },
           { reinstallRequired: true, reinstallReason: "new-input" },
@@ -56,7 +56,7 @@ describe("decideReinstallDialog", () => {
     expect(
       decideReinstallDialog({
         hasPromptedFields: true,
-        byosCollectsSecrets: false,
+
         flaggedInstalls: [{ reinstallRequired: true, reinstallReason: null }],
       }),
     ).toBe("collect-input");
@@ -66,7 +66,7 @@ describe("decideReinstallDialog", () => {
     expect(
       decideReinstallDialog({
         hasPromptedFields: true,
-        byosCollectsSecrets: false,
+
         flaggedInstalls: [{ reinstallRequired: false, reinstallReason: null }],
       }),
     ).toBe("collect-input");
@@ -76,20 +76,8 @@ describe("decideReinstallDialog", () => {
     expect(
       decideReinstallDialog({
         hasPromptedFields: true,
-        byosCollectsSecrets: false,
-        flaggedInstalls: [],
-      }),
-    ).toBe("collect-input");
-  });
 
-  test("BYOS with secret prompted fields → collect values even for restart-only flags (vault refs are re-supplied every reinstall)", () => {
-    expect(
-      decideReinstallDialog({
-        hasPromptedFields: true,
-        byosCollectsSecrets: true,
-        flaggedInstalls: [
-          { reinstallRequired: true, reinstallReason: "restart" },
-        ],
+        flaggedInstalls: [],
       }),
     ).toBe("collect-input");
   });

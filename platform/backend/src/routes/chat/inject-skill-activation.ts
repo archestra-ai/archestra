@@ -39,6 +39,61 @@ import { resolveActivationVersion } from "@/skills/skill-version-resolution";
 import { agentOwner } from "@/types";
 import { spliceText } from "./augment-last-user-message";
 
+type SkillInjectionParams = Parameters<
+  typeof injectSkillActivationForLastMessage
+>[0];
+
+// A queue interruption may submit several consecutive user messages in one
+// request. Activate each explicit skill with its own metadata and access checks.
+export function injectSkillActivation(
+  params: SkillInjectionParams,
+): Promise<ChatMessage[]> {
+  return injectPendingUserMessages(params, injectSkillActivationForLastMessage);
+}
+
+export function injectExternalMcpSkillActivation(
+  params: SkillInjectionParams,
+): Promise<ChatMessage[]> {
+  return injectPendingUserMessages(
+    params,
+    injectExternalMcpSkillActivationForLastMessage,
+  );
+}
+
+export function injectPluginSkillActivation(
+  params: SkillInjectionParams,
+): Promise<ChatMessage[]> {
+  return injectPendingUserMessages(
+    params,
+    injectPluginSkillActivationForLastMessage,
+  );
+}
+
+async function injectPendingUserMessages(
+  params: SkillInjectionParams,
+  inject: (
+    params: SkillInjectionParams & { agentId: string | undefined },
+  ) => Promise<ChatMessage[]>,
+): Promise<ChatMessage[]> {
+  if (params.messages.at(-1)?.role !== "user")
+    return inject({ ...params, agentId: params.agentId });
+  const start =
+    params.messages.findLastIndex((message) => message.role !== "user") + 1;
+  let messages = params.messages;
+  for (let index = start; index < messages.length; index++) {
+    const activated = await inject({
+      ...params,
+      agentId: params.agentId,
+      messages: messages.slice(0, index + 1),
+    });
+    if (activated[index] !== messages[index]) {
+      messages = [...messages];
+      messages[index] = activated[index];
+    }
+  }
+  return messages;
+}
+
 /**
  * When the last user message was sent via a skill slash command, prepend the
  * skill's activation block to its text so the model receives the skill's
@@ -52,7 +107,7 @@ import { spliceText } from "./augment-last-user-message";
  * cannot be resolved or accessed by the user (per its scope), the input is
  * returned unchanged.
  */
-export async function injectSkillActivation({
+async function injectSkillActivationForLastMessage({
   messages,
   organizationId,
   userId,
@@ -262,7 +317,7 @@ export async function injectSkillActivation({
   return next;
 }
 
-export async function injectExternalMcpSkillActivation({
+async function injectExternalMcpSkillActivationForLastMessage({
   messages,
   organizationId,
   userId,
@@ -371,7 +426,7 @@ export async function injectExternalMcpSkillActivation({
   }
 }
 
-export async function injectPluginSkillActivation({
+async function injectPluginSkillActivationForLastMessage({
   messages,
   organizationId,
   userId,

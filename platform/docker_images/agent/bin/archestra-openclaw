@@ -53,6 +53,7 @@ runtime_instructions="$("$(dirname "${BASH_SOURCE[0]}")/archestra-agent-instruct
 export OPENCLAW_STATE_DIR="${ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR:-${runtime_dir}}/openclaw-state"
 export OPENCLAW_CONFIG_PATH="${config_file}"
 mkdir -p "${OPENCLAW_STATE_DIR}" "${attention_plugin_dir}"
+chmod 0700 "${attention_plugin_dir}"
 
 # OpenClaw exposes typed lifecycle hooks to local plugins. The plugin is loaded
 # from this generated, runtime-owned path and only reports state transitions.
@@ -130,6 +131,7 @@ chmod 0600 \
 
 transcript_plugin_dir="${runtime_dir}/openclaw-transcript"
 mkdir -p "${transcript_plugin_dir}"
+chmod 0700 "${transcript_plugin_dir}"
 cat > "${transcript_plugin_dir}/package.json" <<'JSON'
 {
   "name": "archestra-openclaw-transcript",
@@ -293,6 +295,10 @@ export default {
   },
 };
 PLUGIN
+chmod 0600 \
+  "${transcript_plugin_dir}/index.mjs" \
+  "${transcript_plugin_dir}/openclaw.plugin.json" \
+  "${transcript_plugin_dir}/package.json"
 
 # OpenClaw deliberately owns its generated system prompt. Its supported
 # extension point is the workspace bootstrap files, so expose the Agent's
@@ -353,14 +359,16 @@ jq -n \
   --arg binding "${ARCHESTRA_AGENT_RUNTIME_BINDING:-}" \
   --arg mcp_url "${openclaw_mcp_url}" \
   --arg api "${openclaw_api}" \
+  --arg openappa "${ARCHESTRA_AGENT_RUNTIME_OPENAPPA:-0}" \
   --arg workspace "${PWD}" \
   --arg attention_plugin_dir "${attention_plugin_dir}" \
   --arg transcript_plugin_dir "${transcript_plugin_dir}" \
   '({
     logging:{level:"error",consoleLevel:"silent"},
+    # OpenAPPA must see every tool schema before the provider runs a turn.
+    tools:(if $openappa == "1" then {toolSearch:false,codeMode:false} else {} end),
     plugins:{
       enabled:true,
-      bundledDiscovery:"allowlist",
       allow:["archestra-runtime-attention", "archestra-transcript"],
       load:{paths:[$attention_plugin_dir, $transcript_plugin_dir]},
       entries:({

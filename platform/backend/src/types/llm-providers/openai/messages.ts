@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+export const CacheControlSchema = z.object({
+  type: z.literal("ephemeral"),
+  ttl: z.enum(["5m", "1h"]).optional(),
+});
+
+const PromptCacheBreakpointSchema = z.object({ mode: z.literal("explicit") });
+
 const FunctionToolCallSchema = z
   .object({
     id: z.string(),
@@ -42,6 +49,7 @@ export const ToolCallSchema = z
 
 export const ContentPartRefusalSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     type: z.enum(["refusal"]),
     refusal: z.string(),
   })
@@ -51,8 +59,10 @@ export const ContentPartRefusalSchema = z
 
 export const ContentPartTextSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     type: z.enum(["text"]),
     text: z.string(),
+    prompt_cache_breakpoint: PromptCacheBreakpointSchema.optional(),
   })
   .describe(
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821`,
@@ -60,7 +70,9 @@ export const ContentPartTextSchema = z
 
 export const ContentPartImageSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     type: z.enum(["image_url"]),
+    prompt_cache_breakpoint: PromptCacheBreakpointSchema.optional(),
     image_url: z
       .object({
         url: z.string(),
@@ -76,7 +88,9 @@ export const ContentPartImageSchema = z
 
 export const ContentPartInputAudioSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     type: z.enum(["input_audio"]),
+    prompt_cache_breakpoint: PromptCacheBreakpointSchema.optional(),
     input_audio: z
       .object({
         data: z.string(),
@@ -92,7 +106,9 @@ export const ContentPartInputAudioSchema = z
 
 export const ContentPartFileSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     type: z.enum(["file"]),
+    prompt_cache_breakpoint: PromptCacheBreakpointSchema.optional(),
     file: z
       .object({
         file_data: z.string().optional(),
@@ -120,6 +136,7 @@ const ContentPartSchema = z
 
 export const DeveloperMessageParamSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     content: z.union([z.string(), z.array(ContentPartTextSchema)]),
     role: z.enum(["developer"]),
     name: z.string().optional(),
@@ -130,6 +147,7 @@ export const DeveloperMessageParamSchema = z
 
 export const SystemMessageParamSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     content: z.union([z.string(), z.array(ContentPartTextSchema)]),
     role: z.enum(["system"]),
     name: z.string().optional(),
@@ -140,6 +158,7 @@ export const SystemMessageParamSchema = z
 
 export const UserMessageParamSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     content: z.union([z.string(), z.array(ContentPartSchema)]),
     role: z.enum(["user"]),
     name: z.string().optional(),
@@ -150,6 +169,7 @@ export const UserMessageParamSchema = z
 
 export const AssistantMessageParamSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     role: z.enum(["assistant"]),
     audio: z
       .object({
@@ -191,6 +211,7 @@ export const AssistantMessageParamSchema = z
 
 export const ToolMessageParamSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     role: z.enum(["tool"]),
     content: z.union([
       z.string(),
@@ -204,6 +225,7 @@ export const ToolMessageParamSchema = z
 
 export const FunctionMessageParamSchema = z
   .object({
+    cache_control: CacheControlSchema.optional(),
     role: z.enum(["function"]),
     content: z.string().nullable(),
     name: z.string(),

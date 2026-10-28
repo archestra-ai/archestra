@@ -47,12 +47,9 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
-import SecretModel from "@/models/secret";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import {
-  assertByosEnabled,
   getSecretValueForLlmProviderApiKey,
-  isByosEnabled,
   secretManager,
 } from "@/secrets-manager";
 import { CredentialResourcePermissions } from "@/services/credential-resource-permissions";
@@ -395,8 +392,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   "cannot own a key, so it must send true.",
               ),
             isPrimary: z.boolean().optional(),
-            vaultSecretPath: z.string().min(1).optional(),
-            vaultSecretKey: z.string().min(1).optional(),
+
             /** Bedrock-only: AWS access key ID for SigV4 auth */
             awsAccessKeyId: z.string().min(1).optional(),
             /** Bedrock-only: AWS secret access key for SigV4 auth */
@@ -422,9 +418,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (data) => {
               const hasSigV4 = data.awsAccessKeyId && data.awsSecretAccessKey;
               if (hasSigV4) return data.provider === "bedrock";
-              if (isByosEnabled()) {
-                return data.vaultSecretPath && data.vaultSecretKey;
-              }
+
               return (
                 isProviderApiKeyOptional({
                   provider: data.provider,
@@ -435,7 +429,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             {
               message:
-                "Either apiKey, both vaultSecretPath and vaultSecretKey, or AWS SigV4 credentials (Bedrock only) must be provided.",
+                "Either apiKey or AWS SigV4 credentials (Bedrock only) must be provided",
             },
           ),
         response: constructResponseSchema(LlmProviderApiKeyWithScopeInfoSchema),
@@ -446,7 +440,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // so it cannot be the owner (`user_id`) of a key. Refuse before the key
       // is tested or its secret is stored.
       if (!body.shared && isServiceAccountUserId(user.id)) {
-        // Without an apiKey (a Vault reference, a keyless provider) only the
+        // Without an apiKey (a keyless provider) only the
         // provider decides whether the credential is per-user.
         const credential = { provider: body.provider, apiKey: body.apiKey };
         throw new ApiError(
@@ -560,48 +554,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           getChatApiKeySecretName({ scope, teamId: null, userId: user.id }),
         );
-      } else if (isByosEnabled()) {
-        if (!body.vaultSecretPath || !body.vaultSecretKey) {
-          throw new ApiError(400, "Vault secret path and key are required");
-        }
-        const vaultReference = `${body.vaultSecretPath}#${body.vaultSecretKey}`;
-        // first, get secret from vault path and key
-        const manager = assertByosEnabled();
-        const vaultData = await manager.getSecretFromPath(body.vaultSecretPath);
-        actualApiKeyValue = vaultData[body.vaultSecretKey];
-
-        if (!actualApiKeyValue) {
-          throw new ApiError(
-            400,
-            `API key not found in Vault secret at path "${body.vaultSecretPath}" with key "${body.vaultSecretKey}"`,
-          );
-        }
-        assertPerUserCredentialOwnership({
-          provider: body.provider,
-          apiKey: actualApiKeyValue,
-          shared: body.shared,
-        });
-        CredentialResourcePermissions.validateProvider({
-          provider: body.provider,
-          apiKey: actualApiKeyValue,
-          ownerId,
-          grants: body.initialGrants ?? [],
-        });
-        // then test the API key
-        await testApiKeyOrThrow({
-          organizationId,
-          provider: body.provider,
-          apiKey: actualApiKeyValue,
-          baseUrl: runtimeTestBaseUrl,
-          extraHeaders: body.extraHeaders,
-        });
-        // then create the secret
-        secret = await secretManager().createSecret(
-          { apiKey: vaultReference },
-          getChatApiKeySecretName({ scope, teamId: null, userId: user.id }),
-        );
       } else if (body.apiKey) {
-        // When readonly_vault is disabled
         actualApiKeyValue = body.apiKey;
         // Test the API key before saving
         await testApiKeyOrThrow({
@@ -891,8 +844,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .nullable()
               .optional(),
             isPrimary: z.boolean().optional(),
-            vaultSecretPath: z.string().min(1).optional(),
-            vaultSecretKey: z.string().min(1).optional(),
+
             /** Bedrock-only: AWS access key ID for SigV4 auth */
             awsAccessKeyId: z.string().min(1).optional(),
             /** Bedrock-only: AWS secret access key for SigV4 auth */
@@ -912,26 +864,19 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               const hasSigV4 = data.awsAccessKeyId && data.awsSecretAccessKey;
               if (hasSigV4) return true;
               // If no key-related fields are provided, that's fine (updating other fields)
-              if (
-                !data.apiKey &&
-                !data.vaultSecretPath &&
-                !data.vaultSecretKey
-              ) {
+              if (!data.apiKey) {
                 return true;
               }
               // If apiKey is provided, that's always valid
               if (data.apiKey) {
                 return true;
               }
-              // If BYOS is enabled and vault fields are provided, both must be present
-              if (isByosEnabled()) {
-                return data.vaultSecretPath && data.vaultSecretKey;
-              }
+
               return false;
             },
             {
               message:
-                "Either apiKey, both vaultSecretPath and vaultSecretKey, or AWS SigV4 credentials must be provided",
+                "Either apiKey or AWS SigV4 credentials must be provided",
             },
           ),
         response: constructResponseSchema(LlmProviderApiKeyWithScopeInfoSchema),
@@ -1009,12 +954,8 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }),
         });
       }
-      // Update the secret if a new API key is provided (via direct value, vault reference, or SigV4 credentials)
-      if (
-        body.apiKey ||
-        (body.vaultSecretPath && body.vaultSecretKey) ||
-        hasSigV4Update
-      ) {
+      // Update the secret if a new API key is provided (via direct value or SigV4 credentials)
+      if (body.apiKey || hasSigV4Update) {
         let secretPayload: Record<string, string>;
         let testValue: string;
 
@@ -1026,33 +967,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ...(sigV4.sessionToken ? { sessionToken: sigV4.sessionToken } : {}),
           };
           testValue = encodeBedrockSigV4Marker(sigV4);
-        } else if (
-          isByosEnabled() &&
-          body.vaultSecretPath &&
-          body.vaultSecretKey
-        ) {
-          // Get secret from vault
-          const manager = assertByosEnabled();
-          const vaultData = await manager.getSecretFromPath(
-            body.vaultSecretPath,
-          );
-          const apiKeyValue = vaultData[body.vaultSecretKey];
-          if (!apiKeyValue) {
-            throw new ApiError(
-              400,
-              `API key not found in Vault secret at path "${body.vaultSecretPath}" with key "${body.vaultSecretKey}"`,
-            );
-          }
-          const vaultReference = `${body.vaultSecretPath}#${body.vaultSecretKey}`;
-          secretPayload = { apiKey: vaultReference };
-          testValue = apiKeyValue;
         } else if (body.apiKey) {
           // Use direct API key value
           secretPayload = { apiKey: body.apiKey };
           testValue = body.apiKey;
         } else {
           // This shouldn't happen due to refine, but TypeScript needs this
-          throw new ApiError(400, "API key or vault reference is required");
+          throw new ApiError(400, "API key is required");
         }
 
         assertPerUserCredentialOwnership({
@@ -1092,7 +1013,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Validating a subscription credential redeems its refresh token, and
         // the issuer may rotate it — invalidating the submitted one. Persist
         // the newest token or the stored credential is dead on arrival. Only
-        // the direct-value path applies: vault references and SigV4 payloads
+        // the direct-value path applies: SigV4 payloads
         // are not subscription credentials.
         if (body.apiKey && secretPayload.apiKey === body.apiKey) {
           secretPayload = {
@@ -1343,13 +1264,6 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isCredentialLevelSubscriptionProvider(keyRow.provider) &&
         keyRow.secretId
       ) {
-        const secretRow = await SecretModel.findById(keyRow.secretId);
-        if (secretRow?.isByosVault) {
-          throw new ApiError(
-            400,
-            "This key's credential lives in your external Vault, which is read-only — update it there instead.",
-          );
-        }
         const storedValue = await getSecretValueForLlmProviderApiKey(
           keyRow.secretId,
         );
@@ -1636,10 +1550,6 @@ async function writeKeyWithStoredSecret<T>(
   return result;
 }
 
-/**
- * Delete a secret that no key row refers to. In read-only Vault mode this
- * removes only the stored reference, never the Vault entry.
- */
 async function deleteUnusedSecret(secretId: string): Promise<void> {
   try {
     await secretManager().deleteSecret(secretId);

@@ -277,6 +277,14 @@ jobs:
           selection: ${{ runner.temp }}/release-candidate-selection.json
           token: ${{ steps.generate-token.outputs.token }}
 
+      - name: Relay scanned agent-kimi archives
+        if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
+        uses: $/.github/actions/relay-release-candidate
+        with:
+          image_name: agent-kimi
+          selection: ${{ runner.temp }}/release-candidate-selection.json
+          token: ${{ steps.generate-token.outputs.token }}
+
       - name: Retain verified candidate selection for publishers
         if: ${{ !inputs.handoff-fixture && (steps.resolve-release.outputs.should_publish == 'true') }}
         uses: $/.github/actions/github-upload-artifact
@@ -365,6 +373,7 @@ jobs:
     needs:
       - release-please
     permissions:
+      packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
     with:
@@ -384,6 +393,7 @@ jobs:
     needs:
       - release-please
     permissions:
+      packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable Agent image workflow.
       id-token: write # Required for Workload Identity Federation.
     with:
@@ -405,6 +415,7 @@ jobs:
     needs:
       - release-please
     permissions:
+      packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
     with:
@@ -426,6 +437,7 @@ jobs:
     needs:
       - release-please
     permissions:
+      packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.
     with:
@@ -451,6 +463,7 @@ jobs:
       - release-please
     permissions:
       contents: read # Required to invoke the reusable Docker build workflow.
+      packages: write # Required by the reusable GHCR-capable publisher.
       id-token: write # Required for Workload Identity Federation.
     with:
       image_directory: ./platform
@@ -506,7 +519,8 @@ jobs:
       - publish-platform-helm-chart
     permissions:
       contents: write # Attach the saved chart and publish the release.
-      id-token: write # Authenticate the existing registry publisher.
+      packages: write # Publish new release images to GHCR.
+      id-token: write # Keep publishing the Helm chart at its existing GAR URL.
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -564,6 +578,13 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Log in to GHCR
+        uses: $/.github/actions/docker-login
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       - name: Publish stable artifacts without rebuilding
         if: ${{ github.ref_name != 'main' }}

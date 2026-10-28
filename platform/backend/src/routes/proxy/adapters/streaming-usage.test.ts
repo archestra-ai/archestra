@@ -186,6 +186,7 @@ describe("gemini-openai reports the same usage streaming and non-streaming", () 
 
     expect(usageOf(adapter.formatEndSSE())).toEqual({
       prompt_tokens: 2000,
+      prompt_tokens_details: { cached_tokens: 1800 },
       completion_tokens: 600,
       completion_tokens_details: { reasoning_tokens: 500 },
       total_tokens: 2600,
@@ -222,7 +223,7 @@ describe("anthropic-openai reports the gross prompt count", () => {
     prompt_tokens: 91_204,
     completion_tokens: 55,
     total_tokens: 91_259,
-    prompt_tokens_details: { cached_tokens: 90_000 },
+    prompt_tokens_details: { cached_tokens: 90_000, cache_write_tokens: 1_200 },
   };
   const response = {
     id: "msg_1",

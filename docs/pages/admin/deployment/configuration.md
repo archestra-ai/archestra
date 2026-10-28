@@ -1473,6 +1473,8 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 - **`ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS`** - Days without a new message before a conversation is deleted with its messages, attachments, files, and code sandboxes.
   - Default: `0` (keep forever)
 
+- **`ARCHESTRA_AUDIT_LOG_OTEL_ENABLED`** - Set to `true` to export persisted administrative audit event metadata as OTLP logs through the configured OpenTelemetry endpoint. Default: `false`. Delivery is best-effort; see [Audit log export](/docs/admin/observability/audit-logs).
+
 - **`ARCHESTRA_AUDIT_LOG_RETENTION_DAYS`** - Days to keep audit log records.
   - Default: `0` (keep forever)
 

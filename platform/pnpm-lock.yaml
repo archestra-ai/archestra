@@ -554,6 +554,9 @@ importers:
       quick-lru:
         specifier: ^7.3.0
         version: 7.3.0
+      rate-limiter-flexible:
+        specifier: 11.2.3
+        version: 11.2.3
       safe-regex2:
         specifier: 5.1.0
         version: 5.1.0
@@ -9455,6 +9458,9 @@ packages:
   range-parser@1.2.1:
     resolution: {integrity: sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==}
     engines: {node: '>= 0.6'}
+
+  rate-limiter-flexible@11.2.3:
+    resolution: {integrity: sha512-w4HX4toAsEbu1VksOauZwI9d6URb6/4WqJJ5Hg1bESihMt2KJfQ2iTwvDkhIg+y2HetLh65DGu/8xIkUz/xNPA==}
 
   rate-limiter-flexible@8.3.0:
     resolution: {integrity: sha512-mzwlfipDLlRinPgELqVDJetke6Snq26nL565m8nLWXIcWgosYSeNRgqwh7ZrZ4MfYs8CNfmLvR5SBVz3rISQsQ==}
@@ -20496,6 +20502,8 @@ snapshots:
       '@types/react-dom': 19.2.3(@types/react@19.2.14)
 
   range-parser@1.2.1: {}
+
+  rate-limiter-flexible@11.2.3: {}
 
   rate-limiter-flexible@8.3.0: {}
 

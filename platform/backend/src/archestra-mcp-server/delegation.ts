@@ -33,6 +33,10 @@ import {
   subagentReturnPrefix,
 } from "@/openappa/subagent-binding";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
+import {
+  type A2AOAuthExecution,
+  authorizeA2AOAuthExecution,
+} from "@/routes/mcp-gateway/utils";
 import { executeOutboundA2aDelegation } from "@/services/a2a-outbound-client";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import {
@@ -125,6 +129,7 @@ export async function getAgentTools(context: {
   parentLlm?: ModelSelection;
   /** The caller's own delegation chain; a fork's ends in its agent twice. */
   delegationChain?: string;
+  oauthExecution?: A2AOAuthExecution;
 }): Promise<Tool[]> {
   const { agentId, organizationId, userId, skipAccessCheck, lookups } = context;
 
@@ -342,6 +347,18 @@ export async function handleDelegation(
     return target.error;
   }
 
+  if (tokenAuth?.oauthExecution) {
+    try {
+      await authorizeA2AOAuthExecution({
+        agentId: target.id,
+        organizationId,
+        execution: tokenAuth.oauthExecution,
+      });
+    } catch {
+      return errorResult("Agent not found or not accessible.");
+    }
+  }
+
   // Agent Runtime is a capability of the target Agent, not a separate
   // invocation syntax. The ordinary agent__* delegation tool therefore turns
   // into a detached durable task whenever that target has a runtime. A
@@ -406,6 +423,7 @@ export async function handleDelegation(
       ...(spawn.binding ? { appaSubagent: spawn.binding.child } : {}),
       organizationId,
       userId: userId || "system",
+      oauthExecution: tokenAuth?.oauthExecution,
       sessionId,
       // Pass the current delegation chain so the child can extend it
       parentDelegationChain,
@@ -860,6 +878,7 @@ async function finishDelegationTools(
     userId?: string;
     parentLlm?: ModelSelection;
     delegationChain?: string;
+    oauthExecution?: A2AOAuthExecution;
   },
   tools: Tool[],
   attestable: boolean,
@@ -886,7 +905,27 @@ async function finishDelegationTools(
           },
         ]
       : [];
-  return dedupeDelegationTools([...fork, ...tools]);
+  const candidates = dedupeDelegationTools([...fork, ...tools]);
+  if (!context.oauthExecution) return candidates;
+  const execution = context.oauthExecution;
+  const allowed = await Promise.all(
+    candidates.map(async (tool) => {
+      if (tool._meta?.targetType === "external_a2a") return tool;
+      const targetAgentId = tool._meta?.targetAgentId;
+      if (typeof targetAgentId !== "string") return null;
+      try {
+        await authorizeA2AOAuthExecution({
+          agentId: targetAgentId,
+          organizationId: context.organizationId,
+          execution,
+        });
+        return tool;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return allowed.filter((tool) => tool !== null);
 }
 
 /**

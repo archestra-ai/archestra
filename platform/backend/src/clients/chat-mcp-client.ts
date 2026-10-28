@@ -55,7 +55,11 @@ import {
 } from "@/models";
 import { isAppaDelegatedRun } from "@/openappa/service";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
-import { buildAgentMcpToolList } from "@/routes/mcp-gateway/utils";
+import {
+  type A2AOAuthExecution,
+  authorizeA2AOAuthExecution,
+  buildAgentMcpToolList,
+} from "@/routes/mcp-gateway/utils";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
@@ -817,6 +821,7 @@ function shouldValidateCachedClient(cacheKey: string): boolean {
  * @returns Record of tool name to AI SDK Tool object
  */
 export async function getChatMcpTools({
+  oauthExecution,
   agentName,
   agentId,
   userId,
@@ -846,6 +851,7 @@ export async function getChatMcpTools({
   parentLlm,
   openappaReviewPause,
 }: {
+  oauthExecution?: A2AOAuthExecution;
   agentName: string;
   agentId: string;
   userId: string;
@@ -950,7 +956,7 @@ export async function getChatMcpTools({
     parentLlm,
   });
   const shouldUseToolCache =
-    !abortSignal && !appaSubagent && !openappaReviewPause;
+    !oauthExecution && !abortSignal && !appaSubagent && !openappaReviewPause;
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
   // LRU eviction and TTL are handled automatically by LRUCacheManager
@@ -995,11 +1001,17 @@ export async function getChatMcpTools({
   );
 
   // Get token for direct tool execution (bypasses HTTP for security)
-  const mcpGwToken = await selectMCPGatewayToken(
-    agentId,
-    userId,
-    organizationId,
-  );
+  const mcpGwToken: McpGatewayToken | null = oauthExecution
+    ? {
+        ...(await authorizeA2AOAuthExecution({
+          agentId,
+          organizationId,
+          execution: oauthExecution,
+        })),
+        tokenValue: null,
+        oauthExecution,
+      }
+    : await selectMCPGatewayToken(agentId, userId, organizationId);
   if (!mcpGwToken) {
     logger.warn(
       { agentId, userId },
@@ -1153,6 +1165,7 @@ export async function getChatMcpTools({
             skipAccessCheck: userId === "system",
             parentLlm,
             delegationChain,
+            oauthExecution,
           }),
           getSkillDelegationTools({ agentId, organizationId, userId }),
         ]);
@@ -1186,6 +1199,21 @@ export async function getChatMcpTools({
           { agentId, userId, error },
           "Failed to fetch delegation tools, continuing without them",
         );
+      }
+    }
+
+    if (oauthExecution) {
+      for (const tool of Object.values(aiTools)) {
+        const execute = tool.execute;
+        if (!execute) continue;
+        tool.execute = async (...args) => {
+          await authorizeA2AOAuthExecution({
+            agentId,
+            organizationId,
+            execution: oauthExecution,
+          });
+          return execute(...args);
+        };
       }
     }
 

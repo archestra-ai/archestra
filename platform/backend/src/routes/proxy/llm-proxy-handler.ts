@@ -43,6 +43,7 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { a2aOAuthExecutionReference } from "@/clients/a2a-oauth-execution";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
@@ -113,6 +114,7 @@ import {
   type LlmProxyRequestContext,
   type LlmProxyToolCallRefusal,
 } from "@/proxy/plugins/registry";
+import { authorizeA2AOAuthExecution } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { llmProxyTiming } from "@/server/llm-proxy-timing";
 import { configCache } from "@/services/config-cache";
@@ -226,6 +228,8 @@ const {
  * for maintainability and readability.
  */
 export interface LLMProxyContext<TRequest> {
+  /** Recheck the original OAuth actor before each actual upstream attempt. */
+  authorizeA2AOAuthAttempt?: () => Promise<unknown>;
   attributionLabels?: AttributionLabels;
   throughput?: LlmThroughput;
   usageAccountingMode?: PricedBillingUsage["mode"];
@@ -490,6 +494,7 @@ export async function handleLLMProxy<
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
   const clientRuntimeEvidence = consumeClientRuntimeEvidence(request);
   const proof = internalCallProvenance(request);
+  const oauthExecution = a2aOAuthExecutionReference(request);
   // Credential paths accept either proof; only the guardrail proof reaches
   // OpenAPPA as its bypass.
   const internalCall = proof.inProcess || proof.guardrail;
@@ -2044,6 +2049,13 @@ export async function handleLLMProxy<
       claudeCodeAgentId,
     );
     const ctx: LLMProxyContext<TRequest> = {
+      authorizeA2AOAuthAttempt: oauthExecution
+        ? () =>
+            authorizeA2AOAuthExecution({
+              ...oauthExecution,
+              organizationId: resolvedAgent.organizationId,
+            })
+        : undefined,
       attributionLabels,
       throughput: new LlmThroughput({
         entities: [...uniqueBillingEntities.values()],
@@ -4392,16 +4404,23 @@ async function openUpstream<TRequest, T>(params: {
   }) => void;
 }): Promise<T> {
   const { ctx, transport, open, memberTimeoutMs, ...retry } = params;
+  const authorizedOpen = async (attemptTransport: MemberTransport) => {
+    await ctx.authorizeA2AOAuthAttempt?.();
+    return open(attemptTransport);
+  };
   const pool = ctx.modelPool;
   if (!pool) {
-    return openUpstreamWithRetry({ open: () => open(transport), ...retry });
+    return openUpstreamWithRetry({
+      open: () => authorizedOpen(transport),
+      ...retry,
+    });
   }
   try {
     return await openThroughModelPool({
       plan: pool.plan,
       attempt: ctx.upstreamAttempt,
       transportFor: pool.transportFor,
-      open,
+      open: authorizedOpen,
       memberTimeoutMs,
       recordFailedAttempt: pool.recordFailedAttempt,
       ...retry,

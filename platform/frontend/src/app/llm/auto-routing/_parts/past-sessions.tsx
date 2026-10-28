@@ -139,7 +139,7 @@ export function PastSessions({
       </div>
       {!routingEnabled && (
         <p className="text-sm text-muted-foreground">
-          Scored sessions build the first plan once auto routing is turned on.
+          Scored sessions are fitted into a plan once auto routing is turned on.
         </p>
       )}
       {backfill ? (

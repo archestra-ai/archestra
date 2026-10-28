@@ -8,9 +8,10 @@ import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 /**
  * The connect wizard and the Manage dialog share one box: the medium width
  * and a fixed height, so it never resizes between steps. The body scrolls
- * inside it; the footer stays pinned.
+ * inside it; the footer stays pinned. 46rem fits the tallest state, Manage
+ * with Advanced folded.
  */
-export const COPILOT_DIALOG_CLASS = "h-[min(36rem,85vh)]";
+export const COPILOT_DIALOG_CLASS = "h-[min(46rem,85vh)]";
 
 /** The organization a GitHub Copilot plan bills, as both dialogs show it. */
 export function OrganizationRow({ organization }: { organization: string }) {

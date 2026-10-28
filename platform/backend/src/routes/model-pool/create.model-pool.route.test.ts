@@ -1,4 +1,4 @@
-import { desc } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
@@ -148,18 +148,24 @@ describe("POST /api/model-pools", () => {
       timeoutSeconds: null,
       cooldownSeconds: null,
     });
-    const [audit] = await db
+    const audits = await db
       .select({
         before: schema.auditLogsTable.before,
         after: schema.auditLogsTable.after,
       })
       .from(schema.auditLogsTable)
-      .orderBy(desc(schema.auditLogsTable.createdAt))
-      .limit(1);
-    expect(audit).toMatchObject({
-      before: { cooldownSeconds: 300 },
-      after: { cooldownSeconds: null },
-    });
+      .where(
+        and(
+          eq(schema.auditLogsTable.action, "modelPool.updated"),
+          eq(schema.auditLogsTable.resourceId, id),
+        ),
+      )
+      .orderBy(asc(schema.auditLogsTable.createdAt));
+    // The update that keeps them, then the one that clears them.
+    expect(audits).toMatchObject([
+      { before: { cooldownSeconds: 300 }, after: { cooldownSeconds: 300 } },
+      { before: { cooldownSeconds: 300 }, after: { cooldownSeconds: null } },
+    ]);
 
     for (const timing of [
       { streamTimeoutSeconds: 0 },

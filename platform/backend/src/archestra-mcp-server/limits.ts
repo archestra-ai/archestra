@@ -14,6 +14,7 @@ import LlmThroughputModel from "@/models/llm-throughput";
 import { createLimit } from "@/services/limit";
 import {
   ApiError,
+  LimitBehaviorSchema,
   LimitCleanupIntervalSchema,
   LimitEntityTypeSchema,
   LimitTypeSchema,
@@ -49,6 +50,7 @@ const LimitOutputItemSchema = z.object({
   entityId: z.string().describe("The limited entity ID."),
   limitType: LimitTypeSchema.describe("The kind of limit."),
   limitValue: z.number().describe("The configured limit value."),
+  behavior: LimitBehaviorSchema,
   reason: z
     .string()
     .nullable()
@@ -106,6 +108,9 @@ const CreateLimitToolArgsSchema = z
       .string()
       .optional()
       .describe("Tool name. Required for tool_calls limits."),
+    behavior: LimitBehaviorSchema.optional().describe(
+      "Hard blocks exhausted requests; soft continues and records Prometheus observations. Only for token_cost, tokens and requests limits. Defaults to hard.",
+    ),
     reason: ReasonArgSchema,
   })
   .strict()
@@ -164,6 +169,7 @@ const registry = defineArchestraTools([
           entityType: args.entity_type,
           entityId: args.entity_id,
           limitType: args.limit_type,
+          behavior: args.behavior ?? "hard",
           limitValue: args.limit_value,
           model:
             args.model && Array.isArray(args.model) && args.model.length > 0
@@ -307,6 +313,9 @@ const registry = defineArchestraTools([
         cleanup_interval: LimitCleanupIntervalSchema.optional().describe(
           "Optional new cleanup interval for this limit.",
         ),
+        behavior: LimitBehaviorSchema.optional().describe(
+          "Hard blocks exhausted requests; soft continues and records Prometheus observations. Only for token_cost, tokens and requests limits. Defaults to hard.",
+        ),
         reason: ReasonArgSchema,
       })
       .strict(),
@@ -332,6 +341,7 @@ const registry = defineArchestraTools([
         if (args.cleanup_interval !== undefined) {
           updateData.cleanupInterval = args.cleanup_interval;
         }
+        if (args.behavior !== undefined) updateData.behavior = args.behavior;
         if (args.reason !== undefined) {
           updateData.reason = args.reason?.trim() || null;
         }

@@ -383021,6 +383021,13 @@
                         "minimum": -2147483648,
                         "maximum": 2147483647
                       },
+                      "behavior": {
+                        "type": "string",
+                        "enum": [
+                          "hard",
+                          "soft"
+                        ]
+                      },
                       "mcpServerName": {
                         "nullable": true,
                         "type": "string",
@@ -383153,6 +383160,7 @@
                       "entityId",
                       "limitType",
                       "limitValue",
+                      "behavior",
                       "mcpServerName",
                       "toolName",
                       "lastCleanup",
@@ -383451,6 +383459,13 @@
                     "minimum": -2147483648,
                     "maximum": 2147483647
                   },
+                  "behavior": {
+                    "type": "string",
+                    "enum": [
+                      "hard",
+                      "soft"
+                    ]
+                  },
                   "mcpServerName": {
                     "nullable": true,
                     "type": "string",
@@ -383577,6 +383592,13 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "behavior": {
+                      "type": "string",
+                      "enum": [
+                        "hard",
+                        "soft"
+                      ]
+                    },
                     "mcpServerName": {
                       "nullable": true,
                       "type": "string",
@@ -383633,6 +383655,7 @@
                     "entityId",
                     "limitType",
                     "limitValue",
+                    "behavior",
                     "mcpServerName",
                     "toolName",
                     "lastCleanup",
@@ -383949,6 +383972,13 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "behavior": {
+                      "type": "string",
+                      "enum": [
+                        "hard",
+                        "soft"
+                      ]
+                    },
                     "mcpServerName": {
                       "nullable": true,
                       "type": "string",
@@ -384081,6 +384111,7 @@
                     "entityId",
                     "limitType",
                     "limitValue",
+                    "behavior",
                     "mcpServerName",
                     "toolName",
                     "lastCleanup",
@@ -384363,6 +384394,13 @@
                     "minimum": -2147483648,
                     "maximum": 2147483647
                   },
+                  "behavior": {
+                    "type": "string",
+                    "enum": [
+                      "hard",
+                      "soft"
+                    ]
+                  },
                   "mcpServerName": {
                     "nullable": true,
                     "type": "string",
@@ -384495,6 +384533,13 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "behavior": {
+                      "type": "string",
+                      "enum": [
+                        "hard",
+                        "soft"
+                      ]
+                    },
                     "mcpServerName": {
                       "nullable": true,
                       "type": "string",
@@ -384551,6 +384596,7 @@
                     "entityId",
                     "limitType",
                     "limitValue",
+                    "behavior",
                     "mcpServerName",
                     "toolName",
                     "lastCleanup",
@@ -472092,6 +472138,20 @@
                         "additionalProperties": false
                       },
                       "kimi": {
+                        "type": "object",
+                        "properties": {
+                          "hidden": {
+                            "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "copilot": {
                         "type": "object",
                         "properties": {
                           "hidden": {

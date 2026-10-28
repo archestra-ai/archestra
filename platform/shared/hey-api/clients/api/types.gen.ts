@@ -96654,6 +96654,7 @@ export type GetLimitsResponses = {
         entityId: string;
         limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
+        behavior: 'hard' | 'soft';
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
@@ -96695,6 +96696,7 @@ export type CreateLimitData = {
         entityId: string;
         limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
+        behavior?: 'hard' | 'soft';
         mcpServerName?: string | null;
         toolName?: string | null;
         model?: Array<string> | null;
@@ -96791,6 +96793,7 @@ export type CreateLimitResponses = {
         entityId: string;
         limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
+        behavior: 'hard' | 'soft';
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
@@ -96979,6 +96982,7 @@ export type GetLimitResponses = {
         entityId: string;
         limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
+        behavior: 'hard' | 'soft';
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
@@ -97018,6 +97022,7 @@ export type UpdateLimitData = {
     body: {
         limitType?: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue?: number;
+        behavior?: 'hard' | 'soft';
         mcpServerName?: string | null;
         toolName?: string | null;
         model?: Array<string> | null;
@@ -97116,6 +97121,7 @@ export type UpdateLimitResponses = {
         entityId: string;
         limitType: 'token_cost' | 'requests' | 'tokens' | 'requests_per_minute' | 'tokens_per_minute' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
+        behavior: 'hard' | 'soft';
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
@@ -120670,6 +120676,10 @@ export type UpdateIntegrationSettingsData = {
                 position?: number;
             };
             kimi?: {
+                hidden?: boolean;
+                position?: number;
+            };
+            copilot?: {
                 hidden?: boolean;
                 position?: number;
             };

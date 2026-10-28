@@ -18,6 +18,10 @@ import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
+import {
+  observeLimitCheck,
+  reportLimitStorageError,
+} from "@/observability/metrics/limit";
 import type {
   CreateLimit,
   CredentialSpendCap,
@@ -150,7 +154,8 @@ class LimitModel {
       data.limitType === "requests" ||
       data.limitType === "tokens" ||
       data.limitType === "token_cost" ||
-      data.cleanupInterval === "minute"
+      data.cleanupInterval === "minute" ||
+      data.behavior === "soft"
     ) {
       data = CreateLimitSchema.parse(data);
     }
@@ -662,7 +667,8 @@ class LimitModel {
         ) ||
         patchData.cleanupInterval === "minute" ||
         existingLimit.cleanupInterval === "minute" ||
-        existingLimit.limitType === "token_cost"
+        existingLimit.limitType === "token_cost" ||
+        patchData.behavior !== undefined
       ) {
         const validated = CreateLimitSchema.safeParse({
           ...existingLimit,
@@ -1437,6 +1443,7 @@ class LimitModel {
       entityId: row.entityId,
       limitType: row.limitType,
       limitValue: row.limitValue,
+      behavior: row.behavior,
       mcpServerName: row.mcpServerName ?? null,
       toolName: row.toolName ?? null,
       model: row.model ?? null,
@@ -1871,11 +1878,17 @@ export class LimitValidationService {
         const applies = (models?: string[] | null) =>
           !models?.length || models.includes(params.unpricedMediaModel ?? "");
         const limits = [...prefetch.limitsByEntity.values()].flat();
-        let budgeted = limits.some((limit) => applies(limit.model));
+        let budgeted = limits.some(
+          (limit) => limit.behavior !== "soft" && applies(limit.model),
+        );
         const customUserLimits = userId
           ? prefetch.limitsByEntity.get(`user:${userId}`)
           : undefined;
-        if (userId && organizationId && !customUserLimits?.length) {
+        if (
+          userId &&
+          organizationId &&
+          !customUserLimits?.some((limit) => limit.behavior !== "soft")
+        ) {
           const defaultLimit = defaultUserLimit;
           budgeted ||= !!defaultLimit && applies(defaultLimit.model);
         }
@@ -2077,6 +2090,7 @@ export class LimitValidationService {
       logger.error(
         `[LimitValidation] Error checking limits before request: ${error}`,
       );
+      reportLimitStorageError("validation");
       if (
         config.llmProxy.usageAccountingMode === "enforce" ||
         params.unpricedMediaModel
@@ -2199,7 +2213,15 @@ export class LimitValidationService {
         }
       }
 
-      if (comparisonValue >= limit.limitValue) {
+      const exceeded = comparisonValue >= limit.limitValue;
+      if (
+        observeLimitCheck(
+          limit,
+          exceeded,
+          !Number.isFinite(comparisonValue),
+          comparisonValue,
+        )
+      ) {
         logger.info(
           `[LimitValidation] LIMIT EXCEEDED for ${entityType} ${entityId}: ${comparisonValue} ${limitDescription} >= ${limit.limitValue}`,
         );
@@ -2239,8 +2261,8 @@ export class LimitValidationService {
     defaultLimit?: EnvironmentDefaultUserLimit | null;
   }): Promise<null | LimitViolationResponse> {
     try {
-      // A custom per-user limit always wins and disables every default
-      // (org-wide and per-environment) for that user.
+      // Only an enforcing custom budget replaces the default allowance.
+      // Observe-only budgets must not remove the user's hard spend cap.
       const customUserLimits =
         params.customUserLimits ??
         (await LimitModel.findLimitsForValidation(
@@ -2248,9 +2270,9 @@ export class LimitValidationService {
           params.userId,
           "token_cost",
         ));
-      if (customUserLimits.length > 0) {
+      if (customUserLimits.some((limit) => limit.behavior !== "soft")) {
         logger.debug(
-          `[LimitValidation] Skipping default user limit for ${params.userId}: custom user limit exists`,
+          `[LimitValidation] Skipping default user limit for ${params.userId}: custom hard user limit exists`,
         );
         return null;
       }
@@ -2277,7 +2299,23 @@ export class LimitValidationService {
         models: normalizeLimitModels(defaultLimit.model),
         cleanupInterval: defaultLimit.cleanupInterval,
       });
-      if (usage.cost < defaultLimit.limitValue) return null;
+      if (
+        !observeLimitCheck(
+          {
+            id: defaultLimit.id,
+            entityType: "user",
+            entityId: params.userId,
+            limitType: "token_cost",
+            limitValue: defaultLimit.limitValue,
+            cleanupInterval: defaultLimit.cleanupInterval,
+            source: "default_user",
+          },
+          usage.cost >= defaultLimit.limitValue,
+          !Number.isFinite(usage.cost),
+          usage.cost,
+        )
+      )
+        return null;
       return buildLimitViolationResponse({
         source: "default_user",
         entityType: environmentId ? "environment" : "user",

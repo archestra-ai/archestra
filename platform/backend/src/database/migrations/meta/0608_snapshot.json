@@ -1,5 +1,5 @@
 {
-  "id": "506ca36e-a6b7-4139-8f5b-5e79d83f7ae3",
+  "id": "fdb550bb-a083-4b17-841f-6fbd821aa64a",
   "prevId": "d085204e-7a2c-4cf0-afe4-cc7affee4f4d",
   "version": "7",
   "dialect": "postgresql",
@@ -4945,102 +4945,6 @@
           "method": "btree",
           "with": {}
         },
-        "agents_model_id_idx": {
-          "name": "agents_model_id_idx",
-          "columns": [
-            {
-              "expression": "model_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"agents\".\"model_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "agents_fast_model_id_idx": {
-          "name": "agents_fast_model_id_idx",
-          "columns": [
-            {
-              "expression": "fast_model_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"agents\".\"fast_model_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "agents_smart_model_id_idx": {
-          "name": "agents_smart_model_id_idx",
-          "columns": [
-            {
-              "expression": "smart_model_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"agents\".\"smart_model_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "agents_auto_routing_fast_model_id_idx": {
-          "name": "agents_auto_routing_fast_model_id_idx",
-          "columns": [
-            {
-              "expression": "auto_routing_fast_model_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"agents\".\"auto_routing_fast_model_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "agents_auto_routing_normal_model_id_idx": {
-          "name": "agents_auto_routing_normal_model_id_idx",
-          "columns": [
-            {
-              "expression": "auto_routing_normal_model_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"agents\".\"auto_routing_normal_model_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "agents_auto_routing_smart_model_id_idx": {
-          "name": "agents_auto_routing_smart_model_id_idx",
-          "columns": [
-            {
-              "expression": "auto_routing_smart_model_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"agents\".\"auto_routing_smart_model_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "agents_org_name_live_idx": {
           "name": "agents_org_name_live_idx",
           "columns": [
@@ -9840,22 +9744,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "conversations_model_id_idx": {
-          "name": "conversations_model_id_idx",
-          "columns": [
-            {
-              "expression": "model_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"conversations\".\"model_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -16429,6 +16317,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "behavior": {
+          "name": "behavior",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'hard'"
+        },
         "mcp_server_name": {
           "name": "mcp_server_name",
           "type": "varchar(255)",
@@ -18730,22 +18625,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "member_default_model_id_idx": {
-          "name": "member_default_model_id_idx",
-          "columns": [
-            {
-              "expression": "default_model_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"member\".\"default_model_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -24198,21 +24077,6 @@
             },
             {
               "expression": "plan_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "routing_decisions_model_id_idx": {
-          "name": "routing_decisions_model_id_idx",
-          "columns": [
-            {
-              "expression": "model_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

@@ -125,8 +125,10 @@ export function EditCatalogContent({
     values: McpCatalogFormValues,
     form: UseFormReturn<McpCatalogFormValues>,
   ) => {
-    const { multitenant: _multitenant, ...updateData } =
-      transformFormToApiData(values);
+    const { multitenant: _multitenant, ...updateData } = transformFormToApiData(
+      values,
+      item.authFields,
+    );
     // Someone who may not change what the server runs sends its details
     // alone, so nothing the form fills in reads as a change to the rest.
     const data = detailsOnly

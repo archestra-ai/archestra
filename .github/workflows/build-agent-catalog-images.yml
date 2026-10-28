@@ -72,6 +72,7 @@ jobs:
           - agent-openclaw
           - agent-grok
           - agent-kimi
+          - agent-copilot
     permissions:
       contents: read # Required to invoke the reusable image build workflow.
       packages: write # Publish CI images with the repository token.
@@ -97,7 +98,7 @@ jobs:
 
   # Direct PR builds test both native architectures without publishing images.
   # This job does not request the reusable publish workflow's OIDC permission.
-  # Keep both matrices aligned with the seven Dockerfile targets.
+  # Keep both matrices aligned with the eight Dockerfile targets.
   validate-agent-catalog-images:
     name: Validate ${{ matrix.image }} (${{ matrix.arch }})
     if: ${{ inputs.version == '' }}
@@ -117,6 +118,7 @@ jobs:
           - agent-openclaw
           - agent-grok
           - agent-kimi
+          - agent-copilot
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

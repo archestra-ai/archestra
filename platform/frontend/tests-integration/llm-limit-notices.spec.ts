@@ -43,7 +43,7 @@ for (const width of [1440, 390]) {
         .click();
       const dialog = page.getByRole("dialog", { name: "Create limit" });
       await expect(dialog.getByRole("alert")).toContainText(
-        "Requests are blocked when any applicable limit is reached.",
+        "Requests are blocked when any applicable hard limit is reached; soft limits only record metrics.",
       );
       await expect(
         dialog.getByLabel("Label key", { exact: true }),
@@ -82,7 +82,7 @@ for (const width of [1440, 390]) {
     await page.goto("/llm/limits?edit=preview-limit");
     const edit = page.getByRole("dialog", { name: "Edit limit" });
     await expect(edit.getByRole("alert")).toContainText(
-      "virtual key with remaining allowance is still blocked",
+      "A key with allowance remaining is still blocked if its team or organization reaches a hard limit.",
     );
     await expect(edit.getByLabel("Limit value", { exact: true })).toHaveValue(
       "100",
@@ -94,16 +94,12 @@ for (const width of [1440, 390]) {
     await expect(
       edit.getByRole("combobox", { name: "Limit kind", exact: true }),
     ).toBeDisabled();
-    await edit
-      .getByRole("button", { name: "Limit kind help", exact: true })
-      .focus();
     await expect(
-      page.getByRole("tooltip", {
-        name: /Create a new limit to change between/,
-      }),
-    ).toContainText(
-      "Create a new limit to change between spend, tokens and requests.",
-    );
+      edit.getByText(
+        "Create a new limit to change between spend, tokens and requests.",
+        { exact: true },
+      ),
+    ).toBeVisible();
     await edit.getByLabel("Limit value", { exact: true }).focus();
     await expect(
       edit.getByLabel("Label key", { exact: true }),

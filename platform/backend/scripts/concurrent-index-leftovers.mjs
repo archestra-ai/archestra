@@ -5,7 +5,7 @@ import path from "node:path";
  * Drop the invalid indexes that interrupted concurrent builds left behind.
  *
  * A migration that builds an index with CREATE INDEX CONCURRENTLY IF NOT EXISTS
- * (see 0608) leaves an invalid index when the build fails: a lock timeout, a
+ * (see 0609) leaves an invalid index when the build fails: a lock timeout, a
  * killed migration Job. IF NOT EXISTS would keep that index on the rerun, so
  * the migration could never finish. An invalid index is never used by queries
  * but is still updated on every write, so dropping one is always safe.

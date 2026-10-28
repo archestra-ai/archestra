@@ -130,6 +130,15 @@ export function getAgentCatalogTemplates(
       platformName: appName,
       image: images.kimi,
     }),
+    template({
+      id: "copilot",
+      name: AGENT_CATALOG_TEMPLATE_NAMES.copilot,
+      summary: `GitHub's coding agent. Uses a model and credentials configured in ${appName}.`,
+      icon: CATALOG_AGENT_ICONS.copilot,
+      description: `GitHub Copilot CLI with inference through the ${appName} LLM proxy and tools through its MCP gateway.`,
+      platformName: appName,
+      image: images.copilot,
+    }),
   ] as const;
 }
 

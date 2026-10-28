@@ -76,7 +76,7 @@ in the migration harmless.
 For a large, write-hot table whose concurrent build finishes well within the
 migration Job's deadline (`archestra.migrationJob.activeDeadlineSeconds`,
 600 s), a migration can build the index itself without blocking writes.
-`0608_absent_scourge.sql` (`agents`, `conversations`) is the reference. Every
+`0609_absent_scourge.sql` (`agents`, `conversations`) is the reference. Every
 part is needed:
 
 1. `COMMIT;` first. drizzle-kit runs all pending migrations in one transaction,

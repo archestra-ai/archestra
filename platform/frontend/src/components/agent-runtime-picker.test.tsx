@@ -174,6 +174,20 @@ describe("AgentRuntimePicker", () => {
     });
   });
 
+  it("selects Copilot CLI with native terminal input and its supported model protocol", async () => {
+    const user = userEvent.setup();
+    await renderPicker("codex");
+    await user.click(screen.getByRole("radio", { name: "GitHub Copilot CLI" }));
+    expect(
+      screen.queryByRole("button", { name: /^Inference API/ }),
+    ).not.toBeInTheDocument();
+    expect(savedRuntime()).toMatchObject({
+      command: ["archestra-copilot"],
+      inferenceProtocol: "openai_chat",
+      steerMode: "tmux_keys",
+    });
+  });
+
   it("corrects incompatible protocols when a custom command changes harnesses, retaining compatible choices", async () => {
     const user = userEvent.setup();
     await renderPicker("custom");

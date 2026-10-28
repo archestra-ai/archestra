@@ -24,6 +24,7 @@ export const CATALOG_AGENT_ICONS: Record<AgentCatalogId, string> = {
   openclaw: "/agent-logos/openclaw.svg",
   grok: "/model-logos/grok.svg",
   kimi: "/agent-logos/kimi.svg",
+  copilot: "/model-logos/github-copilot.svg",
 };
 
 const CATALOG_AGENT_ID_BY_ICON = new Map(

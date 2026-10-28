@@ -10,6 +10,7 @@
 import { z } from "zod";
 import {
   AssistantMessageParamSchema,
+  CacheControlSchema,
   ContentPartFileSchema,
   ContentPartImageSchema,
   ContentPartInputAudioSchema,
@@ -21,11 +22,6 @@ import {
   ToolMessageParamSchema,
   UserMessageParamSchema,
 } from "../openai/messages";
-
-const CacheControlSchema = z.object({
-  type: z.literal("ephemeral"),
-  ttl: z.enum(["5m", "1h"]).optional(),
-});
 
 // OpenRouter takes breakpoints on text parts. Clients such as
 // @ai-sdk/openai-compatible also put them on the message when its content is

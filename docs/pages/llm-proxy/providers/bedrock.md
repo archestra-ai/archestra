@@ -99,3 +99,7 @@ Set [`ARCHESTRA_BEDROCK_ALLOWED_PROVIDERS`](/docs/admin/deployment/configuration
 The native Converse and ConverseStream endpoints forward caller-supplied `cachePoint` blocks in system messages, message content, and tool definitions. Cache reads and writes reported by Bedrock are recorded.
 
 Archestra does not insert checkpoints into native proxy requests. Use a model and region that support [Bedrock prompt caching](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html); checkpoints do not guarantee cache hits.
+
+Through the [Model Router](/docs/llm-proxy/model-router), use `cache_control: { "type": "ephemeral" }` on supported OpenAI-shaped content blocks, messages, or function tool definitions. The router converts these explicit boundaries to Bedrock `cachePoint` blocks for Chat Completions and Responses requests; it does not create checkpoints automatically.
+
+Top-level `cache_control` is not a Bedrock checkpoint. The router rejects it, incompatible provider cache options, and conflicting outer and inner function-tool cache markers with a 400 error.

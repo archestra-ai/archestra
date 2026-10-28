@@ -34,6 +34,56 @@ const mockGetAzureOpenAiBearerTokenProvider = vi.mocked(
 );
 
 describe("fetchAzureModels", () => {
+  test.each([
+    "/openai",
+    "/openai/deployments/shared-embedding",
+    "/openai/v1",
+  ])("discovers deployments independently for two API-key endpoints at %s", async (path) => {
+    const deployments = {
+      "first-resource.openai.azure.com": [
+        { id: "primary-chat", model: "gpt-4o" },
+        { id: "shared-embedding", model: "text-embedding-3-small" },
+      ],
+      "second-resource.openai.azure.com": [
+        { id: "secondary-chat", model: "gpt-4o-mini" },
+        { id: "shared-embedding", model: "text-embedding-3-small" },
+        { id: "large-embedding", model: "text-embedding-3-large" },
+      ],
+    };
+    const mockFetch = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input));
+      const isFirst = url.hostname === "first-resource.openai.azure.com";
+      const expectedKey = isFirst ? "first-key" : "second-key";
+      expect(new Headers(init?.headers).get("api-key")).toBe(expectedKey);
+      // Newer inference API versions no longer expose deployment listing.
+      if (url.searchParams.get("api-version") !== "2023-03-15-preview") {
+        return new Response("Resource not found", { status: 404 });
+      }
+      return Response.json({
+        data: deployments[url.hostname as keyof typeof deployments],
+      });
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const results = await Promise.all([
+      fetchAzureModels(
+        "first-key",
+        `https://first-resource.openai.azure.com${path}`,
+      ),
+      fetchAzureModels(
+        "second-key",
+        `https://second-resource.openai.azure.com${path}`,
+      ),
+    ]);
+
+    expect(results.map((models) => models.map((model) => model.id))).toEqual([
+      ["primary-chat", "shared-embedding"],
+      ["secondary-chat", "shared-embedding", "large-embedding"],
+    ]);
+    expect(results[1][0].underlyingModelName).toBe("gpt-4o-mini");
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
   test("returns empty array when baseUrl is empty and no override", async () => {
     const result = await fetchAzureModels("test-key", null);
     expect(
@@ -76,7 +126,7 @@ describe("fetchAzureModels", () => {
       { id: "gpt-4o-mini", displayName: "gpt-4o-mini", provider: "azure" },
     ]);
     expect(mockFetch).toHaveBeenCalledWith(
-      "https://my-resource.openai.azure.com/openai/deployments?api-version=2024-02-01",
+      "https://my-resource.openai.azure.com/openai/deployments?api-version=2023-03-15-preview",
       { headers: { "api-key": "test-key" } },
     );
 
@@ -198,7 +248,7 @@ describe("fetchAzureModels", () => {
       },
     ]);
     expect(mockFetch).toHaveBeenCalledWith(
-      "https://my-resource.openai.azure.com/openai/deployments?api-version=2024-02-01",
+      "https://my-resource.openai.azure.com/openai/deployments?api-version=2023-03-15-preview",
       { headers: { "api-key": "test-key" } },
     );
 
@@ -266,7 +316,7 @@ describe("fetchAzureModels", () => {
     ]);
     expect(mockFetch).toHaveBeenNthCalledWith(
       1,
-      "https://my-resource.openai.azure.com/openai/deployments?api-version=2024-02-01",
+      "https://my-resource.openai.azure.com/openai/deployments?api-version=2023-03-15-preview",
       { headers: { Authorization: "Bearer entra-token" } },
     );
     expect(mockFetch).toHaveBeenNthCalledWith(
@@ -436,7 +486,7 @@ describe("fetchAzureModels", () => {
     );
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "https://my-resource.openai.azure.com/openai/deployments?api-version=2024-02-01",
+      "https://my-resource.openai.azure.com/openai/deployments?api-version=2023-03-15-preview",
       { headers: { "api-key": "test-key" } },
     );
 
@@ -458,7 +508,7 @@ describe("fetchAzureModels", () => {
     );
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "https://my-resource.openai.azure.com/openai/deployments?api-version=2024-02-01",
+      "https://my-resource.openai.azure.com/openai/deployments?api-version=2023-03-15-preview",
       { headers: { Authorization: "Bearer entra-token" } },
     );
     expect(mockGetAzureOpenAiBearerTokenProvider).toHaveBeenCalledWith(
@@ -769,7 +819,7 @@ describe("fetchAzureModels", () => {
 
     // Should call the endpoint without the deployment name
     expect(mockFetch).toHaveBeenCalledWith(
-      "https://my-company.openai.azure.com/openai/deployments?api-version=2024-02-01",
+      "https://my-company.openai.azure.com/openai/deployments?api-version=2023-03-15-preview",
       expect.any(Object),
     );
 
@@ -789,7 +839,7 @@ describe("fetchAzureModels", () => {
     );
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "http://localhost:9092/azure/openai/deployments?api-version=2024-02-01",
+      "http://localhost:9092/azure/openai/deployments?api-version=2023-03-15-preview",
       expect.any(Object),
     );
 

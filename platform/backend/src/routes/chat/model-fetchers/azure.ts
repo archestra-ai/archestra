@@ -26,10 +26,7 @@ export async function fetchAzureModels(
     return [];
   }
 
-  const url = buildAzureDeploymentsUrl({
-    apiVersion: config.llm.azure.apiVersion,
-    baseUrl,
-  });
+  const url = buildAzureDeploymentsUrl({ baseUrl });
   const deploymentName = extractAzureDeploymentName(baseUrl);
   const v1ModelsUrl = buildAzureOpenAiV1ModelsUrl(baseUrl);
   const modelsUrl = buildAzureModelsUrl({

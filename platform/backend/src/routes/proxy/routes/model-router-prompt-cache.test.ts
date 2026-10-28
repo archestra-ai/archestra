@@ -308,6 +308,128 @@ for (const provider of providers) {
                 }
                 expect(calls).toBe(1);
               }
+              if (
+                withAgent &&
+                cacheCase === "mixed" &&
+                (provider === "anthropic" ||
+                  provider === "bedrock" ||
+                  provider === "gemini")
+              ) {
+                const cases: Array<{
+                  field: string;
+                  changes: Record<string, unknown>;
+                }> = [
+                  {
+                    field: "prompt_cache_key",
+                    changes: { prompt_cache_key: "unsupported-prefix" },
+                  },
+                  {
+                    field: "prompt_cache_options",
+                    changes: { prompt_cache_options: { mode: "explicit" } },
+                  },
+                  {
+                    field: "prompt_cache_retention",
+                    changes: { prompt_cache_retention: "24h" },
+                  },
+                ];
+                if (provider !== "gemini")
+                  cases.push({
+                    field: "cachedContent",
+                    changes: { cachedContent: "cachedContents/wrong-provider" },
+                  });
+                if (provider !== "anthropic")
+                  cases.push({
+                    field: "cache_control",
+                    changes: { cache_control: marker },
+                  });
+                if (provider === "gemini") {
+                  for (const location of ["message", "part", "tool"]) {
+                    cases.push({
+                      field: "cache_control",
+                      changes:
+                        location === "tool"
+                          ? {
+                              tools: [
+                                api === "responses"
+                                  ? {
+                                      type: "function",
+                                      ...tool,
+                                      cache_control: marker,
+                                    }
+                                  : {
+                                      type: "function",
+                                      function: tool,
+                                      cache_control: marker,
+                                    },
+                              ],
+                            }
+                          : {
+                              [api === "responses" ? "input" : "messages"]: [
+                                {
+                                  role: "user",
+                                  ...(location === "message"
+                                    ? { cache_control: marker }
+                                    : {}),
+                                  content: [
+                                    {
+                                      type: textType,
+                                      text: "prefix",
+                                      ...(location === "part"
+                                        ? { cache_control: marker }
+                                        : {}),
+                                    },
+                                  ],
+                                },
+                              ],
+                            },
+                    });
+                  }
+                }
+                cases.push({
+                  field: "prompt_cache_breakpoint",
+                  changes: {
+                    [api === "responses" ? "input" : "messages"]: [
+                      {
+                        role: "user",
+                        content: [
+                          {
+                            type: textType,
+                            text: "prefix",
+                            prompt_cache_breakpoint: { mode: "explicit" },
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                });
+                if (provider === "bedrock" && api === "chat")
+                  cases.push({
+                    field: "cache_control",
+                    changes: {
+                      tools: [
+                        {
+                          type: "function",
+                          cache_control: marker,
+                          function: {
+                            ...tool,
+                            cache_control: { type: "ephemeral", ttl: "1h" },
+                          },
+                        },
+                      ],
+                    },
+                  });
+                for (const { field, changes } of cases) {
+                  const invalid = await app.inject({
+                    method: "POST",
+                    url,
+                    headers: { authorization: `Bearer ${virtual.value}` },
+                    payload: { ...payload, ...changes },
+                  });
+                  expect(invalid.statusCode, invalid.body).toBe(400);
+                  expect(invalid.body).toContain(field);
+                }
+                expect(calls).toBe(1);
+              }
               await drainBackgroundWork();
               const logged = await InteractionModel.findAllPaginated({
                 limit: 1,

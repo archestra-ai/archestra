@@ -264,6 +264,32 @@ describe("GitHub Copilot organization subscription setup", () => {
     expect(keys).toEqual([{ id: keyId }]);
   });
 
+  test("names a new key as asked; replacing its App keeps that name", async () => {
+    vi.stubGlobal("fetch", githubFake({ appId }));
+    const connected = await post("/api/github-copilot-app/existing", {
+      appId,
+      organization: "my-org",
+      privateKey,
+      name: "Copilot for my-org",
+    });
+    expect(connected.statusCode, connected.body).toBe(200);
+    const keyId = connected.json().id;
+    expect((await LlmProviderApiKeyModel.findById(keyId))?.name).toBe(
+      "Copilot for my-org",
+    );
+
+    const replaced = await post("/api/github-copilot-app/existing", {
+      appId,
+      privateKey,
+      replaceKeyId: keyId,
+      name: "Ignored",
+    });
+    expect(replaced.statusCode, replaced.body).toBe(200);
+    expect((await LlmProviderApiKeyModel.findById(keyId))?.name).toBe(
+      "Copilot for my-org",
+    );
+  });
+
   test("takes the organization's address instead of its name", async () => {
     vi.stubGlobal("fetch", githubFake({ appId }));
 

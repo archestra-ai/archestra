@@ -75,6 +75,7 @@ class CopilotGithubAppSetup {
       grants?: ResourcePermissionGrant[];
       /** Put the new App on this key instead of adding a key. */
       replaceKeyId?: string;
+      name?: string;
     },
   ) {
     const found = await githubAppManifestSetup.installation({
@@ -150,6 +151,7 @@ class CopilotGithubAppSetup {
       organization?: string;
       replaceKeyId?: string;
       grants?: ResourcePermissionGrant[];
+      name?: string;
     },
   ) {
     const definition = await RuntimeCredentialDefinitionModel.findById({
@@ -273,6 +275,7 @@ class CopilotGithubAppSetup {
       privateKey: string;
       replaceKeyId?: string;
       grants?: ResourcePermissionGrant[];
+      name?: string;
     },
   ) {
     await authorize(params);
@@ -429,6 +432,7 @@ class CopilotGithubAppSetup {
       installation: GithubAppInstallation;
       grants?: ResourcePermissionGrant[];
       replaceKeyId?: string;
+      name?: string;
       /** Already read from Copilot for this App; read again when absent. */
       models?: string[];
     },
@@ -489,6 +493,8 @@ class CopilotGithubAppSetup {
       grants?: ResourcePermissionGrant[];
       replaceKeyId?: string;
       models?: string[];
+      /** A new key's name; a replaced key keeps its own. */
+      name?: string;
     },
   ) {
     const { apiKey, organization, organizationId, userId } = params;
@@ -523,7 +529,7 @@ class CopilotGithubAppSetup {
       keyId = existing.id;
     } else {
       const grants = params.grants ?? EVERYONE_IN_ORGANIZATION;
-      const name = `GitHub Copilot (${organization})`;
+      const name = params.name?.trim() || `GitHub Copilot (${organization})`;
       if (grants.length)
         await ResourcePermissions.validateInitialGrants({
           organizationId,

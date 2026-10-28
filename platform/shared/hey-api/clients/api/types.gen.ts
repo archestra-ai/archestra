@@ -51777,6 +51777,7 @@ export type InstallCopilotGithubAppData = {
             actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
         replaceKeyId?: string;
+        name?: string;
     };
     path?: never;
     query?: never;
@@ -51891,6 +51892,7 @@ export type ConnectCopilotGithubAppCredentialData = {
             };
             actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
+        name?: string;
     };
     path?: never;
     query?: never;
@@ -52190,6 +52192,7 @@ export type ConnectExistingCopilotGithubAppData = {
             };
             actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
+        name?: string;
     };
     path?: never;
     query?: never;

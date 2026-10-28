@@ -25,18 +25,23 @@ export const CopilotGithubAppNeedsPermissionSchema = z.object({
 });
 
 /** Use a GitHub App credential the organization already has. */
+/** The new key's name; ignored when the step replaces a key's App. */
+const KeyNameSchema = z.string().trim().min(1).max(256).optional();
+
 export const ConnectCopilotGithubAppCredentialSchema = z.object({
   credentialId: z.string().uuid(),
   /** Omitted when reconnecting a key: the key's own organization is used. */
   organization: GithubOrganizationSchema.optional(),
   replaceKeyId: z.string().uuid().optional(),
   grants: GrantsSchema,
+  name: KeyNameSchema,
 });
 
 export const InstallCopilotGithubAppSchema = z.object({
   grants: GrantsSchema,
   /** Reconnect this key with the new App instead of adding a key. */
   replaceKeyId: z.string().uuid().optional(),
+  name: KeyNameSchema,
 });
 
 export const CopilotGithubAppConnectedSchema = z.object({
@@ -84,6 +89,7 @@ export const ExistingCopilotGithubAppValidationSchema = z.object({
 export const ConnectExistingCopilotGithubAppSchema =
   ExistingAppFieldsSchema.extend({
     grants: GrantsSchema,
+    name: KeyNameSchema,
   });
 
 export const CopilotGithubAppKeySummarySchema = z.object({

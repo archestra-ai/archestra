@@ -109,6 +109,7 @@ const githubCopilotAppRoutes: FastifyPluginAsyncZod = async (app) => {
         userId: request.user.id,
         grants: request.body.grants,
         replaceKeyId: request.body.replaceKeyId,
+        name: request.body.name,
       });
       if (result.status === "waiting") request.auditSkip = true;
       else if (!request.body.replaceKeyId) request.auditBefore = null;

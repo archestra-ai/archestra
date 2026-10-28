@@ -151,6 +151,11 @@ export {
 } from "./interaction-user-activity";
 export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
 export { default as invitationsTable } from "./invitation";
+export {
+  jiraChatOpsDeliveriesTable,
+  jiraChatOpsEventsTable,
+} from "./jira-chatops-event";
+export { default as jiraChatOpsIdentitiesTable } from "./jira-chatops-identity";
 export { default as jwksTable } from "./jwks";
 export {
   kbBm25CorpusStatsTable,

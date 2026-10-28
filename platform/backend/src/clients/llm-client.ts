@@ -17,6 +17,7 @@ import {
   EXTERNAL_AGENT_ID_HEADER,
   isProviderApiKeyOptional,
   LOOPBACK_HOST,
+  MODEL_POOL_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
   perplexityAgentApiBaseUrl,
   providerDisplayNames,
@@ -215,6 +216,8 @@ export function createLLMModel(params: {
   source?: InteractionSource;
   baseUrl: string | null;
   chatApiKeyId?: string;
+  /** The model pool the chat was set to; see MODEL_POOL_ID_HEADER. */
+  modelPoolId?: string | null;
   /**
    * Encrypted chat key. Forwarded so the proxy can store this
    * interaction's content encrypted under it instead of redacting it. The
@@ -290,6 +293,9 @@ export function createLLMModel(params: {
       `[${provider}Proxy] chat attaching provider-api-key-id header`,
     );
   }
+  if (params.modelPoolId) {
+    clientHeaders[MODEL_POOL_ID_HEADER] = params.modelPoolId;
+  }
   // App runtime completions attribute their spend to the calling app; the proxy
   // re-validates this against the executing agent's organization.
   if (appId) {
@@ -342,6 +348,8 @@ export async function createLLMModelForAgent(params: {
   sessionId?: string;
   source?: InteractionSource;
   agentLlmApiKeyId?: string | null;
+  /** The conversation's model pool; its turns go to the pool's members. */
+  modelPoolId?: string | null;
   /**
    * Encrypted chat key, forwarded to the proxy so this turn's
    * interaction content is stored encrypted rather than redacted.
@@ -499,6 +507,7 @@ export async function createLLMModelForAgent(params: {
     source,
     baseUrl,
     chatApiKeyId,
+    modelPoolId: params.modelPoolId,
     encryptedChatKey: params.encryptedChatKey,
     appaSubagentToken: params.appaSubagentToken,
     supportedEndpoints,

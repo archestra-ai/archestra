@@ -1068,10 +1068,11 @@ function ManualSteps({
 // === Guardrails status ===
 
 /**
- * Agents OpenAPPA follows natively (the Claude Code, Codex, OpenCode and
- * Kilo Code adapters in backend/src/proxy/plugins/appa-plugin-archestra/
- * session-identity.ts). Others count as unsupported unless they send OpenAPPA
- * session headers, which the agents on this page don't.
+ * Agents OpenAPPA follows natively (the Claude Code, Claude Desktop, Codex,
+ * OpenCode, Kilo Code and Pi adapters in
+ * backend/src/proxy/plugins/appa-plugin-archestra/session-identity.ts). Others
+ * count as unsupported unless they send OpenAPPA session headers, which the
+ * agents on this page don't.
  */
 const GUARDRAILS_NATIVE = new Set(Object.keys(NATIVE_SESSION_CLIENT_LABELS));
 

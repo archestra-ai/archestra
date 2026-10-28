@@ -5,7 +5,10 @@ import {
   appaSessionIdentity,
 } from "@/openappa/wire";
 import { AppaChatAdapter } from "./adapters/chat";
-import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
+import {
+  AppaClaudeCodeAdapter,
+  AppaClaudeDesktopAdapter,
+} from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPiAdapter } from "./adapters/pi";
@@ -24,6 +27,8 @@ import { withCallerScope } from "./utils";
 export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
   [
     new AppaPiAdapter(),
+    // Before Claude Code: Desktop's Code and Cowork tabs also send Claude Code's UA and session header.
+    new AppaClaudeDesktopAdapter(),
     new AppaClaudeCodeAdapter(),
     new AppaCodexAdapter(),
     // Before OpenCode: Kilo's setup also sends OpenCode's session header.
@@ -54,16 +59,14 @@ export function extractAppaSessionIdentity(params: {
 }): AppaSessionIdentity {
   const generic = appaSessionIdentity(params);
   if (generic.provenance === "appa-header") return generic;
-  const adapter = APPA_CLIENT_ADAPTERS.find((candidate) =>
-    candidate.matches({
-      headers: params.headers,
-      requestBody: params.body,
-    }),
-  );
-  const native = adapter?.extractSessionIdentity?.({
+  const matchContext = {
     headers: params.headers,
     requestBody: params.family ? params.body : undefined,
-  });
+  };
+  const adapter = APPA_CLIENT_ADAPTERS.find((candidate) =>
+    candidate.matches(matchContext),
+  );
+  const native = adapter?.extractSessionIdentity?.(matchContext);
   if (!native?.sessionId) return generic;
   return {
     ...native,

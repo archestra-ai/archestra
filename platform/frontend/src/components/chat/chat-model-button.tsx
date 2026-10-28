@@ -1,6 +1,7 @@
 "use client";
 
 import { E2eTestId } from "@archestra/shared";
+import { LayersIcon } from "lucide-react";
 import { useState } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
@@ -21,8 +22,9 @@ import {
 import { logoNameForProvider } from "@/lib/provider-logos";
 
 /**
- * The composer's model control: the model's name, plus the reasoning level when
- * one is chosen, opening the setup menu's Model and Key tabs. It also keeps
+ * The composer's model control: the model's name (or the model pool's), plus
+ * the reasoning level when one is chosen, opening the setup menu's Model and
+ * Key tabs. It also keeps
  * the selected model valid as the key changes, so it stays mounted.
  */
 export function ChatModelButton({
@@ -71,11 +73,15 @@ export function ChatModelButton({
           data-testid={E2eTestId.ChatModelSelectorTrigger}
           className="h-8 min-w-0 max-w-72 gap-1.5 px-2 font-normal"
         >
-          {provider && (
-            <ModelSelectorLogo
-              provider={logoNameForProvider(provider)}
-              className="size-4 shrink-0"
-            />
+          {data.activePool ? (
+            <LayersIcon className="size-4 shrink-0" />
+          ) : (
+            provider && (
+              <ModelSelectorLogo
+                provider={logoNameForProvider(provider)}
+                className="size-4 shrink-0"
+              />
+            )
           )}
           {menuProps.subscriptionConnectRequired ? (
             <span className="truncate text-primary">

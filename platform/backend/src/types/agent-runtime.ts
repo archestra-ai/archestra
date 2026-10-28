@@ -78,6 +78,8 @@ export const AgentRunCompletionTargetSchema = z.discriminatedUnion("type", [
      * (not the main Slack app) posts the result.
      */
     pinnedAgentId: z.string().uuid().optional(),
+    /** Jira service fallback shares an actor, but never a requester workspace. */
+    jiraRequesterAccountId: z.string().min(1).max(256).optional(),
     conversationReference: z.record(z.string(), z.unknown()).optional(),
     /** Placeholder and mute state belong to this turn, not later UI continuations. */
     originatingTaskId: z.string().uuid().optional(),

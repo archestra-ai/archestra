@@ -135,18 +135,22 @@ export const CacheKey = {
   /** OAuth state (PKCE verifier) of an MS Teams file sign-in in progress */
   TeamsFileSignInState: "teams-file-sign-in-state",
   /** MS Teams channel threads where the bot was @mentioned (sticky auto-reply) */
+  JiraThreadActive: "jira-thread-active",
   TeamsThreadActive: "teams-thread-active",
   /** Slack channel threads where the bot was @mentioned (sticky auto-reply) */
   SlackThreadActive: "slack-thread-active",
   /** MS Teams channel threads that already got the one-time "you can mute me" hint */
+  JiraThreadMuteHint: "jira-thread-mute-hint",
   TeamsThreadMuteHint: "teams-thread-mute-hint",
   /** Slack channel threads that already got the one-time "you can mute me" hint */
   SlackThreadMuteHint: "slack-thread-mute-hint",
   /** Latest mute token per MS Teams channel thread (cross-pod in-flight reply suppression) */
+  JiraThreadMuteMarker: "jira-thread-mute-marker",
   TeamsThreadMuteMarker: "teams-thread-mute-marker",
   /** Latest mute token per Slack channel thread (cross-pod in-flight reply suppression) */
   SlackThreadMuteMarker: "slack-thread-mute-marker",
   /** MS Teams channel threads muted while the channel answers all messages */
+  JiraThreadMuted: "jira-thread-muted",
   TeamsThreadMuted: "teams-thread-muted",
   /** Slack channel threads muted while the channel answers all messages */
   SlackThreadMuted: "slack-thread-muted",

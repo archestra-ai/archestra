@@ -1,4 +1,4 @@
-import { RouteId } from "@archestra/shared";
+import { RouteId, SupportedProvidersSchema } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
@@ -7,6 +7,7 @@ import {
   ModelPoolModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { listChatModelPools } from "@/services/chat-model-pools";
 import {
   ApiError,
   constructResponseSchema,
@@ -40,6 +41,29 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/model-pools/available",
+    {
+      schema: {
+        operationId: RouteId.GetAvailableModelPools,
+        description:
+          "List the model pools the current user can pick in chat: those with a member on a key the user may use",
+        tags: ["Model Pools"],
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              id: z.string().uuid(),
+              name: z.string(),
+              providers: z.array(SupportedProvidersSchema),
+            }),
+          ),
+        ),
+      },
+    },
+    async ({ organizationId, user }, reply) =>
+      reply.send(await listChatModelPools({ organizationId, userId: user.id })),
+  );
+
   fastify.post(
     "/api/model-pools",
     {
@@ -55,7 +79,6 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ organizationId, body }, reply) => {
       assertModelPoolsEnabled();
       await assertValidMembers({ organizationId, input: body });
-      await assertValidVirtualApiKeys({ organizationId, input: body });
       await assertNameHasNoOtherPool({ organizationId, input: body });
       return reply.send(
         await ModelPoolModel.create({ organizationId, input: body }),
@@ -78,7 +101,6 @@ const modelPoolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ organizationId, params, body }, reply) => {
       assertModelPoolsEnabled();
       await assertValidMembers({ organizationId, input: body });
-      await assertValidVirtualApiKeys({ organizationId, input: body });
       await assertNameHasNoOtherPool({
         organizationId,
         input: body,
@@ -180,27 +202,6 @@ async function assertValidMembers(params: {
       throw new ApiError(
         400,
         `Provider key "${key.name}" is on ${key.provider}, which a pool can't send requests to yet.`,
-      );
-    }
-  }
-}
-
-/** Every virtual key is a standard key of the organization. */
-async function assertValidVirtualApiKeys(params: {
-  organizationId: string;
-  input: ModelPoolInput;
-}): Promise<void> {
-  const keys = await VirtualApiKeyModel.findSummariesByIds({
-    ids: params.input.virtualApiKeyIds,
-    organizationId: params.organizationId,
-  });
-  for (const id of params.input.virtualApiKeyIds) {
-    const key = keys.get(id);
-    if (!key) throw new ApiError(400, `Virtual key ${id} not found.`);
-    if (key.keyType !== "standard") {
-      throw new ApiError(
-        400,
-        `Virtual key "${key.name}" passes the caller's own provider key through, so it can't use a pool.`,
       );
     }
   }

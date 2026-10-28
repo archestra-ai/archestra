@@ -60,7 +60,17 @@ Open <http://localhost:3000> and [connect a client](/docs/get-started/connect). 
 
 ## Scale Web and Worker Pods
 
-Set `archestra.replicaCount` for web pods and `archestra.worker.replicaCount` for workers. The web HPA, enabled with `archestra.horizontalPodAutoscaler.enabled`, overrides the web replica count; it does not autoscale workers. [Increase database connection capacity](/docs/admin/deployment/database#connection-capacity) alongside replicas.
+Enable the chart's HorizontalPodAutoscaler (HPA) when web traffic varies with load. Your cluster needs the [resource metrics API](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/#support-for-metrics-apis), usually provided by Metrics Server:
+
+```yaml
+archestra:
+  horizontalPodAutoscaler:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+```
+
+The HPA scales web pods only. Without it, set `archestra.replicaCount`; set `archestra.worker.replicaCount` for workers. [Size database connection capacity](/docs/admin/deployment/database#connection-capacity) for the HPA's maximum replicas and rollout overlap.
 
 Start with the [production sizing example](/docs/admin/deployment/production#cluster-capacity), then adjust `archestra.resources` and `archestra.worker.resources` for pod sizing. To spread each workload across zones:
 
@@ -71,6 +81,8 @@ archestra:
       topologyKey: topology.kubernetes.io/zone
       whenUnsatisfiable: DoNotSchedule
 ```
+
+Agent Runtime pods scale separately from web and worker pods. See [production runtime capacity](/docs/admin/deployment/production#agent-runtime) for node autoscaling and [Runtime Setup](/docs/agents/runtime/setup) for cluster prerequisites.
 
 ## Upgrade
 
@@ -83,3 +95,5 @@ Update `archestra.imageTag` in your values file too: an old values file or `--re
 Keep `archestra.terminationGracePeriodSeconds` at least **120**. During shutdown, Archestra rejects new model requests and gives active requests up to 60 seconds to finish; longer requests can lose their connection.
 
 For Docker, use `docker stop --time 120` or Compose's `stop_grace_period: 120s`.
+
+New companion and agent runtime images are published at `ghcr.io/archestra-ai`. The main platform image remains at `archestra/platform` on Docker Hub. If you mirror images internally, import the release’s companion images from GHCR and preserve your Helm registry overrides. Existing releases remain at their original addresses.

@@ -371,6 +371,8 @@ export async function executeA2AMessage(
   // organization default's). Without it, key lookup prefers the caller's
   // personal key and the run sends a key the selection never chose.
   const llmApiKeyId = resolvedApiKeyId ?? agent.llmApiKeyId;
+  // An agent set to a pool runs on it; a fork runs on its parent's model.
+  const modelPoolId = params.selfFork ? null : agent.modelPoolId;
 
   // Track subagent run so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).
@@ -457,6 +459,7 @@ export async function executeA2AMessage(
       source,
       externalAgentId: delegationChain,
       agentLlmApiKeyId: llmApiKeyId,
+      modelPoolId,
       appaSubagentToken: params.appaSubagent?.token,
     });
     const authorizeModel = (model: typeof providerModel) =>
@@ -640,6 +643,7 @@ export async function executeA2AMessage(
                 source: "a2a:tool_call_repair",
                 externalAgentId: delegationChain,
                 agentLlmApiKeyId: llmApiKeyId,
+                modelPoolId,
                 appaSubagentToken: params.appaSubagent?.token,
               })
             ).model,

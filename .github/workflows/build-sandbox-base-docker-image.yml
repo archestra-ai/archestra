@@ -4,9 +4,9 @@ on:
   workflow_call:
     inputs:
       image_registry:
-        description: "Destination registry prefix; releases keep their existing destination"
+        description: "Destination registry prefix"
         type: string
-        default: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+        default: ghcr.io/archestra-ai
       push_to_gcr:
         description: "Whether to push the built image to GCR"
         required: true

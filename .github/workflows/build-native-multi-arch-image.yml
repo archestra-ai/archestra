@@ -207,17 +207,23 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Registry-backed layer cache next to the image, one ref per arch so the
-      # legs never clobber each other. Export only when this run can actually
-      # push to the registry; reads are anonymous.
+      # Registry-backed layer cache, one ref per architecture. Docker Hub
+      # contains release images only; release jobs promote scanned OCI archives
+      # without rebuilding and need no layer cache there.
       - name: Resolve build cache refs
         id: cache-refs
         shell: bash
         env:
           CACHE_REF: ${{ inputs.image_registry }}/${{ inputs.image_name }}:buildcache-${{ matrix.os_and_arch == 'linux/arm64' && 'arm64' || 'amd64' }}
+          USE_REGISTRY_CACHE: ${{ inputs.auth_provider != 'dockerhub' }}
           CAN_EXPORT_CACHE: ${{ inputs.push_image && inputs.auth_provider != 'none' && inputs.export_cache }}
           CACHE_COMPRESSION: ${{ inputs.cache_compression }}
         run: |
+          if [ "${USE_REGISTRY_CACHE}" != "true" ]; then
+            echo "cache-from=" >> "$GITHUB_OUTPUT"
+            echo "cache-to=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           echo "cache-from=type=registry,ref=${CACHE_REF}" >> "$GITHUB_OUTPUT"
           if [ "${CAN_EXPORT_CACHE}" = "true" ]; then
             cache_to="type=registry,ref=${CACHE_REF},mode=max"

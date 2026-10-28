@@ -105,7 +105,7 @@ const labTest = test.extend<{
           { provider: "openai", providerApiKeyId: deployments[0].keyId },
         ],
       });
-      await ModelPoolModel.create({
+      const pool = await ModelPoolModel.create({
         organizationId: org.id,
         input: {
           name: "lab-model",
@@ -116,8 +116,12 @@ const labTest = test.extend<{
             weight: member.weight ?? 1,
             enabled: true,
           })),
-          virtualApiKeyIds: [virtual.virtualKey.id],
         },
+      });
+      await ModelPoolModel.setPoolsForVirtualApiKey({
+        organizationId: org.id,
+        virtualApiKeyId: virtual.virtualKey.id,
+        poolIds: [pool.id],
       });
       token = virtual.value;
       server.use(

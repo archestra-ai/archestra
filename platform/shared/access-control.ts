@@ -1023,6 +1023,8 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetLlmModels]: {},
   [RouteId.GetModelPools]: { llmModel: ["read"] },
+  // The same gate as the keys a user can pick in chat, which decide the pools.
+  [RouteId.GetAvailableModelPools]: { llmProviderApiKey: ["read"] },
   [RouteId.CreateModelPool]: { llmModel: ["update"] },
   [RouteId.UpdateModelPool]: { llmModel: ["update"] },
   [RouteId.DeleteModelPool]: { llmModel: ["update"] },
@@ -1495,6 +1497,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgentEmailAddress]: {}, // Any authenticated user can view agent email addresses
 
   // ChatOps Routes
+  [RouteId.GetJiraChatOpsConfig]: { organizationSettings: ["read"] },
+  [RouteId.UpdateJiraChatOpsConfig]: { organizationSettings: ["update"] },
+  [RouteId.CreateJiraChatOpsBot]: { organizationSettings: ["update"] },
+  [RouteId.UpdateJiraChatOpsBot]: { organizationSettings: ["update"] },
+  [RouteId.DeleteJiraChatOpsBot]: { organizationSettings: ["update"] },
+  [RouteId.ListJiraChatOpsProjects]: { organizationSettings: ["read"] },
+  [RouteId.CreateJiraChatOpsBinding]: { organizationSettings: ["update"] },
   [RouteId.GetChatOpsStatus]: {
     organizationSettings: ["read"],
   },

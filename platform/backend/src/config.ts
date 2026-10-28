@@ -1599,7 +1599,7 @@ export const getAnalyticsConfig = () => {
 
 const mcpServerBaseImage =
   process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-  `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${appVersion}`;
+  `ghcr.io/archestra-ai/mcp-server-base:${appVersion}`;
 
 /**
  * Default resource requests/limits applied to generated MCP server
@@ -3533,7 +3533,7 @@ const config = {
     perforceShim: {
       image:
         process.env.ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE ||
-        `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:${appVersion}`,
+        `ghcr.io/archestra-ai/p4-shim:${appVersion}`,
       p4Binary: {
         x64: {
           url:

@@ -510,6 +510,7 @@ export const RouteId = {
   DeleteChatAttachment: "deleteChatAttachment",
   GetLlmModels: "getLlmModels",
   GetModelPools: "getModelPools",
+  GetAvailableModelPools: "getAvailableModelPools",
   CreateModelPool: "createModelPool",
   UpdateModelPool: "updateModelPool",
   DeleteModelPool: "deleteModelPool",
@@ -798,6 +799,13 @@ export const RouteId = {
   GetAgentEmailAddress: "getAgentEmailAddress",
 
   // ChatOps Routes
+  GetJiraChatOpsConfig: "getJiraChatOpsConfig",
+  UpdateJiraChatOpsConfig: "updateJiraChatOpsConfig",
+  CreateJiraChatOpsBot: "createJiraChatOpsBot",
+  UpdateJiraChatOpsBot: "updateJiraChatOpsBot",
+  DeleteJiraChatOpsBot: "deleteJiraChatOpsBot",
+  ListJiraChatOpsProjects: "listJiraChatOpsProjects",
+  CreateJiraChatOpsBinding: "createJiraChatOpsBinding",
   GetChatOpsStatus: "getChatOpsStatus",
   ListChatOpsBindings: "listChatOpsBindings",
   DeleteChatOpsBinding: "deleteChatOpsBinding",

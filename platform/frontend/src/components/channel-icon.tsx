@@ -30,4 +30,5 @@ export const CHANNEL_ICON_SRC: Partial<Record<MessagingChannelId, string>> = {
   "ms-teams": "/icons/ms-teams.png",
   slack: "/icons/slack.png",
   telegram: "/icons/telegram.png",
+  jira: "/icons/jira.png",
 };

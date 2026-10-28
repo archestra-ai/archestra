@@ -77,6 +77,7 @@ export function EditManagedOAuthClientDialog({
         providerApiKeys: oauthClient.providerApiKeys.map(
           ({ provider, providerApiKeyId }) => ({ provider, providerApiKeyId }),
         ),
+        modelPoolIds: oauthClient.modelPoolIds,
         redirectUrisText: oauthClient.redirectUris.join("\n"),
         labels: oauthClient.labels,
         billingTeamId: oauthClient.billingTeam?.id ?? null,
@@ -174,6 +175,8 @@ export function EditManagedOAuthClientDialog({
         if (!form.formState.dirtyFields.spendCap) delete body.spendCap;
         if (!form.formState.dirtyFields.billingTeamId)
           delete body.billingTeamId;
+        // Only an admin who may change pool access can send it.
+        if (!form.formState.dirtyFields.modelPoolIds) delete body.modelPoolIds;
         await permissionSave.current?.();
         await onSubmit(oauthClient.id, body);
       })}

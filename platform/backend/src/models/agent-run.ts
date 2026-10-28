@@ -300,6 +300,7 @@ class AgentRunModel {
     organizationId: string;
     actorKind: AgentRunRecord["actorKind"];
     actorId: string;
+    jiraRequesterAccountId?: string;
   }): Promise<{
     run: AgentRunRecord;
     workspace: Pick<
@@ -334,6 +335,9 @@ class AgentRunModel {
           eq(schema.agentRunsTable.organizationId, params.organizationId),
           eq(schema.agentRunsTable.actorKind, params.actorKind),
           eq(schema.agentRunsTable.actorId, params.actorId),
+          params.jiraRequesterAccountId
+            ? sql`${schema.agentRunsTable.completionTarget}->>'jiraRequesterAccountId' = ${params.jiraRequesterAccountId}`
+            : undefined,
         ),
       )
       .orderBy(

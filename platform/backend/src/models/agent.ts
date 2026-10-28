@@ -6452,6 +6452,7 @@ const CHAT_ROSTER_COLUMNS = {
   runtime: schema.agentsTable.runtime,
   modelId: schema.agentsTable.modelId,
   llmApiKeyId: schema.agentsTable.llmApiKeyId,
+  modelPoolId: schema.agentsTable.modelPoolId,
 };
 
 type RosterCursorFields = { cursorValue?: string; chatRank?: number };

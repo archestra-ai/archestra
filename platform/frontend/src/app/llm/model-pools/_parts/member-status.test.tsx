@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemberStatus, PoolHealth } from "./member-status";
+import { MemberCooldown, PoolHealth } from "./member-status";
 
 const NOW = new Date("2026-10-22T12:00:00Z");
 
@@ -26,7 +26,7 @@ function savedMember(overrides: {
   };
 }
 
-describe("MemberStatus", () => {
+describe("MemberCooldown and PoolHealth", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
@@ -35,42 +35,39 @@ describe("MemberStatus", () => {
     vi.useRealTimers();
   });
 
-  it("counts down a benched member", () => {
+  it("counts down a member that is cooling down", () => {
     render(
-      <MemberStatus
-        enabled
+      <MemberCooldown
         saved={savedMember({
           benchedUntil: new Date(NOW.getTime() + 12_000).toISOString(),
           benchReason: "rate_limited (429)",
         })}
       />,
     );
-    expect(screen.getByText("Benched 12 s")).toBeInTheDocument();
+    expect(screen.getByText("Cooling down · 12 s")).toBeInTheDocument();
   });
 
-  it("calls a member healthy once its bench has passed", () => {
-    render(
-      <MemberStatus
-        enabled
+  it("shows nothing once the cooldown has passed, or for a member that is off", () => {
+    const { container, rerender } = render(
+      <MemberCooldown
         saved={savedMember({
           benchedUntil: new Date(NOW.getTime() - 1_000).toISOString(),
-          benchReason: "rate_limited (429)",
         })}
       />,
     );
-    expect(screen.getByText("Healthy")).toBeInTheDocument();
-  });
-
-  it("shows a switched-off member as off and a new one as not saved", () => {
-    const { rerender } = render(
-      <MemberStatus enabled={false} saved={savedMember({})} />,
+    expect(container).toBeEmptyDOMElement();
+    rerender(
+      <MemberCooldown
+        saved={savedMember({
+          enabled: false,
+          benchedUntil: new Date(NOW.getTime() + 12_000).toISOString(),
+        })}
+      />,
     );
-    expect(screen.getByText("Off")).toBeInTheDocument();
-    rerender(<MemberStatus enabled saved={null} />);
-    expect(screen.getByText("Not saved yet")).toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
   });
 
-  it("sums up a pool by its benched members", () => {
+  it("sums up a pool by its members cooling down", () => {
     const pool = {
       id: "pool",
       organizationId: "org",
@@ -86,7 +83,7 @@ describe("MemberStatus", () => {
       ],
     };
     const { rerender } = render(<PoolHealth pool={pool} />);
-    expect(screen.getByText("1 benched, 30 s")).toBeInTheDocument();
+    expect(screen.getByText("1 cooling down, 30 s")).toBeInTheDocument();
     rerender(<PoolHealth pool={{ ...pool, members: [savedMember({})] }} />);
     expect(screen.getByText("All healthy")).toBeInTheDocument();
   });

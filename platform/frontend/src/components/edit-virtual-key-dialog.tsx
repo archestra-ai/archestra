@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import { KeyRound, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import { AdvancedSection } from "@/components/advanced-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
@@ -12,6 +12,10 @@ import {
   type SpendCapValue,
 } from "@/components/credential-billing/budget-fields";
 import { CreatedByHeader } from "@/components/credential-billing/created-by-header";
+import {
+  ModelPoolsField,
+  useCanSetModelPools,
+} from "@/components/credential-billing/model-pools-field";
 import { ProviderKeyList } from "@/components/credential-billing/provider-key-list";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { ProviderAccessField } from "@/components/provider-access-field";
@@ -30,6 +34,7 @@ import {
   useScopedCapabilities,
 } from "@/lib/auth/auth.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useModelPools } from "@/lib/model-pools.query";
 import { useUpdateVirtualApiKey } from "@/lib/virtual-api-keys.query";
 
 export type EditableVirtualKey =
@@ -61,6 +66,26 @@ export function EditVirtualKeyDialog({
     useState<ProviderApiKeyMappings>([]);
   const [billingTeamId, setBillingTeamId] = useState<string | null>(null);
   const [spendCap, setSpendCap] = useState<SpendCapValue>(null);
+  // Undefined until edited, so the pools this key already reaches show
+  // through once they load.
+  const [modelPoolIds, setModelPoolIds] = useState<string[]>();
+  const canSetModelPools = useCanSetModelPools();
+  const { data: pools } = useModelPools({ enabled: canSetModelPools });
+  const grantedPoolIds = useMemo(
+    () =>
+      (pools ?? [])
+        .filter((pool) =>
+          virtualKey ? pool.virtualApiKeyIds.includes(virtualKey.id) : false,
+        )
+        .map((pool) => pool.id),
+    [pools, virtualKey],
+  );
+  const modelPoolsChanged =
+    modelPoolIds !== undefined &&
+    hasUnsavedChanges(
+      { ids: [...grantedPoolIds].sort() },
+      { ids: [...modelPoolIds].sort() },
+    );
   const { data: canManageLimits } = useHasPermissions({
     llmLimit: ["update", "delete"],
   });
@@ -97,6 +122,7 @@ export function EditVirtualKeyDialog({
     const initialSpendCap = toSpendCapValue(virtualKey.spendCap);
     setBillingTeamId(virtualKey.billingTeamId);
     setSpendCap(initialSpendCap);
+    setModelPoolIds(undefined);
     initialSnapshotRef.current = {
       name: virtualKey.name,
       includeFutureProviders: virtualKey.includeFutureProviders,
@@ -141,6 +167,7 @@ export function EditVirtualKeyDialog({
             providerApiKeys: providerApiKeyIds,
             labels: finalLabels,
             ...billing,
+            ...(modelPoolsChanged && { modelPoolIds }),
           },
     });
     if (result) onOpenChange(false);
@@ -156,6 +183,8 @@ export function EditVirtualKeyDialog({
     virtualKey,
     billingTeamId,
     spendCap,
+    modelPoolIds,
+    modelPoolsChanged,
   ]);
 
   if (!virtualKey) return null;
@@ -166,6 +195,7 @@ export function EditVirtualKeyDialog({
     !updateMutation.isPending;
   const isDirty =
     permissionsDirty ||
+    modelPoolsChanged ||
     (initialSnapshotRef.current !== null &&
       hasUnsavedChanges(initialSnapshotRef.current, {
         name,
@@ -309,12 +339,19 @@ export function EditVirtualKeyDialog({
               />
             }
           />
+          {canSetModelPools && (
+            <ModelPoolsField
+              value={modelPoolIds ?? grantedPoolIds}
+              onChange={setModelPoolIds}
+            />
+          )}
         </div>
       )}
       {activeSection === "connect" && (
         <VirtualKeyConnectionGuide
           keyType={virtualKey.keyType}
           mappedProviderKeys={virtualKey.providerApiKeys}
+          includeFutureProviders={virtualKey.includeFutureProviders}
           connectionBaseUrl={connectionBaseUrl}
           name={virtualKey.name}
           expiration={formatExpiration(virtualKey.expiresAt)}

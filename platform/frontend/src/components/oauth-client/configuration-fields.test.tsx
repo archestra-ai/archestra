@@ -8,7 +8,11 @@ import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-ke
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useScopedCapabilities, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import {
   useAppearanceSettings,
@@ -98,6 +102,9 @@ function renderProviders(
 }
 
 beforeEach(() => {
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: false,
+  } as unknown as ReturnType<typeof useHasPermissions>);
   vi.clearAllMocks();
   vi.mocked(useScopedCapabilities).mockReturnValue({
     data: [],

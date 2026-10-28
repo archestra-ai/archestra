@@ -2,7 +2,7 @@
 title: Access Control
 description: Assign roles and share resources with users, teams, and service accounts
 order: 2
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-27
 ---
 
 Roles control which sections a person can open and which kinds of resources they can create. Resource grants control which individual agents, gateways, skills, apps, models, and credentials they can reach. Configure both when giving someone access.
@@ -143,7 +143,7 @@ Only someone with edit and Full access on the resource can make another person t
 
 ### Team Roles
 
-A team **member** receives shared access. A team **admin** can manage its members and settings without organization-wide [`team:update`](/docs/reference/permissions#team:update). The creator becomes the first team admin. This role does not authorize creating or deleting teams, managing other teams, or editing shared MCP connections.
+A team **member** receives shared access but no automatic budget access. A team **admin** can manage its members, settings, and [spend limits](/docs/llm-proxy/costs-and-limits#team-limits-and-spend), and view that team's spend without organization-wide [`team:update`](/docs/reference/permissions#team:update), [`llmLimit:read`](/docs/reference/permissions#llmLimit:read), or [`llmCost:read`](/docs/reference/permissions#llmCost:read). The creator becomes the first team admin. This role does not authorize creating or deleting teams, managing other teams, or editing shared MCP connections.
 
 ### Team Hierarchies
 

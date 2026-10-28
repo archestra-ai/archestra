@@ -50,10 +50,11 @@ describe("TeamManagementDialog", () => {
   });
 
   it("hides the vault tab from team admins without team:update", () => {
-    renderDialog();
+    renderDialog("admin");
 
     expect(screen.getByText("Team")).toBeInTheDocument();
     expect(screen.getByText("Members")).toBeInTheDocument();
+    expect(screen.getByText("Budgets")).toBeInTheDocument();
     expect(screen.getByText("External Group Sync")).toBeInTheDocument();
     expect(screen.queryByText("Vault Folder")).not.toBeInTheDocument();
   });
@@ -66,6 +67,7 @@ describe("TeamManagementDialog", () => {
     renderDialog();
 
     expect(screen.getByText("Vault Folder")).toBeInTheDocument();
+    expect(screen.queryByText("Budgets")).not.toBeInTheDocument();
     // Team gateway tokens moved to service accounts linked to the team.
     expect(screen.queryByText("MCP/A2A Gateway Token")).not.toBeInTheDocument();
   });
@@ -80,12 +82,13 @@ describe("TeamManagementDialog", () => {
 
     renderDialog();
 
+    expect(screen.queryByText("Budgets")).not.toBeInTheDocument();
     expect(screen.getByText("External Group Sync")).toBeInTheDocument();
     expect(screen.queryByText("Vault Folder")).not.toBeInTheDocument();
   });
 });
 
-function renderDialog() {
+function renderDialog(myRole?: "admin" | "member") {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -95,12 +98,16 @@ function renderDialog() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <TeamManagementDialog open onOpenChange={vi.fn()} team={makeTeam()} />
+      <TeamManagementDialog
+        open
+        onOpenChange={vi.fn()}
+        team={makeTeam(myRole)}
+      />
     </QueryClientProvider>,
   );
 }
 
-function makeTeam(): Team {
+function makeTeam(myRole?: "admin" | "member"): Team {
   return {
     id: "team-a",
     name: "Team A",
@@ -113,5 +120,6 @@ function makeTeam(): Team {
     updatedAt: "2026-01-01T00:00:00.000Z",
     roles: [],
     members: [],
+    myRole,
   };
 }

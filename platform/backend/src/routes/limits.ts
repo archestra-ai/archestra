@@ -1,7 +1,9 @@
 import { MAX_BULK_IDS, parseLabelsParam, RouteId } from "@archestra/shared";
+import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { LimitLabelModel, LimitModel } from "@/models";
+import { hasPermission } from "@/auth";
+import { LimitLabelModel, LimitModel, TeamModel } from "@/models";
 import { createLimit, limitReadCleanup } from "@/services/limit";
 import {
   ApiError,
@@ -58,10 +60,12 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(LimitWithUsageSchema)),
       },
     },
-    async (
-      { query: { entityType, entityId, limitType, labels }, organizationId },
-      reply,
-    ) => {
+    async (request, reply) => {
+      const {
+        query: { entityType, entityId, limitType, labels },
+        organizationId,
+      } = request;
+      await assertCanAccessLimit(request, "read", entityType, entityId);
       // Reset elapsed windows before reporting usage.
       await limitReadCleanup.run({
         organizationId,
@@ -105,7 +109,8 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectLimitSchema),
       },
     },
-    async ({ body, organizationId }, reply) => {
+    async (request, reply) => {
+      const { body, organizationId } = request;
       // Org-scoping: the limit's target entity must belong to the caller's
       // organization (limitsTable has no org column, so this is the tenancy
       // guard for cross-tenant entity IDs).
@@ -117,6 +122,12 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!inOrg) {
         throw new ApiError(404, `${body.entityType} not found`);
       }
+      await assertCanAccessLimit(
+        request,
+        "create",
+        body.entityType,
+        body.entityId,
+      );
 
       return reply.send(await createLimit(body));
     },
@@ -135,7 +146,11 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(LimitWithUsageSchema),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { id },
+        organizationId,
+      } = request;
       // Same cleanup the list read performs, so an elapsed reset window is
       // applied before the usage counters are reported either way.
       await limitReadCleanup.run({ organizationId });
@@ -145,6 +160,12 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!limit) {
         throw new ApiError(404, "Limit not found");
       }
+      await assertCanAccessLimit(
+        request,
+        "read",
+        limit.entityType,
+        limit.entityId,
+      );
 
       if (limit.limitType !== "token_cost") {
         return reply.send(limit);
@@ -174,7 +195,12 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectLimitSchema),
       },
     },
-    async ({ params: { id }, body, organizationId }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { id },
+        body,
+        organizationId,
+      } = request;
       const existing = await LimitModel.findByIdInOrganization(
         id,
         organizationId,
@@ -182,6 +208,12 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!existing) {
         throw new ApiError(404, "Limit not found");
       }
+      await assertCanAccessLimit(
+        request,
+        "update",
+        existing.entityType,
+        existing.entityId,
+      );
 
       const limit = await LimitModel.patch(id, body);
 
@@ -262,7 +294,11 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { id },
+        organizationId,
+      } = request;
       const existing = await LimitModel.findByIdInOrganization(
         id,
         organizationId,
@@ -270,6 +306,12 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!existing) {
         throw new ApiError(404, "Limit not found");
       }
+      await assertCanAccessLimit(
+        request,
+        "delete",
+        existing.entityType,
+        existing.entityId,
+      );
 
       const deleted = await LimitModel.delete(id);
 
@@ -283,3 +325,32 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default limitsRoutes;
+
+async function assertCanAccessLimit(
+  request: FastifyRequest,
+  action: "read" | "create" | "update" | "delete",
+  entityType?: string,
+  entityId?: string,
+) {
+  const { success: canManageOrganizationLimits } = await hasPermission(
+    { llmLimit: [action] },
+    request.headers,
+    request.serviceAccount,
+  );
+  if (canManageOrganizationLimits) return;
+
+  // Team admins gain access only to the team's own rules. Require the team
+  // filter on list reads so an unscoped request cannot expose other budgets.
+  if (
+    entityType !== "team" ||
+    !entityId ||
+    request.authMethod !== "session" ||
+    !(await TeamModel.isUserTeamAdmin(entityId, request.user.id))
+  ) {
+    throw new ApiError(403, "You cannot manage these limits");
+  }
+  const team = await TeamModel.findById(entityId, { includeMembers: false });
+  if (!team || team.organizationId !== request.organizationId) {
+    throw new ApiError(404, "Team not found");
+  }
+}

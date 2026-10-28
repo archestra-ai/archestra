@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
+import { hasPermission } from "@/auth";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -10,15 +11,21 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { recordQueries } from "@/test/query-counter";
 import type { User } from "@/types";
 
+vi.mock("@/auth");
+
 describe("limits routes", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
+  let authMethod: "session" | "api_key";
 
-  beforeEach(async ({ makeOrganization, makeAdmin }) => {
+  beforeEach(async ({ makeOrganization, makeAdmin, makeMember }) => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeAdmin();
+    await makeMember(user.id, organizationId, { role: "admin" });
+    authMethod = "session";
+    vi.mocked(hasPermission).mockResolvedValue({ success: true, error: null });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -29,6 +36,7 @@ describe("limits routes", () => {
         }
       ).organizationId = organizationId;
       (request as typeof request & { user: User }).user = user;
+      request.authMethod = authMethod;
     });
 
     registerAuditLogHook(app);
@@ -39,6 +47,165 @@ describe("limits routes", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await app.close();
+  });
+
+  test("team admins can manage only their team's limits", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const teamAdmin = await makeUser();
+    await makeMember(teamAdmin.id, organizationId);
+    const ownTeam = await makeTeam(organizationId, user.id);
+    const otherTeam = await makeTeam(organizationId, user.id);
+    await makeTeamMember(ownTeam.id, teamAdmin.id, { role: "admin" });
+    const ownLimit = await LimitModel.create({
+      entityType: "team",
+      entityId: ownTeam.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      model: null,
+    });
+    const otherLimit = await LimitModel.create({
+      entityType: "team",
+      entityId: otherTeam.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      model: null,
+    });
+    const sharedAgent = await makeAgent({
+      organizationId,
+      access: { teams: [ownTeam.id] },
+    });
+    const agentLimit = await LimitModel.create({
+      entityType: "agent",
+      entityId: sharedAgent.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      model: null,
+    });
+    user = teamAdmin;
+    vi.mocked(hasPermission).mockResolvedValue({ success: false, error: null });
+
+    expect(
+      (await app.inject({ method: "GET", url: "/api/limits" })).statusCode,
+    ).toBe(403);
+    const ownList = await app.inject({
+      method: "GET",
+      url: `/api/limits?entityType=team&entityId=${ownTeam.id}`,
+    });
+    expect(ownList.statusCode, ownList.body).toBe(200);
+    expect(ownList.json().map((limit: { id: string }) => limit.id)).toEqual([
+      ownLimit.id,
+    ]);
+    authMethod = "api_key";
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/limits?entityType=team&entityId=${ownTeam.id}`,
+        })
+      ).statusCode,
+    ).toBe(403);
+    authMethod = "session";
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/limits?entityType=team&entityId=${otherTeam.id}`,
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (await app.inject({ method: "GET", url: `/api/limits/${ownLimit.id}` }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await app.inject({ method: "GET", url: `/api/limits/${otherLimit.id}` }))
+        .statusCode,
+    ).toBe(403);
+    expect(
+      (await app.inject({ method: "GET", url: `/api/limits/${agentLimit.id}` }))
+        .statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: "PATCH",
+          url: `/api/limits/${otherLimit.id}`,
+          payload: { limitValue: 1 },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/limits/${otherLimit.id}`,
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/limits",
+          payload: {
+            entityType: "organization",
+            entityId: organizationId,
+            limitType: "token_cost",
+            limitValue: 1,
+            cleanupInterval: "calendar_month",
+          },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/limits",
+          payload: {
+            entityType: "team",
+            entityId: otherTeam.id,
+            limitType: "token_cost",
+            limitValue: 1,
+            cleanupInterval: "calendar_month",
+          },
+        })
+      ).statusCode,
+    ).toBe(403);
+
+    const edited = await app.inject({
+      method: "PATCH",
+      url: `/api/limits/${ownLimit.id}`,
+      payload: { limitValue: 150 },
+    });
+    expect(edited.statusCode, edited.body).toBe(200);
+    expect(edited.json().limitValue).toBe(150);
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/limits",
+      payload: {
+        entityType: "team",
+        entityId: ownTeam.id,
+        limitType: "token_cost",
+        limitValue: 50,
+        cleanupInterval: "calendar_month",
+      },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/limits/${created.json().id}`,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await LimitModel.findById(otherLimit.id))?.limitValue).toBe(100);
   });
 
   describe("GET /api/limits", () => {

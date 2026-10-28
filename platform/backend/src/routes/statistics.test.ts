@@ -50,6 +50,7 @@ describe("GET /api/statistics/users", () => {
       (request as typeof request & { user: User }).user = currentUser;
       (request as typeof request & { organizationId: string }).organizationId =
         organizationId;
+      request.authMethod = "session";
     });
 
     const { default: statisticsRoutes } = await import("./statistics");
@@ -58,6 +59,58 @@ describe("GET /api/statistics/users", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("team admins see only their team's spend", async ({
+    makeAgent,
+    makeInteraction,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    const ownTeam = await makeTeam(organizationId, currentUser.id);
+    const otherTeam = await makeTeam(organizationId, currentUser.id);
+    const ownAgent = await makeAgent({
+      organizationId,
+      access: { teams: [ownTeam.id] },
+    });
+    const otherAgent = await makeAgent({
+      organizationId,
+      access: { teams: [otherTeam.id] },
+    });
+    await makeInteraction(ownAgent.id, { cost: "3", model: "gpt-4o" });
+    await makeInteraction(otherAgent.id, { cost: "9", model: "gpt-4o" });
+    const teamAdmin = await makeUser();
+    await makeMember(teamAdmin.id, organizationId);
+    await makeTeamMember(ownTeam.id, teamAdmin.id, { role: "admin" });
+    currentUser = teamAdmin;
+    setCanReadAllUsers(false);
+
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/statistics/teams?timeframe=24h",
+        })
+      ).statusCode,
+    ).toBe(403);
+    const own = await app.inject({
+      method: "GET",
+      url: `/api/statistics/teams?timeframe=24h&teamId=${ownTeam.id}`,
+    });
+    expect(own.statusCode, own.body).toBe(200);
+    expect(own.json()).toEqual([
+      expect.objectContaining({ teamId: ownTeam.id, cost: 3 }),
+    ]);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/statistics/teams?timeframe=24h&teamId=${otherTeam.id}`,
+        })
+      ).statusCode,
+    ).toBe(403);
   });
 
   test("returns per-user usage with the email needed to join an external roster", async ({

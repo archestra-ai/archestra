@@ -3,6 +3,25 @@ import { describe, expect, it } from "vitest";
 import { enrichOpenApiWithRbac } from "./enrich-openapi-with-rbac";
 
 describe("enrichOpenApiWithRbac", () => {
+  it.each([
+    RouteId.GetLimits,
+    RouteId.GetLimit,
+    RouteId.CreateLimit,
+    RouteId.UpdateLimit,
+    RouteId.DeleteLimit,
+    RouteId.GetTeamStatistics,
+  ])("documents %s as dynamically authorized for team admins", (operationId) => {
+    const spec = { paths: { "/api/example": { get: { operationId } } } };
+    const operation = enrichOpenApiWithRbac(spec).paths["/api/example"].get as {
+      description?: string;
+      "x-required-permissions"?: { kind: string; note: string };
+    };
+    expect(operation["x-required-permissions"]).toMatchObject({
+      kind: "dynamic",
+      note: expect.stringContaining("team admin"),
+    });
+    expect(operation.description).toContain("team admin");
+  });
   it("adds permission metadata plus authentication and RBAC guidance for routes with static requirements", () => {
     const spec = {
       paths: {

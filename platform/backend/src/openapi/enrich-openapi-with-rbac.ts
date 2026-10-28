@@ -271,6 +271,18 @@ const HTTP_METHODS = new Set<HttpMethod>([
 ]);
 
 const DYNAMIC_ROUTE_PERMISSION_NOTES = {
+  [RouteId.GetLimits]:
+    "Requires `llmLimit:read` for organization-wide access. A session-authenticated team admin may list only their own team's limits by filtering on both `entityType=team` and `entityId`.",
+  [RouteId.GetLimit]:
+    "Requires `llmLimit:read`, or a session-authenticated team admin for a limit on their own team.",
+  [RouteId.CreateLimit]:
+    "Requires `llmLimit:create`, or a session-authenticated team admin creating a limit on their own team.",
+  [RouteId.UpdateLimit]:
+    "Requires `llmLimit:update`, or a session-authenticated team admin updating a limit on their own team.",
+  [RouteId.DeleteLimit]:
+    "Requires `llmLimit:delete`, or a session-authenticated team admin deleting a limit on their own team.",
+  [RouteId.GetTeamStatistics]:
+    "Requires `llmCost:read` for organization-wide team statistics. A session-authenticated team admin may request only their own team by providing `teamId`.",
   [RouteId.GetOrganizationMemberOptions]:
     "All authenticated callers may search visible member identities. member:read returns the organization roster; other callers receive only teammates in the active organization.",
   [RouteId.GetAgentCatalog]:

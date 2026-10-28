@@ -6425,7 +6425,7 @@ export const limitLabelValues = <ThrowOnError extends boolean = false>(options?:
  *
  * Authorization:
  *
- * `llmLimit:read`: View token usage limits
+ * Requires `llmLimit:read` for organization-wide access. A session-authenticated team admin may list only their own team's limits by filtering on both `entityType=team` and `entityId`.
  */
 export const getLimits = <ThrowOnError extends boolean = false>(options?: Options<GetLimitsData, ThrowOnError>) => (options?.client ?? client).get<GetLimitsResponses, GetLimitsErrors, ThrowOnError>({ url: '/api/limits', ...options });
 
@@ -6438,7 +6438,7 @@ export const getLimits = <ThrowOnError extends boolean = false>(options?: Option
  *
  * Authorization:
  *
- * `llmLimit:create`: Create new usage limits
+ * Requires `llmLimit:create`, or a session-authenticated team admin creating a limit on their own team.
  */
 export const createLimit = <ThrowOnError extends boolean = false>(options: Options<CreateLimitData, ThrowOnError>) => (options.client ?? client).post<CreateLimitResponses, CreateLimitErrors, ThrowOnError>({
     url: '/api/limits',
@@ -6458,7 +6458,7 @@ export const createLimit = <ThrowOnError extends boolean = false>(options: Optio
  *
  * Authorization:
  *
- * `llmLimit:delete`: Remove usage limits
+ * Requires `llmLimit:delete`, or a session-authenticated team admin deleting a limit on their own team.
  */
 export const deleteLimit = <ThrowOnError extends boolean = false>(options: Options<DeleteLimitData, ThrowOnError>) => (options.client ?? client).delete<DeleteLimitResponses, DeleteLimitErrors, ThrowOnError>({ url: '/api/limits/{id}', ...options });
 
@@ -6471,7 +6471,7 @@ export const deleteLimit = <ThrowOnError extends boolean = false>(options: Optio
  *
  * Authorization:
  *
- * `llmLimit:read`: View token usage limits
+ * Requires `llmLimit:read`, or a session-authenticated team admin for a limit on their own team.
  */
 export const getLimit = <ThrowOnError extends boolean = false>(options: Options<GetLimitData, ThrowOnError>) => (options.client ?? client).get<GetLimitResponses, GetLimitErrors, ThrowOnError>({ url: '/api/limits/{id}', ...options });
 
@@ -6484,7 +6484,7 @@ export const getLimit = <ThrowOnError extends boolean = false>(options: Options<
  *
  * Authorization:
  *
- * `llmLimit:update`: Modify existing usage limits
+ * Requires `llmLimit:update`, or a session-authenticated team admin updating a limit on their own team.
  */
 export const updateLimit = <ThrowOnError extends boolean = false>(options: Options<UpdateLimitData, ThrowOnError>) => (options.client ?? client).patch<UpdateLimitResponses, UpdateLimitErrors, ThrowOnError>({
     url: '/api/limits/{id}',
@@ -11424,9 +11424,7 @@ export const getProxyCostStatistics = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `llmCost:read`: View organization-wide LLM usage cost statistics and analytics
- *
- * Returns aggregate team usage for the active organization.
+ * Requires `llmCost:read` for organization-wide team statistics. A session-authenticated team admin may request only their own team by providing `teamId`.
  */
 export const getTeamStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetTeamStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetTeamStatisticsResponses, GetTeamStatisticsErrors, ThrowOnError>({ url: '/api/statistics/teams', ...options });
 

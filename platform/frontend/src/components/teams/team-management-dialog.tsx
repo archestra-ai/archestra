@@ -65,12 +65,14 @@ import { throwOnApiError } from "@/lib/utils/api";
 import { formatRoleName } from "@/lib/utils/role";
 import { cn } from "@/lib/utils/tailwind";
 import { EnterpriseLicenseRequired } from "../enterprise-license-required";
+import { TeamBudgetsSection } from "./team-budgets-section";
 
 type Team = archestraApiTypes.GetTeamResponses["200"];
 type TeamListItem = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 type TeamDialogSection =
   | "team"
   | "members"
+  | "budgets"
   | "vault-folder"
   | "external-groups";
 type TeamMemberRole = typeof ADMIN_ROLE_NAME | typeof MEMBER_ROLE_NAME;
@@ -119,6 +121,7 @@ type TeamManagementDialogProps =
 const editNavItems = [
   { id: "team", label: "Team" },
   { id: "members", label: "Members" },
+  { id: "budgets", label: "Budgets" },
   { id: "external-groups", label: "External Group Sync" },
 ] satisfies Array<{ id: TeamDialogSection; label: string }>;
 
@@ -168,27 +171,22 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
   });
   const byosEnabled = useFeature("byosEnabled");
   const navItems = useMemo(() => {
+    const visibleItems = editNavItems.filter(
+      (item) => item.id !== "budgets" || team?.myRole === ADMIN_ROLE_NAME,
+    );
     if (mode === "create") {
-      return team ? [editNavItems[0], editNavItems[1]] : createNavItems;
+      return team ? visibleItems : createNavItems;
     }
 
     if (readOnly) {
-      return [editNavItems[2]];
+      return [editNavItems[3]];
     }
 
-    if (!canUpdateTeams) {
-      return editNavItems;
-    }
-
-    if (!byosEnabled) {
-      return editNavItems;
-    }
-
+    if (!canUpdateTeams || !byosEnabled) return visibleItems;
     return [
-      editNavItems[0],
-      editNavItems[1],
+      ...visibleItems.slice(0, 2),
       vaultFolderNavItem,
-      editNavItems[2],
+      ...visibleItems.slice(2),
     ];
   }, [byosEnabled, canUpdateTeams, mode, readOnly, team]);
   const title =
@@ -225,6 +223,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     const canShowActiveSection =
       (activeSection === "team" && !readOnly) ||
       (activeSection === "members" && !!team && !readOnly) ||
+      (activeSection === "budgets" && !!team && !readOnly) ||
       activeSection === "external-groups" ||
       (activeSection === "vault-folder" &&
         canUpdateTeams &&
@@ -384,7 +383,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
       open={open}
       onOpenChange={onOpenChange}
       title={title}
-      description="Manage team details, members, and external group sync."
+      description="Manage team details, members, budgets, and external group sync."
       sidebarLabel={name.trim() || (mode === "create" ? "New team" : "Team")}
       sidebarDescription="Team"
       sidebarIcon={<Users className="h-4 w-4 text-muted-foreground" />}
@@ -459,6 +458,9 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
           }}
           onGoToExternalGroups={() => setActiveSection("external-groups")}
         />
+      )}
+      {activeSection === "budgets" && team && (
+        <TeamBudgetsSection team={team} open={open} />
       )}
       {(activeSection === "team" || activeSection === "members") && (
         <RoleAssignmentBlockedNotice

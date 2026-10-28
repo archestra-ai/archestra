@@ -77,6 +77,14 @@ The table shows each limit's use so far, and when it resets.
 
 ![Costs & Limits → Limits, with monthly budgets for the organization, two teams, and the production environment](/docs/automated_screenshots/llm-proxy_limits.webp)
 
+<span id="team-limits-and-spend"></span>
+
+### Team Limits and Spend
+
+In **Settings → Teams**, open a team you administer and select **Budgets** to view its spend and manage its spend limits. A team member has no automatic budget access. See [team member and admin roles](/docs/admin/access-control#team-roles).
+
+Organization, user, virtual-key, OAuth-client, agent, and environment limits still require [`llmLimit:read`](/docs/reference/permissions#llmLimit:read) to view, or [`llmLimit:create`](/docs/reference/permissions#llmLimit:create), [`llmLimit:update`](/docs/reference/permissions#llmLimit:update), and [`llmLimit:delete`](/docs/reference/permissions#llmLimit:delete) to change. Organization-wide spend requires [`llmCost:read`](/docs/reference/permissions#llmCost:read).
+
 <span id="default-user-limits"></span><span id="limit-cleanup"></span>
 
 - **A budget for everyone:** set a default per-user limit under **Settings → LLM**. A per-environment default replaces it in that environment. A user's own limit replaces both.

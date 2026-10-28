@@ -1151,23 +1151,14 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgentA2aDelegations]: {},
   [RouteId.SyncAgentA2aDelegations]: {},
   [RouteId.GetAllDelegationConnections]: {},
-  [RouteId.GetLimits]: {
-    llmLimit: ["read"],
-  },
+  // Handlers also allow a team admin for only their own team's limits.
+  [RouteId.GetLimits]: {},
   [RouteId.GetLimitLabelKeys]: { llmLimit: ["read"] },
   [RouteId.GetLimitLabelValues]: { llmLimit: ["read"] },
-  [RouteId.CreateLimit]: {
-    llmLimit: ["create"],
-  },
-  [RouteId.GetLimit]: {
-    llmLimit: ["read"],
-  },
-  [RouteId.UpdateLimit]: {
-    llmLimit: ["update"],
-  },
-  [RouteId.DeleteLimit]: {
-    llmLimit: ["delete"],
-  },
+  [RouteId.CreateLimit]: {},
+  [RouteId.GetLimit]: {},
+  [RouteId.UpdateLimit]: {},
+  [RouteId.DeleteLimit]: {},
   [RouteId.BulkDeleteLimits]: {
     llmLimit: ["delete"],
   },
@@ -1384,9 +1375,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetUserToken]: {},
   [RouteId.GetUserTokenValue]: {},
   [RouteId.RotateUserToken]: {},
-  [RouteId.GetTeamStatistics]: {
-    llmCost: ["read"],
-  },
+  [RouteId.GetTeamStatistics]: {},
   [RouteId.GetProxyCostStatistics]: { llmCost: ["read"] },
   [RouteId.GetAgentStatistics]: {
     llmCost: ["read"],

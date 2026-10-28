@@ -645,9 +645,7 @@ describe("sreAgentService", () => {
       user: { name: "", email: "", role: "", teams: [] },
     });
     expect(rendered).not.toContain("{{");
-    expect(rendered?.includes(` origin ${getAppSourceRef()} `)).toBe(
-      sandbox,
-    );
+    expect(rendered?.includes(` origin ${getAppSourceRef()} `)).toBe(sandbox);
   });
 
   test("an early install's source clone is upgraded, keeping the admin's other edits", async ({

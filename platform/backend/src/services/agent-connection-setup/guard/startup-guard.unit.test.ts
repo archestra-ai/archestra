@@ -485,8 +485,8 @@ describe("renderStartupGuardScript", () => {
     expect(script).toContain("HANG_TIGHT_AFTER_SECONDS=10");
     expect(script).toContain("few more seconds, hang tight...");
     expect(script).toContain("trying to connect...");
-    // the disconnect offer sits two lines below the block — the persistent
-    // [C] hint takes +1, this (Y/n) offer +2 — so both stay visible, drawn
+    // the session-only skip offer sits two lines below the block — the persistent
+    // [C] hint takes +1, this skip offer +2 — so both stay visible, drawn
     // via cursor save/restore so the dots keep appending to the row above
     expect(script).toContain(
       "Instance unreachable. Press [Enter] to skip checks for this session; connections stay configured.",

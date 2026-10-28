@@ -54,7 +54,7 @@ import type { SetupScriptContext, SetupScriptProxySection } from "../types";
  *   below it, text aligned into the glyph column. A row lands on a check
  *   for ok, "Failed to connect to <type> (<id-or-slug>)" for a down one — and
  *   after the whole turn, ONE "Disconnect … from Claude? (Y/n)" prompt covers
- *   every down remote. Everything draws on the alternate screen, so the
+ *   explicitly down resources; transport failures offer a session-only skip. Everything draws on the alternate screen, so the
  *   terminal is clean again after claude exits;
  * - keeps a skip entry live the whole run: Space — polled between animation
  *   frames and during the retry wait — ends the pre-loader

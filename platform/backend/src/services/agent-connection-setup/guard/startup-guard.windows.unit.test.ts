@@ -256,7 +256,7 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     expect(script).toContain("$HangTightAfterSeconds = 10");
     expect(script).toContain("few more seconds, hang tight...");
     expect(script).toContain("trying to connect...");
-    // the disconnect offer sits on its own line below the row (after a
+    // the session-only skip offer sits on its own line below the row (after a
     // blank line), drawn via cursor save/restore so the dots keep
     // appending to the row above it
     expect(script).toContain("function Show-ArchWaitPrompt");

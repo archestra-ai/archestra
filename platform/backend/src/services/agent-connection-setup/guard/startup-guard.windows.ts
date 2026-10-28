@@ -38,9 +38,10 @@ import {
  *   flicker), all on the alternate screen so the terminal is clean after
  *   the client exits; an unreachable platform gets the 15s capped-backoff retry
  *   ladder with jitter, status line at 3s, "hang tight" at 10s, and the
- *   disconnect (Y/n) offer on its own line below the row, `y`/`n` live
- *   throughout; after the whole turn, ONE "Disconnect … from <promptName> now?
- *   (Y/n)" prompt covers every down remote;
+ *   session-only skip offer on its own line below the row; Enter/`n` skip
+ *   checks while preserving connections. After the whole turn, explicit
+ *   resource-down responses get one "Disconnect … (Y/n)" prompt; transport
+ *   failures keep the session-only skip. [C] always allows intentional removal;
  * - keeps a skip entry live the whole run: Space — polled between animation
  *   frames and during the retry wait ([Console]::KeyAvailable is naturally
  *   non-blocking here) — ends the pre-loader immediately and lets the client

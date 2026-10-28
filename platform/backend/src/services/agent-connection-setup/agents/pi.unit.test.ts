@@ -982,3 +982,107 @@ test("refuses lifecycle collisions before installing a launcher or changing prof
   expect(existsSync(path.join(f.home, ".local/bin/arcpi"))).toBe(false);
   expect(existsSync(path.join(f.home, ".profile"))).toBe(false);
 });
+
+const outagePty = `import os, select, sys, time
+pid, master = os.forkpty()
+if pid == 0: os.execvp('bash', ['bash', sys.argv[1]])
+out = b''
+sent = False
+end = time.time() + 20
+while time.time() < end:
+    ready, _, _ = select.select([master], [], [], 1)
+    if not ready: continue
+    try: chunk = os.read(master, 65536)
+    except OSError: break
+    if not chunk: break
+    out += chunk
+    if not sent and (b'Press [Enter]' in out or b'(Y/n)' in out):
+        os.write(master, b'\\r')
+        sent = True
+else: os.kill(pid, 9)
+_, status = os.waitpid(pid, 0)
+sys.stdout.buffer.write(out)
+sys.exit(os.waitstatus_to_exitcode(status))
+`;
+
+test.each([
+  "network",
+  "http",
+])("native Pi %s failure distinguishes transport from invalid credentials before Enter", (failure) => {
+  const f = fixture();
+  expect(f.run().status).toBe(0);
+  const root = path.join(f.home, ".archestra/pi");
+  const state = f.json(".archestra/pi/install-state.json");
+  const paths = [
+    ".archestra/pi/install-state.json",
+    ...Object.keys(state.files),
+    ...Object.keys(state.profiles),
+    ".pi/agent/mcp-auth.json",
+    ".pi/agent/mcp.json",
+  ];
+  const before = paths.map((file) =>
+    readFileSync(path.join(f.home, file), "utf8"),
+  );
+  const network = path.join(f.home, "network.cjs");
+  const healthy = readFileSync(network, "utf8");
+  writeFileSync(
+    network,
+    failure === "network"
+      ? 'global.fetch = async () => { throw new TypeError("synthetic transport failure"); };'
+      : 'global.fetch = async () => new Response("unauthorized", { status: 401 });',
+  );
+  const env = { ...process.env, HOME: f.home, PI_CODING_AGENT_DIR: "" };
+  const check = () =>
+    spawnSync(process.execPath, [path.join(root, "lifecycle.cjs"), "check"], {
+      env,
+      encoding: "utf8",
+    });
+  const checked = check();
+  const runGuard = () =>
+    spawnSync("python3", ["-c", outagePty, path.join(root, "startup.sh")], {
+      env,
+      encoding: "utf8",
+      timeout: 30000,
+    });
+  const guard = runGuard();
+  expect(guard.status, guard.stderr).toBe(0);
+  if (failure === "network") {
+    expect(existsSync(path.join(root, "connection.json")), guard.stdout).toBe(
+      true,
+    );
+    expect(guard.stdout).toContain("connections stay configured");
+    expect(checked.status, checked.stderr).toBe(1);
+    expect(JSON.parse(checked.stdout)).toMatchObject({
+      transport: "down",
+      llm: "down",
+      mcp: "down",
+    });
+    expect(
+      paths.map((file) => readFileSync(path.join(f.home, file), "utf8")),
+    ).toEqual(before);
+    writeFileSync(network, healthy);
+    const recovered = check();
+    expect(recovered.status, recovered.stderr).toBe(0);
+    expect(JSON.parse(recovered.stdout)).toMatchObject({
+      transport: "ok",
+      llm: "ok",
+      mcp: "ok",
+    });
+    const next = runGuard();
+    expect(next.status, next.stderr).toBe(0);
+    expect(next.stdout).not.toContain("Failed to connect");
+    expect(
+      paths.map((file) => readFileSync(path.join(f.home, file), "utf8")),
+    ).toEqual(before);
+  } else {
+    // An answered 401 is an explicit failed resource check, not an outage.
+    expect(checked.status, checked.stderr).toBe(0);
+    expect(JSON.parse(checked.stdout)).toMatchObject({
+      transport: "ok",
+      llm: "down",
+      mcp: "down",
+    });
+    expect(guard.stdout).toContain("Disconnect all");
+    expect(existsSync(path.join(root, "connection.json"))).toBe(false);
+  }
+}, 45000);

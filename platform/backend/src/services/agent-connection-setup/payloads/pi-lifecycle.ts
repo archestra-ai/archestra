@@ -215,6 +215,7 @@ if (require.main === module) {
     } else if (process.argv[2] === "check") {
       checkPiConnection(install).then(report => {
         console.log(JSON.stringify(report));
+        if (report.transport === "down") process.exitCode = 1;
       }).catch(() => { console.log(JSON.stringify({ llm: "down", llmCheck: "proxy-catalog", upstreamInference: "not-tested", mcp: "down", skills: "down" })); process.exitCode = 1; });
     } else throw new Error("Unknown Pi connection action.");
   } catch (error) { console.error(error instanceof SyntaxError ? "Pi configuration could not be read. Preserve it and repair the JSON before retrying." : error.message); process.exitCode = 1; }
@@ -222,7 +223,7 @@ if (require.main === module) {
 async function checkPiConnection(install) {
   const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
   // "llm" is the shared loader's reachability marker, not an inference/auth test.
-  const report = { llm: "down", llmCheck: "proxy-catalog", upstreamInference: "not-tested", mcp: "down", skills: "down", checkedAt: Date.now(), reasons: [] };
+  const report = { transport: "ok", llm: "down", llmCheck: "proxy-catalog", upstreamInference: "not-tested", mcp: "down", skills: "down", checkedAt: Date.now(), reasons: [] };
   let config;
   try {
     install.validate();
@@ -233,7 +234,10 @@ async function checkPiConnection(install) {
   const request = async (url, options) => {
     const parsed = new URL(url);
     if (parsed.username || parsed.password || (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname)))) throw new Error();
-    return fetch(parsed, { ...options, redirect: "error", signal: AbortSignal.timeout(5000) });
+    // Rejected requests are transport failures. HTTP errors and malformed
+    // resource responses remain ordinary down results with exit status zero.
+    try { return await fetch(parsed, { ...options, redirect: "error", signal: AbortSignal.timeout(5000) }); }
+    catch (error) { report.transport = "down"; throw error; }
   };
   await Promise.all([
     (async () => {

@@ -47,7 +47,15 @@ export type OpenAiChatCompletionRequestInput = {
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
      */
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -57,7 +65,15 @@ export type OpenAiChatCompletionRequestInput = {
         role: 'developer';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -67,13 +83,25 @@ export type OpenAiChatCompletionRequestInput = {
         role: 'system';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -86,6 +114,10 @@ export type OpenAiChatCompletionRequestInput = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -98,6 +130,10 @@ export type OpenAiChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -114,11 +150,19 @@ export type OpenAiChatCompletionRequestInput = {
         role: 'user';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -163,14 +207,26 @@ export type OpenAiChatCompletionRequestInput = {
             };
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -185,6 +241,10 @@ export type OpenAiChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'function';
         content: string | null;
         name: string;
@@ -197,11 +257,19 @@ export type OpenAiChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -222,6 +290,10 @@ export type OpenAiChatCompletionRequestInput = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -312,11 +384,19 @@ export type OpenAiChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -345,6 +425,10 @@ export type OpenAiChatCompletionRequestInput = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -1676,7 +1760,15 @@ export type CerebrasChatCompletionRequestInput = {
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
      */
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -1686,7 +1778,15 @@ export type CerebrasChatCompletionRequestInput = {
         role: 'developer';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -1696,13 +1796,25 @@ export type CerebrasChatCompletionRequestInput = {
         role: 'system';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -1715,6 +1827,10 @@ export type CerebrasChatCompletionRequestInput = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -1727,6 +1843,10 @@ export type CerebrasChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -1743,11 +1863,19 @@ export type CerebrasChatCompletionRequestInput = {
         role: 'user';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -1792,14 +1920,26 @@ export type CerebrasChatCompletionRequestInput = {
             };
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -1814,6 +1954,10 @@ export type CerebrasChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'function';
         content: string | null;
         name: string;
@@ -1826,11 +1970,19 @@ export type CerebrasChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -1851,6 +2003,10 @@ export type CerebrasChatCompletionRequestInput = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -1941,11 +2097,19 @@ export type CerebrasChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -1974,6 +2138,10 @@ export type CerebrasChatCompletionRequestInput = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -2229,7 +2397,15 @@ export type MistralChatCompletionRequestInput = {
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
      */
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -2239,7 +2415,15 @@ export type MistralChatCompletionRequestInput = {
         role: 'developer';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -2249,13 +2433,25 @@ export type MistralChatCompletionRequestInput = {
         role: 'system';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -2268,6 +2464,10 @@ export type MistralChatCompletionRequestInput = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -2280,6 +2480,10 @@ export type MistralChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -2296,11 +2500,19 @@ export type MistralChatCompletionRequestInput = {
         role: 'user';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -2345,14 +2557,26 @@ export type MistralChatCompletionRequestInput = {
             };
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -2367,6 +2591,10 @@ export type MistralChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'function';
         content: string | null;
         name: string;
@@ -2379,11 +2607,19 @@ export type MistralChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -2404,6 +2640,10 @@ export type MistralChatCompletionRequestInput = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -2494,11 +2734,19 @@ export type MistralChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -2527,6 +2775,10 @@ export type MistralChatCompletionRequestInput = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -2662,7 +2914,15 @@ export type PerplexityChatCompletionRequestInput = {
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
      */
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -2672,7 +2932,15 @@ export type PerplexityChatCompletionRequestInput = {
         role: 'developer';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -2682,13 +2950,25 @@ export type PerplexityChatCompletionRequestInput = {
         role: 'system';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -2701,6 +2981,10 @@ export type PerplexityChatCompletionRequestInput = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -2713,6 +2997,10 @@ export type PerplexityChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -2729,11 +3017,19 @@ export type PerplexityChatCompletionRequestInput = {
         role: 'user';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -2778,14 +3074,26 @@ export type PerplexityChatCompletionRequestInput = {
             };
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -2800,6 +3108,10 @@ export type PerplexityChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'function';
         content: string | null;
         name: string;
@@ -2812,11 +3124,19 @@ export type PerplexityChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -2837,6 +3157,10 @@ export type PerplexityChatCompletionRequestInput = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -2927,11 +3251,19 @@ export type PerplexityChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -2960,6 +3292,10 @@ export type PerplexityChatCompletionRequestInput = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -3096,7 +3432,15 @@ export type GroqChatCompletionRequestInput = {
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
      */
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -3106,7 +3450,15 @@ export type GroqChatCompletionRequestInput = {
         role: 'developer';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -3116,13 +3468,25 @@ export type GroqChatCompletionRequestInput = {
         role: 'system';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -3135,6 +3499,10 @@ export type GroqChatCompletionRequestInput = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -3147,6 +3515,10 @@ export type GroqChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -3163,11 +3535,19 @@ export type GroqChatCompletionRequestInput = {
         role: 'user';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -3212,14 +3592,26 @@ export type GroqChatCompletionRequestInput = {
             };
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -3234,6 +3626,10 @@ export type GroqChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'function';
         content: string | null;
         name: string;
@@ -3246,11 +3642,19 @@ export type GroqChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -3271,6 +3675,10 @@ export type GroqChatCompletionRequestInput = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -3361,11 +3769,19 @@ export type GroqChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -3394,6 +3810,10 @@ export type GroqChatCompletionRequestInput = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -3526,53 +3946,61 @@ export type GroqChatCompletionResponseInput = {
 export type OpenrouterChatCompletionRequestInput = {
     model: string;
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
-            };
-            cache_control?: {
-                type: 'ephemeral';
-                ttl?: '5m' | '1h';
             };
         }>;
         role: 'developer';
         name?: string;
+    } | {
         cache_control?: {
             type: 'ephemeral';
             ttl?: '5m' | '1h';
         };
-    } | {
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
-            };
-            cache_control?: {
-                type: 'ephemeral';
-                ttl?: '5m' | '1h';
             };
         }>;
         role: 'system';
         name?: string;
+    } | {
         cache_control?: {
             type: 'ephemeral';
             ttl?: '5m' | '1h';
         };
-    } | {
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
+        } | {
             cache_control?: {
                 type: 'ephemeral';
                 ttl?: '5m' | '1h';
             };
-        } | {
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -3585,6 +4013,10 @@ export type OpenrouterChatCompletionRequestInput = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -3597,6 +4029,10 @@ export type OpenrouterChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -3612,24 +4048,24 @@ export type OpenrouterChatCompletionRequestInput = {
         }>;
         role: 'user';
         name?: string;
+    } | {
         cache_control?: {
             type: 'ephemeral';
             ttl?: '5m' | '1h';
         };
-    } | {
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
-            };
-            cache_control?: {
-                type: 'ephemeral';
-                ttl?: '5m' | '1h';
             };
         }> | Array<{
             type: 'refusal';
@@ -3669,23 +4105,27 @@ export type OpenrouterChatCompletionRequestInput = {
                 name: string;
             };
         }>;
+    } | {
         cache_control?: {
             type: 'ephemeral';
             ttl?: '5m' | '1h';
         };
-    } | {
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
+        } | {
             cache_control?: {
                 type: 'ephemeral';
                 ttl?: '5m' | '1h';
             };
-        } | {
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -3699,11 +4139,11 @@ export type OpenrouterChatCompletionRequestInput = {
             };
         }>;
         tool_call_id: string;
+    } | {
         cache_control?: {
             type: 'ephemeral';
             ttl?: '5m' | '1h';
         };
-    } | {
         role: 'function';
         content: string | null;
         name: string;
@@ -3716,11 +4156,19 @@ export type OpenrouterChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -3741,6 +4189,10 @@ export type OpenrouterChatCompletionRequestInput = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -3831,11 +4283,19 @@ export type OpenrouterChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -3864,6 +4324,10 @@ export type OpenrouterChatCompletionRequestInput = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -5033,7 +5497,15 @@ export type DeepSeekChatCompletionRequestInput = {
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
      */
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -5043,7 +5515,15 @@ export type DeepSeekChatCompletionRequestInput = {
         role: 'developer';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -5053,13 +5533,25 @@ export type DeepSeekChatCompletionRequestInput = {
         role: 'system';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -5072,6 +5564,10 @@ export type DeepSeekChatCompletionRequestInput = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -5084,6 +5580,10 @@ export type DeepSeekChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -5100,11 +5600,19 @@ export type DeepSeekChatCompletionRequestInput = {
         role: 'user';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -5149,14 +5657,26 @@ export type DeepSeekChatCompletionRequestInput = {
             };
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -5171,6 +5691,10 @@ export type DeepSeekChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'function';
         content: string | null;
         name: string;
@@ -5183,11 +5707,19 @@ export type DeepSeekChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -5208,6 +5740,10 @@ export type DeepSeekChatCompletionRequestInput = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -5298,11 +5834,19 @@ export type DeepSeekChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -5331,6 +5875,10 @@ export type DeepSeekChatCompletionRequestInput = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -5467,7 +6015,15 @@ export type ArchestraChatCompletionRequestInput = {
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
      */
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -5477,7 +6033,15 @@ export type ArchestraChatCompletionRequestInput = {
         role: 'developer';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -5487,13 +6051,25 @@ export type ArchestraChatCompletionRequestInput = {
         role: 'system';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -5506,6 +6082,10 @@ export type ArchestraChatCompletionRequestInput = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -5518,6 +6098,10 @@ export type ArchestraChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -5534,11 +6118,19 @@ export type ArchestraChatCompletionRequestInput = {
         role: 'user';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -5583,14 +6175,26 @@ export type ArchestraChatCompletionRequestInput = {
             };
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -5605,6 +6209,10 @@ export type ArchestraChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'function';
         content: string | null;
         name: string;
@@ -5617,11 +6225,19 @@ export type ArchestraChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -5642,6 +6258,10 @@ export type ArchestraChatCompletionRequestInput = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -5732,11 +6352,19 @@ export type ArchestraChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -5765,6 +6393,10 @@ export type ArchestraChatCompletionRequestInput = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -5898,11 +6530,19 @@ export type ArchestraChatCompletionResponseInput = {
 export type MinimaxChatCompletionRequestInput = {
     model: string;
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -5950,7 +6590,15 @@ export type MinimaxChatCompletionRequestInput = {
             text: string;
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -5960,7 +6608,15 @@ export type MinimaxChatCompletionRequestInput = {
         role: 'developer';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -5970,13 +6626,25 @@ export type MinimaxChatCompletionRequestInput = {
         role: 'system';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -5989,6 +6657,10 @@ export type MinimaxChatCompletionRequestInput = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -6001,6 +6673,10 @@ export type MinimaxChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -6017,11 +6693,19 @@ export type MinimaxChatCompletionRequestInput = {
         role: 'user';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -6066,14 +6750,26 @@ export type MinimaxChatCompletionRequestInput = {
             };
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -6088,6 +6784,10 @@ export type MinimaxChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'function';
         content: string | null;
         name: string;
@@ -6100,11 +6800,19 @@ export type MinimaxChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -6125,6 +6833,10 @@ export type MinimaxChatCompletionRequestInput = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -6215,11 +6927,19 @@ export type MinimaxChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -6248,6 +6968,10 @@ export type MinimaxChatCompletionRequestInput = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -6368,7 +7092,15 @@ export type XaiChatCompletionRequestInput = {
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
      */
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -6378,7 +7110,15 @@ export type XaiChatCompletionRequestInput = {
         role: 'developer';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -6388,13 +7128,25 @@ export type XaiChatCompletionRequestInput = {
         role: 'system';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -6407,6 +7159,10 @@ export type XaiChatCompletionRequestInput = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -6419,6 +7175,10 @@ export type XaiChatCompletionRequestInput = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -6435,11 +7195,19 @@ export type XaiChatCompletionRequestInput = {
         role: 'user';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -6484,14 +7252,26 @@ export type XaiChatCompletionRequestInput = {
             };
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -6506,6 +7286,10 @@ export type XaiChatCompletionRequestInput = {
         }>;
         tool_call_id: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'function';
         content: string | null;
         name: string;
@@ -6518,11 +7302,19 @@ export type XaiChatCompletionRequestInput = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -6543,6 +7335,10 @@ export type XaiChatCompletionRequestInput = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -6633,11 +7429,19 @@ export type XaiChatCompletionRequestInput = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -6666,6 +7470,10 @@ export type XaiChatCompletionRequestInput = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -6870,7 +7678,15 @@ export type OpenAiChatCompletionRequest = {
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
      */
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -6880,7 +7696,15 @@ export type OpenAiChatCompletionRequest = {
         role: 'developer';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -6890,13 +7714,25 @@ export type OpenAiChatCompletionRequest = {
         role: 'system';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -6909,6 +7745,10 @@ export type OpenAiChatCompletionRequest = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -6921,6 +7761,10 @@ export type OpenAiChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -6937,11 +7781,19 @@ export type OpenAiChatCompletionRequest = {
         role: 'user';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -6986,14 +7838,26 @@ export type OpenAiChatCompletionRequest = {
             };
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -7008,6 +7872,10 @@ export type OpenAiChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'function';
         content: string | null;
         name: string;
@@ -7020,11 +7888,19 @@ export type OpenAiChatCompletionRequest = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -7045,6 +7921,10 @@ export type OpenAiChatCompletionRequest = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -7135,11 +8015,19 @@ export type OpenAiChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -7168,6 +8056,10 @@ export type OpenAiChatCompletionRequest = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -8499,7 +9391,15 @@ export type CerebrasChatCompletionRequest = {
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
      */
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -8509,7 +9409,15 @@ export type CerebrasChatCompletionRequest = {
         role: 'developer';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -8519,13 +9427,25 @@ export type CerebrasChatCompletionRequest = {
         role: 'system';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -8538,6 +9458,10 @@ export type CerebrasChatCompletionRequest = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -8550,6 +9474,10 @@ export type CerebrasChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -8566,11 +9494,19 @@ export type CerebrasChatCompletionRequest = {
         role: 'user';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -8615,14 +9551,26 @@ export type CerebrasChatCompletionRequest = {
             };
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -8637,6 +9585,10 @@ export type CerebrasChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'function';
         content: string | null;
         name: string;
@@ -8649,11 +9601,19 @@ export type CerebrasChatCompletionRequest = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -8674,6 +9634,10 @@ export type CerebrasChatCompletionRequest = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -8764,11 +9728,19 @@ export type CerebrasChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -8797,6 +9769,10 @@ export type CerebrasChatCompletionRequest = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -9052,7 +10028,15 @@ export type MistralChatCompletionRequest = {
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
      */
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -9062,7 +10046,15 @@ export type MistralChatCompletionRequest = {
         role: 'developer';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -9072,13 +10064,25 @@ export type MistralChatCompletionRequest = {
         role: 'system';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -9091,6 +10095,10 @@ export type MistralChatCompletionRequest = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -9103,6 +10111,10 @@ export type MistralChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -9119,11 +10131,19 @@ export type MistralChatCompletionRequest = {
         role: 'user';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -9168,14 +10188,26 @@ export type MistralChatCompletionRequest = {
             };
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -9190,6 +10222,10 @@ export type MistralChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'function';
         content: string | null;
         name: string;
@@ -9202,11 +10238,19 @@ export type MistralChatCompletionRequest = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -9227,6 +10271,10 @@ export type MistralChatCompletionRequest = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -9317,11 +10365,19 @@ export type MistralChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -9350,6 +10406,10 @@ export type MistralChatCompletionRequest = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -9485,7 +10545,15 @@ export type PerplexityChatCompletionRequest = {
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
      */
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -9495,7 +10563,15 @@ export type PerplexityChatCompletionRequest = {
         role: 'developer';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -9505,13 +10581,25 @@ export type PerplexityChatCompletionRequest = {
         role: 'system';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -9524,6 +10612,10 @@ export type PerplexityChatCompletionRequest = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -9536,6 +10628,10 @@ export type PerplexityChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -9552,11 +10648,19 @@ export type PerplexityChatCompletionRequest = {
         role: 'user';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -9601,14 +10705,26 @@ export type PerplexityChatCompletionRequest = {
             };
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -9623,6 +10739,10 @@ export type PerplexityChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'function';
         content: string | null;
         name: string;
@@ -9635,11 +10755,19 @@ export type PerplexityChatCompletionRequest = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -9660,6 +10788,10 @@ export type PerplexityChatCompletionRequest = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -9750,11 +10882,19 @@ export type PerplexityChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -9783,6 +10923,10 @@ export type PerplexityChatCompletionRequest = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -9919,7 +11063,15 @@ export type GroqChatCompletionRequest = {
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
      */
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -9929,7 +11081,15 @@ export type GroqChatCompletionRequest = {
         role: 'developer';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -9939,13 +11099,25 @@ export type GroqChatCompletionRequest = {
         role: 'system';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -9958,6 +11130,10 @@ export type GroqChatCompletionRequest = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -9970,6 +11146,10 @@ export type GroqChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -9986,11 +11166,19 @@ export type GroqChatCompletionRequest = {
         role: 'user';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -10035,14 +11223,26 @@ export type GroqChatCompletionRequest = {
             };
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -10057,6 +11257,10 @@ export type GroqChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'function';
         content: string | null;
         name: string;
@@ -10069,11 +11273,19 @@ export type GroqChatCompletionRequest = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -10094,6 +11306,10 @@ export type GroqChatCompletionRequest = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -10184,11 +11400,19 @@ export type GroqChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -10217,6 +11441,10 @@ export type GroqChatCompletionRequest = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -10349,53 +11577,61 @@ export type GroqChatCompletionResponse = {
 export type OpenrouterChatCompletionRequest = {
     model: string;
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
-            };
-            cache_control?: {
-                type: 'ephemeral';
-                ttl?: '5m' | '1h';
             };
         }>;
         role: 'developer';
         name?: string;
+    } | {
         cache_control?: {
             type: 'ephemeral';
             ttl?: '5m' | '1h';
         };
-    } | {
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
-            };
-            cache_control?: {
-                type: 'ephemeral';
-                ttl?: '5m' | '1h';
             };
         }>;
         role: 'system';
         name?: string;
+    } | {
         cache_control?: {
             type: 'ephemeral';
             ttl?: '5m' | '1h';
         };
-    } | {
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
+        } | {
             cache_control?: {
                 type: 'ephemeral';
                 ttl?: '5m' | '1h';
             };
-        } | {
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -10408,6 +11644,10 @@ export type OpenrouterChatCompletionRequest = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -10420,6 +11660,10 @@ export type OpenrouterChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -10435,24 +11679,24 @@ export type OpenrouterChatCompletionRequest = {
         }>;
         role: 'user';
         name?: string;
+    } | {
         cache_control?: {
             type: 'ephemeral';
             ttl?: '5m' | '1h';
         };
-    } | {
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
-            };
-            cache_control?: {
-                type: 'ephemeral';
-                ttl?: '5m' | '1h';
             };
         }> | Array<{
             type: 'refusal';
@@ -10492,23 +11736,27 @@ export type OpenrouterChatCompletionRequest = {
                 name: string;
             };
         }>;
+    } | {
         cache_control?: {
             type: 'ephemeral';
             ttl?: '5m' | '1h';
         };
-    } | {
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
+        } | {
             cache_control?: {
                 type: 'ephemeral';
                 ttl?: '5m' | '1h';
             };
-        } | {
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -10522,11 +11770,11 @@ export type OpenrouterChatCompletionRequest = {
             };
         }>;
         tool_call_id: string;
+    } | {
         cache_control?: {
             type: 'ephemeral';
             ttl?: '5m' | '1h';
         };
-    } | {
         role: 'function';
         content: string | null;
         name: string;
@@ -10539,11 +11787,19 @@ export type OpenrouterChatCompletionRequest = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -10564,6 +11820,10 @@ export type OpenrouterChatCompletionRequest = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -10654,11 +11914,19 @@ export type OpenrouterChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -10687,6 +11955,10 @@ export type OpenrouterChatCompletionRequest = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -11856,7 +13128,15 @@ export type DeepSeekChatCompletionRequest = {
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
      */
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -11866,7 +13146,15 @@ export type DeepSeekChatCompletionRequest = {
         role: 'developer';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -11876,13 +13164,25 @@ export type DeepSeekChatCompletionRequest = {
         role: 'system';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -11895,6 +13195,10 @@ export type DeepSeekChatCompletionRequest = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -11907,6 +13211,10 @@ export type DeepSeekChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -11923,11 +13231,19 @@ export type DeepSeekChatCompletionRequest = {
         role: 'user';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -11972,14 +13288,26 @@ export type DeepSeekChatCompletionRequest = {
             };
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -11994,6 +13322,10 @@ export type DeepSeekChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'function';
         content: string | null;
         name: string;
@@ -12006,11 +13338,19 @@ export type DeepSeekChatCompletionRequest = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -12031,6 +13371,10 @@ export type DeepSeekChatCompletionRequest = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -12121,11 +13465,19 @@ export type DeepSeekChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -12154,6 +13506,10 @@ export type DeepSeekChatCompletionRequest = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -12290,7 +13646,15 @@ export type ArchestraChatCompletionRequest = {
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
      */
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -12300,7 +13664,15 @@ export type ArchestraChatCompletionRequest = {
         role: 'developer';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -12310,13 +13682,25 @@ export type ArchestraChatCompletionRequest = {
         role: 'system';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -12329,6 +13713,10 @@ export type ArchestraChatCompletionRequest = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -12341,6 +13729,10 @@ export type ArchestraChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -12357,11 +13749,19 @@ export type ArchestraChatCompletionRequest = {
         role: 'user';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -12406,14 +13806,26 @@ export type ArchestraChatCompletionRequest = {
             };
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -12428,6 +13840,10 @@ export type ArchestraChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'function';
         content: string | null;
         name: string;
@@ -12440,11 +13856,19 @@ export type ArchestraChatCompletionRequest = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -12465,6 +13889,10 @@ export type ArchestraChatCompletionRequest = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -12555,11 +13983,19 @@ export type ArchestraChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -12588,6 +14024,10 @@ export type ArchestraChatCompletionRequest = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -12721,11 +14161,19 @@ export type ArchestraChatCompletionResponse = {
 export type MinimaxChatCompletionRequest = {
     model: string;
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -12773,7 +14221,15 @@ export type MinimaxChatCompletionRequest = {
             text: string;
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -12783,7 +14239,15 @@ export type MinimaxChatCompletionRequest = {
         role: 'developer';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -12793,13 +14257,25 @@ export type MinimaxChatCompletionRequest = {
         role: 'system';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -12812,6 +14288,10 @@ export type MinimaxChatCompletionRequest = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -12824,6 +14304,10 @@ export type MinimaxChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -12840,11 +14324,19 @@ export type MinimaxChatCompletionRequest = {
         role: 'user';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -12889,14 +14381,26 @@ export type MinimaxChatCompletionRequest = {
             };
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -12911,6 +14415,10 @@ export type MinimaxChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'function';
         content: string | null;
         name: string;
@@ -12923,11 +14431,19 @@ export type MinimaxChatCompletionRequest = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -12948,6 +14464,10 @@ export type MinimaxChatCompletionRequest = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -13038,11 +14558,19 @@ export type MinimaxChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -13071,6 +14599,10 @@ export type MinimaxChatCompletionRequest = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -13191,7 +14723,15 @@ export type XaiChatCompletionRequest = {
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
      */
     messages: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -13201,7 +14741,15 @@ export type XaiChatCompletionRequest = {
         role: 'developer';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -13211,13 +14759,25 @@ export type XaiChatCompletionRequest = {
         role: 'system';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -13230,6 +14790,10 @@ export type XaiChatCompletionRequest = {
                 detail?: 'auto' | 'low' | 'high';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'input_audio';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -13242,6 +14806,10 @@ export type XaiChatCompletionRequest = {
                 format: 'wav' | 'mp3';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'file';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -13258,11 +14826,19 @@ export type XaiChatCompletionRequest = {
         role: 'user';
         name?: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'assistant';
         audio?: {
             id: string;
         } | null;
         content?: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
@@ -13307,14 +14883,26 @@ export type XaiChatCompletionRequest = {
             };
         }>;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'tool';
         content: string | Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'text';
             text: string;
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'image_url';
             prompt_cache_breakpoint?: {
                 mode: 'explicit';
@@ -13329,6 +14917,10 @@ export type XaiChatCompletionRequest = {
         }>;
         tool_call_id: string;
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         role: 'function';
         content: string | null;
         name: string;
@@ -13341,11 +14933,19 @@ export type XaiChatCompletionRequest = {
      *
      */
     tools?: Array<{
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'function';
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
          */
         function: {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             name: string;
             description?: string;
             /**
@@ -13366,6 +14966,10 @@ export type XaiChatCompletionRequest = {
             strict?: boolean | null;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -13456,11 +15060,19 @@ export type XaiChatCompletionRequest = {
              */
             tools: Array<{
                 [key: string]: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -13489,6 +15101,10 @@ export type XaiChatCompletionRequest = {
             name: string;
         };
     } | {
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
         type: 'custom';
         custom: {
             /**
@@ -32075,7 +33691,15 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
          */
         messages: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -32085,7 +33709,15 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
             role: 'developer';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -32095,13 +33727,25 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
             role: 'system';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -32114,6 +33758,10 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
                     detail?: 'auto' | 'low' | 'high';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'input_audio';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -32126,6 +33774,10 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
                     format: 'wav' | 'mp3';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'file';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -32142,11 +33794,19 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
             role: 'user';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'assistant';
             audio?: {
                 id: string;
             } | null;
             content?: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -32191,14 +33851,26 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
                 };
             }>;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'tool';
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -32213,6 +33885,10 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
             }>;
             tool_call_id: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'function';
             content: string | null;
             name: string;
@@ -32225,11 +33901,19 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
          *
          */
         tools?: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'function';
             /**
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
              */
             function: {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 name: string;
                 description?: string;
                 /**
@@ -32250,6 +33934,10 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
                 strict?: boolean | null;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -32340,11 +34028,19 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
                  */
                 tools: Array<{
                     [key: string]: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'function';
                         /**
                          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                          */
                         function: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             name: string;
                             description?: string;
                             /**
@@ -32373,6 +34069,10 @@ export type AzureRealtimeTurnWithDefaultAgentData = {
                 name: string;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -32606,7 +34306,15 @@ export type AzureRealtimeTurnWithAgentData = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
          */
         messages: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -32616,7 +34324,15 @@ export type AzureRealtimeTurnWithAgentData = {
             role: 'developer';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -32626,13 +34342,25 @@ export type AzureRealtimeTurnWithAgentData = {
             role: 'system';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -32645,6 +34373,10 @@ export type AzureRealtimeTurnWithAgentData = {
                     detail?: 'auto' | 'low' | 'high';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'input_audio';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -32657,6 +34389,10 @@ export type AzureRealtimeTurnWithAgentData = {
                     format: 'wav' | 'mp3';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'file';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -32673,11 +34409,19 @@ export type AzureRealtimeTurnWithAgentData = {
             role: 'user';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'assistant';
             audio?: {
                 id: string;
             } | null;
             content?: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -32722,14 +34466,26 @@ export type AzureRealtimeTurnWithAgentData = {
                 };
             }>;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'tool';
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -32744,6 +34500,10 @@ export type AzureRealtimeTurnWithAgentData = {
             }>;
             tool_call_id: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'function';
             content: string | null;
             name: string;
@@ -32756,11 +34516,19 @@ export type AzureRealtimeTurnWithAgentData = {
          *
          */
         tools?: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'function';
             /**
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
              */
             function: {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 name: string;
                 description?: string;
                 /**
@@ -32781,6 +34549,10 @@ export type AzureRealtimeTurnWithAgentData = {
                 strict?: boolean | null;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -32871,11 +34643,19 @@ export type AzureRealtimeTurnWithAgentData = {
                  */
                 tools: Array<{
                     [key: string]: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'function';
                         /**
                          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                          */
                         function: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             name: string;
                             description?: string;
                             /**
@@ -32904,6 +34684,10 @@ export type AzureRealtimeTurnWithAgentData = {
                 name: string;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -53563,7 +55347,15 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
          */
         messages: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -53573,7 +55365,15 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
             role: 'developer';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -53583,13 +55383,25 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
             role: 'system';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -53602,6 +55414,10 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                     detail?: 'auto' | 'low' | 'high';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'input_audio';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -53614,6 +55430,10 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                     format: 'wav' | 'mp3';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'file';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -53630,11 +55450,19 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
             role: 'user';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'assistant';
             audio?: {
                 id: string;
             } | null;
             content?: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -53679,14 +55507,26 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                 };
             }>;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'tool';
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -53701,6 +55541,10 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
             }>;
             tool_call_id: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'function';
             content: string | null;
             name: string;
@@ -53713,11 +55557,19 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
          *
          */
         tools?: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'function';
             /**
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
              */
             function: {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 name: string;
                 description?: string;
                 /**
@@ -53738,6 +55590,10 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                 strict?: boolean | null;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -53828,11 +55684,19 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                  */
                 tools: Array<{
                     [key: string]: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'function';
                         /**
                          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                          */
                         function: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             name: string;
                             description?: string;
                             /**
@@ -53861,6 +55725,10 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                 name: string;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -54087,7 +55955,15 @@ export type GithubCopilotChatCompletionsWithAgentData = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
          */
         messages: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -54097,7 +55973,15 @@ export type GithubCopilotChatCompletionsWithAgentData = {
             role: 'developer';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -54107,13 +55991,25 @@ export type GithubCopilotChatCompletionsWithAgentData = {
             role: 'system';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -54126,6 +56022,10 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                     detail?: 'auto' | 'low' | 'high';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'input_audio';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -54138,6 +56038,10 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                     format: 'wav' | 'mp3';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'file';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -54154,11 +56058,19 @@ export type GithubCopilotChatCompletionsWithAgentData = {
             role: 'user';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'assistant';
             audio?: {
                 id: string;
             } | null;
             content?: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -54203,14 +56115,26 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                 };
             }>;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'tool';
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -54225,6 +56149,10 @@ export type GithubCopilotChatCompletionsWithAgentData = {
             }>;
             tool_call_id: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'function';
             content: string | null;
             name: string;
@@ -54237,11 +56165,19 @@ export type GithubCopilotChatCompletionsWithAgentData = {
          *
          */
         tools?: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'function';
             /**
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
              */
             function: {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 name: string;
                 description?: string;
                 /**
@@ -54262,6 +56198,10 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                 strict?: boolean | null;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -54352,11 +56292,19 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                  */
                 tools: Array<{
                     [key: string]: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'function';
                         /**
                          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                          */
                         function: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             name: string;
                             description?: string;
                             /**
@@ -54385,6 +56333,10 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                 name: string;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -60587,7 +62539,15 @@ export type GetInteractionsResponses = {
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
                  */
                 messages: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -60597,7 +62557,15 @@ export type GetInteractionsResponses = {
                     role: 'developer';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -60607,13 +62575,25 @@ export type GetInteractionsResponses = {
                     role: 'system';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -60626,6 +62606,10 @@ export type GetInteractionsResponses = {
                             detail?: 'auto' | 'low' | 'high';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'input_audio';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -60638,6 +62622,10 @@ export type GetInteractionsResponses = {
                             format: 'wav' | 'mp3';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'file';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -60654,11 +62642,19 @@ export type GetInteractionsResponses = {
                     role: 'user';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'assistant';
                     audio?: {
                         id: string;
                     } | null;
                     content?: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -60703,14 +62699,26 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'tool';
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -60725,6 +62733,10 @@ export type GetInteractionsResponses = {
                     }>;
                     tool_call_id: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'function';
                     content: string | null;
                     name: string;
@@ -60737,11 +62749,19 @@ export type GetInteractionsResponses = {
                  *
                  */
                 tools?: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -60762,6 +62782,10 @@ export type GetInteractionsResponses = {
                         strict?: boolean | null;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -60852,11 +62876,19 @@ export type GetInteractionsResponses = {
                          */
                         tools: Array<{
                             [key: string]: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 type: 'function';
                                 /**
                                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                                  */
                                 function: {
+                                    cache_control?: {
+                                        type: 'ephemeral';
+                                        ttl?: '5m' | '1h';
+                                    };
                                     name: string;
                                     description?: string;
                                     /**
@@ -60885,6 +62917,10 @@ export type GetInteractionsResponses = {
                         name: string;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -60952,7 +62988,15 @@ export type GetInteractionsResponses = {
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
                  */
                 messages: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -60962,7 +63006,15 @@ export type GetInteractionsResponses = {
                     role: 'developer';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -60972,13 +63024,25 @@ export type GetInteractionsResponses = {
                     role: 'system';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -60991,6 +63055,10 @@ export type GetInteractionsResponses = {
                             detail?: 'auto' | 'low' | 'high';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'input_audio';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -61003,6 +63071,10 @@ export type GetInteractionsResponses = {
                             format: 'wav' | 'mp3';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'file';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -61019,11 +63091,19 @@ export type GetInteractionsResponses = {
                     role: 'user';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'assistant';
                     audio?: {
                         id: string;
                     } | null;
                     content?: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -61068,14 +63148,26 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'tool';
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -61090,6 +63182,10 @@ export type GetInteractionsResponses = {
                     }>;
                     tool_call_id: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'function';
                     content: string | null;
                     name: string;
@@ -61102,11 +63198,19 @@ export type GetInteractionsResponses = {
                  *
                  */
                 tools?: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -61127,6 +63231,10 @@ export type GetInteractionsResponses = {
                         strict?: boolean | null;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -61217,11 +63325,19 @@ export type GetInteractionsResponses = {
                          */
                         tools: Array<{
                             [key: string]: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 type: 'function';
                                 /**
                                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                                  */
                                 function: {
+                                    cache_control?: {
+                                        type: 'ephemeral';
+                                        ttl?: '5m' | '1h';
+                                    };
                                     name: string;
                                     description?: string;
                                     /**
@@ -61250,6 +63366,10 @@ export type GetInteractionsResponses = {
                         name: string;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -61470,7 +63590,15 @@ export type GetInteractionsResponses = {
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
                  */
                 messages: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -61480,7 +63608,15 @@ export type GetInteractionsResponses = {
                     role: 'developer';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -61490,13 +63626,25 @@ export type GetInteractionsResponses = {
                     role: 'system';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -61509,6 +63657,10 @@ export type GetInteractionsResponses = {
                             detail?: 'auto' | 'low' | 'high';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'input_audio';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -61521,6 +63673,10 @@ export type GetInteractionsResponses = {
                             format: 'wav' | 'mp3';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'file';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -61537,11 +63693,19 @@ export type GetInteractionsResponses = {
                     role: 'user';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'assistant';
                     audio?: {
                         id: string;
                     } | null;
                     content?: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -61586,14 +63750,26 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'tool';
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -61608,6 +63784,10 @@ export type GetInteractionsResponses = {
                     }>;
                     tool_call_id: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'function';
                     content: string | null;
                     name: string;
@@ -61620,11 +63800,19 @@ export type GetInteractionsResponses = {
                  *
                  */
                 tools?: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -61645,6 +63833,10 @@ export type GetInteractionsResponses = {
                         strict?: boolean | null;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -61735,11 +63927,19 @@ export type GetInteractionsResponses = {
                          */
                         tools: Array<{
                             [key: string]: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 type: 'function';
                                 /**
                                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                                  */
                                 function: {
+                                    cache_control?: {
+                                        type: 'ephemeral';
+                                        ttl?: '5m' | '1h';
+                                    };
                                     name: string;
                                     description?: string;
                                     /**
@@ -61768,6 +63968,10 @@ export type GetInteractionsResponses = {
                         name: string;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -61835,7 +64039,15 @@ export type GetInteractionsResponses = {
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
                  */
                 messages: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -61845,7 +64057,15 @@ export type GetInteractionsResponses = {
                     role: 'developer';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -61855,13 +64075,25 @@ export type GetInteractionsResponses = {
                     role: 'system';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -61874,6 +64106,10 @@ export type GetInteractionsResponses = {
                             detail?: 'auto' | 'low' | 'high';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'input_audio';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -61886,6 +64122,10 @@ export type GetInteractionsResponses = {
                             format: 'wav' | 'mp3';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'file';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -61902,11 +64142,19 @@ export type GetInteractionsResponses = {
                     role: 'user';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'assistant';
                     audio?: {
                         id: string;
                     } | null;
                     content?: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -61951,14 +64199,26 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'tool';
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -61973,6 +64233,10 @@ export type GetInteractionsResponses = {
                     }>;
                     tool_call_id: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'function';
                     content: string | null;
                     name: string;
@@ -61985,11 +64249,19 @@ export type GetInteractionsResponses = {
                  *
                  */
                 tools?: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -62010,6 +64282,10 @@ export type GetInteractionsResponses = {
                         strict?: boolean | null;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -62100,11 +64376,19 @@ export type GetInteractionsResponses = {
                          */
                         tools: Array<{
                             [key: string]: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 type: 'function';
                                 /**
                                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                                  */
                                 function: {
+                                    cache_control?: {
+                                        type: 'ephemeral';
+                                        ttl?: '5m' | '1h';
+                                    };
                                     name: string;
                                     description?: string;
                                     /**
@@ -62133,6 +64417,10 @@ export type GetInteractionsResponses = {
                         name: string;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -62353,7 +64641,15 @@ export type GetInteractionsResponses = {
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
                  */
                 messages: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -62363,7 +64659,15 @@ export type GetInteractionsResponses = {
                     role: 'developer';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -62373,13 +64677,25 @@ export type GetInteractionsResponses = {
                     role: 'system';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -62392,6 +64708,10 @@ export type GetInteractionsResponses = {
                             detail?: 'auto' | 'low' | 'high';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'input_audio';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -62404,6 +64724,10 @@ export type GetInteractionsResponses = {
                             format: 'wav' | 'mp3';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'file';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -62420,11 +64744,19 @@ export type GetInteractionsResponses = {
                     role: 'user';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'assistant';
                     audio?: {
                         id: string;
                     } | null;
                     content?: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -62469,14 +64801,26 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'tool';
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -62491,6 +64835,10 @@ export type GetInteractionsResponses = {
                     }>;
                     tool_call_id: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'function';
                     content: string | null;
                     name: string;
@@ -62503,11 +64851,19 @@ export type GetInteractionsResponses = {
                  *
                  */
                 tools?: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -62528,6 +64884,10 @@ export type GetInteractionsResponses = {
                         strict?: boolean | null;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -62618,11 +64978,19 @@ export type GetInteractionsResponses = {
                          */
                         tools: Array<{
                             [key: string]: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 type: 'function';
                                 /**
                                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                                  */
                                 function: {
+                                    cache_control?: {
+                                        type: 'ephemeral';
+                                        ttl?: '5m' | '1h';
+                                    };
                                     name: string;
                                     description?: string;
                                     /**
@@ -62651,6 +65019,10 @@ export type GetInteractionsResponses = {
                         name: string;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -62718,7 +65090,15 @@ export type GetInteractionsResponses = {
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
                  */
                 messages: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -62728,7 +65108,15 @@ export type GetInteractionsResponses = {
                     role: 'developer';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -62738,13 +65126,25 @@ export type GetInteractionsResponses = {
                     role: 'system';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -62757,6 +65157,10 @@ export type GetInteractionsResponses = {
                             detail?: 'auto' | 'low' | 'high';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'input_audio';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -62769,6 +65173,10 @@ export type GetInteractionsResponses = {
                             format: 'wav' | 'mp3';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'file';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -62785,11 +65193,19 @@ export type GetInteractionsResponses = {
                     role: 'user';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'assistant';
                     audio?: {
                         id: string;
                     } | null;
                     content?: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -62834,14 +65250,26 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'tool';
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -62856,6 +65284,10 @@ export type GetInteractionsResponses = {
                     }>;
                     tool_call_id: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'function';
                     content: string | null;
                     name: string;
@@ -62868,11 +65300,19 @@ export type GetInteractionsResponses = {
                  *
                  */
                 tools?: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -62893,6 +65333,10 @@ export type GetInteractionsResponses = {
                         strict?: boolean | null;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -62983,11 +65427,19 @@ export type GetInteractionsResponses = {
                          */
                         tools: Array<{
                             [key: string]: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 type: 'function';
                                 /**
                                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                                  */
                                 function: {
+                                    cache_control?: {
+                                        type: 'ephemeral';
+                                        ttl?: '5m' | '1h';
+                                    };
                                     name: string;
                                     description?: string;
                                     /**
@@ -63016,6 +65468,10 @@ export type GetInteractionsResponses = {
                         name: string;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -63236,7 +65692,15 @@ export type GetInteractionsResponses = {
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
                  */
                 messages: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -63246,7 +65710,15 @@ export type GetInteractionsResponses = {
                     role: 'developer';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -63256,13 +65728,25 @@ export type GetInteractionsResponses = {
                     role: 'system';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -63275,6 +65759,10 @@ export type GetInteractionsResponses = {
                             detail?: 'auto' | 'low' | 'high';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'input_audio';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -63287,6 +65775,10 @@ export type GetInteractionsResponses = {
                             format: 'wav' | 'mp3';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'file';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -63303,11 +65795,19 @@ export type GetInteractionsResponses = {
                     role: 'user';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'assistant';
                     audio?: {
                         id: string;
                     } | null;
                     content?: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -63352,14 +65852,26 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'tool';
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -63374,6 +65886,10 @@ export type GetInteractionsResponses = {
                     }>;
                     tool_call_id: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'function';
                     content: string | null;
                     name: string;
@@ -63386,11 +65902,19 @@ export type GetInteractionsResponses = {
                  *
                  */
                 tools?: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -63411,6 +65935,10 @@ export type GetInteractionsResponses = {
                         strict?: boolean | null;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -63501,11 +66029,19 @@ export type GetInteractionsResponses = {
                          */
                         tools: Array<{
                             [key: string]: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 type: 'function';
                                 /**
                                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                                  */
                                 function: {
+                                    cache_control?: {
+                                        type: 'ephemeral';
+                                        ttl?: '5m' | '1h';
+                                    };
                                     name: string;
                                     description?: string;
                                     /**
@@ -63534,6 +66070,10 @@ export type GetInteractionsResponses = {
                         name: string;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -63601,7 +66141,15 @@ export type GetInteractionsResponses = {
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
                  */
                 messages: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -63611,7 +66159,15 @@ export type GetInteractionsResponses = {
                     role: 'developer';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -63621,13 +66177,25 @@ export type GetInteractionsResponses = {
                     role: 'system';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -63640,6 +66208,10 @@ export type GetInteractionsResponses = {
                             detail?: 'auto' | 'low' | 'high';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'input_audio';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -63652,6 +66224,10 @@ export type GetInteractionsResponses = {
                             format: 'wav' | 'mp3';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'file';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -63668,11 +66244,19 @@ export type GetInteractionsResponses = {
                     role: 'user';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'assistant';
                     audio?: {
                         id: string;
                     } | null;
                     content?: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -63717,14 +66301,26 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'tool';
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -63739,6 +66335,10 @@ export type GetInteractionsResponses = {
                     }>;
                     tool_call_id: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'function';
                     content: string | null;
                     name: string;
@@ -63751,11 +66351,19 @@ export type GetInteractionsResponses = {
                  *
                  */
                 tools?: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -63776,6 +66384,10 @@ export type GetInteractionsResponses = {
                         strict?: boolean | null;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -63866,11 +66478,19 @@ export type GetInteractionsResponses = {
                          */
                         tools: Array<{
                             [key: string]: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 type: 'function';
                                 /**
                                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                                  */
                                 function: {
+                                    cache_control?: {
+                                        type: 'ephemeral';
+                                        ttl?: '5m' | '1h';
+                                    };
                                     name: string;
                                     description?: string;
                                     /**
@@ -63899,6 +66519,10 @@ export type GetInteractionsResponses = {
                         name: string;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -64369,7 +66993,15 @@ export type GetInteractionsResponses = {
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
                  */
                 messages: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -64379,7 +67011,15 @@ export type GetInteractionsResponses = {
                     role: 'developer';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -64389,13 +67029,25 @@ export type GetInteractionsResponses = {
                     role: 'system';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -64408,6 +67060,10 @@ export type GetInteractionsResponses = {
                             detail?: 'auto' | 'low' | 'high';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'input_audio';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -64420,6 +67076,10 @@ export type GetInteractionsResponses = {
                             format: 'wav' | 'mp3';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'file';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -64436,11 +67096,19 @@ export type GetInteractionsResponses = {
                     role: 'user';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'assistant';
                     audio?: {
                         id: string;
                     } | null;
                     content?: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -64485,14 +67153,26 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'tool';
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -64507,6 +67187,10 @@ export type GetInteractionsResponses = {
                     }>;
                     tool_call_id: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'function';
                     content: string | null;
                     name: string;
@@ -64519,11 +67203,19 @@ export type GetInteractionsResponses = {
                  *
                  */
                 tools?: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -64544,6 +67236,10 @@ export type GetInteractionsResponses = {
                         strict?: boolean | null;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -64634,11 +67330,19 @@ export type GetInteractionsResponses = {
                          */
                         tools: Array<{
                             [key: string]: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 type: 'function';
                                 /**
                                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                                  */
                                 function: {
+                                    cache_control?: {
+                                        type: 'ephemeral';
+                                        ttl?: '5m' | '1h';
+                                    };
                                     name: string;
                                     description?: string;
                                     /**
@@ -64667,6 +67371,10 @@ export type GetInteractionsResponses = {
                         name: string;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -64734,7 +67442,15 @@ export type GetInteractionsResponses = {
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
                  */
                 messages: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -64744,7 +67460,15 @@ export type GetInteractionsResponses = {
                     role: 'developer';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -64754,13 +67478,25 @@ export type GetInteractionsResponses = {
                     role: 'system';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -64773,6 +67509,10 @@ export type GetInteractionsResponses = {
                             detail?: 'auto' | 'low' | 'high';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'input_audio';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -64785,6 +67525,10 @@ export type GetInteractionsResponses = {
                             format: 'wav' | 'mp3';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'file';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -64801,11 +67545,19 @@ export type GetInteractionsResponses = {
                     role: 'user';
                     name?: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'assistant';
                     audio?: {
                         id: string;
                     } | null;
                     content?: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
@@ -64850,14 +67602,26 @@ export type GetInteractionsResponses = {
                         };
                     }>;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'tool';
                     content: string | Array<{
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'text';
                         text: string;
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
                         };
                     } | {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'image_url';
                         prompt_cache_breakpoint?: {
                             mode: 'explicit';
@@ -64872,6 +67636,10 @@ export type GetInteractionsResponses = {
                     }>;
                     tool_call_id: string;
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     role: 'function';
                     content: string | null;
                     name: string;
@@ -64884,11 +67652,19 @@ export type GetInteractionsResponses = {
                  *
                  */
                 tools?: Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'function';
                     /**
                      * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                      */
                     function: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         name: string;
                         description?: string;
                         /**
@@ -64909,6 +67685,10 @@ export type GetInteractionsResponses = {
                         strict?: boolean | null;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -64999,11 +67779,19 @@ export type GetInteractionsResponses = {
                          */
                         tools: Array<{
                             [key: string]: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 type: 'function';
                                 /**
                                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                                  */
                                 function: {
+                                    cache_control?: {
+                                        type: 'ephemeral';
+                                        ttl?: '5m' | '1h';
+                                    };
                                     name: string;
                                     description?: string;
                                     /**
@@ -65032,6 +67820,10 @@ export type GetInteractionsResponses = {
                         name: string;
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'custom';
                     custom: {
                         /**
@@ -70233,7 +73025,15 @@ export type GetInteractionResponses = {
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
              */
             messages: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -70243,7 +73043,15 @@ export type GetInteractionResponses = {
                 role: 'developer';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -70253,13 +73061,25 @@ export type GetInteractionResponses = {
                 role: 'system';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -70272,6 +73092,10 @@ export type GetInteractionResponses = {
                         detail?: 'auto' | 'low' | 'high';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'input_audio';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -70284,6 +73108,10 @@ export type GetInteractionResponses = {
                         format: 'wav' | 'mp3';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'file';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -70300,11 +73128,19 @@ export type GetInteractionResponses = {
                 role: 'user';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'assistant';
                 audio?: {
                     id: string;
                 } | null;
                 content?: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -70349,14 +73185,26 @@ export type GetInteractionResponses = {
                     };
                 }>;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'tool';
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -70371,6 +73219,10 @@ export type GetInteractionResponses = {
                 }>;
                 tool_call_id: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'function';
                 content: string | null;
                 name: string;
@@ -70383,11 +73235,19 @@ export type GetInteractionResponses = {
              *
              */
             tools?: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'function';
                 /**
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                  */
                 function: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     name: string;
                     description?: string;
                     /**
@@ -70408,6 +73268,10 @@ export type GetInteractionResponses = {
                     strict?: boolean | null;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -70498,11 +73362,19 @@ export type GetInteractionResponses = {
                      */
                     tools: Array<{
                         [key: string]: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             type: 'function';
                             /**
                              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                              */
                             function: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 name: string;
                                 description?: string;
                                 /**
@@ -70531,6 +73403,10 @@ export type GetInteractionResponses = {
                     name: string;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -70598,7 +73474,15 @@ export type GetInteractionResponses = {
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
              */
             messages: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -70608,7 +73492,15 @@ export type GetInteractionResponses = {
                 role: 'developer';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -70618,13 +73510,25 @@ export type GetInteractionResponses = {
                 role: 'system';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -70637,6 +73541,10 @@ export type GetInteractionResponses = {
                         detail?: 'auto' | 'low' | 'high';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'input_audio';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -70649,6 +73557,10 @@ export type GetInteractionResponses = {
                         format: 'wav' | 'mp3';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'file';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -70665,11 +73577,19 @@ export type GetInteractionResponses = {
                 role: 'user';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'assistant';
                 audio?: {
                     id: string;
                 } | null;
                 content?: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -70714,14 +73634,26 @@ export type GetInteractionResponses = {
                     };
                 }>;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'tool';
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -70736,6 +73668,10 @@ export type GetInteractionResponses = {
                 }>;
                 tool_call_id: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'function';
                 content: string | null;
                 name: string;
@@ -70748,11 +73684,19 @@ export type GetInteractionResponses = {
              *
              */
             tools?: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'function';
                 /**
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                  */
                 function: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     name: string;
                     description?: string;
                     /**
@@ -70773,6 +73717,10 @@ export type GetInteractionResponses = {
                     strict?: boolean | null;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -70863,11 +73811,19 @@ export type GetInteractionResponses = {
                      */
                     tools: Array<{
                         [key: string]: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             type: 'function';
                             /**
                              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                              */
                             function: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 name: string;
                                 description?: string;
                                 /**
@@ -70896,6 +73852,10 @@ export type GetInteractionResponses = {
                     name: string;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -71116,7 +74076,15 @@ export type GetInteractionResponses = {
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
              */
             messages: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -71126,7 +74094,15 @@ export type GetInteractionResponses = {
                 role: 'developer';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -71136,13 +74112,25 @@ export type GetInteractionResponses = {
                 role: 'system';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -71155,6 +74143,10 @@ export type GetInteractionResponses = {
                         detail?: 'auto' | 'low' | 'high';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'input_audio';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -71167,6 +74159,10 @@ export type GetInteractionResponses = {
                         format: 'wav' | 'mp3';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'file';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -71183,11 +74179,19 @@ export type GetInteractionResponses = {
                 role: 'user';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'assistant';
                 audio?: {
                     id: string;
                 } | null;
                 content?: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -71232,14 +74236,26 @@ export type GetInteractionResponses = {
                     };
                 }>;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'tool';
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -71254,6 +74270,10 @@ export type GetInteractionResponses = {
                 }>;
                 tool_call_id: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'function';
                 content: string | null;
                 name: string;
@@ -71266,11 +74286,19 @@ export type GetInteractionResponses = {
              *
              */
             tools?: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'function';
                 /**
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                  */
                 function: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     name: string;
                     description?: string;
                     /**
@@ -71291,6 +74319,10 @@ export type GetInteractionResponses = {
                     strict?: boolean | null;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -71381,11 +74413,19 @@ export type GetInteractionResponses = {
                      */
                     tools: Array<{
                         [key: string]: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             type: 'function';
                             /**
                              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                              */
                             function: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 name: string;
                                 description?: string;
                                 /**
@@ -71414,6 +74454,10 @@ export type GetInteractionResponses = {
                     name: string;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -71481,7 +74525,15 @@ export type GetInteractionResponses = {
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
              */
             messages: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -71491,7 +74543,15 @@ export type GetInteractionResponses = {
                 role: 'developer';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -71501,13 +74561,25 @@ export type GetInteractionResponses = {
                 role: 'system';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -71520,6 +74592,10 @@ export type GetInteractionResponses = {
                         detail?: 'auto' | 'low' | 'high';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'input_audio';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -71532,6 +74608,10 @@ export type GetInteractionResponses = {
                         format: 'wav' | 'mp3';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'file';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -71548,11 +74628,19 @@ export type GetInteractionResponses = {
                 role: 'user';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'assistant';
                 audio?: {
                     id: string;
                 } | null;
                 content?: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -71597,14 +74685,26 @@ export type GetInteractionResponses = {
                     };
                 }>;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'tool';
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -71619,6 +74719,10 @@ export type GetInteractionResponses = {
                 }>;
                 tool_call_id: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'function';
                 content: string | null;
                 name: string;
@@ -71631,11 +74735,19 @@ export type GetInteractionResponses = {
              *
              */
             tools?: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'function';
                 /**
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                  */
                 function: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     name: string;
                     description?: string;
                     /**
@@ -71656,6 +74768,10 @@ export type GetInteractionResponses = {
                     strict?: boolean | null;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -71746,11 +74862,19 @@ export type GetInteractionResponses = {
                      */
                     tools: Array<{
                         [key: string]: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             type: 'function';
                             /**
                              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                              */
                             function: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 name: string;
                                 description?: string;
                                 /**
@@ -71779,6 +74903,10 @@ export type GetInteractionResponses = {
                     name: string;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -71999,7 +75127,15 @@ export type GetInteractionResponses = {
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
              */
             messages: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -72009,7 +75145,15 @@ export type GetInteractionResponses = {
                 role: 'developer';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -72019,13 +75163,25 @@ export type GetInteractionResponses = {
                 role: 'system';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -72038,6 +75194,10 @@ export type GetInteractionResponses = {
                         detail?: 'auto' | 'low' | 'high';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'input_audio';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -72050,6 +75210,10 @@ export type GetInteractionResponses = {
                         format: 'wav' | 'mp3';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'file';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -72066,11 +75230,19 @@ export type GetInteractionResponses = {
                 role: 'user';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'assistant';
                 audio?: {
                     id: string;
                 } | null;
                 content?: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -72115,14 +75287,26 @@ export type GetInteractionResponses = {
                     };
                 }>;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'tool';
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -72137,6 +75321,10 @@ export type GetInteractionResponses = {
                 }>;
                 tool_call_id: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'function';
                 content: string | null;
                 name: string;
@@ -72149,11 +75337,19 @@ export type GetInteractionResponses = {
              *
              */
             tools?: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'function';
                 /**
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                  */
                 function: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     name: string;
                     description?: string;
                     /**
@@ -72174,6 +75370,10 @@ export type GetInteractionResponses = {
                     strict?: boolean | null;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -72264,11 +75464,19 @@ export type GetInteractionResponses = {
                      */
                     tools: Array<{
                         [key: string]: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             type: 'function';
                             /**
                              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                              */
                             function: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 name: string;
                                 description?: string;
                                 /**
@@ -72297,6 +75505,10 @@ export type GetInteractionResponses = {
                     name: string;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -72364,7 +75576,15 @@ export type GetInteractionResponses = {
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
              */
             messages: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -72374,7 +75594,15 @@ export type GetInteractionResponses = {
                 role: 'developer';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -72384,13 +75612,25 @@ export type GetInteractionResponses = {
                 role: 'system';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -72403,6 +75643,10 @@ export type GetInteractionResponses = {
                         detail?: 'auto' | 'low' | 'high';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'input_audio';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -72415,6 +75659,10 @@ export type GetInteractionResponses = {
                         format: 'wav' | 'mp3';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'file';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -72431,11 +75679,19 @@ export type GetInteractionResponses = {
                 role: 'user';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'assistant';
                 audio?: {
                     id: string;
                 } | null;
                 content?: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -72480,14 +75736,26 @@ export type GetInteractionResponses = {
                     };
                 }>;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'tool';
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -72502,6 +75770,10 @@ export type GetInteractionResponses = {
                 }>;
                 tool_call_id: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'function';
                 content: string | null;
                 name: string;
@@ -72514,11 +75786,19 @@ export type GetInteractionResponses = {
              *
              */
             tools?: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'function';
                 /**
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                  */
                 function: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     name: string;
                     description?: string;
                     /**
@@ -72539,6 +75819,10 @@ export type GetInteractionResponses = {
                     strict?: boolean | null;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -72629,11 +75913,19 @@ export type GetInteractionResponses = {
                      */
                     tools: Array<{
                         [key: string]: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             type: 'function';
                             /**
                              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                              */
                             function: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 name: string;
                                 description?: string;
                                 /**
@@ -72662,6 +75954,10 @@ export type GetInteractionResponses = {
                     name: string;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -72882,7 +76178,15 @@ export type GetInteractionResponses = {
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
              */
             messages: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -72892,7 +76196,15 @@ export type GetInteractionResponses = {
                 role: 'developer';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -72902,13 +76214,25 @@ export type GetInteractionResponses = {
                 role: 'system';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -72921,6 +76245,10 @@ export type GetInteractionResponses = {
                         detail?: 'auto' | 'low' | 'high';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'input_audio';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -72933,6 +76261,10 @@ export type GetInteractionResponses = {
                         format: 'wav' | 'mp3';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'file';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -72949,11 +76281,19 @@ export type GetInteractionResponses = {
                 role: 'user';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'assistant';
                 audio?: {
                     id: string;
                 } | null;
                 content?: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -72998,14 +76338,26 @@ export type GetInteractionResponses = {
                     };
                 }>;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'tool';
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -73020,6 +76372,10 @@ export type GetInteractionResponses = {
                 }>;
                 tool_call_id: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'function';
                 content: string | null;
                 name: string;
@@ -73032,11 +76388,19 @@ export type GetInteractionResponses = {
              *
              */
             tools?: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'function';
                 /**
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                  */
                 function: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     name: string;
                     description?: string;
                     /**
@@ -73057,6 +76421,10 @@ export type GetInteractionResponses = {
                     strict?: boolean | null;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -73147,11 +76515,19 @@ export type GetInteractionResponses = {
                      */
                     tools: Array<{
                         [key: string]: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             type: 'function';
                             /**
                              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                              */
                             function: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 name: string;
                                 description?: string;
                                 /**
@@ -73180,6 +76556,10 @@ export type GetInteractionResponses = {
                     name: string;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -73247,7 +76627,15 @@ export type GetInteractionResponses = {
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
              */
             messages: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -73257,7 +76645,15 @@ export type GetInteractionResponses = {
                 role: 'developer';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -73267,13 +76663,25 @@ export type GetInteractionResponses = {
                 role: 'system';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -73286,6 +76694,10 @@ export type GetInteractionResponses = {
                         detail?: 'auto' | 'low' | 'high';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'input_audio';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -73298,6 +76710,10 @@ export type GetInteractionResponses = {
                         format: 'wav' | 'mp3';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'file';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -73314,11 +76730,19 @@ export type GetInteractionResponses = {
                 role: 'user';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'assistant';
                 audio?: {
                     id: string;
                 } | null;
                 content?: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -73363,14 +76787,26 @@ export type GetInteractionResponses = {
                     };
                 }>;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'tool';
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -73385,6 +76821,10 @@ export type GetInteractionResponses = {
                 }>;
                 tool_call_id: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'function';
                 content: string | null;
                 name: string;
@@ -73397,11 +76837,19 @@ export type GetInteractionResponses = {
              *
              */
             tools?: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'function';
                 /**
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                  */
                 function: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     name: string;
                     description?: string;
                     /**
@@ -73422,6 +76870,10 @@ export type GetInteractionResponses = {
                     strict?: boolean | null;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -73512,11 +76964,19 @@ export type GetInteractionResponses = {
                      */
                     tools: Array<{
                         [key: string]: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             type: 'function';
                             /**
                              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                              */
                             function: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 name: string;
                                 description?: string;
                                 /**
@@ -73545,6 +77005,10 @@ export type GetInteractionResponses = {
                     name: string;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -74015,7 +77479,15 @@ export type GetInteractionResponses = {
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
              */
             messages: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -74025,7 +77497,15 @@ export type GetInteractionResponses = {
                 role: 'developer';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -74035,13 +77515,25 @@ export type GetInteractionResponses = {
                 role: 'system';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -74054,6 +77546,10 @@ export type GetInteractionResponses = {
                         detail?: 'auto' | 'low' | 'high';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'input_audio';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -74066,6 +77562,10 @@ export type GetInteractionResponses = {
                         format: 'wav' | 'mp3';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'file';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -74082,11 +77582,19 @@ export type GetInteractionResponses = {
                 role: 'user';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'assistant';
                 audio?: {
                     id: string;
                 } | null;
                 content?: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -74131,14 +77639,26 @@ export type GetInteractionResponses = {
                     };
                 }>;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'tool';
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -74153,6 +77673,10 @@ export type GetInteractionResponses = {
                 }>;
                 tool_call_id: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'function';
                 content: string | null;
                 name: string;
@@ -74165,11 +77689,19 @@ export type GetInteractionResponses = {
              *
              */
             tools?: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'function';
                 /**
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                  */
                 function: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     name: string;
                     description?: string;
                     /**
@@ -74190,6 +77722,10 @@ export type GetInteractionResponses = {
                     strict?: boolean | null;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -74280,11 +77816,19 @@ export type GetInteractionResponses = {
                      */
                     tools: Array<{
                         [key: string]: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             type: 'function';
                             /**
                              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                              */
                             function: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 name: string;
                                 description?: string;
                                 /**
@@ -74313,6 +77857,10 @@ export type GetInteractionResponses = {
                     name: string;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -74380,7 +77928,15 @@ export type GetInteractionResponses = {
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
              */
             messages: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -74390,7 +77946,15 @@ export type GetInteractionResponses = {
                 role: 'developer';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -74400,13 +77964,25 @@ export type GetInteractionResponses = {
                 role: 'system';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -74419,6 +77995,10 @@ export type GetInteractionResponses = {
                         detail?: 'auto' | 'low' | 'high';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'input_audio';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -74431,6 +78011,10 @@ export type GetInteractionResponses = {
                         format: 'wav' | 'mp3';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'file';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -74447,11 +78031,19 @@ export type GetInteractionResponses = {
                 role: 'user';
                 name?: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'assistant';
                 audio?: {
                     id: string;
                 } | null;
                 content?: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
@@ -74496,14 +78088,26 @@ export type GetInteractionResponses = {
                     };
                 }>;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'tool';
                 content: string | Array<{
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'text';
                     text: string;
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
                     };
                 } | {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     type: 'image_url';
                     prompt_cache_breakpoint?: {
                         mode: 'explicit';
@@ -74518,6 +78122,10 @@ export type GetInteractionResponses = {
                 }>;
                 tool_call_id: string;
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 role: 'function';
                 content: string | null;
                 name: string;
@@ -74530,11 +78138,19 @@ export type GetInteractionResponses = {
              *
              */
             tools?: Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'function';
                 /**
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                  */
                 function: {
+                    cache_control?: {
+                        type: 'ephemeral';
+                        ttl?: '5m' | '1h';
+                    };
                     name: string;
                     description?: string;
                     /**
@@ -74555,6 +78171,10 @@ export type GetInteractionResponses = {
                     strict?: boolean | null;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -74645,11 +78265,19 @@ export type GetInteractionResponses = {
                      */
                     tools: Array<{
                         [key: string]: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             type: 'function';
                             /**
                              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                              */
                             function: {
+                                cache_control?: {
+                                    type: 'ephemeral';
+                                    ttl?: '5m' | '1h';
+                                };
                                 name: string;
                                 description?: string;
                                 /**
@@ -74678,6 +78306,10 @@ export type GetInteractionResponses = {
                     name: string;
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'custom';
                 custom: {
                     /**
@@ -80121,7 +83753,15 @@ export type KimiCodeChatCompletionsWithDefaultAgentData = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
          */
         messages: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -80131,7 +83771,15 @@ export type KimiCodeChatCompletionsWithDefaultAgentData = {
             role: 'developer';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -80141,13 +83789,25 @@ export type KimiCodeChatCompletionsWithDefaultAgentData = {
             role: 'system';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -80160,6 +83820,10 @@ export type KimiCodeChatCompletionsWithDefaultAgentData = {
                     detail?: 'auto' | 'low' | 'high';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'input_audio';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -80172,6 +83836,10 @@ export type KimiCodeChatCompletionsWithDefaultAgentData = {
                     format: 'wav' | 'mp3';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'file';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -80188,11 +83856,19 @@ export type KimiCodeChatCompletionsWithDefaultAgentData = {
             role: 'user';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'assistant';
             audio?: {
                 id: string;
             } | null;
             content?: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -80237,14 +83913,26 @@ export type KimiCodeChatCompletionsWithDefaultAgentData = {
                 };
             }>;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'tool';
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -80259,6 +83947,10 @@ export type KimiCodeChatCompletionsWithDefaultAgentData = {
             }>;
             tool_call_id: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'function';
             content: string | null;
             name: string;
@@ -80271,11 +83963,19 @@ export type KimiCodeChatCompletionsWithDefaultAgentData = {
          *
          */
         tools?: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'function';
             /**
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
              */
             function: {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 name: string;
                 description?: string;
                 /**
@@ -80296,6 +83996,10 @@ export type KimiCodeChatCompletionsWithDefaultAgentData = {
                 strict?: boolean | null;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -80386,11 +84090,19 @@ export type KimiCodeChatCompletionsWithDefaultAgentData = {
                  */
                 tools: Array<{
                     [key: string]: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'function';
                         /**
                          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                          */
                         function: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             name: string;
                             description?: string;
                             /**
@@ -80419,6 +84131,10 @@ export type KimiCodeChatCompletionsWithDefaultAgentData = {
                 name: string;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -80645,7 +84361,15 @@ export type KimiCodeChatCompletionsWithAgentData = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
          */
         messages: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -80655,7 +84379,15 @@ export type KimiCodeChatCompletionsWithAgentData = {
             role: 'developer';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -80665,13 +84397,25 @@ export type KimiCodeChatCompletionsWithAgentData = {
             role: 'system';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -80684,6 +84428,10 @@ export type KimiCodeChatCompletionsWithAgentData = {
                     detail?: 'auto' | 'low' | 'high';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'input_audio';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -80696,6 +84444,10 @@ export type KimiCodeChatCompletionsWithAgentData = {
                     format: 'wav' | 'mp3';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'file';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -80712,11 +84464,19 @@ export type KimiCodeChatCompletionsWithAgentData = {
             role: 'user';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'assistant';
             audio?: {
                 id: string;
             } | null;
             content?: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -80761,14 +84521,26 @@ export type KimiCodeChatCompletionsWithAgentData = {
                 };
             }>;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'tool';
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -80783,6 +84555,10 @@ export type KimiCodeChatCompletionsWithAgentData = {
             }>;
             tool_call_id: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'function';
             content: string | null;
             name: string;
@@ -80795,11 +84571,19 @@ export type KimiCodeChatCompletionsWithAgentData = {
          *
          */
         tools?: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'function';
             /**
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
              */
             function: {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 name: string;
                 description?: string;
                 /**
@@ -80820,6 +84604,10 @@ export type KimiCodeChatCompletionsWithAgentData = {
                 strict?: boolean | null;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -80910,11 +84698,19 @@ export type KimiCodeChatCompletionsWithAgentData = {
                  */
                 tools: Array<{
                     [key: string]: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'function';
                         /**
                          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                          */
                         function: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             name: string;
                             description?: string;
                             /**
@@ -80943,6 +84739,10 @@ export type KimiCodeChatCompletionsWithAgentData = {
                 name: string;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -81171,7 +84971,15 @@ export type KimiChatCompletionsWithDefaultAgentData = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
          */
         messages: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -81181,7 +84989,15 @@ export type KimiChatCompletionsWithDefaultAgentData = {
             role: 'developer';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -81191,13 +85007,25 @@ export type KimiChatCompletionsWithDefaultAgentData = {
             role: 'system';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -81210,6 +85038,10 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                     detail?: 'auto' | 'low' | 'high';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'input_audio';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -81222,6 +85054,10 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                     format: 'wav' | 'mp3';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'file';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -81238,11 +85074,19 @@ export type KimiChatCompletionsWithDefaultAgentData = {
             role: 'user';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'assistant';
             audio?: {
                 id: string;
             } | null;
             content?: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -81287,14 +85131,26 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                 };
             }>;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'tool';
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -81309,6 +85165,10 @@ export type KimiChatCompletionsWithDefaultAgentData = {
             }>;
             tool_call_id: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'function';
             content: string | null;
             name: string;
@@ -81321,11 +85181,19 @@ export type KimiChatCompletionsWithDefaultAgentData = {
          *
          */
         tools?: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'function';
             /**
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
              */
             function: {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 name: string;
                 description?: string;
                 /**
@@ -81346,6 +85214,10 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                 strict?: boolean | null;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -81436,11 +85308,19 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                  */
                 tools: Array<{
                     [key: string]: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'function';
                         /**
                          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                          */
                         function: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             name: string;
                             description?: string;
                             /**
@@ -81469,6 +85349,10 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                 name: string;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -81695,7 +85579,15 @@ export type KimiChatCompletionsWithAgentData = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
          */
         messages: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -81705,7 +85597,15 @@ export type KimiChatCompletionsWithAgentData = {
             role: 'developer';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -81715,13 +85615,25 @@ export type KimiChatCompletionsWithAgentData = {
             role: 'system';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -81734,6 +85646,10 @@ export type KimiChatCompletionsWithAgentData = {
                     detail?: 'auto' | 'low' | 'high';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'input_audio';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -81746,6 +85662,10 @@ export type KimiChatCompletionsWithAgentData = {
                     format: 'wav' | 'mp3';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'file';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -81762,11 +85682,19 @@ export type KimiChatCompletionsWithAgentData = {
             role: 'user';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'assistant';
             audio?: {
                 id: string;
             } | null;
             content?: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -81811,14 +85739,26 @@ export type KimiChatCompletionsWithAgentData = {
                 };
             }>;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'tool';
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -81833,6 +85773,10 @@ export type KimiChatCompletionsWithAgentData = {
             }>;
             tool_call_id: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'function';
             content: string | null;
             name: string;
@@ -81845,11 +85789,19 @@ export type KimiChatCompletionsWithAgentData = {
          *
          */
         tools?: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'function';
             /**
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
              */
             function: {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 name: string;
                 description?: string;
                 /**
@@ -81870,6 +85822,10 @@ export type KimiChatCompletionsWithAgentData = {
                 strict?: boolean | null;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -81960,11 +85916,19 @@ export type KimiChatCompletionsWithAgentData = {
                  */
                 tools: Array<{
                     [key: string]: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'function';
                         /**
                          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                          */
                         function: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             name: string;
                             description?: string;
                             /**
@@ -81993,6 +85957,10 @@ export type KimiChatCompletionsWithAgentData = {
                 name: string;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -97591,7 +101559,15 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
          */
         messages: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -97601,7 +101577,15 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
             role: 'developer';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -97611,13 +101595,25 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
             role: 'system';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -97630,6 +101626,10 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                     detail?: 'auto' | 'low' | 'high';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'input_audio';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -97642,6 +101642,10 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                     format: 'wav' | 'mp3';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'file';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -97658,11 +101662,19 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
             role: 'user';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'assistant';
             audio?: {
                 id: string;
             } | null;
             content?: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -97707,14 +101719,26 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                 };
             }>;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'tool';
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -97729,6 +101753,10 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
             }>;
             tool_call_id: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'function';
             content: string | null;
             name: string;
@@ -97741,11 +101769,19 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
          *
          */
         tools?: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'function';
             /**
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
              */
             function: {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 name: string;
                 description?: string;
                 /**
@@ -97766,6 +101802,10 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                 strict?: boolean | null;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -97856,11 +101896,19 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                  */
                 tools: Array<{
                     [key: string]: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'function';
                         /**
                          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                          */
                         function: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             name: string;
                             description?: string;
                             /**
@@ -97889,6 +101937,10 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                 name: string;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -98115,7 +102167,15 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
          */
         messages: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -98125,7 +102185,15 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
             role: 'developer';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -98135,13 +102203,25 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
             role: 'system';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -98154,6 +102234,10 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                     detail?: 'auto' | 'low' | 'high';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'input_audio';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -98166,6 +102250,10 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                     format: 'wav' | 'mp3';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'file';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -98182,11 +102270,19 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
             role: 'user';
             name?: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'assistant';
             audio?: {
                 id: string;
             } | null;
             content?: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
@@ -98231,14 +102327,26 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                 };
             }>;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'tool';
             content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'text';
                 text: string;
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
                 };
             } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 type: 'image_url';
                 prompt_cache_breakpoint?: {
                     mode: 'explicit';
@@ -98253,6 +102361,10 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
             }>;
             tool_call_id: string;
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             role: 'function';
             content: string | null;
             name: string;
@@ -98265,11 +102377,19 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
          *
          */
         tools?: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'function';
             /**
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
              */
             function: {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
                 name: string;
                 description?: string;
                 /**
@@ -98290,6 +102410,10 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                 strict?: boolean | null;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -98380,11 +102504,19 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                  */
                 tools: Array<{
                     [key: string]: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
                         type: 'function';
                         /**
                          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
                          */
                         function: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
                             name: string;
                             description?: string;
                             /**
@@ -98413,6 +102545,10 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                 name: string;
             };
         } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
             type: 'custom';
             custom: {
                 /**
@@ -100680,7 +104816,457 @@ export type ModelRouterEmbeddingsWithAgentResponses = {
 export type ModelRouterEmbeddingsWithAgentResponse = ModelRouterEmbeddingsWithAgentResponses[keyof ModelRouterEmbeddingsWithAgentResponses];
 
 export type ModelRouterChatCompletionsWithDefaultAgentData = {
-    body: XaiChatCompletionRequestInput;
+    body: {
+        model: string;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+         */
+        messages: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
+            content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                type: 'text';
+                text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
+            }>;
+            role: 'developer';
+            name?: string;
+        } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
+            content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                type: 'text';
+                text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
+            }>;
+            role: 'system';
+            name?: string;
+        } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
+            content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                type: 'text';
+                text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
+            } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                type: 'image_url';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                 */
+                image_url: {
+                    url: string;
+                    detail?: 'auto' | 'low' | 'high';
+                };
+            } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                type: 'input_audio';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+                 */
+                input_audio: {
+                    data: string;
+                    format: 'wav' | 'mp3';
+                };
+            } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                type: 'file';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+                 */
+                file: {
+                    file_data?: string;
+                    file_id?: string;
+                    filename?: string;
+                };
+            }>;
+            role: 'user';
+            name?: string;
+        } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
+            role: 'assistant';
+            audio?: {
+                id: string;
+            } | null;
+            content?: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                type: 'text';
+                text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
+            }> | Array<{
+                type: 'refusal';
+                refusal: string;
+            }> | null;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+             */
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | null;
+            name?: string;
+            reasoning_content?: string | null;
+            refusal?: string | null;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+             */
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+        } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
+            role: 'tool';
+            content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                type: 'text';
+                text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
+            } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                type: 'image_url';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                 */
+                image_url: {
+                    url: string;
+                    detail?: 'auto' | 'low' | 'high';
+                };
+            }>;
+            tool_call_id: string;
+        } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
+            role: 'function';
+            content: string | null;
+            name: string;
+        }>;
+        /**
+         *
+         * A function tool that can be used to generate a response.
+         *
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+         *
+         */
+        tools?: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
+            type: 'function';
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+             */
+            function: {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                name: string;
+                description?: string;
+                /**
+                 *
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                 * documentation about the format.
+                 *
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * Your chosen grammar
+                     */
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        } | {
+            type: 'custom';
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * The grammar definition
+                 */
+                definition: string;
+                /**
+                 * The syntax of the grammar definition
+                 */
+                syntax: 'lark' | 'regex';
+            };
+        }>;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+         */
+        tool_choice?: 'none' | 'auto' | 'required' | {
+            type: 'allowed_tools';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+             */
+            allowed_tools: {
+                /**
+                 *
+                 * Constrains the tools available to the model to a pre-defined set.
+                 *
+                 * auto allows the model to pick from among the allowed tools and generate a
+                 * message.
+                 *
+                 * required requires the model to call one or more of the allowed tools.
+                 *
+                 */
+                mode: 'auto' | 'required';
+                /**
+                 * A list of tool definitions that the model should be allowed to call
+                 */
+                tools: Array<{
+                    [key: string]: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
+                        type: 'function';
+                        /**
+                         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                         */
+                        function: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
+                            name: string;
+                            description?: string;
+                            /**
+                             *
+                             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                             *
+                             * The parameters the functions accepts, described as a JSON Schema object. See the
+                             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                             * documentation about the format.
+                             *
+                             * Omitting parameters defines a function with an empty parameter list.
+                             *
+                             */
+                            parameters?: {
+                                [key: string]: unknown;
+                            };
+                            strict?: boolean | null;
+                        };
+                    };
+                }>;
+            };
+        } | {
+            type: 'function';
+            function: {
+                name: string;
+            };
+        } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * Your chosen grammar
+                     */
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        };
+        temperature?: number | null;
+        max_tokens?: number | null;
+        max_completion_tokens?: number | null;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in-memory' | '24h';
+        prompt_cache_options?: {
+            mode?: 'implicit' | 'explicit';
+            ttl?: string;
+            [key: string]: unknown;
+        };
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+        modalities?: Array<'text' | 'audio'> | null;
+        audio?: {
+            voice: string;
+            format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+        } | null;
+        stream?: boolean | null;
+        stream_options?: {
+            include_usage?: boolean;
+        } | null;
+        user?: string;
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
+        cachedContent?: string;
+    };
     headers: {
         /**
          * The user agent of the client
@@ -100842,7 +105428,457 @@ export type ModelRouterChatCompletionsWithDefaultAgentResponses = {
 export type ModelRouterChatCompletionsWithDefaultAgentResponse = ModelRouterChatCompletionsWithDefaultAgentResponses[keyof ModelRouterChatCompletionsWithDefaultAgentResponses];
 
 export type ModelRouterChatCompletionsWithAgentData = {
-    body: XaiChatCompletionRequestInput;
+    body: {
+        model: string;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+         */
+        messages: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
+            content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                type: 'text';
+                text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
+            }>;
+            role: 'developer';
+            name?: string;
+        } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
+            content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                type: 'text';
+                text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
+            }>;
+            role: 'system';
+            name?: string;
+        } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
+            content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                type: 'text';
+                text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
+            } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                type: 'image_url';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                 */
+                image_url: {
+                    url: string;
+                    detail?: 'auto' | 'low' | 'high';
+                };
+            } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                type: 'input_audio';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+                 */
+                input_audio: {
+                    data: string;
+                    format: 'wav' | 'mp3';
+                };
+            } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                type: 'file';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+                 */
+                file: {
+                    file_data?: string;
+                    file_id?: string;
+                    filename?: string;
+                };
+            }>;
+            role: 'user';
+            name?: string;
+        } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
+            role: 'assistant';
+            audio?: {
+                id: string;
+            } | null;
+            content?: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                type: 'text';
+                text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
+            }> | Array<{
+                type: 'refusal';
+                refusal: string;
+            }> | null;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+             */
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | null;
+            name?: string;
+            reasoning_content?: string | null;
+            refusal?: string | null;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+             */
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+        } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
+            role: 'tool';
+            content: string | Array<{
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                type: 'text';
+                text: string;
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
+            } | {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                type: 'image_url';
+                prompt_cache_breakpoint?: {
+                    mode: 'explicit';
+                };
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                 */
+                image_url: {
+                    url: string;
+                    detail?: 'auto' | 'low' | 'high';
+                };
+            }>;
+            tool_call_id: string;
+        } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
+            role: 'function';
+            content: string | null;
+            name: string;
+        }>;
+        /**
+         *
+         * A function tool that can be used to generate a response.
+         *
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+         *
+         */
+        tools?: Array<{
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
+            type: 'function';
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+             */
+            function: {
+                cache_control?: {
+                    type: 'ephemeral';
+                    ttl?: '5m' | '1h';
+                };
+                name: string;
+                description?: string;
+                /**
+                 *
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                 * documentation about the format.
+                 *
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * Your chosen grammar
+                     */
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        } | {
+            type: 'custom';
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * The grammar definition
+                 */
+                definition: string;
+                /**
+                 * The syntax of the grammar definition
+                 */
+                syntax: 'lark' | 'regex';
+            };
+        }>;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+         */
+        tool_choice?: 'none' | 'auto' | 'required' | {
+            type: 'allowed_tools';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+             */
+            allowed_tools: {
+                /**
+                 *
+                 * Constrains the tools available to the model to a pre-defined set.
+                 *
+                 * auto allows the model to pick from among the allowed tools and generate a
+                 * message.
+                 *
+                 * required requires the model to call one or more of the allowed tools.
+                 *
+                 */
+                mode: 'auto' | 'required';
+                /**
+                 * A list of tool definitions that the model should be allowed to call
+                 */
+                tools: Array<{
+                    [key: string]: {
+                        cache_control?: {
+                            type: 'ephemeral';
+                            ttl?: '5m' | '1h';
+                        };
+                        type: 'function';
+                        /**
+                         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                         */
+                        function: {
+                            cache_control?: {
+                                type: 'ephemeral';
+                                ttl?: '5m' | '1h';
+                            };
+                            name: string;
+                            description?: string;
+                            /**
+                             *
+                             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                             *
+                             * The parameters the functions accepts, described as a JSON Schema object. See the
+                             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                             * documentation about the format.
+                             *
+                             * Omitting parameters defines a function with an empty parameter list.
+                             *
+                             */
+                            parameters?: {
+                                [key: string]: unknown;
+                            };
+                            strict?: boolean | null;
+                        };
+                    };
+                }>;
+            };
+        } | {
+            type: 'function';
+            function: {
+                name: string;
+            };
+        } | {
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * Your chosen grammar
+                     */
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        };
+        temperature?: number | null;
+        max_tokens?: number | null;
+        max_completion_tokens?: number | null;
+        prompt_cache_key?: string | null;
+        prompt_cache_retention?: 'in-memory' | '24h';
+        prompt_cache_options?: {
+            mode?: 'implicit' | 'explicit';
+            ttl?: string;
+            [key: string]: unknown;
+        };
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+        modalities?: Array<'text' | 'audio'> | null;
+        audio?: {
+            voice: string;
+            format: 'wav' | 'aac' | 'mp3' | 'flac' | 'opus' | 'pcm16';
+        } | null;
+        stream?: boolean | null;
+        stream_options?: {
+            include_usage?: boolean;
+        } | null;
+        user?: string;
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
+        cachedContent?: string;
+    };
     headers: {
         /**
          * The user agent of the client

@@ -49,6 +49,7 @@ import {
   OpenAi,
   UuidIdSchema,
 } from "@/types";
+import { CacheControlSchema } from "@/types/llm-providers/openai/messages";
 import { selectMappedProviderKey } from "@/utils/provider-key-mappings";
 import {
   azureAdapterFactory,
@@ -107,6 +108,11 @@ import {
   type ModelRouterResolution,
   resolveModelRoute,
 } from "../model-router-resolver";
+
+const RouterChatRequestSchema = OpenAi.API.ChatCompletionRequestSchema.extend({
+  cache_control: CacheControlSchema.optional(),
+  cachedContent: z.string().optional(),
+});
 
 type OpenAiWireProvider = LLMProvider<
   OpenAi.Types.ChatCompletionsRequest,
@@ -451,7 +457,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Create a chat completion through the OpenAI-compatible model router (default LLM proxy)",
         tags: ["LLM Proxy"],
-        body: OpenAi.API.ChatCompletionRequestSchema,
+        body: RouterChatRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
           ModelRouterChatCompletionResponseSchema,
@@ -475,7 +481,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           agentId: UuidIdSchema,
         }),
-        body: OpenAi.API.ChatCompletionRequestSchema,
+        body: RouterChatRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
           ModelRouterChatCompletionResponseSchema,
@@ -606,7 +612,8 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     body,
   });
   const { chatBody, responsesContext } = responsesToOpenaiChat(body, {
-    preserveContentParts: resolution.provider === "bedrock",
+    preserveContentParts:
+      resolution.provider === "bedrock" || resolution.provider === "anthropic",
   });
   const routedChatBody = {
     ...chatBody,

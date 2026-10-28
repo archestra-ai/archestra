@@ -553,6 +553,13 @@ function textContentToBedrock(content: unknown): BedrockContentBlock[] {
 }
 
 function appendCacheMarker(blocks: BedrockContentBlock[], marker: Loose): void {
+  const point = cachePoint(marker);
+  if (point) blocks.push(point);
+}
+
+function cachePoint(
+  marker: Loose,
+): { cachePoint: { type: "default"; ttl?: string } } | undefined {
   if (marker === undefined) return;
   if (
     !marker ||
@@ -564,12 +571,12 @@ function appendCacheMarker(blocks: BedrockContentBlock[], marker: Loose): void {
       "Bedrock cache_control requires type ephemeral and an optional string ttl",
     );
   // Model support, TTLs, checkpoint limits and ordering are validated by AWS.
-  blocks.push({
+  return {
     cachePoint: {
       type: "default",
       ...(marker.ttl !== undefined ? { ttl: marker.ttl } : {}),
     },
-  });
+  };
 }
 
 // MIMEs whose text content Bedrock's document block can represent as txt.
@@ -757,22 +764,31 @@ function buildToolConfig(
   const tools = Array.isArray(loose.tools) ? loose.tools : [];
   if (tools.length === 0 && toolChoice == null) return undefined;
 
-  const mapped = tools
-    .filter((t: Loose) => t?.type === "function" && t.function?.name)
-    .map((t: Loose) => ({
-      toolSpec: {
-        name: String(t.function.name),
-        ...(t.function.description
-          ? { description: String(t.function.description) }
-          : {}),
-        inputSchema: {
-          json: (t.function.parameters ?? {
-            type: "object",
-            properties: {},
-          }) as Record<string, unknown>,
+  const mapped = tools.flatMap((t: Loose) => {
+    const point = cachePoint(t?.cache_control ?? t?.function?.cache_control);
+    if (t?.type !== "function" || !t.function?.name) {
+      if (point)
+        throw new ApiError(400, "Unsupported Bedrock tool with cache_control");
+      return [];
+    }
+    return [
+      {
+        toolSpec: {
+          name: String(t.function.name),
+          ...(t.function.description
+            ? { description: String(t.function.description) }
+            : {}),
+          inputSchema: {
+            json: (t.function.parameters ?? {
+              type: "object",
+              properties: {},
+            }) as Record<string, unknown>,
+          },
         },
       },
-    }));
+      ...(point ? [point] : []),
+    ];
+  });
 
   const cfg: NonNullable<BedrockRequest["toolConfig"]> = { tools: mapped };
 

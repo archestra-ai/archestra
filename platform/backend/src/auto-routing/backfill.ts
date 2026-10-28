@@ -314,9 +314,7 @@ async function scan(
   lease: BackfillLease,
   deadline: number,
 ): Promise<boolean> {
-  const profiles = await RoutingHistoryModel.profileIds(
-    backfill.organizationId,
-  );
+  const profiles = await RoutingHistoryModel.profileIds(backfill);
   const resumeAt = backfill.cursorProfileId;
   let batches = 0;
   for (const profileId of profiles) {

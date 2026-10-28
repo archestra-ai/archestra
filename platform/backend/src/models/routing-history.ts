@@ -74,13 +74,31 @@ export type OpeningRow = {
 };
 
 class RoutingHistoryModel {
-  /** The organization's agents, deleted ones included: every past interaction belongs to one of them. */
-  static async profileIds(organizationId: string): Promise<string[]> {
+  /**
+   * The organization's agents, deleted ones included, with an interaction in
+   * [windowStart, cutoff): an organization can hold far more agents than ever
+   * see traffic, and a scan visits each one it is given.
+   */
+  static async profileIds(params: {
+    organizationId: string;
+    windowStart: Date;
+    cutoff: Date;
+  }): Promise<string[]> {
     const agents = schema.agentsTable;
     const rows = await db
       .select({ id: agents.id })
       .from(agents)
-      .where(eq(agents.organizationId, organizationId))
+      .where(
+        and(
+          eq(agents.organizationId, params.organizationId),
+          sql`exists (
+            select 1 from interactions i
+            where i.profile_id = ${agents.id}
+              and i.created_at >= ${utc(params.windowStart)}::timestamp
+              and i.created_at < ${utc(params.cutoff)}::timestamp
+          )`,
+        ),
+      )
       .orderBy(asc(agents.id));
     return rows.map((row) => row.id);
   }

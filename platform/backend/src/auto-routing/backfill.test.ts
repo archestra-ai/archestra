@@ -277,6 +277,26 @@ describe("auto routing backfill", () => {
     });
   });
 
+  test("a scan visits only the agents with traffic in its window", async ({
+    makeAgent,
+  }) => {
+    const busy = await makeAgent({ organizationId });
+    await makeAgent({ organizationId });
+    const stale = await makeAgent({ organizationId });
+    await turn("old", "Long gone", { createdAt: new Date(0) }, stale.id);
+    await turn("live", "Still here", {}, busy.id);
+    await turn("proxy", "Through the proxy");
+
+    const windowStart = new Date(Date.now() - 30 * DAY_MS);
+    expect(
+      await RoutingHistoryModel.profileIds({
+        organizationId,
+        windowStart,
+        cutoff: new Date(),
+      }),
+    ).toEqual([busy.id, profileId].sort());
+  });
+
   test("reads every turn the database stored at sub-millisecond precision", async () => {
     const first = await turn("precise", "Port the parser to a tokenizer", {
       createdAt: new Date(Date.now() - 3 * DAY_MS),

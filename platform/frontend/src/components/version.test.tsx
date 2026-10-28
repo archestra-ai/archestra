@@ -78,7 +78,7 @@ describe("Version", () => {
     mockUseSession.mockReturnValue({ data: null, isPending: false });
     mockUseConfig.mockReturnValue({ data: undefined });
     mockUseHealth.mockReturnValue({
-      data: { version: "1.1.32" },
+      data: { version: "v1.1.32" },
     });
     mockUseLatestGitHubRelease.mockReturnValue({
       data: {
@@ -96,12 +96,12 @@ describe("Version", () => {
       data: { user: { id: "user-1" } },
       isPending: false,
     });
-    mockUseConfig.mockReturnValue({ data: { version: "1.1.32" } });
+    mockUseConfig.mockReturnValue({ data: { version: "v1.1.32" } });
     mockUseHealth.mockReturnValue({ data: undefined });
 
     render(<Version inline />);
 
-    expect(screen.getByText(/Version: 1\.1\.32/)).toBeInTheDocument();
+    expect(screen.getByText(/Version: v1\.1\.32/)).toBeInTheDocument();
     expect(mockUseHealth).toHaveBeenCalledWith({ enabled: false });
   });
 
@@ -120,7 +120,7 @@ describe("Version", () => {
   it("shows the latest release link by default", async () => {
     const { container } = render(<Version inline />);
 
-    expect(container.firstChild).toHaveTextContent("Version: 1.1.32");
+    expect(container.firstChild).toHaveTextContent("Version: v1.1.32");
     // The version comparison loads its semver dependency on demand.
     expect(
       await screen.findByRole("link", {
@@ -137,7 +137,7 @@ describe("Version", () => {
 
     const { container } = render(<Version inline />);
 
-    expect(container.firstChild).toHaveTextContent("Version: 1.1.32");
+    expect(container.firstChild).toHaveTextContent("Version: v1.1.32");
     expect(screen.queryByText(/new:/i)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", {
@@ -173,7 +173,7 @@ describe("Version", () => {
 
     const { container } = render(<Version inline />);
 
-    expect(container.firstChild).toHaveTextContent("Custom footer (vf12beff)");
+    expect(container.firstChild).toHaveTextContent("Custom footer (f12beff)");
     expect(container.firstChild).not.toHaveTextContent(sha);
     expect(container.firstChild).toHaveAttribute("title", sha);
   });

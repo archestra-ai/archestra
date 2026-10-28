@@ -1626,6 +1626,27 @@ describe("encrypted chat escrow config", () => {
   });
 });
 
+describe("platform version", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  test.each([
+    ["platform-v1.5.0-rc.4", "v1.5.0-rc.4"],
+    ["v1.4.1", "v1.4.1"],
+    ["1.4.1", "v1.4.1"],
+    [
+      "f12beffe7b60b380558b47c052fa7a00533cd312",
+      "f12beffe7b60b380558b47c052fa7a00533cd312",
+    ],
+  ])("exposes %s as %s to API consumers", async (buildVersion, expected) => {
+    vi.stubEnv("ARCHESTRA_VERSION", buildVersion);
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.api.version).toBe(expected);
+  });
+});
+
 describe("Agent Runtime catalog images", () => {
   beforeEach(() => {
     vi.resetModules();

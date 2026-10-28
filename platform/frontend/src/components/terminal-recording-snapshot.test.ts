@@ -61,14 +61,31 @@ test("preserves combined Unicode, wide cells, physical rows and soft wrap marker
   });
 });
 
-test("retains written spaces and painted empty rows", async () => {
+test("retains interior spaces and painted empty rows", async () => {
   await withTerminal(
-    "A  \x1b[3;1H\x1b[48;2;1;2;3m\x1b[2K\x1b[0m",
+    "A  B  \x1b[3;1H\x1b[48;2;1;2;3m\x1b[2K\x1b[0m",
     { cols: 8, rows: 5 },
     (terminal) => {
       const result = snapshotTerminalRecording(terminal);
-      expect(textLines(result)).toEqual(["A  ", "", "        "]);
+      expect(textLines(result)).toEqual(["A  B", "", "        "]);
       expect(result.lines[2].runs[0].style.backgroundColor).toBe("#010203");
+    },
+  );
+});
+
+test("a captured screen keeps its background to the line's end and no blank tail", async () => {
+  // `tmux capture-pane -e -N` pads each line with spaces and carries the
+  // attributes from one line into the next.
+  await withTerminal(
+    "\x1b[48;5;237m> prompt  \r\n          \r\n\x1b[49manswer    \r\n          \r\n          ",
+    { cols: 10, rows: 5 },
+    (terminal) => {
+      const result = snapshotTerminalRecording(terminal);
+      expect(textLines(result)).toEqual(["> prompt  ", "          ", "answer"]);
+      for (const row of [0, 1])
+        expect(
+          result.lines[row].runs.map((run) => run.style.backgroundColor),
+        ).toEqual(["#3a3a3a"]);
     },
   );
 });
@@ -108,6 +125,9 @@ test("resolves RGB, palette, inverse, bold and invisible cells", async () => {
         color: "#ef2929",
         fontWeight: "bold",
       });
+      // The document paints the default background, so a wide fallback
+      // glyph in the cell before is not covered.
+      expect(runs[2].style.backgroundColor).toBeUndefined();
       expect(runs[3].style.color).toBe("#ff0000");
       expect(runs[4].style.color).toBe("#808080");
       expect(runs[5].style).toMatchObject({

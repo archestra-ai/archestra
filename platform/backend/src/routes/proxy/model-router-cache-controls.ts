@@ -8,6 +8,7 @@ export function assertModelRouterCacheControls(
   if (
     provider !== "anthropic" &&
     provider !== "bedrock" &&
+    provider !== "cohere" &&
     provider !== "gemini"
   )
     return;
@@ -53,7 +54,10 @@ export function assertModelRouterCacheControls(
     }
   }
   for (const node of nodes) {
-    if (provider === "gemini" && node.cache_control !== undefined)
+    if (
+      (provider === "gemini" || provider === "cohere") &&
+      node.cache_control !== undefined
+    )
       reject("cache_control");
     if (node.prompt_cache_breakpoint !== undefined)
       reject("prompt_cache_breakpoint");

@@ -22,7 +22,14 @@ import {
   WrapText,
   Zap,
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Command,
   CommandEmpty,
@@ -147,7 +154,7 @@ export function McpServerConsole({
   // open a stream that can only time out.
   const noPod = hasNoPodToStream(status);
   // SPDX-SnippetEnd
-  const logs = useLogStream(noPod ? null : serverId);
+  const logs = useLogStream(noPod || !hasPods ? null : serverId);
   const inspector = useInspector(
     inspectorServerId,
     tab === "inspector" && canInspect,
@@ -354,7 +361,11 @@ function InstanceSwitcher({
   const [query, setQuery] = useState("");
   const commandRef = useRef<HTMLDivElement>(null);
   const selected = installs.find((i) => i.id === serverId);
-  const s = serverId ? deploymentStatuses[serverId] : undefined;
+  const statusOf = useCallback(
+    (id: string) => (hasPods ? deploymentStatuses[id] : undefined),
+    [hasPods, deploymentStatuses],
+  );
+  const s = serverId ? statusOf(serverId) : undefined;
   const cs = connState(s);
   const hiddenCount = credentialFiltered ? totalCount - installs.length : 0;
   // Open the list even with one option when others were filtered out, so the
@@ -372,15 +383,20 @@ function InstanceSwitcher({
         .map((g) => ({
           ...g,
           items: g.items.filter((i) =>
-            connHaystack(i, deploymentStatuses[i.id]).includes(q),
+            connHaystack({
+              install: i,
+              status: statusOf(i.id),
+              hasPods,
+            }).includes(q),
           ),
         }))
         .filter((g) => g.items.length > 0)
     : groups;
   const counts = useMemo(() => {
     const c = { running: 0, starting: 0, failed: 0, off: 0 };
+    if (!hasPods) return c;
     for (const i of installs) {
-      const st = connState(deploymentStatuses[i.id]);
+      const st = connState(statusOf(i.id));
       if (st === "running") c.running += 1;
       else if (st === "pending" || st === "waking" || st === "unknown")
         c.starting += 1;
@@ -388,7 +404,7 @@ function InstanceSwitcher({
       else c.off += 1;
     }
     return c;
-  }, [installs, deploymentStatuses]);
+  }, [installs, hasPods, statusOf]);
 
   const meta = [
     ownerLabel(selected, myEmail),
@@ -459,7 +475,11 @@ function InstanceSwitcher({
                 <CommandInput
                   value={query}
                   onValueChange={setQuery}
-                  placeholder="Search name, owner, team or pod"
+                  placeholder={
+                    hasPods
+                      ? "Search name, owner, team or pod"
+                      : "Search name, owner or team"
+                  }
                   className="text-xs"
                 />
               )}
@@ -518,9 +538,7 @@ function InstanceSwitcher({
                       <SwitcherRow
                         key={install.id}
                         install={install}
-                        status={
-                          hasPods ? deploymentStatuses[install.id] : undefined
-                        }
+                        status={statusOf(install.id)}
                         hasPods={hasPods}
                         isSelected={install.id === serverId}
                         isMine={isMine(install, myEmail)}
@@ -852,10 +870,15 @@ function groupInstalls(installs: McpLogsInstall[], myEmail: string | null) {
   ].filter((g) => g.items.length > 0);
 }
 
-function connHaystack(
-  install: McpLogsInstall,
-  status: McpDeploymentStatusEntry | undefined,
-) {
+function connHaystack({
+  install,
+  status,
+  hasPods,
+}: {
+  install: McpLogsInstall;
+  status: McpDeploymentStatusEntry | undefined;
+  hasPods: boolean;
+}) {
   return [
     install.name,
     install.ownerEmail,
@@ -863,7 +886,7 @@ function connHaystack(
     install.scope === "org" ? "organization org" : install.scope,
     status?.podName,
     status?.message,
-    connStateLabel(connState(status)),
+    hasPods ? connStateLabel(connState(status)) : null,
   ]
     .filter(Boolean)
     .join(" ")

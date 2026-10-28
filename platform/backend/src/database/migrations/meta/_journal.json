@@ -4250,6 +4250,13 @@
       "when": 1793185488614,
       "tag": "0606_concerned_bedlam",
       "breakpoints": true
+    },
+    {
+      "idx": 607,
+      "version": "7",
+      "when": 1793202129954,
+      "tag": "0607_awesome_red_ghost",
+      "breakpoints": true
     }
   ]
 }

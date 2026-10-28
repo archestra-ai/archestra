@@ -92,6 +92,73 @@ describe("POST /api/model-pools", () => {
     ]);
   });
 
+  test("stores the pool's own timeouts and cooldown, kept when an update leaves them out", async ({
+    makeLlmProviderApiKey,
+  }) => {
+    const key = await makeLlmProviderApiKey(organizationId, null);
+    const members = [{ providerApiKeyId: key.id, modelId: "claude-haiku-4-5" }];
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/model-pools",
+      payload: {
+        name: "claude-haiku-4-5",
+        members,
+        streamTimeoutSeconds: 120,
+        timeoutSeconds: 600,
+        cooldownSeconds: 300,
+      },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    expect(created.json()).toMatchObject({
+      streamTimeoutSeconds: 120,
+      timeoutSeconds: 600,
+      cooldownSeconds: 300,
+    });
+    const id = created.json().id;
+
+    const kept = await app.inject({
+      method: "PUT",
+      url: `/api/model-pools/${id}`,
+      payload: { name: "claude-haiku-4-5", members },
+    });
+    expect(kept.json()).toMatchObject({
+      streamTimeoutSeconds: 120,
+      timeoutSeconds: 600,
+      cooldownSeconds: 300,
+    });
+
+    const cleared = await app.inject({
+      method: "PUT",
+      url: `/api/model-pools/${id}`,
+      payload: {
+        name: "claude-haiku-4-5",
+        members,
+        streamTimeoutSeconds: null,
+        timeoutSeconds: null,
+        cooldownSeconds: null,
+      },
+    });
+    expect(cleared.json()).toMatchObject({
+      streamTimeoutSeconds: null,
+      timeoutSeconds: null,
+      cooldownSeconds: null,
+    });
+
+    for (const timing of [
+      { streamTimeoutSeconds: 0 },
+      { timeoutSeconds: 1801 },
+      { cooldownSeconds: 1.5 },
+    ]) {
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/model-pools/${id}`,
+        payload: { name: "claude-haiku-4-5", members, ...timing },
+      });
+      expect(response.statusCode, response.body).toBe(400);
+    }
+  });
+
   test("rejects a personal key, a provider pools can't reach, and a repeated member", async ({
     makeLlmProviderApiKey,
   }) => {

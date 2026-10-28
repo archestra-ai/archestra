@@ -21,11 +21,20 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { ArrowDown, GripVertical, Plus } from "lucide-react";
+import {
+  ArrowDown,
+  ChevronDown,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  GripVertical,
+  Plus,
+} from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ProviderIcon } from "@/components/provider-icon";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { OverlappedIcons } from "@/components/ui/overlapped-icons";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 import { MEMBER_COLUMNS, type MemberFields, MemberRow } from "./member-row";
 import { HelpTip } from "./pool-fields";
@@ -68,6 +77,9 @@ const collision: CollisionDetection = (args) => {
   return first ? [first] : [];
 };
 
+/** Above this many members, the orders after the first open folded. */
+const FOLD_ABOVE = 4;
+
 // Rows only make room for the dragged member inside its own card.
 const withinOrder: SortingStrategy = (args) =>
   args.activeIndex < 0 || args.overIndex < 0
@@ -77,7 +89,8 @@ const withinOrder: SortingStrategy = (args) =>
 /**
  * The members as one card per order. Requests try order 1 first; members of
  * an order split its traffic by weight. Drag a member into another card, or
- * between two cards to give it an order of its own.
+ * between two cards to give it an order of its own. An order folds to its
+ * header, so a big pool's later settings stay in reach.
  */
 export function MembersEditor(props: MemberFields) {
   const { disabled, options } = props;
@@ -85,6 +98,16 @@ export function MembersEditor(props: MemberFields) {
   const { buckets, count, canAdd } = orders;
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
   const [overId, setOverId] = useState<UniqueIdentifier | null>(null);
+  // Folding goes by member, not order number, so it survives orders being
+  // renumbered, and an order a member is added or dragged into opens.
+  const [foldedIds, setFoldedIds] = useState(
+    () =>
+      new Set(
+        count > FOLD_ABOVE
+          ? buckets.slice(1).flatMap((bucket) => idsOf(bucket))
+          : [],
+      ),
+  );
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, {
@@ -97,6 +120,19 @@ export function MembersEditor(props: MemberFields) {
   const dragging = active !== null;
   const target = overId === null ? null : dropTarget(overId, buckets);
   const canDrag = !disabled && count > 1;
+  // A single order has nothing to fold away from.
+  const canFold = buckets.length > 1;
+  const isFolded = (bucket: OrderBucket) =>
+    canFold && idsOf(bucket).every((id) => foldedIds.has(id));
+  const anyFolded = buckets.some(isFolded);
+  const setFolded = (bucket: OrderBucket, folded: boolean) => {
+    const next = new Set(foldedIds);
+    for (const id of idsOf(bucket)) {
+      if (folded) next.add(id);
+      else next.delete(id);
+    }
+    setFoldedIds(next);
+  };
 
   const addOrder = (
     <AddOrder
@@ -124,13 +160,37 @@ export function MembersEditor(props: MemberFields) {
 
   return (
     <div className="@container space-y-2">
-      <div className="space-y-0.5">
-        <Label>Members</Label>
-        {count > 0 ? (
-          <p className="text-xs text-muted-foreground">
-            Order 1 is tried first. Members of an order split its traffic by
-            weight.
-          </p>
+      <div className="flex items-start justify-between gap-2">
+        <div className="space-y-0.5">
+          <Label>Members</Label>
+          {count > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Order 1 is tried first. Members of an order split its traffic by
+              weight.
+            </p>
+          ) : null}
+        </div>
+        {canFold ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="-mt-1 text-muted-foreground"
+            onClick={() =>
+              setFoldedIds(
+                new Set(
+                  anyFolded ? [] : buckets.flatMap((bucket) => idsOf(bucket)),
+                ),
+              )
+            }
+          >
+            {anyFolded ? (
+              <ChevronsUpDown aria-hidden="true" />
+            ) : (
+              <ChevronsDownUp aria-hidden="true" />
+            )}
+            <span>{anyFolded ? "Expand all" : "Collapse all"}</span>
+          </Button>
         ) : null}
       </div>
       {count === 0 ? (
@@ -180,6 +240,9 @@ export function MembersEditor(props: MemberFields) {
                   fields={props}
                   canDrag={canDrag}
                   canAdd={canAdd}
+                  canFold={canFold}
+                  folded={isFolded(bucket)}
+                  onFold={(folded) => setFolded(bucket, folded)}
                   highlighted={
                     dragging &&
                     target?.kind === "order" &&
@@ -210,6 +273,10 @@ export function MembersEditor(props: MemberFields) {
       )}
     </div>
   );
+}
+
+function idsOf(bucket: OrderBucket): string[] {
+  return bucket.members.map((member) => member.id);
 }
 
 function AddOrder({
@@ -281,6 +348,9 @@ function OrderCard({
   fields,
   canDrag,
   canAdd,
+  canFold,
+  folded,
+  onFold,
   highlighted,
   onAdd,
   onRemove,
@@ -289,13 +359,15 @@ function OrderCard({
   fields: MemberFields;
   canDrag: boolean;
   canAdd: boolean;
+  canFold: boolean;
+  folded: boolean;
+  onFold: (folded: boolean) => void;
   highlighted: boolean;
   onAdd: () => void;
   onRemove: (index: number) => void;
 }) {
-  const { order, members } = bucket;
+  const { order } = bucket;
   const { setNodeRef } = useDroppable({ id: `zone:order:${order}` });
-  const shared = members.length > 1;
 
   return (
     <section
@@ -307,7 +379,12 @@ function OrderCard({
         highlighted && "border-primary bg-primary/5 ring-2 ring-primary/20",
       )}
     >
-      <header className="flex items-center gap-2 border-b px-3 py-2">
+      <header
+        className={cn(
+          "flex items-center gap-2 px-3 py-2",
+          !folded && "border-b",
+        )}
+      >
         <span
           className={cn(
             "flex size-5 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums",
@@ -320,7 +397,129 @@ function OrderCard({
           {order}
         </span>
         <span className="text-sm font-medium">Order {order}</span>
+        {canFold ? (
+          <UnstyledButton
+            aria-expanded={!folded}
+            aria-label={`${folded ? "Expand" : "Collapse"} order ${order}`}
+            onClick={() => onFold(!folded)}
+            className="-my-1 flex min-w-0 flex-1 items-center gap-2 self-stretch rounded-md py-1 pl-1 text-left"
+          >
+            {folded ? (
+              <FoldedSummary bucket={bucket} options={fields.options} />
+            ) : (
+              <span className="flex-1" />
+            )}
+            <ChevronDown
+              className={cn(
+                "size-4 shrink-0 text-muted-foreground transition-transform",
+                folded && "-rotate-90",
+              )}
+              aria-hidden="true"
+            />
+          </UnstyledButton>
+        ) : null}
       </header>
+      {folded ? null : (
+        <OrderBody
+          bucket={bucket}
+          fields={fields}
+          canDrag={canDrag}
+          canAdd={canAdd}
+          onAdd={onAdd}
+          onRemove={onRemove}
+        />
+      )}
+    </section>
+  );
+}
+
+/** A folded order's header: who is in it, how traffic splits, how many are off. */
+function FoldedSummary({
+  bucket,
+  options,
+}: {
+  bucket: OrderBucket;
+  options: PoolOptions;
+}) {
+  const { members } = bucket;
+  const names = [
+    ...new Set(
+      members.map(
+        ({ member }) =>
+          options.keysById.get(member.providerApiKeyId)?.name ?? "Provider key",
+      ),
+    ),
+  ];
+  const off = members.filter(({ member }) => !member.enabled).length;
+  const shares = members.flatMap(({ share }) =>
+    share === null ? [] : [share],
+  );
+  const only = members.length === 1 ? members[0] : null;
+
+  return (
+    <span className="flex min-w-0 flex-1 items-center gap-2 text-xs text-muted-foreground">
+      <OverlappedIcons
+        maxVisible={4}
+        icons={members.flatMap(({ id, member }) => {
+          const key = options.keysById.get(member.providerApiKeyId);
+          return key
+            ? [
+                {
+                  key: id,
+                  icon: <ProviderIcon provider={key.provider} size={12} />,
+                  tooltip: `${key.name} · ${member.modelId}`,
+                },
+              ]
+            : [];
+        })}
+      />
+      <span className="min-w-0 truncate text-foreground">
+        {names.join(", ")}
+      </span>
+      {only ? (
+        <span className="min-w-0 max-w-48 shrink-0 truncate font-mono">
+          {only.member.modelId}
+        </span>
+      ) : null}
+      {members.length > 3 ? (
+        <Dot>{members.length} members</Dot>
+      ) : shares.length > 1 ? (
+        <Dot>{shares.join(" / ")}</Dot>
+      ) : null}
+      {off > 0 ? <Dot>{off} off</Dot> : null}
+    </span>
+  );
+}
+
+function Dot({ children }: { children: ReactNode }) {
+  return (
+    <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
+      <span aria-hidden="true">·</span>
+      <span>{children}</span>
+    </span>
+  );
+}
+
+/** An open order: column labels, member rows and "Add member". */
+function OrderBody({
+  bucket,
+  fields,
+  canDrag,
+  canAdd,
+  onAdd,
+  onRemove,
+}: {
+  bucket: OrderBucket;
+  fields: MemberFields;
+  canDrag: boolean;
+  canAdd: boolean;
+  onAdd: () => void;
+  onRemove: (index: number) => void;
+}) {
+  const { order, members } = bucket;
+  const shared = members.length > 1;
+  return (
+    <>
       <ColumnHeaders shared={shared} />
       <SortableContext
         items={members.map((member) => member.id)}
@@ -354,7 +553,7 @@ function OrderCard({
           <span>Add member</span>
         </Button>
       </div>
-    </section>
+    </>
   );
 }
 

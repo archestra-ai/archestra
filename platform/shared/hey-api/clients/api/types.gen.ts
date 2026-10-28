@@ -105349,6 +105349,9 @@ export type GetModelPoolsResponses = {
         id: string;
         organizationId: string;
         name: string;
+        streamTimeoutSeconds: number | null;
+        timeoutSeconds: number | null;
+        cooldownSeconds: number | null;
         createdAt: string;
         updatedAt: string;
         members: Array<{
@@ -105381,6 +105384,9 @@ export type CreateModelPoolData = {
             weight?: number;
             enabled?: boolean;
         }>;
+        streamTimeoutSeconds?: number | null;
+        timeoutSeconds?: number | null;
+        cooldownSeconds?: number | null;
     };
     path?: never;
     query?: never;
@@ -105463,6 +105469,9 @@ export type CreateModelPoolResponses = {
         id: string;
         organizationId: string;
         name: string;
+        streamTimeoutSeconds: number | null;
+        timeoutSeconds: number | null;
+        cooldownSeconds: number | null;
         createdAt: string;
         updatedAt: string;
         members: Array<{
@@ -105669,6 +105678,9 @@ export type UpdateModelPoolData = {
             weight?: number;
             enabled?: boolean;
         }>;
+        streamTimeoutSeconds?: number | null;
+        timeoutSeconds?: number | null;
+        cooldownSeconds?: number | null;
     };
     path: {
         id: string;
@@ -105753,6 +105765,9 @@ export type UpdateModelPoolResponses = {
         id: string;
         organizationId: string;
         name: string;
+        streamTimeoutSeconds: number | null;
+        timeoutSeconds: number | null;
+        cooldownSeconds: number | null;
         createdAt: string;
         updatedAt: string;
         members: Array<{

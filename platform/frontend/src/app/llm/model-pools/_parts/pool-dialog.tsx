@@ -15,7 +15,7 @@ import {
 } from "@/lib/model-pools.query";
 import type { ConnectablePool } from "./connect-pool-dialog";
 import { MembersEditor } from "./members-editor";
-import { FailoverNote, ModelNameField } from "./pool-fields";
+import { ModelNameField, TimeoutFields } from "./pool-fields";
 import {
   type PoolFormValues,
   toFormValues,
@@ -94,7 +94,7 @@ export function PoolDialog({
             disabled={disabled}
             savedMembers={live?.members ?? []}
           />
-          <FailoverNote />
+          <TimeoutFields form={form} disabled={disabled} />
         </DialogBody>
         <DialogStickyFooter className="mt-0">
           {!pool && options.sharedKeys.length === 0 ? (

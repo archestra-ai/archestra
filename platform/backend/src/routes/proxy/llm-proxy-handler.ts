@@ -2687,7 +2687,9 @@ async function handleStreaming<
             withFirstChunk(
               (await transport.executeStream(request)) as AsyncIterable<TChunk>,
             ),
-          memberTimeoutMs: MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
+          memberTimeoutMs:
+            ctx.modelPool?.plan.streamTimeoutMs ??
+            MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
           // Gemini's SDK loses the HTTP status when an error body is cut off;
           // that is indistinguishable from a transport failure, so don't retry.
           isRetryable: (error) =>
@@ -3425,7 +3427,8 @@ async function handleNonStreaming<
             (await llmProxyTiming.upstream(reply, () =>
               transport.execute(request),
             )) as TResponse,
-          memberTimeoutMs: poolResponseTimeoutMs(request),
+          memberTimeoutMs:
+            ctx.modelPool?.plan.timeoutMs ?? poolResponseTimeoutMs(request),
           // See the streaming path: Gemini cannot safely classify this boundary.
           isRetryable: (error) =>
             providerName !== "gemini" &&

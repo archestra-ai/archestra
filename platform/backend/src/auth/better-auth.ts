@@ -20,6 +20,7 @@ import {
 } from "@archestra/shared/access-control";
 import { apiKey } from "@better-auth/api-key";
 import type { HookEndpointContext } from "@better-auth/core";
+import { getCurrentAdapter } from "@better-auth/core/context";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { sso } from "@better-auth/sso";
 import { APIError, betterAuth } from "better-auth";
@@ -27,6 +28,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, jwt, organization, twoFactor } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
+import type { Jwk } from "better-auth/plugins/jwt";
 import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import { withInheritedRoleAuthorization } from "@/auth/role-composition";
@@ -107,6 +109,21 @@ export const JWT_PLUGIN_OPTIONS = {
   },
   jwks: {
     keyPairConfig: { alg: "RS256", modulusLength: 2048 },
+  },
+  adapter: {
+    createJwk: async ({ alg, crv, ...key }, ctx) => {
+      // This deployment signs only RS256. Keep the existing key schema: the
+      // JWT plugin treats rows without algorithm metadata as the configured
+      // default. Other algorithms require persisted metadata before use.
+      if (alg !== "RS256" || crv != null) {
+        throw new Error("Only RS256 signing keys are supported");
+      }
+      const adapter = await getCurrentAdapter(ctx.context.adapter);
+      return adapter.create<Jwk>({
+        model: "jwks",
+        data: { ...key, createdAt: new Date() },
+      });
+    },
   },
   // Without this, the plugin's /get-session after-hook mints a JWT — a
   // jwks table read plus an RS256 signature — on EVERY authenticated
@@ -274,7 +291,7 @@ export const auth = betterAuth({
       issuer: APP_NAME,
     }),
     ...(ssoConfig ? [sso(ssoConfig)] : []),
-    jwt(JWT_PLUGIN_OPTIONS),
+    jwtWithExistingSchema(),
     oauthProvider({
       loginPage: OAUTH_PAGES.login,
       consentPage: OAUTH_PAGES.consent,
@@ -2731,4 +2748,22 @@ function getInvitationIdFromSignUpBody(
   } catch {
     return undefined;
   }
+}
+
+function jwtWithExistingSchema() {
+  const plugin = jwt(JWT_PLUGIN_OPTIONS);
+  // Declare the four fields the RS256 adapter persists. Other algorithms need
+  // stored algorithm metadata before they can be enabled.
+  const { publicKey, privateKey, createdAt, expiresAt } =
+    plugin.schema.jwks.fields;
+  return {
+    ...plugin,
+    schema: {
+      ...plugin.schema,
+      jwks: {
+        ...plugin.schema.jwks,
+        fields: { publicKey, privateKey, createdAt, expiresAt },
+      },
+    },
+  };
 }

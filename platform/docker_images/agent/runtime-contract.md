@@ -79,7 +79,7 @@ Copilot CLI exposes its native TUI unchanged in interactive runs and uses prompt
 
 ## Readable Transcript
 
-The maintained Archestra Agent, Claude Code, Codex, OpenCode, Hermes, OpenClaw, Grok Build, and Kimi Code images export their native message and tool history as a readable transcript. A custom image can provide the same completed-run experience by writing `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json` (normally `/var/run/archestra/readable-transcript.json`) before its process exits.
+The maintained Archestra Agent, Claude Code, Codex, OpenCode, Hermes, OpenClaw, Grok Build, Kimi Code, and GitHub Copilot CLI images export their native message and tool history as a readable transcript. A custom image can provide the same completed-run experience by writing `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json` (normally `/var/run/archestra/readable-transcript.json`) before its process exits.
 
 The file must be a JSON object using version 1 of this contract:
 

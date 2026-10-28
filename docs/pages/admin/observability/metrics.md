@@ -106,6 +106,39 @@ Every replica reports the same `llm_active_users` value, so aggregate it with `m
 
 LLM and MCP metrics carry trace exemplars, so a Grafana panel can link a data point to its trace. See [Exemplars](/docs/admin/observability#exemplars).
 
+## Limit Metrics
+
+These counters cover LLM spend, token, and request limits. They have their own labels; agent and request labels do not apply.
+
+| Metric | Type | Labels | Measures |
+| --- | --- | --- | --- |
+| <span id="llm_limit_checks_total"></span>`llm_limit_checks_total` | Counter | `entity_type`, `limit_kind`, `behavior`, `outcome` | Rule evaluations during request admission. |
+| <span id="llm_limit_storage_errors_total"></span>`llm_limit_storage_errors_total` | Counter | `operation` | Failures validating, admitting, settling, or cancelling limit usage. |
+
+`behavior` is `hard` or `soft`. `limit_kind` is `token_cost`, `tokens`, or `requests`; legacy per-minute types use the same token/request values. `entity_type` is the configured scope: `organization`, `team`, `agent`, `user`, `virtual_key`, `environment`, or `llm_oauth_client`.
+
+`outcome` is `within_limit`, `blocked` for an exhausted hard rule, `exceeded` for an exhausted soft rule, or `usage_unavailable` when spend cannot be evaluated. Unknown usage is not evidence that a threshold was crossed. Hard limits retain their existing failure behavior; soft limits do not block for unknown spend.
+
+Each evaluated rule contributes an observation. One request can contribute several, and checks can stop at a hard refusal. These counters are neither distinct request counts nor unique threshold crossings. Token and spend checks reflect reported usage; responses already in flight can exceed an allowance before another request is checked. Counters are local to each process, reset on restart, and have no limit, user, or key identifiers.
+
+For soft-limit exceeded checks over five minutes:
+
+```promql
+sum by (entity_type, limit_kind) (
+  increase(llm_limit_checks_total{behavior="soft",outcome="exceeded"}[5m])
+)
+```
+
+For hard-limit refusal observations per second:
+
+```promql
+sum by (entity_type, limit_kind) (
+  rate(llm_limit_checks_total{behavior="hard",outcome="blocked"}[5m])
+)
+```
+
+`llm_limit_storage_errors_total` uses `operation="validation"`, `"admission"`, `"settlement"`, or `"cancellation"`. A storage error is separate from an exhausted allowance. See [Limit Behavior](/docs/llm-proxy/costs-and-limits/limits#limit-behavior) to choose enforcement behavior.
+
 ## MCP Metrics
 
 | Metric | Type | Measures |

@@ -643,6 +643,22 @@ describe("LimitsPage", () => {
     );
   });
 
+  it("defaults to hard and submits the selected soft behavior", async () => {
+    render(<LimitsPage />);
+    const behavior = screen.getByRole("combobox", { name: "Behavior" });
+    expect(behavior).toHaveTextContent("Hard limit");
+    fireEvent.keyDown(behavior, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: /Soft limit/ }));
+    expect(behavior).toHaveTextContent("Soft limit");
+    fireEvent.change(screen.getByLabelText("Limit value"), {
+      target: { value: "100" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create limit" }));
+    expect(mockCreateLimit).toHaveBeenCalledWith(
+      expect.objectContaining({ behavior: "soft", limitValue: 100 }),
+    );
+  });
+
   it("saves a pending label after Advanced is collapsed", () => {
     render(<LimitsPage />);
 

@@ -3,6 +3,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  Activity,
   ArrowRightLeft,
   Bot,
   Boxes,
@@ -16,6 +17,7 @@ import {
   type LucideIcon,
   MessageSquareText,
   Plus,
+  ShieldCheck,
   Trash2,
   User,
   Users,
@@ -121,6 +123,7 @@ type UsageSummary = {
 const canBulkDeleteLimit = (limit: LimitData) => limit.entityType !== "user";
 
 type LimitFormState = {
+  behavior: "hard" | "soft";
   limitType: "token_cost" | "requests" | "tokens";
   entityType: LimitEntityType;
   entityId: string;
@@ -133,6 +136,7 @@ type LimitFormState = {
 };
 
 const DEFAULT_FORM_STATE: LimitFormState = {
+  behavior: "hard",
   limitType: "token_cost",
   entityType: "organization",
   entityId: "",
@@ -415,6 +419,7 @@ export default function LimitsPage() {
     const isAllModels = models.length === 0;
 
     return {
+      behavior: limit.behavior ?? "hard",
       limitType:
         limit.limitType === "requests_per_minute"
           ? "requests"
@@ -673,7 +678,12 @@ export default function LimitsPage() {
         size: 120,
         minSize: 110,
         cell: ({ row }) => (
-          <LimitKindLabel limitType={row.original.limitType} />
+          <span className="flex items-center gap-2">
+            <LimitKindLabel limitType={row.original.limitType} />
+            {row.original.behavior === "soft" && (
+              <Badge variant="secondary">Soft</Badge>
+            )}
+          </span>
         ),
       },
       {
@@ -787,6 +797,7 @@ export default function LimitsPage() {
           : formState.entityId,
       limitType: formState.limitType,
       limitValue: Number(formState.limitValue),
+      behavior: formState.behavior,
       cleanupInterval: formState.cleanupInterval,
       model: formState.isAllModels ? null : formState.models,
       labels: finalLabels,
@@ -1084,9 +1095,11 @@ export default function LimitsPage() {
             <InlineNotice variant="warning">
               <Info aria-hidden="true" />
               <InlineNoticeText>
-                Requests are blocked when any applicable limit is reached. For
-                example, a virtual key with remaining allowance is still blocked
-                if its team or organization has reached a limit.
+                Requests are blocked when any applicable hard limit is reached.
+                For example, a virtual key with remaining allowance is still
+                blocked if its team or organization has reached a hard limit.
+                Soft limits keep requests flowing and record exceeded limits in
+                metrics.
               </InlineNoticeText>
             </InlineNotice>
 
@@ -1304,6 +1317,62 @@ export default function LimitsPage() {
             </div>
 
             <div className="space-y-4 border-t pt-4">
+              <div className="space-y-2">
+                <Label htmlFor="limit-behavior">Behavior</Label>
+                <Select
+                  value={formState.behavior}
+                  onValueChange={(value) =>
+                    setFormState((current) => ({
+                      ...current,
+                      behavior: value as LimitFormState["behavior"],
+                    }))
+                  }
+                >
+                  <SelectTrigger
+                    id="limit-behavior"
+                    aria-label="Behavior"
+                    className="w-full"
+                  >
+                    <SelectValue>
+                      <span className="flex items-center gap-2">
+                        {formState.behavior === "hard" ? (
+                          <ShieldCheck className="size-4" />
+                        ) : (
+                          <Activity className="size-4" />
+                        )}
+                        {formState.behavior === "hard"
+                          ? "Hard limit"
+                          : "Soft limit"}
+                      </span>
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="w-[var(--radix-select-trigger-width)]">
+                    <SelectItem value="hard" textValue="Hard limit">
+                      <span className="flex items-start gap-2 py-1">
+                        <ShieldCheck className="mt-0.5 size-4 shrink-0" />
+                        <span className="flex flex-col gap-0.5">
+                          <span className="font-medium">Hard limit</span>
+                          <span className="text-muted-foreground text-xs whitespace-normal">
+                            Block requests when the limit is reached.
+                          </span>
+                        </span>
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="soft" textValue="Soft limit">
+                      <span className="flex items-start gap-2 py-1">
+                        <Activity className="mt-0.5 size-4 shrink-0" />
+                        <span className="flex flex-col gap-0.5">
+                          <span className="font-medium">Soft limit</span>
+                          <span className="text-muted-foreground text-xs whitespace-normal">
+                            Keep requests flowing and record exceeded limits in
+                            metrics.
+                          </span>
+                        </span>
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="grid items-start gap-4 sm:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1.4fr)]">
                 <div className="flex flex-col gap-2">
                   <div className="flex h-5 items-center gap-1.5">

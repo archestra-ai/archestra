@@ -18,6 +18,10 @@ const limitsTable = pgTable(
     entityId: text("entity_id").notNull(),
     limitType: varchar("limit_type").$type<LimitType>().notNull(),
     limitValue: integer("limit_value").notNull(),
+    behavior: varchar("behavior")
+      .$type<"hard" | "soft">()
+      .notNull()
+      .default("hard"),
     mcpServerName: varchar("mcp_server_name", { length: 255 }),
     toolName: varchar("tool_name", { length: 255 }),
     // JSONB array stores multiple models for a single limit (e.g., ["gpt-4o", "claude-3-5-sonnet"])

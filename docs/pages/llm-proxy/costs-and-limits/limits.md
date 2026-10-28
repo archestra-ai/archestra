@@ -18,8 +18,9 @@ Set budgets and rate limits in **Costs & Limits → Limits** so a busy key, runa
 1. Go to **Costs & Limits → Limits** and click **Create limit**.
 2. Under **Apply to**, choose the scope (**Organization**, **Team**, **Virtual key**, **User**, **Agent**, **LLM OAuth client**, or **Environment**) and select the target entity.
 3. Under **Select models**, keep **All models** so every model shares one pool, or pick specific models to cap only those models.
-4. Enter a whole-number **Limit value**, choose the **Limit kind** (**Spend**, **Tokens**, or **Requests**), and pick the reset **Interval**.
-5. Optionally expand **Labels** to tag the rule for filtering, then click **Create limit**.
+4. Under **Behavior**, choose **Hard limit** to block requests or **Soft limit** to observe usage without blocking.
+5. Enter a whole-number **Limit value**, choose the **Limit kind** (**Spend**, **Tokens**, or **Requests**), and pick the reset **Interval**.
+6. Optionally expand **Labels** to tag the rule for filtering, then click **Create limit**.
 
 ![The Create limit dialog showing scope, model selection, limit value, limit kind, and interval](/docs/automated_screenshots/llm-proxy_throughput.webp)
 
@@ -32,11 +33,19 @@ Set budgets and rate limits in **Costs & Limits → Limits** so a busy key, runa
 | **Organization**, **Team**, **Virtual key** | Rolling (`1h`–`1m`) and calendar intervals | **Per minute**, plus all rolling and calendar intervals | **Per minute**, plus all rolling and calendar intervals |
 | **User**, **Agent**, **LLM OAuth client**, **Environment** | Rolling (`1h`–`1m`) and calendar intervals | — | — |
 
-When more than one rule matches a call, every matching rule is checked:
+When more than one rule matches a call, every matching hard rule must allow it:
 
 - **Every matching scope must allow the request.** A virtual key with remaining allowance is still blocked if its billing team or the organization has reached its cap.
 - **Model-specific and all-models rules both apply.** A call to `claude-sonnet-4-6` checks both any rule targeting `claude-sonnet-4-6` and any rule set to **All models** on the same scope.
 - **Multi-model rules share one pool.** Selecting multiple models on a single rule caps their combined spend, tokens, or requests together.
+
+## Limit Behavior
+
+**Hard limit** blocks requests when the allowance is exhausted. **Soft limit** keeps requests flowing and records exceeded checks in Prometheus. Use soft limits to observe a workload before enforcing a cap. Existing limits and newly created limits default to hard.
+
+Choose **Behavior** when creating or editing an explicit spend, token, or request limit. Changing behavior preserves recorded usage and the reset schedule. A soft limit does not override another matching hard limit. Default user allowances remain hard.
+
+See [Limit Metrics](/docs/admin/observability/metrics#limit-metrics) for the counters. Your existing monitoring and alerting stack can use them to notify your team.
 
 ## Reset Intervals
 
@@ -68,7 +77,7 @@ At the top of **Costs & Limits → Limits**, the **Default user limit** card set
 
 ## When a Request Is Blocked
 
-When any matching rule is exhausted, the proxy rejects the call before forwarding it upstream:
+When any matching hard rule is exhausted, the proxy rejects the call before forwarding it upstream:
 
 | Limit reached | HTTP status | Error code | Details |
 | --- | --- | --- | --- |

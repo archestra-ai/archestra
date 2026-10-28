@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import { PreparedQuery } from "@/database/prepared-query";
+import { observeLimitCheck } from "@/observability/metrics/limit";
 import type { Limit, LimitEntityType } from "@/types/limit";
 import {
   readBucket,
@@ -55,7 +56,8 @@ class LlmThroughputModel {
       params.rules ?? (await LlmThroughputModel.findRules(params.entities));
     if (!rules.some((rule) => matchesModel(rule, params.model)))
       return { reservation: null };
-    return CacheEntryModel.withLocks(
+    const observations: Array<{ rule: Limit; exceeded: boolean }> = [];
+    const result = await CacheEntryModel.withLocks<ThroughputAdmission>(
       rules.map((rule) => `llm-throughput:${rule.id}`),
       async (entries, tx) => {
         // Re-read after acquiring locks shared with edits: a queued admission
@@ -83,7 +85,9 @@ class LlmThroughputModel {
           const actualOnly = money || isToken(rule);
           const amount = actualOnly ? 0 : 1;
           const shortage = counters[index].count + amount - rule.limitValue;
-          if (actualOnly ? shortage < 0 : shortage <= 0) return [];
+          const exceeded = actualOnly ? shortage >= 0 : shortage > 0;
+          observations.push({ rule, exceeded });
+          if (!exceeded || rule.behavior === "soft") return [];
           return [
             {
               entityType: rule.entityType,
@@ -150,6 +154,9 @@ class LlmThroughputModel {
         return { reservation };
       },
     );
+    for (const { rule, exceeded } of observations)
+      observeLimitCheck(rule, exceeded);
+    return result;
   }
 
   static async reconcile(params: {

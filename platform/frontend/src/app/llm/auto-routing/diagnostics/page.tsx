@@ -208,7 +208,7 @@ function TrainingSummary() {
             label: "Data up to",
             value: formatDate({
               date: history.last_created_at,
-              dateFormat: "MMM d",
+              dateFormat: "MMM d, yyyy",
             }),
           },
         ]

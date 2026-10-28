@@ -185,7 +185,7 @@ describe("AutoRoutingDiagnosticsPage", () => {
     const summary = await screen.findByTestId("auto-routing-training-summary");
     await waitFor(() =>
       expect(summary).toHaveTextContent(
-        "Trained on3,000 sessionsPast traffic80%Data up toOct 25",
+        "Trained on3,000 sessionsPast traffic80%Data up toOct 25, 2026",
       ),
     );
   });

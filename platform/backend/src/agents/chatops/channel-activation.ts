@@ -705,9 +705,11 @@ function activationKey(params: {
   scope?: string;
 }): AllowedCacheKey {
   const prefix =
-    params.provider === "slack"
-      ? CacheKey.SlackThreadActive
-      : CacheKey.TeamsThreadActive;
+    params.provider === "jira"
+      ? CacheKey.JiraThreadActive
+      : params.provider === "slack"
+        ? CacheKey.SlackThreadActive
+        : CacheKey.TeamsThreadActive;
   return `${prefix}-${params.channelId}::${params.threadId}${scopeSuffix(params.scope)}`;
 }
 
@@ -718,9 +720,11 @@ function muteHintKey(params: {
   scope?: string;
 }): AllowedCacheKey {
   const prefix =
-    params.provider === "slack"
-      ? CacheKey.SlackThreadMuteHint
-      : CacheKey.TeamsThreadMuteHint;
+    params.provider === "jira"
+      ? CacheKey.JiraThreadMuteHint
+      : params.provider === "slack"
+        ? CacheKey.SlackThreadMuteHint
+        : CacheKey.TeamsThreadMuteHint;
   return `${prefix}-${params.channelId}::${params.threadId}${scopeSuffix(params.scope)}`;
 }
 
@@ -731,9 +735,11 @@ function mutedKey(params: {
   scope?: string;
 }): AllowedCacheKey {
   const prefix =
-    params.provider === "slack"
-      ? CacheKey.SlackThreadMuted
-      : CacheKey.TeamsThreadMuted;
+    params.provider === "jira"
+      ? CacheKey.JiraThreadMuted
+      : params.provider === "slack"
+        ? CacheKey.SlackThreadMuted
+        : CacheKey.TeamsThreadMuted;
   return `${prefix}-${params.channelId}::${params.threadId}${scopeSuffix(params.scope)}`;
 }
 
@@ -809,9 +815,11 @@ function muteMarkerKey(params: {
   scope?: string;
 }): AllowedCacheKey {
   const prefix =
-    params.provider === "slack"
-      ? CacheKey.SlackThreadMuteMarker
-      : CacheKey.TeamsThreadMuteMarker;
+    params.provider === "jira"
+      ? CacheKey.JiraThreadMuteMarker
+      : params.provider === "slack"
+        ? CacheKey.SlackThreadMuteMarker
+        : CacheKey.TeamsThreadMuteMarker;
   return `${prefix}-${params.channelId}::${params.threadId}${scopeSuffix(params.scope)}`;
 }
 

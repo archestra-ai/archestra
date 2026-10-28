@@ -1,13 +1,15 @@
 ---
 title: Networking
 description: Configure public endpoints, streaming, and workload network isolation
-order: 2
-lastUpdated: 2026-10-22
+order: 4
+lastUpdated: 2026-10-27
 ---
 
 Give users and clients an HTTPS endpoint, then configure the routes and public URLs to match it.
 
 ## Public URLs and Ingress
+
+Route gateway traffic directly to the backend, and keep the web app and sign-in on the frontend.
 
 1. Configure DNS and TLS for your Archestra host.
 2. Set [`ARCHESTRA_FRONTEND_URL`](/docs/admin/deployment/configuration#ARCHESTRA_FRONTEND_URL) to the public UI URL and [`ARCHESTRA_API_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_API_BASE_URL) to every public backend or gateway URL. API base URLs accept a comma-separated list. Use `https://` even when TLS terminates at a load balancer.

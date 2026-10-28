@@ -2,7 +2,7 @@
 title: GitHub
 description: Connect GitHub documents to Knowledge and configure source access
 order: 3
-lastUpdated: 2026-10-19
+lastUpdated: 2026-10-27
 ---
 
 Let agents answer from your GitHub repositories: "Why did we drop Redis?" finds the pull request where you decided it. The connector syncs issues, pull request discussions, and repository files.
@@ -21,14 +21,22 @@ Let agents answer from your GitHub repositories: "Why did we drop Redis?" finds 
 | Field                 | Description                                                                                     |
 | --------------------- | ----------------------------------------------------------------------------------------------- |
 | GitHub API URL        | API endpoint (e.g., `https://api.github.com` for GitHub.com, or your GHE API URL)               |
-| Owner                 | GitHub organization or username that owns the repositories                                      |
+| Owner                 | GitHub organization or username used for automatic repository discovery                          |
 | Credential | Saved organization secret or GitHub App from **Settings → Credentials** |
-| Repositories          | Comma-separated repository names to sync (optional -- leave blank to sync all org repositories) |
-| Include Issues        | Toggle to sync issues and their comments (default: on)                                          |
-| Include Pull Requests | Toggle to sync pull requests and their comments (default: on)                                   |
-| Include Repository Files | Toggle to sync repository files (default: off)                                               |
-| File Types            | Comma-separated extensions (`.md`, `.tm.hcl`) or file names (`Dockerfile`, `Makefile`) to index when repository files are enabled, in any folder. `*` indexes every text file and skips binaries. Defaults to `.md`, `.mdx`, `.yaml`, `.yml` |
-| Folders               | Comma-separated folders to index, relative to the repository root (optional -- leave blank to index the whole repository) |
+| Repository selection | Choose **Selected repositories** or **All accessible repositories** in **Advanced**. |
+
+## Configure Repository Settings
+
+Sync issues from one repository and selected documentation from another, with separate settings in each repository card.
+
+1. Open **Advanced** and choose a repository selection mode.
+2. With **All accessible repositories**, configure the shared issues, pull requests, files and labels settings directly. Those settings apply to every repository the connector discovers.
+3. Switching from **All accessible repositories** to **Selected repositories** does not add cards automatically. Click **Add repository**, enter its full `owner/repo` name, and configure its settings. New cards use standard settings; they do not copy the shared form.
+4. When repository files are enabled, set **File Types**, **Folders** and **Exclude paths**. Save the connector, reopen **Advanced**, and check its mode and settings.
+
+- Removing the last selected repository does not enable discovery; add a repository or choose **All accessible repositories** explicitly. Switching modes keeps each unsaved draft. Saving applies the active form. Switching to **All accessible repositories** or changing its shared settings replaces individual customizations when saved; an unchanged save preserves existing settings.
+- Blank **Folders** means the whole repository; blank **Exclude paths** or **Labels to Skip** means none. Blank **File Types** uses `.md`, `.mdx`, `.yaml` and `.yml`; `*` includes every text file. Paths are repository-relative, not globs: `docs` includes `docs/guide.md`, not `docs-internal/guide.md`. Exclusions win and affect files only.
+- Existing populated repository lists open as cards with their previous effective settings; existing blank lists open the shared form. Saving either mode keeps one connector. Changing selection or filters affects later syncs; it does not automatically remove previously indexed documents.
 
 ## GitHub Auto-Sync Permissions
 

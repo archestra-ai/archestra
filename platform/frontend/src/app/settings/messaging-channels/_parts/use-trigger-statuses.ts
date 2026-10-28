@@ -45,6 +45,8 @@ export function useTriggerStatuses() {
   const telegram = chatOpsProviders?.find((p) => p.id === "telegram");
   const telegramActive =
     telegramAvailable && hasLlmKey && !!telegram?.configured;
+  const jira = chatOpsProviders?.find((provider) => provider.id === "jira");
+  const jiraActive = hasLlmKey && !!jira?.configured;
 
   const emailActive =
     !!configData?.features.incomingEmail?.enabled && !!emailStatus?.isActive;
@@ -57,6 +59,7 @@ export function useTriggerStatuses() {
       { id: "ms-teams", active: msTeamsActive, available: true },
       { id: "slack", active: slackActive, available: true },
       { id: "telegram", active: telegramActive, available: telegramAvailable },
+      { id: "jira", active: jiraActive, available: true },
       { id: "email", active: emailActive, available: true },
     ] as const
   )
@@ -76,6 +79,7 @@ export function useTriggerStatuses() {
     slack: slackActive,
     telegram: telegramActive,
     telegramAvailable,
+    jira: jiraActive,
     email: emailActive,
     firstProviderHref,
     isLoading:

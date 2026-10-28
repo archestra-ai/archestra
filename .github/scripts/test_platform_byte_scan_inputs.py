@@ -223,6 +223,12 @@ sys.stdout.write((pathlib.Path(os.environ['FIXTURE']) / name).read_text())
             (root / "gcloud").write_text("#!/bin/sh\nexit 1\n")
             (root / "curl").write_text('''#!/usr/bin/env python3
 import os, pathlib, sys
+if sys.argv[-1] == 'https://ghcr.io/token':
+    assert 'scope=repository:archestra-ai/ci/platform:pull' in sys.argv
+    assert '--header' not in sys.argv
+    print('{"token":"anonymous-registry-token"}')
+    sys.exit(0)
+assert 'Authorization: Bearer anonymous-registry-token' in sys.argv
 assert sys.argv[-1].startswith('https://' + os.environ['EXPECTED_REPO'].split('/')[0] + '/v2/'), sys.argv[-1]
 assert '@' not in sys.argv[-1], sys.argv[-1]
 pathlib.Path(sys.argv[sys.argv.index('--output') + 1]).write_text((pathlib.Path(os.environ['FIXTURE']) / 'sbom').read_text())

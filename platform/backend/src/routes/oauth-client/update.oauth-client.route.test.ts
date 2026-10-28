@@ -1,8 +1,10 @@
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import ManagedOauthClientModel from "@/models/managed-oauth-client";
+import ModelPoolModel from "@/models/model-pool";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
 import { expect, test } from "@/test";
@@ -171,4 +173,65 @@ test("provider mode changes produce non-secret audit diffs", async ({
     });
     expect(JSON.stringify(audits)).not.toContain("sk-audit-secret");
   });
+});
+
+test("model pools are kept on the client and need permission to change", async ({
+  makeMember,
+  makeSecret,
+  makeLlmProviderApiKey,
+}) => {
+  config.llmProxy.modelPoolsEnabled = true;
+  try {
+    const member = await makeMember(ctx.user.id, ctx.organizationId, {
+      role: "member",
+    });
+    const secret = await makeSecret();
+    const key = await makeLlmProviderApiKey(ctx.organizationId, secret.id, {
+      provider: "openai",
+    });
+    const pool = await ModelPoolModel.create({
+      organizationId: ctx.organizationId,
+      input: {
+        name: "gpt-pool",
+        members: [
+          {
+            providerApiKeyId: key.id,
+            modelId: "gpt-4o",
+            priority: 1,
+            weight: 1,
+            enabled: true,
+          },
+        ],
+      },
+    });
+    const { oauthClient } = await ManagedOauthClientModel.create({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      name: "Pool client",
+      providerApiKeys: [{ provider: "openai", providerApiKeyId: key.id }],
+    });
+    const update = (payload: Record<string, unknown>) =>
+      ctx.app.inject({
+        method: "PUT",
+        url: `/api/oauth-clients/${oauthClient.id}`,
+        payload: { name: oauthClient.name, scopes: ["llm:proxy"], ...payload },
+      });
+
+    expect((await update({ modelPoolIds: [pool.id] })).statusCode).toBe(403);
+    await db
+      .update(schema.membersTable)
+      .set({ role: "admin" })
+      .where(eq(schema.membersTable.id, member.id));
+    const granted = await update({ modelPoolIds: [pool.id] });
+    expect(granted.statusCode, granted.body).toBe(200);
+    expect(granted.json().modelPoolIds).toEqual([pool.id]);
+    // Omitted on another edit, the pools stay.
+    const renamed = await update({ name: "Renamed pool client" });
+    expect(renamed.json().modelPoolIds).toEqual([pool.id]);
+    expect(
+      (await update({ modelPoolIds: [crypto.randomUUID()] })).statusCode,
+    ).toBe(400);
+  } finally {
+    config.llmProxy.modelPoolsEnabled = false;
+  }
 });

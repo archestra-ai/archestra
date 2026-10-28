@@ -11,6 +11,8 @@ const PROVENANCE_TO_CLIENT_ID: Partial<
 > = {
   "claude-code-header": "claude-code",
   "claude-code-metadata": "claude-code",
+  "claude-desktop-header": "claude-desktop",
+  "claude-desktop-metadata": "claude-desktop",
   "codex-turn-metadata": "codex",
   "pi-session-header": "pi",
   "opencode-session-header": "opencode",

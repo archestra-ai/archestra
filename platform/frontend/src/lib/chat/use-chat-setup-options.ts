@@ -36,6 +36,7 @@ import {
   type LlmProviderApiKey,
   useAvailableLlmProviderApiKeys,
 } from "@/lib/llm-provider-api-keys.query";
+import { useAvailableModelPools } from "@/lib/model-pools.query";
 
 export type ChatSetupAgent = NonNullable<
   ReturnType<typeof useChatAgents>["data"]
@@ -87,6 +88,9 @@ export function useChatSetupOptions(params: {
   onApiKeyChange?: (apiKeyId: string) => void;
   onProviderChange?: (provider: SupportedProvider, apiKeyId: string) => void;
   onThinkingEffortChange?: (effort: ThinkingEffortSetting) => void;
+  /** The model pool the chat is set to; it stands in for the key and model. */
+  modelPoolId?: string | null;
+  onModelPoolChange?: (modelPoolId: string | null) => void;
 }) {
   const catalog = useModelProviderCatalog();
   const { data: session } = useSession();
@@ -203,9 +207,11 @@ export function useChatSetupOptions(params: {
 
   // Same guard as the model picker: when the key changes and the selected
   // model is no longer offered, fall back to the best available one.
-  const { selectedModel, onModelChange, suppressAutoSelect } = params;
+  // A pool's member model need not be in its key's list; the pool keeps it.
+  const { selectedModel, onModelChange, suppressAutoSelect, modelPoolId } =
+    params;
   useEffect(() => {
-    if (isPlaceholderData || suppressAutoSelect) return;
+    if (isPlaceholderData || suppressAutoSelect || modelPoolId) return;
     const next = resolveAutoSelectedModel({
       selectedModel,
       availableModels: models.map((m) => ({
@@ -220,6 +226,7 @@ export function useChatSetupOptions(params: {
   }, [
     isPlaceholderData,
     suppressAutoSelect,
+    modelPoolId,
     selectedModel,
     models,
     modelsLoading,
@@ -255,8 +262,17 @@ export function useChatSetupOptions(params: {
     [keys, catalog, params.currentProvider],
   );
 
+  // ---- model pools: picked in place of a key, and the pool picks the model
+  const { data: pools = [] } = useAvailableModelPools({
+    enabled: !!params.onModelPoolChange,
+  });
+  const activePool = params.modelPoolId
+    ? pools.find((pool) => pool.id === params.modelPoolId)
+    : undefined;
+
   // ---- reasoning
   const supportsReasoning =
+    !activePool &&
     !!activeModel &&
     !!params.onThinkingEffortChange &&
     modelSupportsThinkingEffort({
@@ -269,7 +285,11 @@ export function useChatSetupOptions(params: {
   // ---- actions
   const updateConversation = useUpdateConversation();
   const selectKey = (key: LlmProviderApiKey) => {
-    if (key.id === params.apiKeyId) return;
+    if (key.id === params.apiKeyId) {
+      // The pool's own key: back to it, alone.
+      if (params.modelPoolId) params.onModelPoolChange?.(null);
+      return;
+    }
     if (params.conversationId) {
       if (params.onProviderChange) {
         params.onProviderChange(key.provider, key.id);
@@ -302,10 +322,19 @@ export function useChatSetupOptions(params: {
     modelsLoading,
     activeModel,
     modelName:
-      activeModel?.displayName ?? params.fallbackModelName ?? "Choose a model",
+      activePool?.name ??
+      activeModel?.displayName ??
+      params.fallbackModelName ??
+      "Choose a model",
     modelSections,
     selectModel: (dbId: string) => {
       if (dbId !== params.selectedModel) params.onModelChange(dbId);
+    },
+    // model pools
+    pools,
+    activePool,
+    selectPool: (id: string) => {
+      if (id !== params.modelPoolId) params.onModelPoolChange?.(id);
     },
     // credentials
     keys,

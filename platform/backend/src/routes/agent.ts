@@ -81,6 +81,7 @@ import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclus
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { findVisibleChatAgent } from "@/services/chat-agent-visibility";
+import { applyAgentModelPool } from "@/services/chat-model-pools";
 import { getObservedClaudeCodeToolTokenCount } from "@/services/claude-code-tool-token-count";
 import { getDocsSuggestedPrompts } from "@/services/docs-mcp-servers";
 import {
@@ -832,6 +833,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      await applyAgentModelPool(body, { organizationId, userId: user.id });
       // A model and its API key are a pair: persist both or neither.
       if (
         !isModelSelectionComplete({
@@ -2232,6 +2234,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      await applyAgentModelPool(body, { organizationId, userId: user.id });
+
       // Built-in agent guard: restrict which fields can be modified
       let updateData: typeof body;
       if (existingAgent.builtInAgentConfig) {
@@ -2257,6 +2261,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             llmApiKeyId: body.llmApiKeyId,
           }),
           ...(body.modelId !== undefined && { modelId: body.modelId }),
+          ...(body.modelPoolId !== undefined && {
+            modelPoolId: body.modelPoolId,
+          }),
           ...(body.fastModelId !== undefined && {
             fastModelId: body.fastModelId,
           }),

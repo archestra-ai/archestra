@@ -286,6 +286,16 @@ export const ${OPENCODE_V1_PROXY_EXPORT} = async () => ({
         const headers = Object.fromEntries(Object.entries(options.headers ?? {}).filter(([name]) => !clientCredentialHeaders.some((credential) => credential.toLowerCase() === name.toLowerCase())));
         const whitelist = Array.isArray(previous.whitelist) ? served.filter((id) => previous.whitelist.includes(id)) : [...served];
         config.provider[providerId] = { ...previous, whitelist,
+          ...(catalogModelRouter[providerId] ? {
+            name: catalogModelRouter[providerId].name,
+            npm: "@ai-sdk/openai",
+            models: Object.fromEntries(catalogModelRouter[providerId].models.map((model) => [model.id, {
+              name: model.name,
+              id: catalogModelRouter[providerId].provider + ":" + model.id,
+              ...(model.context > 0 || model.output > 0 ? { limit: { context: model.context > 0 ? model.context : 0, output: model.output > 0 ? model.output : 0 } } : {}),
+              ...(model.inputModalities?.length ? { modalities: { input: model.inputModalities, output: ["text"] }, attachment: model.inputModalities.some((modality) => modality !== "text") } : {}),
+            }])),
+          } : {}),
           options: { ...options, baseURL, apiKey: managedKey, headers: { ...headers, ...headersFor(providerId) } },
         };
         managedKeys.set(providerId, managedKey);
@@ -433,7 +443,8 @@ export const ${OPENCODE_V1_OAUTH_EXPORT} = async () => ({
  * - providers without a route are disabled, matching V1's enabled_providers
  *   list; a provider the organization's credential serves keeps its stock
  *   name and ids, lists only the models that credential serves, and carries
- *   the managed key;
+ *   the managed key. Azure and Copilot use managed Model Router providers
+ *   with their complete deployment catalogs;
  * - the `model.request` hook swaps the base URL and adds the attribution
  *   headers, and fails closed for a provider the proxy cannot route;
  * - a ChatGPT sign-in (OpenAI requests bound for the Codex backend) is marked
@@ -514,13 +525,38 @@ ${params.runtime ? "const directInferencePath = /(?:\\/(?:messages|responses|cha
 export default {
   id: "archestra.llm-proxy",
   async setup(ctx${params.runtime ? ", bindingProof" : ""}) {
-    await ctx.provider.transform(async (editor) => {
+    // The editor is an Immer draft and expires when the callback returns.
+    const sdk = Object.keys(catalogModelRouter).length ? await import("@opencode/plugin") : null;
+    await ctx.provider.transform((editor) => {
       activeRoutes = { ...routes };
       effectiveRouteHeaders = { ...routeHeaders };
       managedProviders.clear();
       const managedKey = readManagedKey();
       managedCredential = managedKey;
+      if (Object.keys(catalogModelRouter).length && managedKey) {
+        for (const [id, definition] of Object.entries(catalogModelRouter)) {
+          if (!Object.hasOwn(routes, id)) continue;
+          const providerID = sdk.Provider.ID.make(id);
+          const models = definition.models.map((model) => {
+            const defaults = sdk.Model.Info.default(providerID, sdk.Model.ID.make(model.id));
+            return { ...defaults, name: model.name, modelID: sdk.Model.ID.make(definition.provider + ":" + model.id),
+              limit: { ...defaults.limit, ...(model.context > 0 ? { context: model.context } : {}), ...(model.output > 0 ? { output: model.output } : {}) },
+              ...(model.inputModalities?.length ? { capabilities: { ...defaults.capabilities, input: [...model.inputModalities] } } : {}),
+            };
+          });
+          const info = { ...sdk.Provider.Info.empty(providerID), name: definition.name, activation: "enabled",
+            package: "@opencode/ai/providers/openai", settings: { apiKey: managedKey, baseURL: routes[id] }, headers: { ...managedHeaders } };
+          if (editor.get(id)) {
+            editor.update(id, (provider) => Object.assign(provider, info));
+            editor.models.set(id, models);
+          } else editor.add({ info, models });
+          managedProviders.add(id);
+          effectiveRouteHeaders[id] = {};
+        }
+      }
+      if (!managedKey) for (const id of Object.keys(catalogModelRouter)) delete activeRoutes[id];
       for (const [id, served] of Object.entries(catalogManaged)) {
+        if (Object.hasOwn(catalogModelRouter, id)) continue;
         const record = editor.get(id);
         // A provider the client does not know cannot be shown without an
         // extra provider of the proxy's own, so there is nothing to filter.
@@ -617,6 +653,7 @@ function catalogSource(params: RenderOpenCodeRoutingPluginParams): string {
   const catalog = params.catalog;
   return `const catalogRoutes = ${JSON.stringify(catalog?.routes ?? {})};
 const catalogManaged = ${JSON.stringify(catalog?.managed ?? {})};
+const catalogModelRouter = ${JSON.stringify(catalog?.modelRouter ?? {})};
 const catalogPassthrough = ${JSON.stringify(catalog?.passthrough ?? [])};
 const legacyProviderIds = ${JSON.stringify(catalog?.legacy ?? {})};
 const hasCatalog = ${JSON.stringify(params.catalog !== undefined)};`;

@@ -50,6 +50,8 @@ export const TaskTypeSchema = z.enum([
   "agent_run_attention_notice",
   "check_due_model_cost_backfills",
   "model_cost_backfill",
+  "jira_chatops_event",
+  "jira_chatops_poll",
 ]);
 export type TaskType = z.infer<typeof TaskTypeSchema>;
 
@@ -111,6 +113,8 @@ export const TASK_LANES = {
     "agent_run_attention_notice",
     "check_due_model_cost_backfills",
     "model_cost_backfill",
+    "jira_chatops_event",
+    "jira_chatops_poll",
   ],
 } as const satisfies Record<string, TaskType[]>;
 

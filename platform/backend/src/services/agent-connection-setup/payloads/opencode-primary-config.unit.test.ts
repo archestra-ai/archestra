@@ -167,6 +167,71 @@ test("the runtime catalog addresses the installation's agent on ordinary proxy r
   });
 });
 
+test("managed Azure deployments and Copilot models use the model router without enabling native passthrough", () => {
+  const primaryProviders: SetupScriptProxySection["primaryProviders"] = [
+    {
+      provider: "azure",
+      name: "My resource",
+      models: [
+        {
+          id: "custom/deployment",
+          name: "Deployment",
+          context: 128000,
+          output: 4096,
+        },
+      ],
+    },
+    {
+      provider: "github-copilot",
+      name: "My subscription",
+      models: [{ id: "gpt-codex", name: "Codex", context: null, output: null }],
+    },
+  ];
+  const payload = openCodePrimaryConfig(
+    { ...PROXY, primaryProviders, passthroughProviders: [] },
+    "Acme",
+  );
+  expect(payload.unsupported).toEqual([]);
+  expect(payload.catalog).toMatchObject({
+    routes: {
+      "archestra-azure": "https://proxy.example/v1/model-router",
+      "archestra-github-copilot": "https://proxy.example/v1/model-router",
+    },
+    managed: {
+      "archestra-azure": ["custom/deployment"],
+      "archestra-github-copilot": ["gpt-codex"],
+    },
+    passthrough: [],
+    modelRouter: {
+      "archestra-azure": {
+        provider: "azure",
+        name: "Azure AI Foundry",
+        models: primaryProviders[0].models,
+      },
+      "archestra-github-copilot": {
+        provider: "github-copilot",
+        name: "GitHub Copilot",
+        models: primaryProviders[1].models,
+      },
+    },
+  });
+  expect(payload.routeHeaders).toEqual({});
+  expect(
+    publicManagedCatalog({
+      primaryProviders,
+      ordinaryBaseUrl: "https://deployment.example/v1",
+      routingAgentId: "agent-1",
+    }),
+  ).toMatchObject({
+    ...payload.catalog,
+    routes: {
+      "archestra-azure": "https://deployment.example/v1/model-router/agent-1",
+      "archestra-github-copilot":
+        "https://deployment.example/v1/model-router/agent-1",
+    },
+  });
+});
+
 test("connect writes the key and leaves the client's providers, allowlists and pins alone", () => {
   const home = mkdtempSync(path.join(tmpdir(), "opencode-primary-"));
   const configPath = path.join(home, ".config/opencode/opencode.json");

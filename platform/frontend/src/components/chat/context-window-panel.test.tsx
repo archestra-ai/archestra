@@ -444,4 +444,85 @@ describe("ContextWindowDialog — compact action", () => {
       screen.queryByRole("button", { name: /compact now/i }),
     ).not.toBeInTheDocument();
   });
+
+  it("keeps the panel synchronized with the active model's maxTokens and refined tokensUsed", async () => {
+    // Reproduces the composer model-switch / post-turn refinement case:
+    // breakdown was built on a 328k window with 9.7k estimated tokens, then
+    // the user switched to a 16.4k model (gpt-3.5-turbo-0613).
+    await openDialog(
+      <ContextWindowDialog
+        breakdown={makeBreakdown({
+          usedTokens: 9_700,
+          contextLength: 328_000,
+          freeTokens: 318_300,
+          usedPercent: 2.957,
+        })}
+        tokensUsed={9_700}
+        maxTokens={16_385}
+        onCompact={vi.fn()}
+      >
+        <button type="button">Open</button>
+      </ContextWindowDialog>,
+    );
+
+    // 9.7k / 16.4k tokens → 59% used, 21% remaining until auto-compact (80% - 59.2%)
+    expect(screen.getByText(/9\.7k \/ 16\.4k tokens/)).toBeInTheDocument();
+    expect(screen.getByText("59")).toBeInTheDocument();
+    expect(
+      screen.getByText("21% of context remaining until auto-compact."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the freed-tokens confirmation note and compact button after manual compaction clears the breakdown", async () => {
+    const onCompact = vi.fn();
+    await openDialog(
+      <ContextWindowDialog
+        breakdown={null}
+        tokensUsed={18_000}
+        maxTokens={200_000}
+        lastCompaction={{
+          originalTokenEstimate: 90_000,
+          compactedTokenEstimate: 18_000,
+          trigger: "manual",
+        }}
+        onCompact={onCompact}
+      >
+        <button type="button">Open</button>
+      </ContextWindowDialog>,
+    );
+
+    expect(screen.getByText("18.0k")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Compaction summarized earlier turns and freed/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("72.0k tokens")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /compact now/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("disables the compact button while compacting and shows auto-compaction wording in EmptyState", async () => {
+    await openDialog(
+      <ContextWindowDialog
+        breakdown={null}
+        tokensUsed={20_000}
+        maxTokens={200_000}
+        lastCompaction={{
+          originalTokenEstimate: 100_000,
+          compactedTokenEstimate: 20_000,
+          trigger: "auto",
+        }}
+        onCompact={vi.fn()}
+        isCompacting
+      >
+        <button type="button">Open</button>
+      </ContextWindowDialog>,
+    );
+
+    expect(
+      screen.getByText(/Auto-compaction summarized earlier turns and freed/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("80.0k tokens")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /compacting/i })).toBeDisabled();
+  });
 });

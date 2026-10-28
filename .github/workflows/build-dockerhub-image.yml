@@ -52,6 +52,7 @@ jobs:
   build-dockerhub-image:
     name: Build Docker Hub image
     permissions:
+      packages: write # Required by the reusable GHCR-capable publisher.
       contents: read # Required to checkout the repository and build the image.
       id-token: write # Required for Workload Identity Federation when pushing images.
     uses: $/.github/workflows/build-native-multi-arch-image.yml

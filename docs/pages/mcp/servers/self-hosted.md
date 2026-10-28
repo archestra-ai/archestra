@@ -2,7 +2,7 @@
 title: Self-Hosted Servers
 description: Run MCP server processes in Kubernetes and manage their runtime
 order: 4
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -19,7 +19,7 @@ Run any MCP server for your whole team, even one built to run on a laptop. Many 
 With the quickstart or the Helm chart, there is nothing to set up. Go straight to [adding a self-hosted server](/docs/mcp/servers/adding#self-hosted-servers).
 
 - **[Quickstart](/docs/get-started#run-archestra):** Archestra runs its own small Kubernetes cluster inside Docker. That is why the command mounts the Docker socket.
-- **[Helm chart](/docs/admin/deployment#install-with-helm):** Archestra runs servers in the cluster it is installed in. The chart creates the service account and permissions it needs.
+- **[Helm chart](/docs/admin/deployment/helm#install):** Archestra runs servers in the cluster it is installed in. The chart creates the service account and permissions it needs.
 - **Anything else:** mount a kubeconfig for the target cluster, and set [`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`](/docs/admin/deployment/configuration#ARCHESTRA_ORCHESTRATOR_KUBECONFIG) to its path.
 
 ## Change How It Runs

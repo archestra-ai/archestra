@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import tarfile
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -208,9 +209,13 @@ class HandoffFixture(unittest.TestCase):
         image = "docker.io/archestra/platform"
         directory = self.root / "promotion"
         directory.mkdir()
-        root_digest = "sha256:" + "e" * 64
+        (directory / "image.oci.tar").write_bytes(fixture_archive()[0])
+        with tarfile.open(directory / "image.oci.tar") as archive:
+            root_digest = json.load(archive.extractfile("index.json"))["manifests"][0]["digest"]
         def copy(args, **kwargs):
             self.assertEqual(args[:4], ["skopeo", "copy", "--all", "--preserve-digests"])
+            self.assertEqual(args[-1], "docker://" + image + "@" + root_digest)
+            self.assertNotIn(":candidate-", " ".join(args))
             Path(args[args.index("--digestfile") + 1]).write_text(root_digest)
         values = [json.dumps({"manifests": [{"digest": record["oci"]["runtime_manifest"]},
                                            {"digest": record["oci"]["attestations"][0]}]}),
@@ -220,6 +225,13 @@ class HandoffFixture(unittest.TestCase):
         ) as run, patch.object(HANDOFF, "command", side_effect=values):
             self.assertEqual(HANDOFF.push(record, image, "amd64"), root_digest)
             run.assert_called_once()
+        def changed_digest(args, **kwargs):
+            Path(args[args.index("--digestfile") + 1]).write_text("sha256:" + "0" * 64)
+        with patch.dict(os.environ, {"CANDIDATE_DIR": str(directory)}), patch.object(
+            HANDOFF.subprocess, "run", side_effect=changed_digest
+        ), patch.object(HANDOFF, "command") as inspect, self.assertRaisesRegex(ValueError, "scanned archive root"):
+            HANDOFF.push(record, image, "amd64")
+        inspect.assert_not_called()
         wrong = [values[0], json.dumps({"config": {"digest": "sha256:" + "0" * 64}})]
         with patch.dict(os.environ, {"GITHUB_RUN_ID": "14", "GITHUB_RUN_ATTEMPT": "1", "CANDIDATE_DIR": str(directory)}), patch.object(
             HANDOFF.subprocess, "run", side_effect=copy

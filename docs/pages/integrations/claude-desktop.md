@@ -2,7 +2,7 @@
 title: Claude Desktop
 description: Route Claude Desktop's inference and tools through Archestra
 order: 2
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -39,7 +39,9 @@ Your admin decides which one Desktop uses. When an admin picks provider keys for
 
 ## Tools, Skills, and Plugins
 
-After Desktop restarts, open **Settings → Connectors**, select **archestra**, and sign in. In each conversation, enable it under **+ → Connectors**. A connected checkmark in Settings confirms the connection, not its selection for your conversation. Ask Claude to list the gateway's tools to verify availability.
+After Desktop restarts, open **Settings → Connectors**, select **archestra**, and sign in. In each conversation, enable it under **+ → Connectors**. A connected checkmark in Settings confirms the connection, not its selection for your conversation.
+
+Ask Claude to list the gateway's tools to verify availability. When [Guardrails](/docs/agents/guardrails) are enabled, Desktop's **Code** and **Cowork** sessions need this connector enabled to receive remedy plans and approval reviews.
 
 The skills and [plugins](/docs/agents/plugins) selected on **Connect** install automatically after Desktop restarts, and plugins show under **Customize → Plugins**. Setup pins the selected snapshot; rerun **Connect** to install an updated snapshot.
 

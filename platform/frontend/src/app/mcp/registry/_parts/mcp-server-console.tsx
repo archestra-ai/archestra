@@ -1,9 +1,10 @@
 "use client";
 
-// The Logs / Inspector / Shell console of a local MCP server's detail page:
-// one dark frame whose top bar carries the connection switcher, its state and
-// the tab's own actions, and whose tmux-style status bar carries the tab's live
-// status and the equivalent kubectl command. Only the body swaps between tabs.
+// The Logs / Inspector / Shell console of an MCP server's detail page (a remote
+// server has only the Inspector): one dark frame whose top bar carries the
+// connection switcher, its state and the tab's own actions, and whose
+// tmux-style status bar carries the tab's live status and the equivalent
+// kubectl command. Only the body swaps between tabs.
 
 import { E2eTestId, type McpDeploymentStatusEntry } from "@archestra/shared";
 import {
@@ -21,7 +22,14 @@ import {
   WrapText,
   Zap,
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Command,
   CommandEmpty,
@@ -78,6 +86,7 @@ export function McpServerConsole({
   installs,
   deploymentStatuses,
   initialServerId,
+  hasPods = true,
 }: {
   /** Which page tab is showing; tab switching lives in the page's tab strip. */
   tab: McpServerConsoleTab;
@@ -85,6 +94,11 @@ export function McpServerConsole({
   installs: McpLogsInstall[];
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   initialServerId: string | null;
+  /**
+   * False for a remote server: its connections are upstream URLs, not pods,
+   * so there is no deployment state to wait for or show.
+   */
+  hasPods?: boolean;
 }) {
   const [serverId, setServerId] = useState<string | null>(null);
 
@@ -123,6 +137,9 @@ export function McpServerConsole({
       : null;
   const status = serverId ? deploymentStatuses[serverId] : undefined;
   const isRunning = status?.state === "running";
+  // The Inspector talks to the live server: a pod once it runs, or a remote
+  // server's URL straight away.
+  const canInspect = !hasPods || isRunning;
 
   // A shell runs commands inside the server's container in the cluster, so it
   // stays with the people who manage installations; the backend refuses it to
@@ -137,10 +154,10 @@ export function McpServerConsole({
   // open a stream that can only time out.
   const noPod = hasNoPodToStream(status);
   // SPDX-SnippetEnd
-  const logs = useLogStream(noPod ? null : serverId);
+  const logs = useLogStream(noPod || !hasPods ? null : serverId);
   const inspector = useInspector(
     inspectorServerId,
-    tab === "inspector" && isRunning,
+    tab === "inspector" && canInspect,
   );
   const shellActive =
     tab === "debug" && !!serverId && !!canOpenShell && isRunning;
@@ -179,7 +196,7 @@ export function McpServerConsole({
     );
     body = <LogsBody logs={logs} status={status} noPod={noPod} />;
   } else if (tab === "inspector") {
-    if (inspectorServerId && isRunning) {
+    if (inspectorServerId && canInspect) {
       actions = (
         <>
           <BarButton
@@ -205,7 +222,7 @@ export function McpServerConsole({
       );
     }
     statusLeft =
-      inspectorServerId && isRunning ? (
+      inspectorServerId && canInspect ? (
         <InspectorStatus inspector={inspector} />
       ) : (
         <StatusItem>
@@ -231,7 +248,7 @@ export function McpServerConsole({
           }
         />
       ) : null
-    ) : !isRunning ? (
+    ) : !canInspect ? (
       <PodNotRunningState status={status} purpose="inspector" />
     ) : (
       <InspectorBody inspector={inspector} />
@@ -284,6 +301,7 @@ export function McpServerConsole({
           totalCount={installs.length}
           credentialFiltered={tab === "inspector"}
           deploymentStatuses={deploymentStatuses}
+          hasPods={hasPods}
           serverId={serverId}
           setServerId={setServerId}
           myEmail={myEmail}
@@ -324,6 +342,7 @@ function InstanceSwitcher({
   totalCount,
   credentialFiltered,
   deploymentStatuses,
+  hasPods,
   serverId,
   setServerId,
   myEmail,
@@ -333,6 +352,7 @@ function InstanceSwitcher({
   totalCount: number;
   credentialFiltered: boolean;
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
+  hasPods: boolean;
   serverId: string | null;
   setServerId: (id: string) => void;
   myEmail: string | null;
@@ -341,7 +361,11 @@ function InstanceSwitcher({
   const [query, setQuery] = useState("");
   const commandRef = useRef<HTMLDivElement>(null);
   const selected = installs.find((i) => i.id === serverId);
-  const s = serverId ? deploymentStatuses[serverId] : undefined;
+  const statusOf = useCallback(
+    (id: string) => (hasPods ? deploymentStatuses[id] : undefined),
+    [hasPods, deploymentStatuses],
+  );
+  const s = serverId ? statusOf(serverId) : undefined;
   const cs = connState(s);
   const hiddenCount = credentialFiltered ? totalCount - installs.length : 0;
   // Open the list even with one option when others were filtered out, so the
@@ -359,15 +383,20 @@ function InstanceSwitcher({
         .map((g) => ({
           ...g,
           items: g.items.filter((i) =>
-            connHaystack(i, deploymentStatuses[i.id]).includes(q),
+            connHaystack({
+              install: i,
+              status: statusOf(i.id),
+              hasPods,
+            }).includes(q),
           ),
         }))
         .filter((g) => g.items.length > 0)
     : groups;
   const counts = useMemo(() => {
     const c = { running: 0, starting: 0, failed: 0, off: 0 };
+    if (!hasPods) return c;
     for (const i of installs) {
-      const st = connState(deploymentStatuses[i.id]);
+      const st = connState(statusOf(i.id));
       if (st === "running") c.running += 1;
       else if (st === "pending" || st === "waking" || st === "unknown")
         c.starting += 1;
@@ -375,7 +404,7 @@ function InstanceSwitcher({
       else c.off += 1;
     }
     return c;
-  }, [installs, deploymentStatuses]);
+  }, [installs, hasPods, statusOf]);
 
   const meta = [
     ownerLabel(selected, myEmail),
@@ -387,7 +416,7 @@ function InstanceSwitcher({
 
   const identity = (
     <>
-      <ConnDot state={cs} />
+      {hasPods && <ConnDot state={cs} />}
       <span className="truncate font-mono text-[13px] font-medium text-slate-100">
         {selected?.name ?? "—"}
       </span>
@@ -446,7 +475,11 @@ function InstanceSwitcher({
                 <CommandInput
                   value={query}
                   onValueChange={setQuery}
-                  placeholder="Search name, owner, team or pod"
+                  placeholder={
+                    hasPods
+                      ? "Search name, owner, team or pod"
+                      : "Search name, owner or team"
+                  }
                   className="text-xs"
                 />
               )}
@@ -468,16 +501,22 @@ function InstanceSwitcher({
                     </>
                   )}
                 </span>
-                <span className="flex shrink-0 items-center gap-2.5 font-mono tabular-nums">
-                  <CountPip tone="running" n={counts.running} label="running" />
-                  <CountPip
-                    tone="starting"
-                    n={counts.starting}
-                    label="starting"
-                  />
-                  <CountPip tone="failed" n={counts.failed} label="failed" />
-                  <CountPip tone="off" n={counts.off} label="not deployed" />
-                </span>
+                {hasPods && (
+                  <span className="flex shrink-0 items-center gap-2.5 font-mono tabular-nums">
+                    <CountPip
+                      tone="running"
+                      n={counts.running}
+                      label="running"
+                    />
+                    <CountPip
+                      tone="starting"
+                      n={counts.starting}
+                      label="starting"
+                    />
+                    <CountPip tone="failed" n={counts.failed} label="failed" />
+                    <CountPip tone="off" n={counts.off} label="not deployed" />
+                  </span>
+                )}
               </div>
               <CommandList className="max-h-[min(360px,48dvh)]">
                 <CommandEmpty className="py-6 text-center text-xs text-muted-foreground">
@@ -499,7 +538,8 @@ function InstanceSwitcher({
                       <SwitcherRow
                         key={install.id}
                         install={install}
-                        status={deploymentStatuses[install.id]}
+                        status={statusOf(install.id)}
+                        hasPods={hasPods}
                         isSelected={install.id === serverId}
                         isMine={isMine(install, myEmail)}
                         onSelect={() => {
@@ -546,18 +586,20 @@ function InstanceSwitcher({
           {identity}
         </div>
       )}
-      <span
-        className={cn(
-          "shrink-0 text-xs",
-          cs === "running" && "text-emerald-400",
-          (cs === "failed" || cs === "degraded") && "text-red-400",
-          (cs === "pending" || cs === "unknown") && "text-amber-400",
-          (cs === "hibernated" || cs === "waking" || cs === "not_created") &&
-            "text-slate-400",
-        )}
-      >
-        {connStateLabel(cs)}
-      </span>
+      {hasPods && (
+        <span
+          className={cn(
+            "shrink-0 text-xs",
+            cs === "running" && "text-emerald-400",
+            (cs === "failed" || cs === "degraded") && "text-red-400",
+            (cs === "pending" || cs === "unknown") && "text-amber-400",
+            (cs === "hibernated" || cs === "waking" || cs === "not_created") &&
+              "text-slate-400",
+          )}
+        >
+          {connStateLabel(cs)}
+        </span>
+      )}
       {meta.length > 0 && (
         <span className="hidden min-w-0 truncate text-xs text-slate-500 md:block">
           {meta.join("  ·  ")}
@@ -570,12 +612,14 @@ function InstanceSwitcher({
 function SwitcherRow({
   install,
   status,
+  hasPods,
   isSelected,
   isMine,
   onSelect,
 }: {
   install: McpLogsInstall;
   status: McpDeploymentStatusEntry | undefined;
+  hasPods: boolean;
   isSelected: boolean;
   isMine: boolean;
   onSelect: () => void;
@@ -604,7 +648,7 @@ function SwitcherRow({
       className="gap-2.5 py-1.5"
       aria-current={isSelected ? "true" : undefined}
     >
-      <ConnDot state={cs} />
+      {hasPods && <ConnDot state={cs} />}
       <span className="min-w-0 flex-1">
         <span className="block truncate font-mono text-xs">{install.name}</span>
         <span className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
@@ -629,9 +673,9 @@ function SwitcherRow({
           <span className="tabular-nums text-muted-foreground">
             {status?.podAge ?? ""}
           </span>
-        ) : (
+        ) : hasPods ? (
           <StateTag state={cs} />
-        )}
+        ) : null}
         {(status?.restartCount ?? 0) > 0 && (
           <span
             className={cn(
@@ -826,10 +870,15 @@ function groupInstalls(installs: McpLogsInstall[], myEmail: string | null) {
   ].filter((g) => g.items.length > 0);
 }
 
-function connHaystack(
-  install: McpLogsInstall,
-  status: McpDeploymentStatusEntry | undefined,
-) {
+function connHaystack({
+  install,
+  status,
+  hasPods,
+}: {
+  install: McpLogsInstall;
+  status: McpDeploymentStatusEntry | undefined;
+  hasPods: boolean;
+}) {
   return [
     install.name,
     install.ownerEmail,
@@ -837,7 +886,7 @@ function connHaystack(
     install.scope === "org" ? "organization org" : install.scope,
     status?.podName,
     status?.message,
-    connStateLabel(connState(status)),
+    hasPods ? connStateLabel(connState(status)) : null,
   ]
     .filter(Boolean)
     .join(" ")

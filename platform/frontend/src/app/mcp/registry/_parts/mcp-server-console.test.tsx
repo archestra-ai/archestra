@@ -18,6 +18,7 @@ import {
   vi,
 } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import websocketService from "@/lib/websocket/websocket";
 import type { McpLogsInstall } from "./mcp-logs-dialog";
 import {
   McpServerConsole,
@@ -62,6 +63,7 @@ beforeAll(() => {
 });
 beforeEach(() => {
   wsHandlers.clear();
+  vi.mocked(websocketService.send).mockClear();
   inspect.mockClear();
   vi.mocked(useSession).mockReturnValue({
     data: { user: { email: "me@example.com" } },
@@ -114,6 +116,10 @@ const RUNNING: Record<string, McpDeploymentStatusEntry> = Object.fromEntries(
 function renderConsole(
   tab: McpServerConsoleTab,
   installs: McpLogsInstall[] = [MINE, SHARED, THEIRS],
+  options: {
+    deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
+    hasPods?: boolean;
+  } = {},
 ) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
@@ -121,8 +127,9 @@ function renderConsole(
         tab={tab}
         serverName="Orbit Tracker"
         installs={installs}
-        deploymentStatuses={RUNNING}
+        deploymentStatuses={options.deploymentStatuses ?? RUNNING}
         initialServerId={null}
+        hasPods={options.hasPods}
       />
     </QueryClientProvider>,
   );
@@ -169,6 +176,104 @@ describe("McpServerConsole", () => {
     await waitFor(() => expect(inspect).not.toHaveBeenCalled());
   });
 
+  it("lists a remote server's tools without waiting for a pod", async () => {
+    // A remote connection is an upstream URL: no deployment ever reports it
+    // running, so the Inspector must connect straight away.
+    const listTools = vi.fn(() =>
+      HttpResponse.json({
+        tools: [
+          {
+            name: "search_docs",
+            description: "Search the documentation",
+            inputSchema: { type: "object", properties: {} },
+          },
+        ],
+      }),
+    );
+    server.use(
+      http.post(`${API_ORIGIN}/api/mcp_server/:id/inspect`, listTools),
+    );
+    renderConsole("inspector", [MINE], {
+      deploymentStatuses: {},
+      hasPods: false,
+    });
+
+    expect((await screen.findAllByText("search_docs")).length).toBeGreaterThan(
+      0,
+    );
+    expect(listTools).toHaveBeenCalled();
+    expect(websocketService.send).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "subscribe_mcp_logs" }),
+    );
+    expect(screen.queryByText(/Pod is starting/)).toBeNull();
+    expect(screen.queryByText("Starting")).toBeNull();
+  });
+
+  it.each([
+    false,
+    true,
+  ])("searches pod state only for local connections (hasPods=%s)", async (hasPods) => {
+    const installs = Array.from({ length: 7 }, (_, index) => ({
+      ...MINE,
+      id: `install-${index}`,
+      name: `orbit-${index}`,
+    }));
+    renderConsole("inspector", installs, {
+      deploymentStatuses: {},
+      hasPods,
+    });
+    const list = await openSwitcher();
+    const search = screen.getByRole("combobox");
+    await userEvent.type(search, "start");
+
+    if (hasPods) {
+      expect(within(list).getAllByRole("option")).toHaveLength(7);
+    } else {
+      expect(within(list).queryAllByRole("option")).toHaveLength(0);
+      expect(list).toHaveTextContent("No connection matches");
+    }
+
+    await userEvent.clear(search);
+    await userEvent.type(search, "orbit-3");
+    expect(within(list).getAllByRole("option")).toHaveLength(1);
+    expect(list).toHaveTextContent("orbit-3");
+  });
+
+  it("omits pod metadata throughout the remote connection switcher", async () => {
+    const deploymentStatuses = {
+      [MINE.id]: {
+        ...RUNNING[MINE.id],
+        restartCount: 5,
+        podAge: "2h",
+      },
+      [SHARED.id]: {
+        ...RUNNING[SHARED.id],
+        state: "failed" as const,
+        message: "Pod crashed",
+      },
+    };
+    renderConsole("inspector", [MINE, SHARED], {
+      deploymentStatuses,
+      hasPods: false,
+    });
+    const list = await openSwitcher();
+
+    expect(list).toHaveTextContent("orbit-mine");
+    expect(list).toHaveTextContent("Engineering team");
+    expect(screen.queryByText(/5 restarts|up 2h|Pod crashed/)).toBeNull();
+    expect(screen.queryByTitle("1 running")).toBeNull();
+    expect(screen.queryByTitle("1 failed")).toBeNull();
+    expect(within(list).queryByText("Failed")).toBeNull();
+    expect(within(list).queryByText("2h")).toBeNull();
+  });
+
+  it("waits for a local server's pod before inspecting it", async () => {
+    renderConsole("inspector", [MINE], { deploymentStatuses: {} });
+
+    expect(await screen.findByText(/Pod is starting/)).toBeInTheDocument();
+    await waitFor(() => expect(inspect).not.toHaveBeenCalled());
+  });
+
   it("keeps the shell to people who manage installations", async () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
@@ -184,6 +289,12 @@ describe("McpServerConsole", () => {
     renderConsole("logs", [MINE]);
 
     await waitFor(() => expect(wsHandlers.get("mcp_logs")?.size).toBe(1));
+    expect(websocketService.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "subscribe_mcp_logs",
+        payload: expect.objectContaining({ serverId: MINE.id }),
+      }),
+    );
     act(() => {
       for (const handler of wsHandlers.get("mcp_logs") ?? []) {
         handler({

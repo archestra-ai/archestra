@@ -869,9 +869,9 @@ describe("an unverified disconnect is not recorded as done", () => {
     expect(script).toContain(
       "if ($downRemotes.Count -ge $ActiveRemotes.Count -and -not $Script:ArchDisconnectFailed) { Remove-ArchGuard }",
     );
-    expect(script).toContain(
-      "if (-not $Script:ArchDisconnectFailed) { Remove-ArchGuard }",
-    );
+    // Explicit /disconnect cleanup still waits for every verified reversal.
+    // The removed outage-retry branch must no longer offer an uninstall.
+    expect(script).toContain("if (-not $archFailed) { Remove-ArchGuard }");
     // A missing binary cannot have removed anything.
     expect(script).toContain("the codex executable could not be found on PATH");
     // …and Windows reverses the credential too.

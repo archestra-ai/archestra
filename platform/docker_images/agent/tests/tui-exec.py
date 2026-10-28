@@ -1,8 +1,12 @@
-"""archestra-tui-exec stops a failed turn's whole client process group."""
+"""archestra-tui-exec stops a failed turn's whole client process group and
+captures the client's last screen."""
 import os
 from pathlib import Path
 import pty
+import re
 import select
+import shlex
+import subprocess
 import tempfile
 import time
 import unittest
@@ -68,6 +72,53 @@ class TuiExecTest(unittest.TestCase):
                     os.waitpid(pid, 0)
                 except (ProcessLookupError, ChildProcessError):
                     pass
+
+    def test_captured_screen_keeps_a_background_to_the_line_end(self):
+        # A client's highlighted row paints its background to the pane's
+        # edge with spaces; the capture must keep them, or the replayed row
+        # stops at its last character.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            client = (
+                "printf '\\033[48;5;235mab\\033[K\\033[0m\\n'; "
+                'touch "$1/turn-complete.failed" "$1/turn-complete"; '
+                "trap 'exit 0' TERM; while :; do sleep 0.05; done"
+            )
+            command = shlex.join([
+                str(BIN / "archestra-tui-exec"),
+                str(root / "turn-complete"),
+                str(root / "frame"),
+                "/bin/sh", "-c", client, "client", str(root),
+            ])
+            tmux = ["tmux", "-L", f"tui-exec-test-{os.getpid()}", "-f", "/dev/null"]
+            environment = {
+                key: value
+                for key, value in os.environ.items()
+                if key not in ("TMUX", "TMUX_PANE", "ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX")
+            }
+            subprocess.run(
+                [*tmux, "new-session", "-d", "-x", "40", "-y", "5", command],
+                check=True,
+                env=environment,
+            )
+            try:
+                frame = root / "frame"
+                deadline = time.monotonic() + 30
+                while time.monotonic() < deadline and not (frame.exists() and frame.stat().st_size):
+                    time.sleep(0.1)
+                self.assertTrue(frame.exists(), "archestra-tui-exec wrote no frame")
+                time.sleep(0.2)
+                content = frame.read_text()
+                self.assertTrue(content.startswith("\x1b]777;archestra-terminal-size=40x5\x07"))
+                first_row = re.sub(r"\x1b\[[0-9;:]*m", "", content.split("\x07", 1)[1].split("\n")[0])
+                self.assertEqual(first_row, "ab" + " " * 38)
+            finally:
+                subprocess.run(
+                    [*tmux, "kill-server"],
+                    check=False,
+                    env=environment,
+                    stderr=subprocess.DEVNULL,
+                )
 
 
 if __name__ == "__main__":

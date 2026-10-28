@@ -574,8 +574,8 @@ export class WebSocketService {
    * Authorization is narrower than being able to see the agent run: attaching
    * lands inside a shell running under the creator's own credentials, so only
    * that creator or a manager of the owning service account may do it.
-   * Administrative Agent access must not become access
-   * to another person's live credentials.
+   * Administrative Agent access must not become access to another person's
+   * live credentials.
    */
   private async handleSubscribeAgentRunAttach(
     ws: WebSocket,

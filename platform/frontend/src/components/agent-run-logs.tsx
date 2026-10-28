@@ -82,6 +82,10 @@ export function AgentRunLogs({
     ref,
     () => ({
       download: (kind) => {
+        if (kind === "trajectory" && !run.endedAt) {
+          toast.info("Native trajectory is available after the run ends.");
+          return;
+        }
         if (kind === "logs" && !run.endedAt && !terminalContent) {
           toast.info("No terminal output is available yet.");
           return;
@@ -258,7 +262,10 @@ export function AgentRunLogs({
     )
       return;
     setPendingDownload(null);
-    if (error) return;
+    if (error) {
+      toast.error("Could not download run output. Try again.");
+      return;
+    }
     if (pendingDownload === "logs") {
       if (terminalContent)
         downloadRunOutput(run.taskId, terminalContent, "log", "text/plain");

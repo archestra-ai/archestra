@@ -255,6 +255,38 @@ describe("AgentRunLogs", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it("reports a pending download failure and never downloads a later fragment", async () => {
+    const create = vi.fn();
+    vi.stubGlobal("URL", { createObjectURL: create, revokeObjectURL: vi.fn() });
+    render(<LogDownloadHarness />);
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "task-1", logs: "tail" },
+    });
+    emit({
+      type: "agent_run_logs_ended",
+      payload: { runId: "task-1", source: "full", omittedBytes: 100 },
+    });
+    await selectDownload("Download logs");
+    emit({
+      type: "agent_run_logs_error",
+      payload: { runId: "task-1", error: "Could not read recording" },
+    });
+    expect(toast.error).toHaveBeenCalledWith(
+      "Could not download run output. Try again.",
+    );
+    expect(screen.getByText("Could not read recording")).toBeVisible();
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "task-1", logs: "late fragment" },
+    });
+    emit({
+      type: "agent_run_logs_ended",
+      payload: { runId: "task-1", source: "full" },
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("shows an ended run as loading, then renders its whole history once", () => {
     render(<AgentRunLogs run={completedRun} />);
     expect(screen.getByText("Loading recording")).toBeInTheDocument();

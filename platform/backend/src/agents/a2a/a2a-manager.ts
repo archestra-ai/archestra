@@ -337,6 +337,18 @@ export class A2AManager {
         throw new A2AError(A2AErrorKind.AgentNotFound);
       }
 
+      if (
+        fullTaskMode &&
+        actor.oauthExecution &&
+        resolveAgentRuntime(agent) &&
+        (params.taskRun?.createTask || request.message.taskId)
+      ) {
+        throw new A2AError(
+          A2AErrorKind.UnsupportedOperation,
+          "OAuth applications cannot use Agent Runtime; use an in-process agent instead.",
+        );
+      }
+
       const contextAccessOptions = {
         trustedActorAccess: Boolean(this.config.trustedContextAccess),
       };

@@ -21,8 +21,8 @@ import a2aV2Routes from "./v2";
 describe("OAuth A2A execution", () => {
   const external = useMswServer();
 
-  for (const { version, revocation } of (["v1", "v2"] as const).flatMap(
-    (version) =>
+  for (const { version, revocation, runtime } of (["v1", "v2"] as const)
+    .flatMap((version) =>
       (
         [
           "none",
@@ -38,9 +38,14 @@ describe("OAuth A2A execution", () => {
       ).map((revocation) => ({
         version,
         revocation,
+        runtime: false,
       })),
-  )) {
-    test(`${version} unbound OAuth executes a team-scoped agent's real MCP tool (${revocation})`, async ({
+    )
+    .concat([
+      { version: "v1", revocation: "none", runtime: true },
+      { version: "v1", revocation: "after-tool", runtime: true },
+    ])) {
+    test(`${version} unbound OAuth executes a team-scoped agent's real MCP tool (${revocation}, runtime=${runtime})`, async ({
       makeOrganization,
       makeUser,
       makeMember,
@@ -87,6 +92,21 @@ describe("OAuth A2A execution", () => {
         organizationId: org.id,
         access: { teams: [team.id] },
         toolExposureMode: "full",
+        ...(runtime && {
+          runtime: {
+            image: "example.invalid/oauth-runtime:test",
+            command: null,
+            inferenceProtocol: "openai_responses" as const,
+            backend: "kubernetes" as const,
+            steerMode: "pipe" as const,
+            privileged: false,
+            resources: null,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            idleTimeoutMinutes: null,
+          },
+        }),
         ...(summaryModel &&
           summaryKey && {
             modelId: summaryModel.id,

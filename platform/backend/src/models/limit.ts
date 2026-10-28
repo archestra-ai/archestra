@@ -103,6 +103,8 @@ type LimitViolationResponse = [
   metadata?: {
     entityType: LimitEntityType;
     limitType: "token_cost";
+    entityName?: string;
+    source: "explicit" | "default_user";
   },
 ];
 
@@ -1390,7 +1392,7 @@ export class LimitValidationService {
       // virtual key when both are present on the request.
       if (passthroughVirtualKeyId) {
         const passthroughLimitViolation =
-          LimitValidationService.evaluateEntityLimits(
+          await LimitValidationService.evaluateEntityLimits(
             "virtual_key",
             passthroughVirtualKeyId,
             prefetch,
@@ -1407,11 +1409,12 @@ export class LimitValidationService {
         logger.debug(
           `[LimitValidation] Checking virtual-key-level limits for: ${virtualKeyId}`,
         );
-        const vkLimitViolation = LimitValidationService.evaluateEntityLimits(
-          "virtual_key",
-          virtualKeyId,
-          prefetch,
-        );
+        const vkLimitViolation =
+          await LimitValidationService.evaluateEntityLimits(
+            "virtual_key",
+            virtualKeyId,
+            prefetch,
+          );
         if (vkLimitViolation) {
           logger.info(
             `[LimitValidation] BLOCKED by virtual-key-level limit for: ${virtualKeyId}`,
@@ -1425,7 +1428,7 @@ export class LimitValidationService {
 
       if (llmOauthClientId) {
         const clientLimitViolation =
-          LimitValidationService.evaluateEntityLimits(
+          await LimitValidationService.evaluateEntityLimits(
             "llm_oauth_client",
             llmOauthClientId,
             prefetch,
@@ -1442,11 +1445,12 @@ export class LimitValidationService {
         logger.debug(
           `[LimitValidation] Checking user-level limits for: ${userId}`,
         );
-        const userLimitViolation = LimitValidationService.evaluateEntityLimits(
-          "user",
-          userId,
-          prefetch,
-        );
+        const userLimitViolation =
+          await LimitValidationService.evaluateEntityLimits(
+            "user",
+            userId,
+            prefetch,
+          );
         if (userLimitViolation) {
           logger.info(
             `[LimitValidation] BLOCKED by user-level limit for: ${userId}`,
@@ -1473,11 +1477,12 @@ export class LimitValidationService {
       logger.debug(
         `[LimitValidation] Checking agent-level limits for: ${agentId}`,
       );
-      const agentLimitViolation = LimitValidationService.evaluateEntityLimits(
-        "agent",
-        agentId,
-        prefetch,
-      );
+      const agentLimitViolation =
+        await LimitValidationService.evaluateEntityLimits(
+          "agent",
+          agentId,
+          prefetch,
+        );
       if (agentLimitViolation) {
         logger.info(
           `[LimitValidation] BLOCKED by agent-level limit for: ${agentId}`,
@@ -1493,7 +1498,7 @@ export class LimitValidationService {
           `[LimitValidation] Checking environment-level limits for: ${environmentId}`,
         );
         const environmentLimitViolation =
-          LimitValidationService.evaluateEntityLimits(
+          await LimitValidationService.evaluateEntityLimits(
             "environment",
             environmentId,
             prefetch,
@@ -1523,7 +1528,7 @@ export class LimitValidationService {
             `[LimitValidation] Checking team limit for team: ${team.id}`,
           );
           const teamLimitViolation =
-            LimitValidationService.evaluateEntityLimits(
+            await LimitValidationService.evaluateEntityLimits(
               "team",
               team.id,
               prefetch,
@@ -1545,11 +1550,12 @@ export class LimitValidationService {
         logger.debug(
           `[LimitValidation] Checking organization-level limits for org: ${organizationId}`,
         );
-        const orgLimitViolation = LimitValidationService.evaluateEntityLimits(
-          "organization",
-          organizationId,
-          prefetch,
-        );
+        const orgLimitViolation =
+          await LimitValidationService.evaluateEntityLimits(
+            "organization",
+            organizationId,
+            prefetch,
+          );
         if (orgLimitViolation) {
           logger.info(
             `[LimitValidation] BLOCKED by organization-level limit for org: ${organizationId}`,
@@ -1627,14 +1633,14 @@ export class LimitValidationService {
 
   /**
    * Check if current token cost usage has exceeded limits for a specific entity,
-   * using data already loaded by {@link prefetchEntityLimits}. Pure in-memory
-   * evaluation — issues no queries of its own.
+   * using data already loaded by {@link prefetchEntityLimits}. On a violation,
+   * a best-effort query resolves the target's display name for the response.
    */
-  private static evaluateEntityLimits(
+  private static async evaluateEntityLimits(
     entityType: LimitEntityType,
     entityId: string,
     prefetch: LimitPrefetch,
-  ): null | LimitViolationResponse {
+  ): Promise<null | LimitViolationResponse> {
     const limits =
       prefetch.limitsByEntity.get(`${entityType}:${entityId}`) ?? [];
 
@@ -1688,8 +1694,10 @@ export class LimitValidationService {
         );
 
         return buildLimitViolationResponse({
+          source: "explicit",
           entityType,
           entityId,
+          entityName: await resolveLimitEntityName(entityType, entityId),
           limitValue: limit.limitValue,
           comparisonValue,
           limitDescription,
@@ -1753,8 +1761,13 @@ export class LimitValidationService {
           }
 
           return buildLimitViolationResponse({
+            source: "default_user",
             entityType: "environment",
             entityId: params.environmentId,
+            entityName: await resolveLimitEntityName(
+              "environment",
+              params.environmentId,
+            ),
             limitValue: envDefault.limitValue,
             comparisonValue: usage.cost,
             limitDescription: "cost_dollars",
@@ -1788,8 +1801,10 @@ export class LimitValidationService {
       }
 
       return buildLimitViolationResponse({
+        source: "default_user",
         entityType: "user",
         entityId: params.userId,
+        entityName: await resolveLimitEntityName("user", params.userId),
         limitValue: globalDefault.limitValue,
         comparisonValue: usage.cost,
         limitDescription: "cost_dollars",
@@ -2177,9 +2192,94 @@ async function getDefaultUserLimitUsage(params: {
   };
 }
 
+// This query runs only after a budget rejection. A readable target is more
+// useful to the caller than a database ID, especially for team budgets.
+async function resolveLimitEntityName(
+  entityType: LimitEntityType,
+  entityId: string,
+): Promise<string | undefined> {
+  try {
+    return await readLimitEntityName(entityType, entityId);
+  } catch (error) {
+    logger.warn(
+      { error, entityType, entityId },
+      "Could not resolve the name of a limit target",
+    );
+    return undefined;
+  }
+}
+
+async function readLimitEntityName(
+  entityType: LimitEntityType,
+  entityId: string,
+): Promise<string | undefined> {
+  switch (entityType) {
+    case "team":
+      return (
+        await db
+          .select({ name: schema.teamsTable.name })
+          .from(schema.teamsTable)
+          .where(eq(schema.teamsTable.id, entityId))
+          .limit(1)
+      )[0]?.name;
+    case "virtual_key":
+      return (
+        await db
+          .select({ name: schema.virtualApiKeysTable.name })
+          .from(schema.virtualApiKeysTable)
+          .where(eq(schema.virtualApiKeysTable.id, entityId))
+          .limit(1)
+      )[0]?.name;
+    case "llm_oauth_client":
+      return (
+        (
+          await db
+            .select({ name: schema.oauthClientsTable.name })
+            .from(schema.oauthClientsTable)
+            .where(eq(schema.oauthClientsTable.id, entityId))
+            .limit(1)
+        )[0]?.name ?? undefined
+      );
+    case "user":
+      return (
+        await db
+          .select({ email: schema.usersTable.email })
+          .from(schema.usersTable)
+          .where(eq(schema.usersTable.id, entityId))
+          .limit(1)
+      )[0]?.email;
+    case "agent":
+      return (
+        await db
+          .select({ name: schema.agentsTable.name })
+          .from(schema.agentsTable)
+          .where(eq(schema.agentsTable.id, entityId))
+          .limit(1)
+      )[0]?.name;
+    case "environment":
+      return (
+        await db
+          .select({ name: schema.environmentsTable.name })
+          .from(schema.environmentsTable)
+          .where(eq(schema.environmentsTable.id, entityId))
+          .limit(1)
+      )[0]?.name;
+    case "organization":
+      return (
+        await db
+          .select({ name: schema.organizationsTable.name })
+          .from(schema.organizationsTable)
+          .where(eq(schema.organizationsTable.id, entityId))
+          .limit(1)
+      )[0]?.name;
+  }
+}
+
 function buildLimitViolationResponse(params: {
+  source: "explicit" | "default_user";
   entityType: LimitEntityType;
   entityId: string;
+  entityName?: string;
   limitValue: number;
   comparisonValue: number;
   limitDescription: "tokens" | "cost_dollars";
@@ -2188,24 +2288,42 @@ function buildLimitViolationResponse(params: {
   cleanupInterval?: LimitCleanupInterval | null;
   models?: string[] | null;
 }): LimitViolationResponse {
+  const entityLabel = params.entityType.replace(/_/g, " ");
+  const identityLine = params.entityName
+    ? `Affected ${entityLabel}: ${JSON.stringify(params.entityName)}.`
+    : `Affected scope: ${entityLabel}.`;
+  const scopeLabel =
+    params.source === "default_user"
+      ? "default user"
+      : formatLimitEntityType(params.entityType);
+  const modelScope = describeLimitModelScope(params.models);
+  const resetWindow = describeLimitResetWindow(params.cleanupInterval);
+  const ruleLine = `Rule: ${scopeLabel} cost limit ($${params.limitValue.toFixed(2)}), applied to ${modelScope}${
+    resetWindow ? `, resets ${resetWindow}` : ""
+  }.`;
   if (!Number.isFinite(params.comparisonValue))
     return [
       "Usage accounting is incomplete.",
-      `The ${archestraMcpBranding.appName} budget has incomplete billing usage. Ask an administrator to review provider usage and model prices before resetting the budget.`,
-      { entityType: params.entityType, limitType: "token_cost" },
+      `The ${archestraMcpBranding.appName} budget has incomplete billing usage. ${identityLine} ${ruleLine} Ask an administrator to review provider usage and model prices before resetting the budget.`,
+      {
+        entityType: params.entityType,
+        limitType: "token_cost",
+        entityName: params.entityName,
+        source: params.source,
+      },
     ];
   const totalTokens = params.totalTokensIn + params.totalTokensOut;
   const remaining = Math.max(0, params.limitValue - params.comparisonValue);
   // Human-readable description of the exact rule that fired, so both the LLM
   // (via the metadata block) and the end user (via the content message) can
   // tell *which* Archestra limit blocked them rather than guessing.
-  const scopeLabel = formatLimitEntityType(params.entityType);
-  const modelScope = describeLimitModelScope(params.models);
-  const resetWindow = describeLimitResetWindow(params.cleanupInterval);
+  // Keep the existing machine-readable target in the LLM metadata; the
+  // end-user content below identifies the target by its readable name.
   const archestraMetadata = `
 <archestra-limit-type>token_cost</archestra-limit-type>
 <archestra-limit-entity-type>${params.entityType}</archestra-limit-entity-type>
 <archestra-limit-entity-id>${params.entityId}</archestra-limit-entity-id>
+<archestra-limit-source>${params.source}</archestra-limit-source>
 <archestra-limit-model-scope>${modelScope}</archestra-limit-model-scope>
 <archestra-limit-reset-window>${resetWindow ?? "n/a"}</archestra-limit-reset-window>
 <archestra-limit-current-usage>${totalTokens}</archestra-limit-current-usage>
@@ -2217,9 +2335,6 @@ function buildLimitViolationResponse(params: {
   // clear that this platform enforced it — under the deployment's own brand,
   // since this string is returned straight to the end user.
   const header = `This request was blocked by ${archestraMcpBranding.appName} (not the AI provider): the ${scopeLabel} cost limit has been reached.`;
-  const ruleLine = `Rule: ${scopeLabel} cost limit, applied to ${modelScope}${
-    resetWindow ? `, resets ${resetWindow}` : ""
-  }.`;
   const footer = resetWindow
     ? `Contact your administrator to raise the limit, or wait for the usage to reset (${resetWindow}).`
     : "Contact your administrator to raise the limit, or wait for the usage to reset.";
@@ -2237,6 +2352,7 @@ Remaining: ${Math.max(0, params.limitValue - totalTokens).toLocaleString()} toke
 ${header}
 
 ${ruleLine}
+${identityLine}
 
 ${usageBlock}
 
@@ -2245,7 +2361,12 @@ ${footer}`;
   return [
     `${archestraMetadata}\n${contentMessage}`,
     contentMessage,
-    { entityType: params.entityType, limitType: "token_cost" },
+    {
+      entityType: params.entityType,
+      limitType: "token_cost",
+      entityName: params.entityName,
+      source: params.source,
+    },
   ];
 }
 

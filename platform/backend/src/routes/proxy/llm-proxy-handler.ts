@@ -1158,6 +1158,8 @@ export async function handleLLMProxy<
             ? {
                 limit_type: limitMetadata.limitType,
                 entity_type: limitMetadata.entityType,
+                entity_name: limitMetadata.entityName,
+                source: limitMetadata.source,
               }
             : undefined,
         },

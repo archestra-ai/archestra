@@ -2498,7 +2498,13 @@ describe("cleanupLimitsIfNeeded", () => {
       userId: user.id,
     });
     expect(result).not.toBeNull();
-    expect(result?.[1]).toContain("user-level cost limit");
+    expect(result?.[1]).toContain("default user cost limit");
+    expect(result?.[2]).toMatchObject({
+      entityType: "user",
+      limitType: "token_cost",
+      source: "default_user",
+      entityName: user.email,
+    });
   });
 
   test("subscription-billed interactions do not count toward default user limits", async ({
@@ -2559,7 +2565,13 @@ describe("cleanupLimitsIfNeeded", () => {
       userId: user.id,
     });
     expect(blocked).not.toBeNull();
-    expect(blocked?.[1]).toContain("user-level cost limit");
+    expect(blocked?.[1]).toContain("default user cost limit");
+    expect(blocked?.[2]).toMatchObject({
+      entityType: "user",
+      limitType: "token_cost",
+      source: "default_user",
+      entityName: user.email,
+    });
   });
 
   test("custom user limits override the inherited default user limit", async ({
@@ -3484,6 +3496,14 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
     expect(refusalMessage).toContain(
       `<archestra-limit-entity-id>${agent.id}</archestra-limit-entity-id>`,
     );
+    expect(result?.[1]).toContain('Affected agent: "Test Agent".');
+    expect(result?.[1]).not.toContain(agent.id);
+    expect(result?.[2]).toMatchObject({
+      entityType: "agent",
+      limitType: "token_cost",
+      entityName: agent.name,
+      source: "explicit",
+    });
   });
 
   test("does not reset limits for entity types not included in entities", async ({

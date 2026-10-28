@@ -207628,325 +207628,6 @@
         }
       }
     },
-    "/api/github-copilot-app/keys/{id}/private-key": {
-      "post": {
-        "operationId": "replaceCopilotGithubAppPrivateKey",
-        "tags": [
-          "LLM Provider API Keys"
-        ],
-        "description": "Replace the private key of an organization's GitHub Copilot subscription App\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "privateKey": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 20000
-                  }
-                },
-                "required": [
-                  "privateKey"
-                ]
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "installed"
-                      ]
-                    },
-                    "id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "organization": {
-                      "type": "string"
-                    },
-                    "modelIds": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "id",
-                    "organization",
-                    "modelIds"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
-        }
-      }
-    },
     "/api/github-copilot-auth/device/start": {
       "post": {
         "operationId": "githubCopilotDeviceAuthStart",
@@ -221695,12 +221376,6 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
-                              "llmProviderApiKeyId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
                               "appId": {
                                 "nullable": true,
                                 "type": "string",
@@ -222252,7 +221927,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -222337,12 +222011,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -223503,7 +223171,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -223588,12 +223255,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -224270,7 +223931,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -224355,12 +224015,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -225037,7 +224691,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -225122,12 +224775,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -225804,7 +225451,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -225889,12 +225535,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -226571,7 +226211,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -226656,12 +226295,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -227218,7 +226851,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -227303,12 +226935,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -227865,7 +227491,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -227950,12 +227575,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -230640,7 +230259,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -230725,12 +230343,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -234077,7 +233689,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -234162,12 +233773,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -234724,7 +234329,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -234809,12 +234413,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -235371,7 +234969,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -235456,12 +235053,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -236018,7 +235609,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -236103,12 +235693,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -236665,7 +236249,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -236750,12 +236333,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -237312,7 +236889,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -237397,12 +236973,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -237959,7 +237529,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -238044,12 +237613,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -238606,7 +238169,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -238691,12 +238253,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -239253,7 +238809,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -239338,12 +238893,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -239900,7 +239449,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -239985,12 +239533,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -240547,7 +240089,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -240632,12 +240173,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -241194,7 +240729,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -241279,12 +240813,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -241841,7 +241369,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -241926,12 +241453,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -246257,7 +245778,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -246342,12 +245862,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -250673,7 +250187,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -250758,12 +250271,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -255084,7 +254591,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -255169,12 +254675,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -259500,7 +259000,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -259585,12 +259084,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -260147,7 +259640,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -260232,12 +259724,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -261029,7 +260515,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -261114,12 +260599,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -265455,7 +264934,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -265540,12 +265018,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -266251,7 +265723,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -266336,12 +265807,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -267047,7 +266512,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -267132,12 +266596,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -267948,7 +267406,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -268033,12 +267490,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -269017,7 +268468,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -269102,12 +268552,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -270086,7 +269530,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -270171,12 +269614,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -271146,7 +270583,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -271231,12 +270667,6 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "connectorId": {
-                                "nullable": true,
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
-                              "llmProviderApiKeyId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -271786,7 +271216,6 @@
                               "passthroughVirtualKeyId",
                               "environmentId",
                               "connectorId",
-                              "llmProviderApiKeyId",
                               "appId",
                               "providerApiKeyId",
                               "modelPoolId",
@@ -274540,12 +273969,6 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
-                        "llmProviderApiKeyId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
                         "appId": {
                           "nullable": true,
                           "type": "string",
@@ -275097,7 +274520,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -275182,12 +274604,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -276348,7 +275764,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -276433,12 +275848,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -277115,7 +276524,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -277200,12 +276608,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -277882,7 +277284,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -277967,12 +277368,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -278649,7 +278044,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -278734,12 +278128,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -279416,7 +278804,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -279501,12 +278888,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -280063,7 +279444,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -280148,12 +279528,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -280710,7 +280084,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -280795,12 +280168,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -283485,7 +282852,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -283570,12 +282936,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -286922,7 +286282,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -287007,12 +286366,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -287569,7 +286922,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -287654,12 +287006,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -288216,7 +287562,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -288301,12 +287646,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -288863,7 +288202,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -288948,12 +288286,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -289510,7 +288842,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -289595,12 +288926,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -290157,7 +289482,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -290242,12 +289566,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -290804,7 +290122,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -290889,12 +290206,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -291451,7 +290762,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -291536,12 +290846,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -292098,7 +291402,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -292183,12 +291486,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -292745,7 +292042,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -292830,12 +292126,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -293392,7 +292682,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -293477,12 +292766,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -294039,7 +293322,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -294124,12 +293406,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -294686,7 +293962,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -294771,12 +294046,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -299102,7 +298371,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -299187,12 +298455,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -303518,7 +302780,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -303603,12 +302864,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -307929,7 +307184,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -308014,12 +307268,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -312345,7 +311593,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -312430,12 +311677,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -312992,7 +312233,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -313077,12 +312317,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -313874,7 +313108,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -313959,12 +313192,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -318300,7 +317527,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -318385,12 +317611,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -319096,7 +318316,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -319181,12 +318400,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -319892,7 +319105,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -319977,12 +319189,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -320793,7 +319999,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -320878,12 +320083,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -321862,7 +321061,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -321947,12 +321145,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -322931,7 +322123,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -323016,12 +322207,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -323991,7 +323176,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",
@@ -324076,12 +323260,6 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "connectorId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "llmProviderApiKeyId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -324631,7 +323809,6 @@
                         "passthroughVirtualKeyId",
                         "environmentId",
                         "connectorId",
-                        "llmProviderApiKeyId",
                         "appId",
                         "providerApiKeyId",
                         "modelPoolId",

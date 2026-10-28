@@ -107,11 +107,6 @@ export const CopilotGithubAppKeySummarySchema = z.object({
   fingerprint: z.string(),
 });
 
-export const ReplaceCopilotGithubAppPrivateKeySchema = z.object({
-  /** The App's new private key (PEM). Never returned or logged. */
-  privateKey: z.string().min(1).max(20_000),
-});
-
 export const ConnectCopilotGithubAppCredentialResultSchema =
   z.discriminatedUnion("status", [
     CopilotGithubAppConnectedSchema,

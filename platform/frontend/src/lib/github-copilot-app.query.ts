@@ -141,27 +141,6 @@ export function useCopilotGithubAppKeySummary(keyId: string | null) {
   });
 }
 
-export function useReplaceCopilotGithubAppPrivateKey() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: async (params: { id: string; privateKey: string }) => {
-      const { data, error } =
-        await archestraApiSdk.replaceCopilotGithubAppPrivateKey({
-          path: { id: params.id },
-          body: { privateKey: params.privateKey },
-        });
-      if (error) throw toApiError(error);
-      return data;
-    },
-    onSuccess: (_data, params) => {
-      client.invalidateQueries({
-        queryKey: ["github-copilot-app", "key", params.id],
-      });
-      invalidateKeys(client);
-    },
-  });
-}
-
 /** Check that a name or GitHub address names an organization, before a step uses it. */
 export function useCheckCopilotGithubOrganization() {
   return useMutation({

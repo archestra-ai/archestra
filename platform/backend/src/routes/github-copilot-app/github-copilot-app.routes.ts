@@ -19,7 +19,6 @@ import {
   CopilotGithubOrganizationSchema,
   ExistingCopilotGithubAppValidationSchema,
   InstallCopilotGithubAppSchema,
-  ReplaceCopilotGithubAppPrivateKeySchema,
   StartCopilotGithubAppSchema,
   ValidateExistingCopilotGithubAppSchema,
 } from "@/types/github-copilot-app-setup";
@@ -252,29 +251,6 @@ const githubCopilotAppRoutes: FastifyPluginAsyncZod = async (app) => {
           organizationId: request.organizationId,
           userId: request.user.id,
           keyId: request.params.id,
-        }),
-      ),
-  );
-  app.post(
-    "/api/github-copilot-app/keys/:id/private-key",
-    {
-      schema: {
-        operationId: RouteId.ReplaceCopilotGithubAppPrivateKey,
-        description:
-          "Replace the private key of an organization's GitHub Copilot subscription App",
-        tags: ["LLM Provider API Keys"],
-        params: z.object({ id: z.string().uuid() }),
-        body: ReplaceCopilotGithubAppPrivateKeySchema,
-        response: constructResponseSchema(CopilotGithubAppConnectedSchema),
-      },
-    },
-    async (request, reply) =>
-      reply.send(
-        await copilotGithubAppSetup.replacePrivateKey({
-          organizationId: request.organizationId,
-          userId: request.user.id,
-          keyId: request.params.id,
-          privateKey: request.body.privateKey,
         }),
       ),
   );

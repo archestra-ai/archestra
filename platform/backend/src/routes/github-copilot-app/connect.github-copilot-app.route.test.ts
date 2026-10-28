@@ -15,7 +15,7 @@ import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { getRuntimeCredentialUsage } from "@/services/agent-runtime/runtime-credentials";
 import {
   decodeGithubAppReference,
-  encodeGithubAppCredential,
+  encodeGithubAppReference,
 } from "@/services/github-app-copilot-token";
 import { createGithubCopilotFetch } from "@/services/github-copilot-token";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -478,7 +478,7 @@ describe("GitHub Copilot organization subscription setup", () => {
     expect((await resolve(appKeyId))?.id).toBe(appKeyId);
   });
 
-  test("summarizes, replaces the private key, and needs a reconnect once GitHub refuses the App", async () => {
+  test("summarizes, needs a reconnect once GitHub refuses the App, and reconnects by key", async () => {
     vi.stubGlobal("fetch", githubFake({ appId }));
     const connected = await post("/api/github-copilot-app/existing", {
       appId,
@@ -526,27 +526,17 @@ describe("GitHub Copilot organization subscription setup", () => {
       (await LlmProviderApiKeyModel.findById(keyId))?.requiresReauthentication,
     ).toBe(true);
 
-    // A new private key that GitHub accepts clears it.
+    // Reconnecting the App by its key, as the key tile does, clears it.
     vi.stubGlobal("fetch", githubFake({ appId }));
-    const replaced = await post(
-      `/api/github-copilot-app/keys/${keyId}/private-key`,
-      { privateKey },
-    );
-    expect(replaced.statusCode, replaced.body).toBe(200);
+    const reconnected = await post("/api/github-copilot-app/existing", {
+      appId,
+      privateKey,
+      replaceKeyId: keyId,
+    });
+    expect(reconnected.statusCode, reconnected.body).toBe(200);
     expect(
       (await LlmProviderApiKeyModel.findById(keyId))?.requiresReauthentication,
     ).toBe(false);
-    const audit = await db
-      .select()
-      .from(schema.auditLogsTable)
-      .where(
-        and(
-          eq(schema.auditLogsTable.resourceId, keyId),
-          eq(schema.auditLogsTable.action, "llmProviderApiKey.updated"),
-        ),
-      );
-    expect(audit).toHaveLength(1);
-    expect(JSON.stringify(audit[0])).not.toContain("PRIVATE KEY");
   });
 
   /** A GitHub App credential already connected to the organization. */
@@ -705,13 +695,266 @@ describe("GitHub Copilot organization subscription setup", () => {
   test("reads models with the in-memory App value used before the App is saved", async () => {
     vi.stubGlobal("fetch", githubFake({ appId }));
     const response = await createGithubCopilotFetch({
-      githubToken: encodeGithubAppCredential({
-        appId,
-        installationId: "555",
-        privateKey,
-      }),
+      githubToken: undefined,
+      appCredential: { appId, installationId: "555", privateKey },
     })("https://api.githubcopilot.com/models");
     expect(response.status).toBe(200);
+  });
+
+  /** The stored plan key's own fetch, as the proxy builds it. */
+  async function planFetch(keyId: string) {
+    const key = await LlmProviderApiKeyModel.findById(keyId);
+    return createGithubCopilotFetch({
+      githubToken: (await getSecretValueForLlmProviderApiKey(
+        key?.secretId ?? "",
+      )) as string,
+      providerApiKeyId: keyId,
+    });
+  }
+
+  async function flagged(keyId: string) {
+    return (await LlmProviderApiKeyModel.findById(keyId))
+      ?.requiresReauthentication;
+  }
+
+  test("refuses a GitHub App reference a caller sends, without reading a credential", async () => {
+    const { reference } = await connectedApp();
+    const lookups = vi.spyOn(RuntimeCredentialDefinitionModel, "findById");
+    // A caller's own provider key on the proxy carries no stored key id.
+    const response = await createGithubCopilotFetch({
+      githubToken: encodeGithubAppReference(
+        reference as NonNullable<typeof reference>,
+      ),
+    })("https://api.githubcopilot.com/models");
+
+    expect(response.status).toBe(400);
+    expect(lookups).not.toHaveBeenCalled();
+    lookups.mockRestore();
+  });
+
+  test("refuses a stored key whose reference points at another organization", async ({
+    makeOrganization,
+  }) => {
+    const { reference } = await connectedApp();
+    const other = await makeOrganization();
+    const value = encodeGithubAppReference({
+      ...(reference as NonNullable<typeof reference>),
+      ref: {
+        organizationId: other.id,
+        credentialId: reference?.ref.credentialId as string,
+      },
+    });
+    const key = await LlmProviderApiKeyModel.create(
+      {
+        organizationId,
+        name: "Planted",
+        provider: "github-copilot",
+        secretId: (
+          await (
+            await import("@/secrets-manager")
+          )
+            .secretManager()
+            .createSecret({ apiKey: value }, "planted")
+        ).id,
+        scope: "org",
+        userId: null,
+      },
+      { apiKeyValue: value },
+    );
+    const lookups = vi.spyOn(RuntimeCredentialDefinitionModel, "findById");
+
+    const response = await (await planFetch(key.id))(
+      "https://api.githubcopilot.com/models",
+    );
+
+    expect(response.status).toBe(400);
+    expect(lookups).not.toHaveBeenCalled();
+    expect(await flagged(key.id)).toBeFalsy();
+    lookups.mockRestore();
+  });
+
+  test("refuses a GitHub App reference as a generic API key, on create and update", async () => {
+    const { keyId, reference } = await connectedApp();
+    const value = encodeGithubAppReference(
+      reference as NonNullable<typeof reference>,
+    );
+
+    const created = await post("/api/llm-provider-api-keys", {
+      name: "Sneaky",
+      provider: "github-copilot",
+      apiKey: value,
+      shared: true,
+    });
+    expect(created.statusCode).toBe(400);
+
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${keyId}`,
+      payload: { apiKey: value },
+    });
+    expect(updated.statusCode).toBe(400);
+  });
+
+  test("still serves a stored plan key", async () => {
+    const { keyId } = await connectedApp();
+    vi.stubGlobal("fetch", githubFake({ appId }));
+    const response = await (await planFetch(keyId))(
+      "https://api.githubcopilot.com/models",
+    );
+    expect(response.status).toBe(200);
+  });
+
+  test("keeps the plan connected when Copilot refuses one request, but not when the App lacks Copilot Requests", async () => {
+    const { keyId } = await connectedApp();
+    const copilotSays = (message: string) =>
+      vi.fn(async (input: unknown) =>
+        String(input).endsWith("/access_tokens")
+          ? Response.json(
+              {
+                token: "ghs_plan",
+                expires_at: new Date(Date.now() + 3600_000).toISOString(),
+              },
+              { status: 201 },
+            )
+          : Response.json({ message }, { status: 403 }),
+      );
+
+    vi.stubGlobal(
+      "fetch",
+      copilotSays("The requested model is not enabled for your organization"),
+    );
+    const blocked = await (await planFetch(keyId))(
+      "https://api.githubcopilot.com/chat/completions",
+      { method: "POST", body: "{}" },
+    );
+    expect(blocked.status).toBe(403);
+    expect(await flagged(keyId)).toBeFalsy();
+
+    vi.stubGlobal(
+      "fetch",
+      copilotSays("Resource not accessible by integration"),
+    );
+    const refused = await (await planFetch(keyId))(
+      "https://api.githubcopilot.com/models",
+    );
+    expect(refused.status).toBe(401);
+    expect(await flagged(keyId)).toBe(true);
+  });
+
+  test("keeps the plan connected through a credential store failure or a GitHub rate limit", async () => {
+    const { keyId } = await connectedApp();
+    // Past the short resolution cache, so the store is read again.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() + 60_000);
+    const broken = vi
+      .spyOn(RuntimeCredentialConnectionModel, "resolveValue")
+      .mockRejectedValueOnce(new Error("connection refused"));
+    const storeDown = await (await planFetch(keyId))(
+      "https://api.githubcopilot.com/models",
+    );
+    broken.mockRestore();
+    vi.useRealTimers();
+    expect(storeDown.status).toBe(503);
+    expect(await flagged(keyId)).toBeFalsy();
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { message: "API rate limit exceeded for installation" },
+          { status: 429, headers: { "retry-after": "30" } },
+        ),
+      ),
+    );
+    // Copilot's own rate limit passes through as it is.
+    const limited = await (await planFetch(keyId))(
+      "https://api.githubcopilot.com/models",
+    );
+    expect(limited.status).toBe(429);
+    expect(await flagged(keyId)).toBeFalsy();
+  });
+
+  test("connecting a known App by its key updates its credential instead of adding one", async () => {
+    vi.stubGlobal("fetch", githubFake({ appId }));
+    const first = await post("/api/github-copilot-app/existing", {
+      appId,
+      organization: "my-org",
+      privateKey,
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    const apps = async () =>
+      (await RuntimeCredentialDefinitionModel.list(organizationId)).filter(
+        (definition) => definition.appId === appId,
+      );
+    const [credential] = await apps();
+    // A created App's connection holds the OAuth client secret too.
+    const { setRuntimeCredentialConnection } = await import(
+      "@/services/agent-runtime/runtime-credentials"
+    );
+    await setRuntimeCredentialConnection({
+      organizationId,
+      userId: user.id,
+      credentialId: credential.key,
+      scope: "organization",
+      value: JSON.stringify({ privateKey, clientSecret: "client-secret" }),
+    });
+
+    const again = await post("/api/github-copilot-app/existing", {
+      appId,
+      privateKey,
+      replaceKeyId: first.json().id,
+    });
+    expect(again.statusCode, again.body).toBe(200);
+    expect(await apps()).toHaveLength(1);
+    const stored = await RuntimeCredentialConnectionModel.resolveValue({
+      organizationId,
+      credentialId: credential.key,
+      scope: "organization",
+    });
+    expect(JSON.parse(stored as string)).toMatchObject({
+      clientSecret: "client-secret",
+    });
+  });
+
+  test("reads only plan keys when checking what uses a credential, never personal sign-ins", async ({
+    makeSecret,
+  }) => {
+    const { keyId } = await connectedApp();
+    const personal = await LlmProviderApiKeyModel.create(
+      {
+        organizationId,
+        name: "GitHub Copilot",
+        provider: "github-copilot",
+        secretId: (await makeSecret({ secret: { apiKey: "gho_mine" } })).id,
+        scope: "personal",
+        userId: user.id,
+      },
+      { apiKeyValue: "gho_mine" },
+    );
+
+    const values =
+      await LlmProviderApiKeyModel.findGithubAppKeyValues(organizationId);
+
+    expect(values.map((value) => value.id)).toEqual([keyId]);
+    expect(JSON.stringify(values)).not.toContain("gho_mine");
+    expect(values.map((value) => value.id)).not.toContain(personal.id);
+  });
+
+  test("removes the credential it made when connecting fails afterwards", async () => {
+    vi.stubGlobal("fetch", githubFake({ appId }));
+    const failed = await post("/api/github-copilot-app/existing", {
+      appId,
+      privateKey,
+      organization: "my-org",
+      // No such key: storing fails after the credential was saved.
+      replaceKeyId: "00000000-0000-4000-8000-000000000000",
+    });
+    expect(failed.statusCode).toBeGreaterThanOrEqual(400);
+    expect(
+      (await RuntimeCredentialDefinitionModel.list(organizationId)).filter(
+        (definition) => definition.appId === appId,
+      ),
+    ).toHaveLength(0);
   });
 
   async function setConnection(credentialKey: string) {

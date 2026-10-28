@@ -1751,7 +1751,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CheckCopilotGithubOrganization]: { llmProviderApiKey: ["create"] },
   // The service checks the key's own grants, like the key's read and update.
   [RouteId.GetCopilotGithubAppKeySummary]: {},
-  [RouteId.ReplaceCopilotGithubAppPrivateKey]: {},
   // The setup checks its own permissions when it completes.
   [RouteId.CompleteCopilotGithubApp]: {},
   [RouteId.GetPendingAppaGithubApp]: { organizationSettings: ["update"] },

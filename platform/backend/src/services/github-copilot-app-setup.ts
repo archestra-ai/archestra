@@ -6,6 +6,7 @@ import {
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { fetchAsGithubApp } from "@/integrations/github/app-auth";
+import { parseGitHubAppSecrets } from "@/integrations/github/app-secrets";
 import logger from "@/logging";
 import {
   LlmProviderApiKeyModel,
@@ -17,12 +18,15 @@ import {
   getSecretValueForLlmProviderApiKey,
   secretManager,
 } from "@/secrets-manager";
-import { setRuntimeCredentialConnection } from "@/services/agent-runtime/runtime-credentials";
+import {
+  deleteRuntimeCredentialDefinition,
+  setRuntimeCredentialConnection,
+} from "@/services/agent-runtime/runtime-credentials";
 import {
   decodeGithubAppReference,
-  encodeGithubAppCredential,
   encodeGithubAppReference,
   forgetGithubAppReference,
+  type GithubAppCredential,
   githubAppApiBase,
   githubAppKeyFingerprint,
   githubWebFromApi,
@@ -96,15 +100,13 @@ class CopilotGithubAppSetup {
           `This plan is for ${login}, but the new App is installed on ${app.account}.`,
         );
     }
-    const models = await fetchCopilotModelIds(
-      encodeGithubAppCredential({
-        appId: app.appId,
-        installationId: String(installation.id),
-        privateKey: app.secret.privateKey,
-        githubUrl: app.web,
-        organization: app.account,
-      }),
-    );
+    const models = await fetchCopilotModelIds({
+      appId: app.appId,
+      installationId: String(installation.id),
+      privateKey: app.secret.privateKey,
+      githubUrl: app.web,
+      organization: app.account,
+    });
     const definition = await githubAppManifestSetup.saveCredential({
       ...params,
       app,
@@ -230,6 +232,13 @@ class CopilotGithubAppSetup {
         githubUrl: githubWebFromApi(api),
       },
       installation,
+      models: await fetchCopilotModelIds({
+        appId: definition.appId,
+        installationId: String(installation.id),
+        privateKey,
+        githubUrl: githubWebFromApi(api),
+        organization: installation.account?.login ?? login,
+      }),
     });
   }
 
@@ -284,48 +293,71 @@ class CopilotGithubAppSetup {
     const checked = await this.validateExisting(params);
     // Check Copilot answers the App before anything is saved.
     assertCopilotRequests(checked.installation, checked.organization);
-    const models = await fetchCopilotModelIds(
-      encodeGithubAppCredential({
-        appId: checked.appId,
-        installationId: checked.installationId,
-        privateKey: checked.privateKey,
-        githubUrl: checked.web,
-        organization: checked.organization,
-      }),
-    );
+    const models = await fetchCopilotModelIds({
+      appId: checked.appId,
+      installationId: checked.installationId,
+      privateKey: checked.privateKey,
+      githubUrl: checked.web,
+      organization: checked.organization,
+    });
     const app = await fetchAsGithubApp<{ name?: string; slug?: string }>({
       githubUrl: checked.api,
       appId: checked.appId,
       privateKey: checked.privateKey,
       path: "/app",
     }).catch(() => null);
-    const definition = await githubAppManifestSetup.saveCredential({
-      ...params,
-      app: {
-        name: app?.name ?? `GitHub App ${checked.appId}`,
-        slug: app?.slug ?? checked.appId,
-        appId: checked.appId,
-        api: checked.api,
-      },
-      installationId: checked.installationId,
-      description: `Makes GitHub Copilot requests for ${checked.organization}.`,
-      icon: "logo:github",
-      value: checked.privateKey,
+    // The organization keeps one credential per App: a known App gets its
+    // new private key, an unknown one a new credential.
+    const known = await this.knownAppCredential({
+      organizationId: params.organizationId,
+      appId: checked.appId,
+      api: checked.api,
     });
-    return this.connect({
-      ...params,
-      reference: {
-        ref: {
-          organizationId: params.organizationId,
-          credentialId: definition.id,
+    if (known)
+      await this.replaceAppPrivateKey({
+        ...params,
+        definition: known,
+        privateKey: checked.privateKey,
+      });
+    const definition =
+      known ??
+      (await githubAppManifestSetup.saveCredential({
+        ...params,
+        app: {
+          name: app?.name ?? `GitHub App ${checked.appId}`,
+          slug: app?.slug ?? checked.appId,
+          appId: checked.appId,
+          api: checked.api,
         },
         installationId: checked.installationId,
-        organization: checked.organization,
-        githubUrl: checked.web,
-      },
-      installation: checked.installation,
-      models,
-    });
+        description: `Makes GitHub Copilot requests for ${checked.organization}.`,
+        icon: "logo:github",
+        value: checked.privateKey,
+      }));
+    try {
+      return await this.connect({
+        ...params,
+        reference: {
+          ref: {
+            organizationId: params.organizationId,
+            credentialId: definition.id,
+          },
+          installationId: checked.installationId,
+          organization: checked.organization,
+          githubUrl: checked.web,
+        },
+        installation: checked.installation,
+        models,
+      });
+    } catch (error) {
+      // A credential made for this connect alone goes with it.
+      if (!known)
+        await deleteRuntimeCredentialDefinition({
+          organizationId: params.organizationId,
+          key: definition.key,
+        }).catch(() => undefined);
+      throw error;
+    }
   }
 
   /**
@@ -335,7 +367,10 @@ class CopilotGithubAppSetup {
   async summary(params: Owner & { keyId: string }) {
     const stored = await this.storedValue(params, "read");
     const reference = decodeGithubAppReference(stored.value);
-    const credential = await resolveGithubAppCredential(stored.value);
+    const credential = await resolveGithubAppCredential({
+      value: stored.value,
+      organizationId: params.organizationId,
+    });
     if (!reference || !credential)
       throw new ApiError(
         400,
@@ -364,57 +399,6 @@ class CopilotGithubAppSetup {
   }
 
   /**
-   * Replace the App's private key in the GitHub App credential the key uses,
-   * so every use of the App gets it.
-   */
-  async replacePrivateKey(
-    params: Owner & { keyId: string; privateKey: string },
-  ) {
-    const stored = await this.storedValue(params, "update");
-    const reference = decodeGithubAppReference(stored.value);
-    if (!reference)
-      throw new ApiError(
-        400,
-        "The stored GitHub App credential is unreadable.",
-      );
-    const definition = await RuntimeCredentialDefinitionModel.findById({
-      id: reference.ref.credentialId,
-      organizationId: params.organizationId,
-    });
-    if (!definition?.appId)
-      throw new ApiError(
-        400,
-        "The GitHub App credential this plan used was deleted. Use Reconnect to choose an App.",
-      );
-    const { privateKey } = validateGithubAppPrivateKey({
-      appId: definition.appId,
-      privateKey: params.privateKey,
-    });
-    const api = githubAppApiBase(reference);
-    const installation = await findInstallation({
-      api,
-      appId: definition.appId,
-      privateKey,
-      login: reference.organization,
-      appName: definition.name,
-    });
-    await setRuntimeCredentialConnection({
-      organizationId: params.organizationId,
-      userId: params.userId,
-      credentialId: definition.key,
-      scope: "organization",
-      value: privateKey,
-    });
-    forgetGithubAppReference(reference.ref);
-    return this.connect({
-      ...params,
-      replaceKeyId: params.keyId,
-      reference,
-      installation,
-    });
-  }
-
-  /**
    * Check that Copilot answers the App, then store the key: a new shared key,
    * or a key whose App was replaced.
    */
@@ -425,8 +409,8 @@ class CopilotGithubAppSetup {
       grants?: ResourcePermissionGrant[];
       replaceKeyId?: string;
       name?: string;
-      /** Already read from Copilot for this App; read again when absent. */
-      models?: string[];
+      /** The App's chat models, read before anything is stored. */
+      models: string[];
     },
   ) {
     assertCopilotRequests(params.installation, params.reference.organization);
@@ -443,13 +427,13 @@ class CopilotGithubAppSetup {
       organization: string;
       grants?: ResourcePermissionGrant[];
       replaceKeyId?: string;
-      models?: string[];
+      /** The App's chat models, read before anything is stored. */
+      models: string[];
       /** A new key's name; a replaced key keeps its own. */
       name?: string;
     },
   ) {
-    const { apiKey, organization, organizationId, userId } = params;
-    const models = params.models ?? (await fetchCopilotModelIds(apiKey));
+    const { apiKey, organization, organizationId, userId, models } = params;
 
     let keyId: string;
     if (params.replaceKeyId) {
@@ -546,6 +530,71 @@ class CopilotGithubAppSetup {
     };
   }
 
+  /** The organization's GitHub App credential for this App on this GitHub, if any. */
+  private async knownAppCredential(params: {
+    organizationId: string;
+    appId: string;
+    api: string;
+  }) {
+    const normalize = (url: string | null) =>
+      (url ?? "https://api.github.com").replace(/\/+$/, "");
+    return (
+      (await RuntimeCredentialDefinitionModel.list(params.organizationId)).find(
+        (definition) =>
+          definition.kind === "github_app" &&
+          definition.appId === params.appId &&
+          normalize(definition.githubUrl) === normalize(params.api),
+      ) ?? null
+    );
+  }
+
+  /**
+   * Put a new private key on a known App's credential, keeping its stored
+   * shape (a bare PEM, or the PEM with the OAuth client secret).
+   */
+  private async replaceAppPrivateKey(
+    params: Owner & {
+      definition: { id: string; key: string; name: string };
+      privateKey: string;
+    },
+  ) {
+    try {
+      await ResourcePermissions.require({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        resource: "credential",
+        scope: params.definition.id,
+        action: "update",
+      });
+    } catch {
+      throw new ApiError(
+        403,
+        `${params.definition.name} is already connected, and you can't change its private key. Ask someone who can, or pick it under Use an App I already have.`,
+      );
+    }
+    const current = await RuntimeCredentialConnectionModel.resolveValue({
+      organizationId: params.organizationId,
+      credentialId: params.definition.key,
+      scope: "organization",
+    });
+    const clientSecret = current
+      ? parseGitHubAppSecrets(current).clientSecret
+      : undefined;
+    await setRuntimeCredentialConnection({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      credentialId: params.definition.key,
+      scope: "organization",
+      value: clientSecret
+        ? JSON.stringify({ privateKey: params.privateKey, clientSecret })
+        : params.privateKey,
+    });
+    forgetGithubAppReference({
+      organizationId: params.organizationId,
+      credentialId: params.definition.id,
+    });
+  }
+
   /** An organization's GitHub Copilot key the user may act on. */
   private async ownKey(
     params: Owner & { keyId: string },
@@ -622,21 +671,15 @@ export async function copilotKeysUsingCredential(params: {
   organizationId: string;
   credentialId: string;
 }): Promise<Array<{ id: string; name: string }>> {
-  const keys = (
-    await LlmProviderApiKeyModel.findByOrganizationId(params.organizationId)
-  ).filter((key) => key.provider === "github-copilot" && key.secretId);
-  const using = await Promise.all(
-    keys.map(async (key) => {
-      const value = (await getSecretValueForLlmProviderApiKey(
-        key.secretId as string,
-      ).catch(() => undefined)) as string | undefined;
-      const reference = decodeGithubAppReference(value);
-      return reference?.ref.credentialId === params.credentialId
-        ? { id: key.id, name: `GitHub Copilot for ${reference.organization}` }
-        : null;
-    }),
+  const keys = await LlmProviderApiKeyModel.findGithubAppKeyValues(
+    params.organizationId,
   );
-  return using.filter((entry) => entry !== null);
+  return keys.flatMap((key) => {
+    const reference = decodeGithubAppReference(key.value);
+    return reference?.ref.credentialId === params.credentialId
+      ? [{ id: key.id, name: `GitHub Copilot for ${reference.organization}` }]
+      : [];
+  });
 }
 
 // ===================== Internals =====================
@@ -745,8 +788,13 @@ function assertCopilotRequests(
  * The chat models Copilot lists for the App, read before anything is stored
  * so a key that can't reach Copilot is never created.
  */
-async function fetchCopilotModelIds(apiKey: string): Promise<string[]> {
-  const copilotFetch = createGithubCopilotFetch({ githubToken: apiKey });
+async function fetchCopilotModelIds(
+  appCredential: GithubAppCredential,
+): Promise<string[]> {
+  const copilotFetch = createGithubCopilotFetch({
+    githubToken: undefined,
+    appCredential,
+  });
   const response = await copilotFetch(
     `${config.llm["github-copilot"].baseUrl.replace(/\/+$/, "")}/models`,
   );

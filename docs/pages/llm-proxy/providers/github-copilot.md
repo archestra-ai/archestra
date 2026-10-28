@@ -58,7 +58,7 @@ What to know:
 
 ### Manage or Reconnect a Plan
 
-**Manage** on the card opens the same steps for the connected plan. Switch to another App, rotate the App's private key with **Connect an App by its ID and private key**, or change who can use it. When GitHub refuses the App, for example after it was uninstalled or its key was revoked, the card shows **Reconnect**.
+**Manage** on the card opens the same steps for the connected plan. Switch to another App, rotate the App's private key with **Connect an App by its ID and private key**, or change who can use it. When GitHub refuses the App, for example after it was uninstalled or its key was revoked, the card shows **Reconnect**. Switching to another App leaves the old App connected to Archestra, because other features may use it.
 
 ### Personal Sign-In or Enterprise Plan
 

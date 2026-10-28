@@ -1230,6 +1230,47 @@ class LlmProviderApiKeyModel {
   }
 
   /** True when the key stores an organization's GitHub App credential. */
+  /**
+   * The organization's GitHub Copilot plan keys (GitHub App keys) with their
+   * stored values, in one query. Personal sign-in tokens are never read.
+   */
+  static async findGithubAppKeyValues(
+    organizationId: string,
+  ): Promise<Array<{ id: string; name: string; value: string | null }>> {
+    const rows = await db
+      .select({
+        id: schema.llmProviderApiKeysTable.id,
+        name: schema.llmProviderApiKeysTable.name,
+        secretId: schema.llmProviderApiKeysTable.secretId,
+        secret: schema.secretsTable.secret,
+        secretIsVault: schema.secretsTable.isVault,
+      })
+      .from(schema.llmProviderApiKeysTable)
+      .innerJoin(
+        schema.secretsTable,
+        eq(schema.llmProviderApiKeysTable.secretId, schema.secretsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+          eq(schema.llmProviderApiKeysTable.provider, "github-copilot"),
+          eq(schema.llmProviderApiKeysTable.credentialKind, "github_app"),
+        ),
+      );
+    return Promise.all(
+      rows.map(async (row) => ({
+        id: row.id,
+        name: row.name,
+        value:
+          row.secretIsVault && row.secretId
+            ? (((await getSecretValueForLlmProviderApiKey(row.secretId)) as
+                | string
+                | null) ?? null)
+            : readApiKeyValue(row.secret),
+      })),
+    );
+  }
+
   static async isGithubAppKey(id: string | null | undefined): Promise<boolean> {
     if (!id) return false;
     return (

@@ -12,10 +12,14 @@ import {
   TerminalSquare,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { AgentRunId } from "@/components/agent-run-id";
 import { AgentRunLiveness } from "@/components/agent-run-liveness";
-import { AgentRunLogs } from "@/components/agent-run-logs";
+import {
+  AgentRunDownloadMenuItems,
+  AgentRunLogs,
+  type AgentRunLogsHandle,
+} from "@/components/agent-run-logs";
 import { AgentRunState } from "@/components/agent-run-state";
 import { AgentRunTerminal } from "@/components/agent-run-terminal";
 import { ShareAgentRunDialog } from "@/components/chat/share-agent-run-dialog";
@@ -27,6 +31,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -251,7 +256,9 @@ function RunDetails({
   onClosed: () => void;
 }) {
   const active = !run.endedAt;
+  const logsRef = useRef<AgentRunLogsHandle>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const showingLogs = !active || !canAttach || showHistory;
   const now = useRuntimeClock(true);
   const [permissionsOpen, setPermissionsOpen] = useState(false);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
@@ -373,7 +380,7 @@ function RunDetails({
               <span>Stop</span>
             </Button>
           )}
-          {canManageAccess && (
+          {(canManageAccess || showingLogs) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -385,10 +392,19 @@ function RunDetails({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => setPermissionsOpen(true)}>
-                  <Share2 />
-                  <span>Share</span>
-                </DropdownMenuItem>
+                {showingLogs && (
+                  <AgentRunDownloadMenuItems
+                    onDownload={(kind) => logsRef.current?.download(kind)}
+                    trajectoryDisabled={active}
+                  />
+                )}
+                {showingLogs && canManageAccess && <DropdownMenuSeparator />}
+                {canManageAccess && (
+                  <DropdownMenuItem onSelect={() => setPermissionsOpen(true)}>
+                    <Share2 />
+                    <span>Share</span>
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -408,7 +424,7 @@ function RunDetails({
             onClosed={onClosed}
           />
         ) : (
-          <AgentRunLogs run={run} title="" />
+          <AgentRunLogs ref={logsRef} run={run} title="" />
         )}
       </div>
       <ShareAgentRunDialog

@@ -46,7 +46,8 @@ vi.mock("@/components/agent-run-terminal", () => ({
   AgentRunTerminal: () => <div>Live terminal</div>,
 }));
 
-vi.mock("@/components/agent-run-logs", () => ({
+vi.mock("@/components/agent-run-logs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/agent-run-logs")>()),
   AgentRunLogs: () => <div>Retained output</div>,
 }));
 
@@ -209,8 +210,8 @@ describe("AgentRuns", () => {
     fireEvent.click(screen.getByRole("button", { name: /Shared review/ }));
     expect(screen.getByText("by Sam Chen")).toBeVisible();
     expect(
-      screen.queryByRole("button", { name: "More run actions" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "More run actions" }),
+    ).toBeVisible();
     expect(screen.getByText("Retained output")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
     expect(
@@ -324,6 +325,13 @@ describe("AgentRuns", () => {
       .setup()
       .click(screen.getByRole("button", { name: "Run history" }));
     expect(screen.getByText("Retained output")).toBeVisible();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "More run actions" }));
+    expect(
+      screen.getByRole("menuitem", { name: "Download logs" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("menuitem", { name: "Share" })).toBeNull();
   });
 
   it("keeps a service-account run read-only when terminal permission is absent", async () => {

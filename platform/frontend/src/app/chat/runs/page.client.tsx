@@ -18,12 +18,16 @@ import {
   Unplug,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentRunId } from "@/components/agent-run-id";
 import { AgentRunLiveness } from "@/components/agent-run-liveness";
-import { AgentRunLogs } from "@/components/agent-run-logs";
+import {
+  AgentRunDownloadMenuItems,
+  AgentRunLogs,
+  type AgentRunLogsHandle,
+} from "@/components/agent-run-logs";
 import { AgentRunState } from "@/components/agent-run-state";
 import { AgentRunTerminal } from "@/components/agent-run-terminal";
 import { ShareAgentRunDialog } from "@/components/chat/share-agent-run-dialog";
@@ -87,6 +91,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const [commandCopied, setCommandCopied] = useState(false);
   const [portCommandCopied, setPortCommandCopied] = useState(false);
   const run = query.data;
+  const logsRef = useRef<AgentRunLogsHandle>(null);
   usePageTitle(run?.title ?? "Agent Runtime");
   const now = useRuntimeClock(true);
 
@@ -272,7 +277,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                     <span>{action.label}</span>
                   </Button>
                 ))}
-              {(canAttach || canManageAccess) && (
+              {(canAttach || canManageAccess || !showLiveTerminal) && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -288,6 +293,17 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    {!showLiveTerminal && (
+                      <AgentRunDownloadMenuItems
+                        onDownload={(kind) => logsRef.current?.download(kind)}
+                        trajectoryDisabled={live}
+                      />
+                    )}
+                    {!showLiveTerminal &&
+                      (actions.some(
+                        (action) => !action.primary && !action.prominent,
+                      ) ||
+                        isOwner) && <DropdownMenuSeparator />}
                     {actions
                       .filter((action) => !action.primary && !action.prominent)
                       .map((action) => (
@@ -408,6 +424,8 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
               </div>
             )}
             <AgentRunLogs
+              ref={logsRef}
+              title=""
               key={run.taskId}
               run={run}
               sessionId={isOwner ? run.sessionId : undefined}

@@ -6,7 +6,15 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { AgentRun } from "@/lib/agent-runtime.query";
 
 const socket = vi.hoisted(() => {
@@ -34,7 +42,11 @@ vi.mock("@/components/terminal-playback", () => ({
 }));
 
 import { toast } from "sonner";
-import { AgentRunLogs } from "./agent-run-logs";
+import {
+  AgentRunDownloadMenuItems,
+  AgentRunLogs,
+  type AgentRunLogsHandle,
+} from "./agent-run-logs";
 
 vi.mock("sonner");
 
@@ -62,10 +74,10 @@ describe("AgentRunLogs", () => {
     ) {
       clicked.push(this.download);
     });
-    render(<AgentRunLogs run={completedRun} />);
+    render(<LogDownloadHarness />);
     expect(
-      screen.getByRole("button", { name: "Download trajectory" }),
-    ).toBeDisabled();
+      screen.queryByRole("button", { name: "Download trajectory" }),
+    ).toBeNull();
     const trajectory = JSON.stringify({
       version: 1,
       provider: "claude-code",
@@ -103,10 +115,8 @@ describe("AgentRunLogs", () => {
       type: "agent_run_logs_ended",
       payload: { runId: "task-1", source: "full", truncated: false },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Download logs" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Download trajectory" }),
-    );
+    await selectDownload("Download logs");
+    await selectDownload("Download trajectory");
     expect(clicked).toEqual(["agent-run-task-1.log", "agent-run-task-1.json"]);
     expect(await readBlob(blobs[0])).toBe("first line\nlast line\n");
     expect(await readBlob(blobs[1])).toBe(trajectory);
@@ -126,7 +136,7 @@ describe("AgentRunLogs", () => {
       revokeObjectURL: vi.fn(),
     });
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    render(<AgentRunLogs run={completedRun} />);
+    render(<LogDownloadHarness />);
     emit({
       type: "agent_run_logs",
       payload: { runId: "task-1", logs: "tail" },
@@ -140,7 +150,7 @@ describe("AgentRunLogs", () => {
         truncated: false,
       },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Download logs" }));
+    await selectDownload("Download logs");
     expect(blobs).toHaveLength(0);
     expect(socket.send).toHaveBeenLastCalledWith({
       type: "subscribe_agent_run_logs",
@@ -168,7 +178,7 @@ describe("AgentRunLogs", () => {
       revokeObjectURL: vi.fn(),
     });
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    render(<AgentRunLogs run={completedRun} />);
+    render(<LogDownloadHarness />);
     emit({
       type: "agent_run_logs",
       payload: { runId: "task-1", logs: "output" },
@@ -177,9 +187,7 @@ describe("AgentRunLogs", () => {
       type: "agent_run_logs_ended",
       payload: { runId: "task-1", source: "full", omittedBytes: 0 },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Download trajectory" }),
-    );
+    await selectDownload("Download trajectory");
     expect(blobs).toHaveLength(0);
     expect(socket.send).toHaveBeenLastCalledWith({
       type: "subscribe_agent_run_logs",
@@ -205,7 +213,7 @@ describe("AgentRunLogs", () => {
   it("explains absent native history without downloading an empty trajectory", async () => {
     const create = vi.fn();
     vi.stubGlobal("URL", { createObjectURL: create, revokeObjectURL: vi.fn() });
-    render(<AgentRunLogs run={completedRun} />);
+    render(<LogDownloadHarness />);
     emit({
       type: "agent_run_logs",
       payload: { runId: "task-1", logs: "retained output" },
@@ -214,9 +222,7 @@ describe("AgentRunLogs", () => {
       type: "agent_run_logs_ended",
       payload: { runId: "task-1", source: "full" },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Download trajectory" }),
-    );
+    await selectDownload("Download trajectory");
     emit({
       type: "agent_run_logs",
       payload: { runId: "task-1", logs: "retained output" },
@@ -534,4 +540,28 @@ function readBlob(blob: Blob): Promise<string> {
     reader.onerror = () => reject(reader.error);
     reader.readAsText(blob);
   });
+}
+
+function LogDownloadHarness() {
+  const logsRef = useRef<AgentRunLogsHandle>(null);
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button>More run actions</Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <AgentRunDownloadMenuItems
+            onDownload={(kind) => logsRef.current?.download(kind)}
+          />
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AgentRunLogs ref={logsRef} run={completedRun} title="" />
+    </>
+  );
+}
+async function selectDownload(name: string) {
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "More run actions" }));
+  await user.click(screen.getByRole("menuitem", { name }));
 }

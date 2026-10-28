@@ -6,23 +6,54 @@ import type {
   AgentRunLogsMessage,
 } from "@archestra/shared";
 import { Download, FileX2, TerminalSquare } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type Ref, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "sonner";
 import { DeploymentLogPanel } from "@/components/deployment-console";
 import { TerminalRecording } from "@/components/terminal-recording";
 import { Button } from "@/components/ui/button";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import type { AgentRun } from "@/lib/agent-runtime.query";
 import { formatBytes } from "@/lib/utils/format-bytes";
 import websocketService from "@/lib/websocket/websocket";
+
+export type AgentRunLogsHandle = {
+  download: (kind: "logs" | "trajectory") => void;
+};
+
+export function AgentRunDownloadMenuItems({
+  onDownload,
+  trajectoryDisabled = false,
+}: {
+  onDownload: AgentRunLogsHandle["download"];
+  trajectoryDisabled?: boolean;
+}) {
+  return (
+    <>
+      <DropdownMenuItem onSelect={() => onDownload("logs")}>
+        <Download />
+        <span>Download logs</span>
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        disabled={trajectoryDisabled}
+        onSelect={() => onDownload("trajectory")}
+      >
+        <Download />
+        <span>Download trajectory</span>
+      </DropdownMenuItem>
+    </>
+  );
+}
 
 export function AgentRunLogs({
   run,
   title = "Output",
   sessionId,
+  ref,
 }: {
   run: AgentRun;
   title?: string;
   sessionId?: string;
+  ref?: Ref<AgentRunLogsHandle>;
 }) {
   const includeSessionHistory = Boolean(sessionId);
   const logId = sessionId ?? run.taskId;
@@ -46,6 +77,45 @@ export function AgentRunLogs({
   const [fullRecording, setFullRecording] = useState(false);
   const [omittedBytes, setOmittedBytes] = useState(0);
   const requestTail = Boolean(run.endedAt) && !fullRecording;
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      download: (kind) => {
+        if (
+          !error &&
+          kind === "logs" &&
+          terminalContent &&
+          omittedBytes === 0
+        ) {
+          downloadRunOutput(run.taskId, terminalContent, "log", "text/plain");
+          return;
+        }
+        if (!error && kind === "trajectory" && readableContent) {
+          downloadRunOutput(
+            run.taskId,
+            readableContent,
+            "json",
+            "application/json",
+          );
+          return;
+        }
+        setPendingDownload(kind);
+        if (requestTail) {
+          setHistoryLoaded(false);
+          setFullRecording(true);
+        }
+      },
+    }),
+    [
+      requestTail,
+      error,
+      terminalContent,
+      omittedBytes,
+      readableContent,
+      run.taskId,
+    ],
+  );
 
   useEffect(() => {
     let receivedOutput = false;
@@ -171,15 +241,24 @@ export function AgentRunLogs({
     if (
       !pendingDownload ||
       !historyLoaded ||
-      isStreaming ||
+      (run.endedAt && isStreaming) ||
       omittedBytes > 0 ||
       requestTail
     )
       return;
+    if (
+      !error &&
+      pendingDownload === "logs" &&
+      !terminalContent &&
+      !run.endedAt
+    )
+      return;
     setPendingDownload(null);
     if (error) return;
-    if (pendingDownload === "logs" && terminalContent) {
-      downloadRunOutput(run.taskId, terminalContent, "log", "text/plain");
+    if (pendingDownload === "logs") {
+      if (terminalContent)
+        downloadRunOutput(run.taskId, terminalContent, "log", "text/plain");
+      else toast.info("No terminal output was recorded for this run.");
     } else if (pendingDownload === "trajectory") {
       if (readableContent)
         downloadRunOutput(
@@ -203,84 +282,12 @@ export function AgentRunLogs({
     terminalContent,
     readableContent,
     run.taskId,
+    run.endedAt,
   ]);
 
   return (
     <DeploymentLogPanel
       title={title}
-      actions={
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={
-              !terminalContent || Boolean(error) || Boolean(pendingDownload)
-            }
-            title={
-              omittedBytes > 0
-                ? "Loads the full retained recording before downloading"
-                : "Download retained terminal output; live runs include output received so far"
-            }
-            onClick={() => {
-              if (omittedBytes > 0) {
-                setPendingDownload("logs");
-                setFullRecording(true);
-              } else {
-                downloadRunOutput(
-                  run.taskId,
-                  terminalContent,
-                  "log",
-                  "text/plain",
-                );
-              }
-            }}
-          >
-            <Download className="size-4" />
-            <span>
-              {pendingDownload === "logs" ? "Loading logs…" : "Download logs"}
-            </span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={
-              !run.endedAt ||
-              !historyLoaded ||
-              Boolean(error) ||
-              Boolean(pendingDownload)
-            }
-            title={
-              readableContent
-                ? "Download the retained native trajectory as JSON"
-                : "Available when native history has been collected after the run ends; load the full recording if only its end is shown"
-            }
-            onClick={() => {
-              if (readableContent)
-                downloadRunOutput(
-                  run.taskId,
-                  readableContent,
-                  "json",
-                  "application/json",
-                );
-              else if (requestTail) {
-                setPendingDownload("trajectory");
-                setHistoryLoaded(false);
-                setFullRecording(true);
-              } else
-                toast.info(
-                  "No native trajectory was recorded for this run. Its retained terminal output is available in Download logs.",
-                );
-            }}
-          >
-            <Download className="size-4" />
-            <span>
-              {pendingDownload === "trajectory"
-                ? "Loading trajectory…"
-                : "Download trajectory"}
-            </span>
-          </Button>
-        </div>
-      }
       content={terminalContent}
       contentRenderer={(output) => (
         <TerminalRecording

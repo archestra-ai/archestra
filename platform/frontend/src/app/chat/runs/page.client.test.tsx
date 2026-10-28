@@ -47,7 +47,8 @@ vi.mock("@/components/agent-run-terminal", () => ({
   },
 }));
 
-vi.mock("@/components/agent-run-logs", () => ({
+vi.mock("@/components/agent-run-logs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/agent-run-logs")>()),
   AgentRunLogs: () => <div>Retained run output</div>,
 }));
 
@@ -354,7 +355,7 @@ describe("AgentRunChatSession", () => {
     expect(screen.queryByText("Read-only terminal")).toBeNull();
   });
 
-  it("gives a shared viewer read-only output without owner controls on a live run", () => {
+  it("gives a shared viewer read-only output without owner controls on a live run", async () => {
     queryState.value.data = run({
       state: "TASK_STATE_WORKING",
       endedAt: null,
@@ -380,9 +381,19 @@ describe("AgentRunChatSession", () => {
     expect(
       screen.queryByRole("button", { name: "Share" }),
     ).not.toBeInTheDocument();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "More run actions" }));
     expect(
-      screen.queryByRole("button", { name: "More run actions" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("menuitem", { name: "Download logs" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("menuitem", { name: "Download trajectory" }),
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByRole("menuitem", { name: "Share" })).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", { name: "Delete saved files" }),
+    ).toBeNull();
   });
 
   it("shows a shared viewer retained output for an ended run without owner controls", () => {

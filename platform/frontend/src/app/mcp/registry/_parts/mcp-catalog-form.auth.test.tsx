@@ -1,6 +1,6 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -15,6 +15,11 @@ import {
 } from "vitest";
 import { Button } from "@/components/ui/button";
 import { McpCatalogForm } from "./mcp-catalog-form";
+import {
+  buildCloneFormValues,
+  transformCatalogItemToFormValues,
+  transformFormToApiData,
+} from "./mcp-catalog-form.utils";
 
 const server = setupServer(
   http.get("http://localhost:9000/api/secrets/type", () =>
@@ -172,7 +177,138 @@ it("preserves a server URL rejection when switching authentication methods", asy
   expect(screen.getByText("This server URL is not allowed")).toBeVisible();
 });
 
-function renderForm() {
+it.each([
+  [false, false],
+  [true, false],
+  [false, true],
+  [true, true],
+])("clears declared authentication headers when choosing None (saved: %s, clone: %s)", async (saved, clone) => {
+  const item = {
+    id: "catalog-auth-fields",
+    name: "Auth fields server",
+    description: "",
+    icon: null,
+    serverType: "remote",
+    serverUrl: "https://mcp.example.com",
+    requiresAuth: true,
+    authFields: [
+      { name: "X-API-Key", label: "API key", type: "header", required: false },
+    ],
+    oauthConfig: null,
+    enterpriseManagedConfig: null,
+    localConfig: null,
+    deploymentSpecYaml: null,
+    userConfig: {
+      ...(saved
+        ? {
+            header_x_api_key: {
+              type: "string",
+              title: "X-API-Key",
+              headerName: "X-API-Key",
+              promptOnInstallation: true,
+              required: true,
+              sensitive: true,
+            },
+            header_x_tenant: {
+              type: "string",
+              title: "X-Tenant",
+              headerName: "X-Tenant",
+              promptOnInstallation: false,
+              required: false,
+              sensitive: false,
+              default: "local-control",
+            },
+          }
+        : {}),
+    },
+    scope: "org",
+    teams: [],
+    labels: [],
+  };
+  const { user, onSubmit } = clone
+    ? renderForm(undefined, buildCloneFormValues(item as never))
+    : renderForm(item);
+
+  expect(
+    await screen.findByRole("button", { name: /^Token header/ }),
+  ).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByText("X-API-Key")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: /^Token header/ }));
+  expect(screen.queryByText("Authorization")).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: /^None/ }));
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
+  expect(transformFormToApiData(onSubmit.mock.calls[0][0])).toMatchObject({
+    requiresAuth: false,
+  });
+  const userConfig = transformFormToApiData(
+    onSubmit.mock.calls[0][0],
+  ).userConfig;
+  expect(Object.keys(userConfig ?? {})).toEqual(
+    saved ? ["header_x_tenant"] : [],
+  );
+  if (saved) {
+    expect(userConfig?.header_x_tenant).toMatchObject({
+      default: "local-control",
+      required: false,
+      sensitive: false,
+      promptOnInstallation: false,
+    });
+  }
+  if (!saved && !clone) {
+    onSubmit.mockClear();
+    await user.click(screen.getByRole("button", { name: /^Token header/ }));
+    await user.click(
+      screen.getByRole("button", { name: /^Authorization per-installation/ }),
+    );
+    const dialog = within(screen.getByRole("dialog", { name: "Edit header" }));
+    await user.clear(dialog.getByRole("textbox", { name: "Header name" }));
+    await user.type(
+      dialog.getByRole("textbox", { name: "Header name" }),
+      "X-Reenabled-Key",
+    );
+    await user.click(
+      dialog.getByRole("switch", { name: "Prepend Bearer prefix" }),
+    );
+    await user.click(dialog.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
+    const reenabled = transformFormToApiData(
+      onSubmit.mock.calls[0][0],
+      item.authFields,
+    );
+    expect(reenabled.requiresAuth).toBe(true);
+    const reloaded = transformCatalogItemToFormValues({
+      ...item,
+      ...reenabled,
+    } as never);
+    expect(reloaded.authMethod).toBe("auth_header");
+    expect(reloaded.additionalHeaders).toEqual([
+      expect.objectContaining({
+        headerName: "X-Reenabled-Key",
+        sourceAuthFieldName: "x-reenabled-key",
+        includeBearerPrefix: false,
+      }),
+    ]);
+    onSubmit.mockClear();
+    await user.click(screen.getByRole("button", { name: /^None/ }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
+    const disabledAgain = transformFormToApiData(
+      onSubmit.mock.calls[0][0],
+      reenabled.authFields,
+    );
+    expect(disabledAgain.requiresAuth).toBe(false);
+    expect(disabledAgain.userConfig).toEqual({});
+    expect(disabledAgain.authFields).toEqual([]);
+  }
+});
+
+function renderForm(
+  initialValues?: Record<string, unknown>,
+  formValues?: ReturnType<typeof buildCloneFormValues>,
+) {
   const user = userEvent.setup();
   const onSubmit = vi.fn();
   const submitRef = { current: null as (() => Promise<void>) | null };
@@ -186,7 +322,9 @@ function renderForm() {
   render(
     <QueryClientProvider client={client}>
       <McpCatalogForm
-        mode="create"
+        mode={initialValues ? "edit" : "create"}
+        initialValues={initialValues as never}
+        formValues={formValues}
         submitRef={submitRef}
         onSubmit={onSubmit}
         footer={() => <Button type="submit">Save</Button>}

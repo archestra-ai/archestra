@@ -2207,6 +2207,7 @@ export class LimitValidationService {
         return buildLimitViolationResponse({
           source: "explicit",
           entityType,
+          entityId,
           entityName: await resolveLimitEntityName(entityType, entityId),
           limitValue: limit.limitValue,
           comparisonValue,
@@ -2280,6 +2281,7 @@ export class LimitValidationService {
       return buildLimitViolationResponse({
         source: "default_user",
         entityType: environmentId ? "environment" : "user",
+        entityId: environmentId ?? params.userId,
         entityName: await resolveLimitEntityName(
           environmentId ? "environment" : "user",
           environmentId ?? params.userId,
@@ -2801,6 +2803,7 @@ async function readLimitEntityName(
 function buildLimitViolationResponse(params: {
   source: "explicit" | "default_user";
   entityType: LimitEntityType;
+  entityId: string;
   entityName?: string;
   limitValue: number;
   comparisonValue: number;
@@ -2839,9 +2842,12 @@ function buildLimitViolationResponse(params: {
   // Human-readable description of the exact rule that fired, so both the LLM
   // (via the metadata block) and the end user (via the content message) can
   // tell *which* Archestra limit blocked them rather than guessing.
+  // Keep the existing machine-readable target in the LLM metadata; the
+  // end-user content below identifies the target by its readable name.
   const archestraMetadata = `
 <archestra-limit-type>token_cost</archestra-limit-type>
 <archestra-limit-entity-type>${params.entityType}</archestra-limit-entity-type>
+<archestra-limit-entity-id>${params.entityId}</archestra-limit-entity-id>
 <archestra-limit-source>${params.source}</archestra-limit-source>
 <archestra-limit-model-scope>${modelScope}</archestra-limit-model-scope>
 <archestra-limit-reset-window>${resetWindow ?? "n/a"}</archestra-limit-reset-window>

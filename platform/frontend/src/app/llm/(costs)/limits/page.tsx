@@ -1100,6 +1100,7 @@ export default function LimitsPage() {
                 For example, a virtual key with remaining allowance is still
                 blocked if its team or organization has reached a hard limit.
                 <br />
+                <br />
                 Soft limits keep requests flowing and record exceeded limits in
                 metrics.
               </InlineNoticeText>
@@ -1475,6 +1476,13 @@ export default function LimitsPage() {
             <AdvancedSection keepMounted>
               <div className="space-y-2">
                 <Label htmlFor="limit-behavior">Behavior</Label>
+                <p
+                  id="limit-behavior-description"
+                  className="text-sm text-muted-foreground"
+                >
+                  Choose whether reaching this limit blocks requests or only
+                  records metrics.
+                </p>
                 <Select
                   value={formState.behavior}
                   onValueChange={(value) =>
@@ -1487,6 +1495,7 @@ export default function LimitsPage() {
                   <SelectTrigger
                     id="limit-behavior"
                     aria-label="Behavior"
+                    aria-describedby="limit-behavior-description"
                     className="w-full"
                   >
                     <SelectValue>

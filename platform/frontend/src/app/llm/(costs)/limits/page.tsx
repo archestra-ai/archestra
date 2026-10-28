@@ -1098,6 +1098,7 @@ export default function LimitsPage() {
                 Requests are blocked when any applicable hard limit is reached.
                 For example, a virtual key with remaining allowance is still
                 blocked if its team or organization has reached a hard limit.
+                <br />
                 Soft limits keep requests flowing and record exceeded limits in
                 metrics.
               </InlineNoticeText>

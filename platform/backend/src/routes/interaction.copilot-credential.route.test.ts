@@ -76,7 +76,7 @@ describe("GitHub Copilot credential source in the logs", () => {
           choices: [],
         },
         type: "github-copilot:chatCompletions",
-        llmProviderApiKeyId: keyId,
+        providerApiKeyId: keyId,
       });
     const orgRow = await record(appKey.id, "org-session");
     const personalRow = await record(personalKey.id, "personal-session");

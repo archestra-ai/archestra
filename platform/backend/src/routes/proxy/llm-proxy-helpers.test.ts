@@ -788,13 +788,6 @@ describe("buildInteractionRecord", () => {
     billingMode: "metered" as const,
   };
 
-  test("records the provider key that served the call", () => {
-    expect(
-      buildInteractionRecord({ ...baseParams, llmProviderApiKeyId: "key-1" })
-        .llmProviderApiKeyId,
-    ).toBe("key-1");
-  });
-
   test("builds correct record with all fields", () => {
     const record = buildInteractionRecord(baseParams);
 

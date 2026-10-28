@@ -534,13 +534,13 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const copilotCredentialSource =
-        interaction.llmProviderApiKeyId &&
+        interaction.providerApiKeyId &&
         interaction.type.startsWith("github-copilot:")
           ? ((
               await LlmProviderApiKeyModel.findCopilotCredentialSources([
-                interaction.llmProviderApiKeyId,
+                interaction.providerApiKeyId,
               ])
-            ).get(interaction.llmProviderApiKeyId) ?? null)
+            ).get(interaction.providerApiKeyId) ?? null)
           : null;
 
       return reply.send({

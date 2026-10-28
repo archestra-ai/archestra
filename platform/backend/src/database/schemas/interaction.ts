@@ -108,17 +108,6 @@ const interactionsTable = pgTable(
      */
     connectorId: uuid("connector_id"),
     /**
-     * The provider key that served this call, when Archestra resolved one (a
-     * stored key, not a client's own passthrough credential). Lets the logs
-     * tell an organization's GitHub Copilot subscription from a personal
-     * sign-in.
-     *
-     * Not a foreign key, for the same reason as `connectorId`: ON DELETE SET
-     * NULL needs an index here, and an index on this table cannot be built in
-     * a transactional migration. A deleted key's id resolves to nothing on read.
-     */
-    llmProviderApiKeyId: uuid("llm_provider_api_key_id"),
-    /**
      * MCP App whose runtime made this LLM call. Set only on app-runtime
      * interactions (`source = 'app:llm_complete'` today) from the app-bound
      * proxy header, which the LLM proxy honours only on its loopback path and

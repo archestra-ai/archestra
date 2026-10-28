@@ -2568,7 +2568,7 @@ class InteractionModel {
         >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.virtualKeyId}::text), NULL)`,
         copilotProviderApiKeyIds: sql<
           string[]
-        >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.llmProviderApiKeyId}::text) FILTER (WHERE ${schema.interactionsTable.type} LIKE 'github-copilot:%'), NULL)`,
+        >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.providerApiKeyId}::text) FILTER (WHERE ${schema.interactionsTable.type} LIKE 'github-copilot:%'), NULL)`,
         passthroughVirtualKeyIds: sql<
           string[]
         >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.passthroughVirtualKeyId}::text), NULL)`,

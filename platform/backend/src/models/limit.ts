@@ -1884,7 +1884,11 @@ export class LimitValidationService {
         const customUserLimits = userId
           ? prefetch.limitsByEntity.get(`user:${userId}`)
           : undefined;
-        if (userId && organizationId && !customUserLimits?.length) {
+        if (
+          userId &&
+          organizationId &&
+          !customUserLimits?.some((limit) => limit.behavior !== "soft")
+        ) {
           const defaultLimit = defaultUserLimit;
           budgeted ||= !!defaultLimit && applies(defaultLimit.model);
         }
@@ -2257,8 +2261,8 @@ export class LimitValidationService {
     defaultLimit?: EnvironmentDefaultUserLimit | null;
   }): Promise<null | LimitViolationResponse> {
     try {
-      // A custom per-user limit always wins and disables every default
-      // (org-wide and per-environment) for that user.
+      // Only an enforcing custom budget replaces the default allowance.
+      // Observe-only budgets must not remove the user's hard spend cap.
       const customUserLimits =
         params.customUserLimits ??
         (await LimitModel.findLimitsForValidation(
@@ -2266,9 +2270,9 @@ export class LimitValidationService {
           params.userId,
           "token_cost",
         ));
-      if (customUserLimits.length > 0) {
+      if (customUserLimits.some((limit) => limit.behavior !== "soft")) {
         logger.debug(
-          `[LimitValidation] Skipping default user limit for ${params.userId}: custom user limit exists`,
+          `[LimitValidation] Skipping default user limit for ${params.userId}: custom hard user limit exists`,
         );
         return null;
       }

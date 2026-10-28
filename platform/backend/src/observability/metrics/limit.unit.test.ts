@@ -84,6 +84,33 @@ describe("limit alert context", () => {
     expect(await values("llm_limit_last_exceeded_usage")).toEqual([]);
   });
 
+  test("unknown spend counts hard refusals as blocked and soft allowances as unavailable", async () => {
+    const { observeLimitCheck } = await import("./limit");
+    expect(observeLimitCheck(rule, true, true, Infinity)).toBe(true);
+    expect(
+      observeLimitCheck({ ...rule, behavior: "soft" }, true, true, Infinity),
+    ).toBe(false);
+    expect(await values("llm_limit_checks_total")).toEqual([
+      expect.objectContaining({
+        labels: expect.objectContaining({
+          behavior: "hard",
+          outcome: "blocked",
+        }),
+        value: 1,
+      }),
+      expect.objectContaining({
+        labels: expect.objectContaining({
+          behavior: "soft",
+          outcome: "usage_unavailable",
+        }),
+        value: 1,
+      }),
+    ]);
+    expect(await values("llm_limit_last_exceeded_timestamp_seconds")).toEqual(
+      [],
+    );
+  });
+
   test("default allowances identify the affected account and distinguish their source", async () => {
     const { observeLimitCheck } = await import("./limit");
     observeLimitCheck(

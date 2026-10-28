@@ -1107,8 +1107,9 @@ export default function LimitsPage() {
               <InlineNotice variant="info">
                 <Info aria-hidden="true" />
                 <InlineNoticeText>
-                  This custom user spend limit will override the default user
-                  spend limit for the selected user.
+                  {formState.behavior === "soft"
+                    ? "This soft custom user spend limit observes usage alongside the default user spend limit."
+                    : "This custom user spend limit will override the default user spend limit for the selected user."}
                 </InlineNoticeText>
               </InlineNotice>
             )}

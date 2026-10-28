@@ -127,10 +127,10 @@ export function observeLimitCheck(
     entity_type: rule.entityType,
     limit_kind: rule.limitType.replace("_per_minute", ""),
     behavior,
-    outcome: unavailable
-      ? "usage_unavailable"
-      : blocked
-        ? "blocked"
+    outcome: blocked
+      ? "blocked"
+      : unavailable
+        ? "usage_unavailable"
         : exceeded
           ? "exceeded"
           : "within_limit",

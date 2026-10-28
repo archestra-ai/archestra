@@ -109,7 +109,7 @@ const CreateLimitToolArgsSchema = z
       .optional()
       .describe("Tool name. Required for tool_calls limits."),
     behavior: LimitBehaviorSchema.optional().describe(
-      "Hard blocks exhausted requests; soft continues and records Prometheus observations. Defaults to hard.",
+      "Hard blocks exhausted requests; soft continues and records Prometheus observations. Only for token_cost, tokens and requests limits. Defaults to hard.",
     ),
     reason: ReasonArgSchema,
   })
@@ -314,7 +314,7 @@ const registry = defineArchestraTools([
           "Optional new cleanup interval for this limit.",
         ),
         behavior: LimitBehaviorSchema.optional().describe(
-          "Hard blocks exhausted requests; soft continues and records Prometheus observations. Defaults to hard.",
+          "Hard blocks exhausted requests; soft continues and records Prometheus observations. Only for token_cost, tokens and requests limits. Defaults to hard.",
         ),
         reason: ReasonArgSchema,
       })

@@ -1,6 +1,9 @@
+import { eq } from "drizzle-orm";
 import client from "prom-client";
+import db, { schema } from "@/database";
 import { LlmThroughput } from "@/services/llm-throughput";
 import { describe, expect, test } from "@/test";
+import EnvironmentDefaultUserLimitModel from "./environment-default-user-limit";
 import LimitModel, { LimitValidationService } from "./limit";
 import LlmThroughputModel from "./llm-throughput";
 
@@ -22,6 +25,56 @@ async function observed(outcome: string, behavior: string, kind: string) {
 }
 
 describe("soft limits", () => {
+  test("a soft custom user budget preserves the hard default allowance and unpriced-media guard", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: null,
+      limitValue: 1,
+      model: ["gpt-4o"],
+      cleanupInterval: "1w",
+    });
+    const interaction = await makeInteraction(agent.id, {
+      model: "gpt-4o",
+      cost: "2",
+    });
+    await db
+      .update(schema.interactionsTable)
+      .set({ userId: user.id })
+      .where(eq(schema.interactionsTable.id, interaction.id));
+    const custom = await LimitModel.create({
+      entityType: "user",
+      entityId: user.id,
+      limitType: "token_cost",
+      limitValue: 5,
+      behavior: "soft",
+    });
+    const params = { agentId: agent.id, userId: user.id };
+    const result =
+      await LimitValidationService.checkLimitsBeforeRequest(params);
+    expect(result?.[2]).toMatchObject({ source: "default_user" });
+    await expect(
+      LimitValidationService.checkLimitsBeforeRequest({
+        ...params,
+        unpricedMediaModel: "gpt-4o",
+      }),
+    ).rejects.toMatchObject({ statusCode: 422 });
+    // Explicit hard budgets retain the existing default-override behavior.
+    await LimitModel.patch(custom.id, { behavior: "hard" });
+    await expect(
+      LimitValidationService.checkLimitsBeforeRequest(params),
+    ).resolves.toBeNull();
+  });
+
   test("continues beyond request thresholds, records usage, and switches to hard without resetting debt", async ({
     makeOrganization,
   }) => {

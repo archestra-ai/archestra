@@ -3498,7 +3498,7 @@ Required RBAC permission: [`llmLimit:create`](/docs/reference/permissions#llmLim
 | `cleanup_interval` | `"minute" \| "1h" \| "12h" \| "24h" \| "1w" \| "1m" \| "calendar_day" \| "calendar_week_sunday" \| "calendar_week_monday" \| "calendar_month"` | No | Minute recovers continuously. Other intervals reset on their rolling or calendar schedule. Omit for calendar month; legacy per-minute types imply minute. |
 | `mcp_server_name` | `string` | No | MCP server name. Required for mcp_server_calls and tool_calls limits. |
 | `tool_name` | `string` | No | Tool name. Required for tool_calls limits. |
-| `behavior` | `"hard" \| "soft"` | No | Hard blocks exhausted requests; soft continues and records Prometheus observations. Defaults to hard. |
+| `behavior` | `"hard" \| "soft"` | No | Hard blocks exhausted requests; soft continues and records Prometheus observations. Only for token_cost, tokens and requests limits. Defaults to hard. |
 | `reason` | `string \| null` | No | Optional note on why the limit was set, shown with custom per-user limits. Null clears it. |
 
 ##### Output
@@ -3566,7 +3566,7 @@ Required RBAC permission: [`llmLimit:update`](/docs/reference/permissions#llmLim
 | `limit_type` | `"token_cost" \| "requests" \| "tokens" \| "requests_per_minute" \| "tokens_per_minute" \| "mcp_server_calls" \| "tool_calls"` | No | Same-unit legacy conversion only: requests_per_minute to requests, or tokens_per_minute to tokens. |
 | `model` | `string[] \| null` | No | Canonical model names; null applies to all models. |
 | `cleanup_interval` | `"minute" \| "1h" \| "12h" \| "24h" \| "1w" \| "1m" \| "calendar_day" \| "calendar_week_sunday" \| "calendar_week_monday" \| "calendar_month"` | No | Optional new cleanup interval for this limit. |
-| `behavior` | `"hard" \| "soft"` | No | Hard blocks exhausted requests; soft continues and records Prometheus observations. Defaults to hard. |
+| `behavior` | `"hard" \| "soft"` | No | Hard blocks exhausted requests; soft continues and records Prometheus observations. Only for token_cost, tokens and requests limits. Defaults to hard. |
 | `reason` | `string \| null` | No | Optional note on why the limit was set, shown with custom per-user limits. Null clears it. |
 
 ##### Output

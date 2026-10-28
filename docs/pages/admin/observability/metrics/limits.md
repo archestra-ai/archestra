@@ -21,7 +21,7 @@ Limit metrics have their own labels; LLM request and agent labels do not apply.
 
 `behavior` is `hard` or `soft`. `limit_kind` is `token_cost`, `tokens`, or `requests`; legacy per-minute types use the same token/request values. `entity_type` is the configured scope: `organization`, `team`, `agent`, `user`, `virtual_key`, `environment`, or `llm_oauth_client`.
 
-`outcome` is `within_limit`, `blocked` for an exhausted hard rule, `exceeded` for an exhausted soft rule, or `usage_unavailable` when spend cannot be evaluated. Unknown usage is not evidence that a threshold was crossed. Hard limits retain their existing failure behavior; soft limits do not block for unknown spend.
+`outcome` is `within_limit`, `blocked` for a hard refusal (including unavailable spend), `exceeded` for an exhausted soft rule, or `usage_unavailable` when unknown spend is allowed by a soft rule. Unknown usage is not evidence that a threshold was crossed and does not emit detail gauges. Hard limits retain their existing failure behavior; soft limits do not block for unknown spend.
 
 Each evaluated rule contributes an observation. One request can contribute several, and checks can stop at a hard refusal. These counters are neither distinct request counts nor unique threshold crossings. Token and spend checks reflect reported usage; responses already in flight can exceed an allowance before another request is checked. The aggregate counters are local to each process, reset on restart, and have no limit, user, or key identifiers.
 

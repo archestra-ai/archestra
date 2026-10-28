@@ -6,6 +6,7 @@ export function isCommandExecutionTool(name: string): boolean {
   const stripped = name.replace(/^(builtin:|host\/[^/]+\/)/, "").toLowerCase();
   return (
     stripped === "bash" ||
+    stripped === "mcp__workspace__bash" ||
     stripped === "shell" ||
     stripped === "exec_command" ||
     stripped === "run_command" ||

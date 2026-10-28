@@ -31,7 +31,9 @@ export function useMessagingProviders() {
           ? statuses.slack
           : id === "telegram"
             ? statuses.telegram
-            : statuses.email,
+            : id === "jira"
+              ? statuses.jira
+              : statuses.email,
   }));
 }
 
@@ -95,5 +97,6 @@ const CHAT_PROVIDER_IDS = [
   "ms-teams",
   "slack",
   "telegram",
+  "jira",
   "email",
 ] as const satisfies readonly MessagingChannelId[];

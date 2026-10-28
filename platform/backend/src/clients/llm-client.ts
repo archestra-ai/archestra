@@ -17,6 +17,7 @@ import {
   EXTERNAL_AGENT_ID_HEADER,
   isProviderApiKeyOptional,
   LOOPBACK_HOST,
+  MODEL_POOL_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
   perplexityAgentApiBaseUrl,
   providerDisplayNames,
@@ -215,6 +216,8 @@ export function createLLMModel(params: {
   source?: InteractionSource;
   baseUrl: string | null;
   chatApiKeyId?: string;
+  /** The model pool the chat was set to; see MODEL_POOL_ID_HEADER. */
+  modelPoolId?: string | null;
   /**
    * Encrypted chat key. Forwarded so the proxy can store this
    * interaction's content encrypted under it instead of redacting it. The
@@ -290,6 +293,9 @@ export function createLLMModel(params: {
       `[${provider}Proxy] chat attaching provider-api-key-id header`,
     );
   }
+  if (params.modelPoolId) {
+    clientHeaders[MODEL_POOL_ID_HEADER] = params.modelPoolId;
+  }
   // App runtime completions attribute their spend to the calling app; the proxy
   // re-validates this against the executing agent's organization.
   if (appId) {
@@ -342,6 +348,8 @@ export async function createLLMModelForAgent(params: {
   sessionId?: string;
   source?: InteractionSource;
   agentLlmApiKeyId?: string | null;
+  /** The conversation's model pool; its turns go to the pool's members. */
+  modelPoolId?: string | null;
   /**
    * Encrypted chat key, forwarded to the proxy so this turn's
    * interaction content is stored encrypted rather than redacted.
@@ -499,6 +507,7 @@ export async function createLLMModelForAgent(params: {
     source,
     baseUrl,
     chatApiKeyId,
+    modelPoolId: params.modelPoolId,
     encryptedChatKey: params.encryptedChatKey,
     appaSubagentToken: params.appaSubagentToken,
     supportedEndpoints,
@@ -723,9 +732,30 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       const client = createOpenAI({ apiKey, baseURL, headers, fetch });
       // "pro" reasoning models are Responses-API-only; routing them through
       // .chat() hits /chat/completions and 404s. See requiresOpenAiResponsesApi.
-      return requiresOpenAiResponsesApi(modelName)
-        ? client.responses(modelName)
-        : client.chat(modelName);
+      if (!requiresOpenAiResponsesApi(modelName)) {
+        return client.chat(modelName);
+      }
+      // Every Responses-routed model reasons, but the SDK recognizes reasoning
+      // models by name and misses newer ones (gpt-6). For those it would not
+      // request encrypted reasoning under store:false, so the next tool step
+      // resends reasoning by id alone and OpenAI rejects it. It would also
+      // drop reasoningSummary and keep sampling parameters.
+      return wrapLanguageModel({
+        model: client.responses(modelName),
+        middleware: {
+          specificationVersion: "v3",
+          transformParams: async ({ params }) => ({
+            ...params,
+            providerOptions: {
+              ...params.providerOptions,
+              openai: {
+                forceReasoning: true,
+                ...params.providerOptions?.openai,
+              },
+            },
+          }),
+        },
+      });
     },
     defaultBaseUrl: config.llm.openai.baseUrl,
     apiKeyRequiredMessage:
@@ -893,6 +923,18 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     defaultBaseUrl: config.llm.kimi.baseUrl,
     apiKeyRequiredMessage:
       "Kimi API key is required. Please configure ARCHESTRA_CHAT_KIMI_API_KEY.",
+  },
+
+  "kimi-code": {
+    // Kimi Code's models think too (k3.1-pro only thinks) and replay
+    // `reasoning_content` on tool-call turns.
+    createModel: reasoningCompatibleCreateModel({
+      name: "kimi-code",
+      missingBaseUrlMessage: "Kimi Code base URL is required.",
+    }),
+    defaultBaseUrl: config.llm["kimi-code"].baseUrl,
+    apiKeyRequiredMessage:
+      "Kimi Code API key is required. Please configure ARCHESTRA_CHAT_KIMI_CODE_API_KEY.",
   },
 
   "github-copilot": {

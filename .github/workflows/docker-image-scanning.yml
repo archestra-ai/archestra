@@ -86,7 +86,7 @@ jobs:
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           sentry-auth-token: ${{ (matrix.image == 'platform' || matrix.image == 'platform-slim') && secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN || '' }}
-          cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/${{ matrix.image == 'platform-slim' && 'platform' || matrix.image }}:buildcache-${{ matrix.arch }}
+          cache-from: type=registry,ref=ghcr.io/archestra-ai/ci/${{ matrix.image == 'platform-slim' && 'platform' || matrix.image }}:buildcache-${{ matrix.arch }}
       - name: Seal candidate bytes for scanning
         run: |
           skopeo copy --override-os linux --override-arch "$IMAGE_ARCH" \

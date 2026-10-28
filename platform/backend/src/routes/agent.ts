@@ -38,6 +38,7 @@ import type {
   AgentTypeListPermissionChecker,
   AgentTypePermissionChecker,
 } from "@/auth/agent-type-permissions";
+import { canUseAgent } from "@/auth/permission-gated";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
@@ -80,6 +81,7 @@ import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclus
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { findVisibleChatAgent } from "@/services/chat-agent-visibility";
+import { applyAgentModelPool } from "@/services/chat-model-pools";
 import { getObservedClaudeCodeToolTokenCount } from "@/services/claude-code-tool-token-count";
 import { getDocsSuggestedPrompts } from "@/services/docs-mcp-servers";
 import {
@@ -831,6 +833,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      await applyAgentModelPool(body, { organizationId, userId: user.id });
       // A model and its API key are a pair: persist both or neither.
       if (
         !isModelSelectionComplete({
@@ -1416,7 +1419,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply,
     ) => {
       const agent = await AgentModel.findGatewayAgentById(id);
-      if (!agent || agent.organizationId !== organizationId) {
+      if (
+        !agent ||
+        agent.organizationId !== organizationId ||
+        !(await canUseAgent(id, { userId: user.id, organizationId }))
+      ) {
         throw new ApiError(404, "Agent not found");
       }
 
@@ -2227,6 +2234,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      await applyAgentModelPool(body, { organizationId, userId: user.id });
+
       // Built-in agent guard: restrict which fields can be modified
       let updateData: typeof body;
       if (existingAgent.builtInAgentConfig) {
@@ -2252,6 +2261,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             llmApiKeyId: body.llmApiKeyId,
           }),
           ...(body.modelId !== undefined && { modelId: body.modelId }),
+          ...(body.modelPoolId !== undefined && {
+            modelPoolId: body.modelPoolId,
+          }),
           ...(body.fastModelId !== undefined && {
             fastModelId: body.fastModelId,
           }),
@@ -2847,7 +2859,7 @@ export async function getAgentDefaultSuggestedPrompts(params: {
   // Only the agent's own prompts matter here, not the full agent.
   const agent = await requireReadableAgent({
     ...params,
-    load: AgentModel.findByIdForAccess,
+    load: (id) => AgentModel.findByIdForAccess(id, params.userId),
   });
   const suggestedPrompts =
     (await AgentSuggestedPromptModel.getForAgents([agent.id])).get(agent.id) ??
@@ -2880,7 +2892,11 @@ async function requireReadableAgent<
   const agent = params.load
     ? await params.load(params.id)
     : ((await AgentModel.findById(params.id, params.userId, true)) as T | null);
-  if (!agent || agent.organizationId !== params.organizationId) {
+  if (
+    !agent ||
+    agent.organizationId !== params.organizationId ||
+    !(await canUseAgent(agent.id, params))
+  ) {
     throw new ApiError(404, "Agent not found");
   }
 

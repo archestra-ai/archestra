@@ -6,7 +6,14 @@ import {
   getChatApiKeySelectorProviderGroupTestId,
   type SupportedProvider,
 } from "@archestra/shared";
-import { CheckIcon, ChevronDown, Key, Plus, TriangleAlert } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronDown,
+  Key,
+  LayersIcon,
+  Plus,
+  TriangleAlert,
+} from "lucide-react";
 import Image from "next/image";
 import { useMemo } from "react";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
@@ -31,6 +38,7 @@ import {
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
+import type { AvailableModelPool } from "@/lib/model-pools.query";
 import { cn } from "@/lib/utils/tailwind";
 
 type DropdownLlmProviderApiKey = Pick<
@@ -78,6 +86,10 @@ interface LlmProviderApiKeyDropdownProps {
   allowOrganizationDefault?: boolean;
   organizationDefaultSelected?: boolean;
   onSelectOrganizationDefault?: () => void;
+  /** Model pools offered before the keys; a picked pool replaces the key. */
+  pools?: AvailableModelPool[];
+  selectedPoolId?: string | null;
+  onSelectPool?: (poolId: string) => void;
 }
 
 export function LlmProviderApiKeyDropdown({
@@ -105,6 +117,9 @@ export function LlmProviderApiKeyDropdown({
   allowOrganizationDefault = false,
   organizationDefaultSelected = false,
   onSelectOrganizationDefault,
+  pools = [],
+  selectedPoolId = null,
+  onSelectPool,
 }: LlmProviderApiKeyDropdownProps) {
   const selectableKeys = useMemo(
     () =>
@@ -133,7 +148,11 @@ export function LlmProviderApiKeyDropdown({
       }),
     [keysByProvider, currentProvider],
   );
-  const selectedKey = availableKeys.find((key) => key.id === selectedApiKeyId);
+  const selectedPool = pools.find((pool) => pool.id === selectedPoolId);
+  const selectedKey = selectedPool
+    ? undefined
+    : availableKeys.find((key) => key.id === selectedApiKeyId);
+  const checkedKeyId = selectedPool ? null : selectedApiKeyId;
   const selectedKeyIsSubscription =
     selectedKey !== undefined && isPersonalSubscription(selectedKey);
   const fallbackTriggerLabel =
@@ -161,7 +180,14 @@ export function LlmProviderApiKeyDropdown({
             data-testid={triggerTestId}
           >
             <span className="flex min-w-0 items-center gap-1.5">
-              {selectedKey ? (
+              {selectedPool ? (
+                <>
+                  <LayersIcon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate font-medium">
+                    {selectedPool.name}
+                  </span>
+                </>
+              ) : selectedKey ? (
                 <>
                   <SubscriptionBrandIcon
                     kind={selectedKey.subscriptionKind}
@@ -267,6 +293,36 @@ export function LlmProviderApiKeyDropdown({
                 </CommandItem>
               </CommandGroup>
             )}
+            {onSelectPool && pools.length > 0 && (
+              <CommandGroup
+                heading={
+                  <div className="space-y-0.5">
+                    <div className="text-foreground">Model pools</div>
+                    <div className="font-normal">
+                      Fail over across every member
+                    </div>
+                  </div>
+                }
+              >
+                {pools.map((pool) => (
+                  <CommandItem
+                    key={pool.id}
+                    value={`pool:${pool.id}`}
+                    keywords={[pool.name, "model pool", ...pool.providers]}
+                    onSelect={() => onSelectPool(pool.id)}
+                    className="cursor-pointer"
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <LayersIcon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{pool.name}</span>
+                    </div>
+                    {selectedPoolId === pool.id && (
+                      <CheckIcon className="h-4 w-4 shrink-0" />
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
             {subscriptionKeys.length > 0 && (
               <CommandGroup
                 heading={
@@ -316,7 +372,7 @@ export function LlmProviderApiKeyDropdown({
                             : "Per-user"}
                       </Badge>
                     </div>
-                    {selectedApiKeyId === key.id && (
+                    {checkedKeyId === key.id && (
                       <CheckIcon className="h-4 w-4 shrink-0" />
                     )}
                   </CommandItem>
@@ -366,7 +422,7 @@ export function LlmProviderApiKeyDropdown({
                     <div className="flex min-w-0 flex-1 items-center gap-2">
                       <span className="truncate">{key.name}</span>
                     </div>
-                    {selectedApiKeyId === key.id && (
+                    {checkedKeyId === key.id && (
                       <CheckIcon className="h-4 w-4 shrink-0" />
                     )}
                   </CommandItem>

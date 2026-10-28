@@ -73,6 +73,10 @@ import {
 } from "@/knowledge-base/connectors/gdrive/gdrive-oauth";
 import { reconcileP4ShimForConnector } from "@/knowledge-base/connectors/perforce/p4-shim-service";
 import { getConnector } from "@/knowledge-base/connectors/registry";
+import {
+  githubRepositorySettingsWriteError,
+  githubSyncConfigurationChanged,
+} from "@/knowledge-base/github-settings-compatibility";
 import { invalidateGroupTokenCache } from "@/knowledge-base/group-token-cache";
 import {
   deleteConnector,
@@ -1725,6 +1729,16 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // resolve the connector's auth shape after this update so credential
       // storage stays consistent across App <-> inline-secret transitions
       const nextConfig = body.config ?? connector.config;
+      if (
+        connector.config.type === "github" &&
+        body.config?.type === "github"
+      ) {
+        const compatibilityError = githubRepositorySettingsWriteError(
+          connector.config,
+          body.config,
+        );
+        if (compatibilityError) throw new ApiError(409, compatibilityError);
+      }
       const salesforceViolation = salesforceAuthPolicyViolation({
         connectorType: connector.connectorType,
         nextConfig: body.config,
@@ -1892,12 +1906,17 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Reset checkpoint when config changes to force a full re-sync
-      // (filters, queries, inclusion/exclusion criteria affect which items get synced)
+      const configAffectsSync =
+        updateData.config !== undefined &&
+        (connector.config.type !== "github" ||
+          updateData.config.type !== "github" ||
+          githubSyncConfigurationChanged(connector.config, updateData.config));
+      // GitHub representation-only changes retain their cursor and corpus.
+      // Other connector types keep their existing full-resync behavior.
       const updated = await KnowledgeBaseConnectorModel.update(id, {
         ...updateData,
         secretId: nextSecretId,
-        ...(updateData.config ? { checkpoint: null } : {}),
+        ...(configAffectsSync ? { checkpoint: null } : {}),
       });
       if (!updated) {
         throw new ApiError(404, "Connector not found");
@@ -1958,13 +1977,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const nextEnabled = updateData.enabled ?? connector.enabled;
       if (
         connector.syncPermissionsFromSource &&
-        (updateData.config !== undefined ||
+        (configAffectsSync ||
           body.credentials !== undefined ||
           !nextSync ||
           nextEnabled !== connector.enabled)
       ) {
-        // A submitted config counts as changed without a field-by-field
-        // comparison, matching the checkpoint reset above.
+        // A format-only GitHub save needs no replacement permission pass.
         await supersedePermissionSyncAfterSettingsChange({
           connectorId: id,
           syncPermissionsFromSource: nextSync,

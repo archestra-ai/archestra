@@ -432,9 +432,9 @@ async function installAndSync(params: {
   if (!server) throw new Error("server not created");
   await reloadToolsForServer(server);
   const toolName = ToolModel.slugifyName(catalog.name, "get_forecast");
-  const [tool] = (await ToolModel.findByCatalogIdWithMeta(catalog.id)).filter(
-    (row) => row.name === toolName,
-  );
+  const [tool] = (
+    await ToolModel.findByCatalogIdWithMeta(catalog.id, { kind: "caller" })
+  ).filter((row) => row.name === toolName);
   await AgentToolModel.create(agent.id, tool.id, { mcpServerId: serverId });
 
   const { value: token } = await UserTokenModel.create(user.id, org.id);

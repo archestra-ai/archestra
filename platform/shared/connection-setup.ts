@@ -15,6 +15,7 @@ export {
 /** Clients whose proxy requests carry a native conversation identity. */
 export const NATIVE_SESSION_CLIENT_LABELS = {
   "claude-code": "Claude Code",
+  "claude-desktop": "Claude Desktop",
   codex: "Codex",
   pi: "Pi",
   opencode: OPENCODE_FAMILY.opencode.label,

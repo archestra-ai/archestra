@@ -34,14 +34,14 @@ export async function listUserLimitUsage(params: {
   const { organizationId, query } = params;
   const now = params.now ?? new Date();
 
-  // Custom limits are counters; reset any elapsed window before reading them.
-  await limitReadCleanup.run({
-    organizationId,
-    entityType: "user",
-    limitType: "token_cost",
-  });
-
-  const [defaults, environments, customLimits] = await Promise.all([
+  const [, defaults, environments, customLimits] = await Promise.all([
+    // Custom limits are counters; reset any elapsed window before their
+    // totals are read below.
+    limitReadCleanup.run({
+      organizationId,
+      entityType: "user",
+      limitType: "token_cost",
+    }),
     EnvironmentDefaultUserLimitModel.findAllForOrganization(organizationId),
     EnvironmentModel.listForOrganization(organizationId),
     LimitModel.findAll("user", undefined, "token_cost", organizationId),
@@ -70,6 +70,7 @@ export async function listUserLimitUsage(params: {
     overrideSpend,
     environmentSpend,
     resets,
+    environmentUsers,
   ] = await Promise.all([
     LimitModel.getTokenCostTotals(
       [...customByUser.values()].flat().map((limit) => limit.id),
@@ -102,13 +103,13 @@ export async function listUserLimitUsage(params: {
         })
       : Promise.resolve(null),
     UserLimitUsageResetModel.findResets({ organizationId }),
+    query.environmentId
+      ? Promise.resolve(new Map<string, number>())
+      : LimitModel.countUsersWithSpendByEnvironment({
+          organizationId,
+          cleanupInterval: organizationScope.cleanupInterval,
+        }),
   ]);
-  const environmentUsers = query.environmentId
-    ? new Map<string, number>()
-    : await LimitModel.countUsersWithSpendByEnvironment({
-        organizationId,
-        cleanupInterval: organizationScope.cleanupInterval,
-      });
 
   // Only members who spent this window or hold a custom limit can differ from
   // the idle row (no spend against the organization default, or no limit), so

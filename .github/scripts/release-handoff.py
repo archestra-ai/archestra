@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 from urllib.parse import urlencode
 import zipfile
@@ -123,7 +124,7 @@ def validate_index(index, run, repository, branch, tree, version, matrix, now):
         candidate.verify_record(record, {key: index[key] for key in (
             "repository", "source_sha", "source_tree", "run_id", "run_attempt")}, now)
         previous = record.get("previous_image", "")
-        if previous and not re.fullmatch(r"docker.io/archestra/platform@sha256:[0-9a-f]{64}", previous):
+        if previous and not re.fullmatch(r"docker\.io/archestra/platform@sha256:[0-9a-f]{64}", previous):
             raise ValueError("Candidate previous assets are not immutable")
         actual.add(pair)
     if actual != expected:
@@ -229,19 +230,30 @@ def verify_archive(selection, image, arch, directory):
 
 
 def push(record, image, arch):
-    if not re.fullmatch(r"(?:docker\.io/archestra|europe-west1-docker\.pkg\.dev/friendly-path-465518-r6/archestra-public)/[a-z0-9-]+", image):
+    if not re.fullmatch(r"(?:docker\.io/archestra/platform|ghcr\.io/archestra-ai/[a-z0-9-]+)", image):
         raise ValueError("Unexpected release image destination")
-    suffix = f"{int(os.environ['GITHUB_RUN_ID'])}-{int(os.environ['GITHUB_RUN_ATTEMPT'])}-{arch}"
-    incoming = f"{image}:candidate-{suffix}"
     directory = Path(os.environ["CANDIDATE_DIR"])
+    # The archive has already passed checksum and provenance verification.
+    # Address its single root index by digest, so no temporary public tag is
+    # created while publication waits for the other architecture.
+    with tarfile.open(directory / "image.oci.tar", "r:*") as archive:
+        indexes = [member for member in archive if member.name.removeprefix("./") == "index.json"]
+        if len(indexes) != 1 or indexes[0].size > 1024**2:
+            raise ValueError("Missing or oversized OCI root index")
+        with archive.extractfile(indexes[0]) as source:
+            descriptors = json.load(source)["manifests"]
+    if len(descriptors) != 1 or not DIGEST.fullmatch(descriptors[0].get("digest", "")):
+        raise ValueError("Exactly one immutable OCI root is required")
+    expected_digest = descriptors[0]["digest"]
+    incoming = f"{image}@{expected_digest}"
     digest_file = directory / "promoted-digest"
     config = Path(os.environ.get("DOCKER_CONFIG", str(Path.home() / ".docker"))) / "config.json"
     subprocess.run(["skopeo", "copy", "--all", "--preserve-digests", "--authfile", str(config),
                     "--digestfile", str(digest_file), "oci-archive:" + str(directory / "image.oci.tar"),
                     "docker://" + incoming], check=True)
     result = digest_file.read_text().strip()
-    if not DIGEST.fullmatch(result):
-        raise ValueError("Missing promoted OCI digest")
+    if result != expected_digest:
+        raise ValueError("Promoted OCI digest differs from the scanned archive root")
     root = f"{image}@{result}"
     leaves = set()
     def verify(reference, depth=0):

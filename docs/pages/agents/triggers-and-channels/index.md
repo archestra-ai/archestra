@@ -1,17 +1,18 @@
 ---
 title: Triggers & Channels
-description: Start agent runs from webhooks, A2A calls, email, Slack, Microsoft Teams, and Telegram
+description: Start agent runs from webhooks, A2A calls, email, Slack, Microsoft Teams, Telegram, and Jira
 order: 7
-lastUpdated: 2026-10-08
+lastUpdated: 2026-10-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Run your agents where your team already works. An agent can answer messages in Slack, Microsoft Teams, and Telegram. It can also reply to email, and run when your code sends it a request. It keeps the same tools, skills, and [Guardrails](/docs/agents/guardrails) everywhere.
+Run your agents where your team already works. An agent can answer messages in Slack, Microsoft Teams, Telegram, and Jira issues. It can also reply to email, and run when your code sends it a request. It keeps the same tools, skills, and [Guardrails](/docs/agents/guardrails) everywhere.
 
 | Where | How the Agent Is Chosen |
 | --- | --- |
 | [Slack](/docs/agents/triggers-and-channels/slack), [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams), [Telegram](/docs/agents/triggers-and-channels/telegram) | You assign an agent to each channel or direct message. |
+| [Jira](/docs/agents/triggers-and-channels/jira) | Each Jira bot is pinned to one agent, with project bindings and project instructions. |
 | [Incoming Email](/docs/agents/triggers-and-channels/email) | Each agent gets its own email address. |
 | [Webhook (A2A)](/docs/agents/triggers-and-channels/webhook-a2a) | Each agent gets its own endpoint. |
 
@@ -28,6 +29,8 @@ A channel is one place where people message the agent: a Slack or Microsoft Team
 3. To change the channel's instructions or reply behavior, click **Settings** on it.
 
 To see every channel at once, open the provider under messaging channel settings. Microsoft Teams and Telegram list each channel with its agent, whether it replies to all messages, and its settings. Personal chats stay hidden until you show them.
+
+For Jira, [connect the bot and projects](/docs/agents/triggers-and-channels/jira#connect-jira) in messaging channel settings. Its agent stays pinned to that Jira identity.
 
 ## Conversation History
 

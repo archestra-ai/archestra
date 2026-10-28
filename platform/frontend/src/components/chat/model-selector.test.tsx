@@ -24,6 +24,13 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useAvailableLlmProviderApiKeys: () => ({ data: [] }),
 }));
 
+const isPooledModelMock = vi.hoisted(() =>
+  vi.fn((_provider: string, _modelId: string) => false),
+);
+vi.mock("@/lib/model-pools.query", () => ({
+  useIsPooledModel: () => isPooledModelMock,
+}));
+
 // The dropdown internals are Radix-based and irrelevant to the branches under
 // test. The root mock exposes a toggle button wired to onOpenChange so tests
 // can flip the component's open state, and structural wrappers render their
@@ -147,6 +154,7 @@ function renderSelector(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  isPooledModelMock.mockReturnValue(false);
   setQuery({});
 });
 
@@ -522,6 +530,18 @@ describe("ModelSelector coverage matrix", () => {
 
     fireEvent.click(screen.getByTestId("dialog-toggle"));
     expect(screen.getByText("Limited for complex tasks")).toBeInTheDocument();
+  });
+
+  it("marks a model a pool serves, in the list and on the trigger", () => {
+    isPooledModelMock.mockImplementation(
+      (provider, modelId) => provider === "ollama" && modelId === "qwen3:4b",
+    );
+    setQuery({ modelsByProvider: { ollama: [ollamaRow({})] } });
+    renderSelector({ selectedModel: "o1", variant: "default" });
+    expect(screen.getByText("pooled")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("dialog-toggle"));
+    expect(screen.getAllByText("pooled")).toHaveLength(2);
   });
 
   // `true` is the column default, so it says nothing and must stay silent —

@@ -27,6 +27,7 @@ import environmentsTable from "./environment";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
+import modelPoolsTable from "./model-pool";
 import secretsTable from "./secret";
 import serviceAccountsTable from "./service-account";
 import { softDeletablePgTable } from "./soft-deletable-table";
@@ -103,6 +104,14 @@ const agentsTable = softDeletablePgTable(
     llmModel: text("llm_model"),
     /** FK to models(id) — the agent's default model. ON DELETE SET NULL. */
     modelId: uuid("model_id").references(() => modelsTable.id, {
+      onDelete: "set null",
+    }),
+    /**
+     * A model pool as the agent's default model. `llmApiKeyId` and `modelId`
+     * then hold one member, for everything that needs a single model; its
+     * runs and new chats go to the pool. ON DELETE SET NULL.
+     */
+    modelPoolId: uuid("model_pool_id").references(() => modelPoolsTable.id, {
       onDelete: "set null",
     }),
     /** Optional `fast` / `smart` tiers of the agent's trio, on `llmApiKeyId`. */

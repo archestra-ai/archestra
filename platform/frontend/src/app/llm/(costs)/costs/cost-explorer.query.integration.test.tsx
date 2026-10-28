@@ -506,3 +506,82 @@ it("groups proxy usage by provider key and pool and shows failed-over attempts",
   // The failed-over column is a request count, so Spend leaves it out.
   expect(byPool.result.current.extraCols).toEqual([]);
 });
+
+it("uses the stored net cache savings timeline, including negative buckets", async () => {
+  server.use(
+    http.get(`${origin}/api/statistics/costs`, () =>
+      HttpResponse.json({
+        models: [],
+        activeUsers: 0,
+        costSavings: {
+          totalCacheSavings: -1.25,
+          totalSavings: 999,
+          totalActualCost: 5,
+          totalSubscriptionCost: 100,
+          totalBaselineCost: 3.75,
+          timeSeries: [
+            { timestamp: "2026-01-01T00:00:00Z", cacheSavings: -2 },
+            { timestamp: "2026-01-02T00:00:00Z", cacheSavings: 0.75 },
+          ],
+        },
+      }),
+    ),
+  );
+  const { result } = renderHook(
+    () =>
+      usePivotCube(
+        {
+          metric: "cacheSavings",
+          group: "time",
+          split: "none",
+          chart: "lines",
+        },
+        "7d",
+        true,
+      ),
+    { wrapper },
+  );
+  await waitFor(() => expect(result.current.isLoading).toBe(false));
+  expect(result.current.total).toBe(-1.25);
+  expect(result.current.rows[0].series).toEqual([-2, 0.75]);
+  expect(result.current.api).toBe("GET /api/statistics/costs?timeframe=7d");
+});
+
+it("keeps cache-write totals and timeline distinct from cache reads and processed tokens", async () => {
+  server.use(
+    http.get(`${origin}/api/statistics/costs`, () =>
+      HttpResponse.json({
+        models: [
+          {
+            model: "example",
+            cacheReadTokens: 900,
+            cacheWriteTokens: 10,
+            totalTokens: 110,
+            timeSeries: [
+              {
+                timestamp: "2026-01-01T00:00:00Z",
+                cacheReadTokens: 900,
+                cacheWriteTokens: 10,
+                totalTokens: 110,
+              },
+            ],
+          },
+        ],
+        activeUsers: 0,
+        costSavings: { timeSeries: [] },
+      }),
+    ),
+  );
+  const { result } = renderHook(
+    () =>
+      usePivotCube(
+        { metric: "cacheWrite", group: "model", split: "none", chart: "bars" },
+        "7d",
+        true,
+      ),
+    { wrapper },
+  );
+  await waitFor(() => expect(result.current.isLoading).toBe(false));
+  expect(result.current.total).toBe(10);
+  expect(result.current.rows[0].series).toEqual([10]);
+});

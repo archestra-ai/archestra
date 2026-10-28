@@ -5,14 +5,7 @@ import {
   isPlaywrightCatalogItem,
 } from "@archestra/shared";
 import { KeyRound } from "lucide-react";
-import {
-  lazy,
-  Suspense,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
@@ -20,25 +13,15 @@ import remarkGfm from "remark-gfm";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FieldDescription } from "@/components/ui/field-description";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useMcpCatalogCredentialPreflight } from "@/lib/mcp/internal-mcp-catalog.query";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useDefaultEnvironment } from "@/lib/organization.query";
-import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
 import {
   compileValidationRegex,
   toFieldValueType,
@@ -51,12 +34,6 @@ import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
 } from "./select-mcp-server-credential-type-and-teams";
-
-const InlineVaultSecretSelector = lazy(
-  () =>
-    // biome-ignore lint/style/noRestrictedImports: lazy loading
-    import("@/components/inline-vault-secret-selector.ee"),
-);
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -122,8 +99,6 @@ export interface LocalServerInstallResult {
   scope: McpServerInstallScope;
   /** Team ID to assign the MCP server to (only when scope is "team") */
   teamId?: string | null;
-  /** Whether environmentValues contains BYOS vault references in path#key format */
-  isByosVault?: boolean;
 }
 
 interface LocalServerInstallDialogProps {
@@ -229,11 +204,6 @@ export function LocalServerInstallDialog({
   const nonSecretEnvVars = promptedEnvVars.filter(
     (env) => env.type !== "secret",
   );
-  const hasPromptedSecretFields =
-    secretEnvVars.length > 0 || secretFileVars.length > 0;
-  const hasPromptedSensitiveUserConfig = Object.values(
-    promptableUserConfig,
-  ).some((field) => field.sensitive && field.promptOnInstallation !== false);
 
   const [environmentValues, setEnvironmentValues] = useState<
     Record<string, string>
@@ -264,60 +234,7 @@ export function LocalServerInstallDialog({
     ),
   );
 
-  // Vault team selection (separate from install team for personal + BYOS)
-  const [vaultTeamId, setVaultTeamId] = useState<string | null>(null);
-
-  // BYOS (Bring Your Own Secrets) state - per-field vault references
-  const [vaultSecrets, setVaultSecrets] = useState<
-    Record<string, { path: string | null; key: string | null }>
-  >({});
-  const [userConfigVaultSecrets, setUserConfigVaultSecrets] = useState<
-    Record<string, { path: string | null; key: string | null }>
-  >({});
-
-  const byosEnabled = useFeature("byosEnabled");
-  const { data: teamsWithVault } = useTeamsWithVaultFolders({
-    enabled: isOpen,
-  });
-  const vaultTeams = teamsWithVault?.filter((t) => t.vaultPath);
-
   // Sync vaultTeamId from selectedTeamId when in team mode, reset when switching to personal
-  useEffect(() => {
-    if (scope === "team") {
-      setVaultTeamId(selectedTeamId);
-    } else {
-      setVaultTeamId(null);
-    }
-    setVaultSecrets({});
-    setUserConfigVaultSecrets({});
-  }, [scope, selectedTeamId]);
-
-  const handleVaultTeamChange = (teamId: string) => {
-    setVaultTeamId(teamId);
-    setVaultSecrets({});
-    setUserConfigVaultSecrets({});
-  };
-
-  // Show vault selector when BYOS is enabled and any prompt-time sensitive input needs Vault.
-  const useVaultSecrets =
-    byosEnabled && (hasPromptedSecretFields || hasPromptedSensitiveUserConfig);
-
-  // Helper to update vault secret for a specific field
-  const updateVaultSecret = (
-    fieldName: string,
-    prop: "path" | "key",
-    value: string | null,
-  ) => {
-    setVaultSecrets((prev) => ({
-      ...prev,
-      [fieldName]: {
-        ...prev[fieldName],
-        [prop]: value,
-        // Reset key when path changes
-        ...(prop === "path" ? { key: null } : {}),
-      },
-    }));
-  };
 
   const handleEnvVarChange = (key: string, value: string) => {
     setEnvironmentValues((prev) => ({ ...prev, [key]: value }));
@@ -346,47 +263,19 @@ export function LocalServerInstallDialog({
 
     // Add secret env var values
     for (const env of secretEnvVars) {
-      if (useVaultSecrets) {
-        // BYOS mode: use vault reference in path#key format
-        const vaultRef = vaultSecrets[env.key];
-        if (vaultRef?.path && vaultRef?.key) {
-          finalEnvironmentValues[env.key] = `${vaultRef.path}#${vaultRef.key}`;
-        }
-      } else {
-        // Non-BYOS mode: use manual value
-        if (environmentValues[env.key]) {
-          finalEnvironmentValues[env.key] = environmentValues[env.key];
-        }
+      if (environmentValues[env.key]) {
+        finalEnvironmentValues[env.key] = environmentValues[env.key];
       }
     }
 
     // Add secret file values
     for (const env of secretFileVars) {
-      if (useVaultSecrets) {
-        // BYOS mode: use vault reference in path#key format
-        const vaultRef = vaultSecrets[env.key];
-        if (vaultRef?.path && vaultRef?.key) {
-          finalEnvironmentValues[env.key] = `${vaultRef.path}#${vaultRef.key}`;
-        }
-      } else {
-        // Non-BYOS mode: use manual value
-        if (environmentValues[env.key]) {
-          finalEnvironmentValues[env.key] = environmentValues[env.key];
-        }
+      if (environmentValues[env.key]) {
+        finalEnvironmentValues[env.key] = environmentValues[env.key];
       }
     }
 
-    for (const [fieldName, fieldConfig] of Object.entries(
-      promptableUserConfig,
-    )) {
-      if (useVaultSecrets && fieldConfig.sensitive) {
-        const vaultRef = userConfigVaultSecrets[fieldName];
-        if (vaultRef?.path && vaultRef?.key) {
-          finalUserConfigValues[fieldName] = `${vaultRef.path}#${vaultRef.key}`;
-        }
-        continue;
-      }
-
+    for (const fieldName of Object.keys(promptableUserConfig)) {
       const value = userConfigValues[fieldName];
       if (value !== undefined && value !== "") {
         finalUserConfigValues[fieldName] = value;
@@ -399,11 +288,6 @@ export function LocalServerInstallDialog({
       userConfigValues: finalUserConfigValues,
       scope: submittedScope,
       teamId: submittedScope === "team" ? selectedTeamId : null,
-      isByosVault:
-        useVaultSecrets &&
-        (secretEnvVars.length > 0 ||
-          secretFileVars.length > 0 ||
-          hasPromptedSensitiveUserConfig),
     });
 
     // Reset form
@@ -442,9 +326,6 @@ export function LocalServerInstallDialog({
           ? "org"
           : "personal",
     );
-    setVaultTeamId(null);
-    setVaultSecrets({});
-    setUserConfigVaultSecrets({});
   };
 
   const handleClose = () => {
@@ -463,22 +344,14 @@ export function LocalServerInstallDialog({
   });
 
   // Check if secrets are valid:
-  // - Vault mode (team + BYOS): each required secret field must have vault path AND key selected
-  // - Manual mode (personal or BYOS disabled): manual secret values must be filled
   const allSecrets = [...secretEnvVars, ...secretFileVars];
   const isSecretsValid =
     allSecrets.length === 0 ||
-    (useVaultSecrets
-      ? allSecrets.every((env) => {
-          if (!env.required) return true;
-          const vaultRef = vaultSecrets[env.key];
-          return vaultRef?.path && vaultRef?.key;
-        })
-      : allSecrets.every((env) => {
-          if (!env.required) return true;
-          const value = environmentValues[env.key];
-          return !!value?.trim();
-        }));
+    allSecrets.every((env) => {
+      if (!env.required) return true;
+      const value = environmentValues[env.key];
+      return !!value?.trim();
+    });
 
   const isValid = isNonSecretValid && isSecretsValid;
   const sensitiveRequiredUserConfig = Object.entries(
@@ -496,15 +369,9 @@ export function LocalServerInstallDialog({
       return !!value?.trim();
     },
   );
-  const isSensitiveUserConfigValid = useVaultSecrets
-    ? sensitiveRequiredUserConfig.every(
-        ([fieldName]) =>
-          userConfigVaultSecrets[fieldName]?.path &&
-          userConfigVaultSecrets[fieldName]?.key,
-      )
-    : sensitiveRequiredUserConfig.every(([fieldName]) =>
-        userConfigValues[fieldName]?.trim(),
-      );
+  const isSensitiveUserConfigValid = sensitiveRequiredUserConfig.every(
+    ([fieldName]) => userConfigValues[fieldName]?.trim(),
+  );
   const hasPromptedUserConfig = Object.keys(promptableUserConfig).length > 0;
   const isUserConfigValid =
     isNonSensitiveUserConfigValid && isSensitiveUserConfigValid;
@@ -657,30 +524,6 @@ export function LocalServerInstallDialog({
         />
       )}
 
-      {useVaultSecrets && scope !== "team" && !blockedAtEveryScope && (
-        <div className="space-y-2">
-          <Label>Pull Vault secrets from:</Label>
-          <FieldDescription>
-            Only folders associated with your teams are shown.
-          </FieldDescription>
-          <Select
-            value={vaultTeamId ?? ""}
-            onValueChange={handleVaultTeamChange}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="-- Select Vault folder --" />
-            </SelectTrigger>
-            <SelectContent>
-              {vaultTeams?.map((team) => (
-                <SelectItem key={team.id} value={team.id}>
-                  {team.vaultPath}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
       {canInstall && !blockedAtEveryScope && (
         <div className="space-y-6">
           {/* Non-secret Environment Variables (always editable) */}
@@ -806,38 +649,7 @@ export function LocalServerInstallDialog({
                           </div>
                         )}
 
-                        {/* BYOS mode: vault selector for each secret field */}
-                        {useVaultSecrets ? (
-                          <Suspense
-                            fallback={
-                              <div className="text-sm text-muted-foreground">
-                                Loading...
-                              </div>
-                            }
-                          >
-                            <InlineVaultSecretSelector
-                              teamId={vaultTeamId}
-                              selectedSecretPath={
-                                vaultSecrets[env.key]?.path ?? null
-                              }
-                              selectedSecretKey={
-                                vaultSecrets[env.key]?.key ?? null
-                              }
-                              onSecretPathChange={(path) =>
-                                updateVaultSecret(env.key, "path", path)
-                              }
-                              onSecretKeyChange={(key) =>
-                                updateVaultSecret(env.key, "key", key)
-                              }
-                              disabled={isInstalling}
-                              noTeamMessage={
-                                scope !== "team"
-                                  ? "Select a vault folder to pull secrets from"
-                                  : undefined
-                              }
-                            />
-                          </Suspense>
-                        ) : (
+                        {
                           <SecretInput
                             id={`env-${env.key}`}
                             value={environmentValues[env.key] || ""}
@@ -848,7 +660,7 @@ export function LocalServerInstallDialog({
                             className="font-mono"
                             disabled={isInstalling}
                           />
-                        )}
+                        }
                       </div>
                     ))}
                   </div>
@@ -881,38 +693,7 @@ export function LocalServerInstallDialog({
                           </div>
                         )}
 
-                        {/* BYOS mode: vault selector for each secret field */}
-                        {useVaultSecrets ? (
-                          <Suspense
-                            fallback={
-                              <div className="text-sm text-muted-foreground">
-                                Loading...
-                              </div>
-                            }
-                          >
-                            <InlineVaultSecretSelector
-                              teamId={vaultTeamId}
-                              selectedSecretPath={
-                                vaultSecrets[env.key]?.path ?? null
-                              }
-                              selectedSecretKey={
-                                vaultSecrets[env.key]?.key ?? null
-                              }
-                              onSecretPathChange={(path) =>
-                                updateVaultSecret(env.key, "path", path)
-                              }
-                              onSecretKeyChange={(key) =>
-                                updateVaultSecret(env.key, "key", key)
-                              }
-                              disabled={isInstalling}
-                              noTeamMessage={
-                                scope !== "team"
-                                  ? "Select a vault folder to pull secrets from"
-                                  : undefined
-                              }
-                            />
-                          </Suspense>
-                        ) : (
+                        {
                           <AutoResizeTextarea
                             id={`env-${env.key}`}
                             value={environmentValues[env.key] || ""}
@@ -921,7 +702,7 @@ export function LocalServerInstallDialog({
                             }
                             disabled={isInstalling}
                           />
-                        )}
+                        }
                       </div>
                     ))}
                   </div>
@@ -965,46 +746,7 @@ export function LocalServerInstallDialog({
                         </div>
                       )}
 
-                      {useVaultSecrets && fieldConfig.sensitive ? (
-                        <Suspense
-                          fallback={
-                            <div className="text-sm text-muted-foreground">
-                              Loading...
-                            </div>
-                          }
-                        >
-                          <InlineVaultSecretSelector
-                            teamId={vaultTeamId}
-                            selectedSecretPath={
-                              userConfigVaultSecrets[fieldName]?.path ?? null
-                            }
-                            selectedSecretKey={
-                              userConfigVaultSecrets[fieldName]?.key ?? null
-                            }
-                            onSecretPathChange={(path) =>
-                              setUserConfigVaultSecrets((prev) => ({
-                                ...prev,
-                                [fieldName]: { path, key: null },
-                              }))
-                            }
-                            onSecretKeyChange={(key) =>
-                              setUserConfigVaultSecrets((prev) => ({
-                                ...prev,
-                                [fieldName]: {
-                                  path: prev[fieldName]?.path ?? null,
-                                  key,
-                                },
-                              }))
-                            }
-                            disabled={isInstalling}
-                            noTeamMessage={
-                              scope !== "team"
-                                ? "Select a vault folder to pull secrets from"
-                                : undefined
-                            }
-                          />
-                        </Suspense>
-                      ) : fieldConfig.type === "boolean" ? (
+                      {fieldConfig.type === "boolean" ? (
                         <div className="flex items-center gap-2">
                           <Checkbox
                             id={`user-config-${fieldName}`}

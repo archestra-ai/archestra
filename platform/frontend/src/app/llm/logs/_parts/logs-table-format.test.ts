@@ -49,6 +49,35 @@ describe("describeModelOrigin", () => {
     ).toEqual({ kind: "maker", provider: "gemini", name: "Google" });
   });
 
+  it("credits Moonshot with Kimi Code plan models", () => {
+    expect(
+      describeModelOrigin({
+        model: "k3.1-pro",
+        interactionType: "kimi-code:chatCompletions",
+      }),
+    ).toEqual({ kind: "maker", provider: "kimi", name: "Moonshot" });
+    expect(
+      describeModelOrigin({
+        model: "kimi-for-coding",
+        interactionType: "kimi-code:chatCompletions",
+      }),
+    ).toEqual({ kind: "maker", provider: "kimi", name: "Moonshot" });
+    // Only plan ids are Moonshot's.
+    expect(
+      describeModelOrigin({
+        model: "llama3.1",
+        interactionType: "kimi-code:chatCompletions",
+      }),
+    ).toEqual({ kind: "unknown", name: "Meta" });
+    // Another vendor's k-numbered model is not Moonshot's.
+    expect(
+      describeModelOrigin({
+        model: "k2-think",
+        interactionType: "ollama:chatCompletions",
+      }),
+    ).toEqual({ kind: "aggregator", provider: "ollama" });
+  });
+
   it("falls back to an aggregator that served an unrecognised model", () => {
     expect(
       describeModelOrigin({

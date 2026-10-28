@@ -77,6 +77,7 @@ import config, {
   parseRetentionDays,
   parseSampleRate,
   parseSandboxMemoryMaxBytes,
+  parseSreApiServerCidrs,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
   resolveAllowedOrigins,
@@ -1666,7 +1667,7 @@ describe("Agent Runtime catalog images", () => {
     const { default: cfg } = await import("./config");
 
     expect(cfg.agentRuntime.catalogImages["claude-code"]).toBe(
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-claude-code:latest",
+      "ghcr.io/archestra-ai/agent-claude-code:latest",
     );
   });
 
@@ -1675,7 +1676,7 @@ describe("Agent Runtime catalog images", () => {
     const { default: cfg } = await import("./config");
 
     expect(cfg.agentRuntime.catalogImages.codex).toBe(
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-codex:1.4.0-beta.2",
+      "ghcr.io/archestra-ai/agent-codex:1.4.0-beta.2",
     );
   });
 
@@ -2554,6 +2555,34 @@ describe("parseEngineDeniedCidrs", () => {
     expect(parseEngineDeniedCidrs(`10.1.0.0/16,${bad},192.0.2.0/24`)).toEqual([
       "10.1.0.0/16",
       "192.0.2.0/24",
+    ]);
+  });
+});
+
+describe("parseSreApiServerCidrs", () => {
+  test("returns an empty list when unset or empty", () => {
+    expect(parseSreApiServerCidrs(undefined)).toEqual([]);
+    expect(parseSreApiServerCidrs(" , ")).toEqual([]);
+  });
+
+  test("keeps IPv4 and IPv6 CIDRs, trimmed and deduplicated", () => {
+    expect(
+      parseSreApiServerCidrs(" 10.0.0.1/32, 2001:db8::/64 ,10.0.0.1/32"),
+    ).toEqual(["10.0.0.1/32", "2001:db8::/64"]);
+  });
+
+  test.each([
+    "10.0.0.1", // no prefix
+    "10.0.0.0/33",
+    "2001:db8::/129",
+    "10.0.0.0/8/8",
+    "10.0.0.0/x",
+    "010.0.0.0/8",
+    "api.example.com/32",
+  ])("drops the invalid entry %s", (bad) => {
+    expect(parseSreApiServerCidrs(`10.0.0.1/32,${bad},fd00::/8`)).toEqual([
+      "10.0.0.1/32",
+      "fd00::/8",
     ]);
   });
 });

@@ -242,6 +242,13 @@ export function isClaudeClientAgentId(
   return CLAUDE_CLIENT_AGENT_ID_SET.has(externalAgentId.trim().toLowerCase());
 }
 
+/** Whether an `external_agent_id` value denotes Claude Desktop. */
+export function isClaudeDesktopClientAgentId(
+  externalAgentId: string | null | undefined,
+): boolean {
+  return externalAgentId?.trim().toLowerCase() === CLAUDE_DESKTOP_CLIENT_ID;
+}
+
 /**
  * `external_agent_id` values for Codex clients. Only the generic
  * {@link CODEX_CLIENT_ID} exists today (the connect script sets it explicitly

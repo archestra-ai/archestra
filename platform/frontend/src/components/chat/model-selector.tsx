@@ -41,6 +41,7 @@ import {
   FreeModelBadge,
   LatestModelBadge,
   OldModelBadge,
+  PooledModelBadge,
 } from "@/components/model-badges";
 import {
   ModelCapabilityBadges,
@@ -62,6 +63,7 @@ import { copyToClipboard } from "@/lib/clipboard";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { type LlmModel, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useIsPooledModel } from "@/lib/model-pools.query";
 import { formatPricePerMillion } from "@/lib/model-price-format";
 import { logoNameForProvider } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils/tailwind";
@@ -132,6 +134,11 @@ interface ModelSelectorProps {
   modelFilter?: (model: LlmModel) => boolean;
   /** Names why the current selection is retained but cannot be selected again. */
   unavailableModelHeading?: string;
+  /**
+   * Marks the models a pool serves. Off where a pool is picked by itself,
+   * so a model picked here is never pooled.
+   */
+  markPooledModels?: boolean;
 }
 
 /**
@@ -486,6 +493,7 @@ export const ModelSelector = memo(function ModelSelector({
   fallbackModelName,
   modelFilter,
   unavailableModelHeading,
+  markPooledModels = true,
 }: ModelSelectorProps) {
   const catalogQuery = useLlmModelsByProvider({
     apiKeyId: apiKeyId ?? undefined,
@@ -562,6 +570,7 @@ export const ModelSelector = memo(function ModelSelector({
     ? logoNameForProvider(selectedModelProvider, selectedKeySubscriptionKind)
     : null;
 
+  const isPooledModel = useIsPooledModel(markPooledModels);
   // Get display name for selected model
   const selectedModelDisplayName = useMemo(() => {
     for (const provider of fetchedProviders) {
@@ -579,6 +588,12 @@ export const ModelSelector = memo(function ModelSelector({
     fetchedProviders,
     fallbackModelName,
   ]);
+
+  const selectedModelPooled = fetchedProviders.some((provider) =>
+    fetchedModelsByProvider[provider]?.some(
+      (m) => m.dbId === selectedModel && isPooledModel(provider, m.id),
+    ),
+  );
 
   const handleSelectModel = (modelValue: string) => {
     // Parse the provider:modelId format
@@ -700,6 +715,7 @@ export const ModelSelector = memo(function ModelSelector({
                   {placeholder ?? "Best available model"}
                 </span>
               )}
+              {selectedModelPooled && <PooledModelBadge />}
             </Button>
           ) : (
             <PromptInputButton
@@ -716,6 +732,7 @@ export const ModelSelector = memo(function ModelSelector({
               <ModelSelectorName className="truncate flex-1 text-left">
                 {selectedModelDisplayName || "Select model"}
               </ModelSelectorName>
+              {selectedModelPooled && <PooledModelBadge />}
             </PromptInputButton>
           )}
         </ModelSelectorTrigger>
@@ -746,6 +763,7 @@ export const ModelSelector = memo(function ModelSelector({
               onSelectModel={handleSelectModel}
               onClose={() => handleOpenChange(false)}
               unavailableModelHeading={unavailableModelHeading}
+              markPooledModels={markPooledModels}
             />
           </ModelSelectorContent>
         )}
@@ -782,6 +800,7 @@ function ModelSelectorDialogBody({
   onSelectModel,
   onClose,
   unavailableModelHeading = "Current (API key missing)",
+  markPooledModels,
 }: {
   modelsByProvider: Record<SupportedProvider, LlmModel[]>;
   availableProviders: SupportedProvider[];
@@ -793,7 +812,9 @@ function ModelSelectorDialogBody({
   onSelectModel: (modelValue: string) => void;
   onClose: () => void;
   unavailableModelHeading?: string;
+  markPooledModels: boolean;
 }) {
+  const isPooledModel = useIsPooledModel(markPooledModels);
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
   const providerCatalog = useModelProviderCatalog();
 
@@ -936,6 +957,7 @@ function ModelSelectorDialogBody({
                       <CopyModelIdButton modelId={model.id} />
                     </ModelSelectorName>
                     {model.isFree && <FreeModelBadge />}
+                    {isPooledModel(provider, model.id) && <PooledModelBadge />}
                     {model.requiresUserConnection && !model.isConnected && (
                       <ConnectAccountBadge />
                     )}

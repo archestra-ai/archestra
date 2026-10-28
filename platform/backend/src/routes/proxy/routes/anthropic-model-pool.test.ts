@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { LLM_PROXY_OAUTH_SCOPE } from "@archestra/shared";
 import Fastify from "fastify";
 import {
   serializerCompiler,
@@ -7,7 +9,12 @@ import {
 import { HttpResponse, http } from "msw";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
-import { ModelPoolModel, VirtualApiKeyModel } from "@/models";
+import {
+  LlmOauthClientModel,
+  ModelPoolModel,
+  OAuthAccessTokenModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import { beforeEach, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
@@ -19,7 +26,7 @@ beforeEach(() => {
 });
 
 // Claude Code asks for a pool's name on Anthropic's wire; the pool's only
-// member is Z.ai on the OpenAI wire. The virtual key maps no Anthropic key:
+// member is Z.ai on the OpenAI wire. The credential maps no Anthropic key:
 // mapping the member's key (as a Connect key does) or a grant lets it in.
 // Only the HTTP upstream is mocked.
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
@@ -31,6 +38,7 @@ for (const [stream, access] of [
   [false, "member key"],
   [true, "member key"],
   [false, "grant"],
+  [false, "OAuth client grant"],
 ] as const) {
   test(`answers an Anthropic request from a Z.ai member (stream: ${stream}, via ${access})`, async ({
     makeOrganization,
@@ -54,7 +62,7 @@ for (const [stream, access] of [
           ? [{ provider: "openai", providerApiKeyId: openai.id }]
           : [{ provider: "zhipuai", providerApiKeyId: zai.id }],
     });
-    await ModelPoolModel.create({
+    const pool = await ModelPoolModel.create({
       organizationId: org.id,
       input: {
         name: "glm-5",
@@ -67,9 +75,33 @@ for (const [stream, access] of [
             enabled: true,
           },
         ],
-        virtualApiKeyIds: access === "grant" ? [virtualKey.id] : [],
       },
     });
+    if (access === "grant") {
+      await ModelPoolModel.setPoolsForVirtualApiKey({
+        organizationId: org.id,
+        virtualApiKeyId: virtualKey.id,
+        poolIds: [pool.id],
+      });
+    }
+    let token = value;
+    if (access === "OAuth client grant") {
+      const { oauthClient } = await LlmOauthClientModel.create({
+        organizationId: org.id,
+        authorId: crypto.randomUUID(),
+        name: "Pool-only client",
+        providerApiKeys: [{ provider: "openai", providerApiKeyId: openai.id }],
+        modelPoolIds: [pool.id],
+      });
+      token = `pool-client-token-${crypto.randomUUID()}`;
+      await OAuthAccessTokenModel.createClientCredentialsToken({
+        tokenHash: createHash("sha256").update(token).digest("base64url"),
+        clientId: oauthClient.clientId,
+        expiresAt: new Date(Date.now() + 60_000),
+        scopes: [LLM_PROXY_OAUTH_SCOPE],
+        referenceId: `llm-proxy:${oauthClient.id}`,
+      });
+    }
 
     let upstream: Record<string, unknown> | undefined;
     let authorization: string | null = null;
@@ -126,7 +158,7 @@ for (const [stream, access] of [
         method: "POST",
         url: `/v1/anthropic/${agent.id}/v1/messages`,
         headers: {
-          authorization: `Bearer ${value}`,
+          authorization: `Bearer ${token}`,
           "anthropic-version": "2023-06-01",
         },
         payload: {
@@ -200,7 +232,6 @@ test("keeps out a virtual key that maps no member key and has no grant", async (
           enabled: true,
         },
       ],
-      virtualApiKeyIds: [],
     },
   });
   let calls = 0;

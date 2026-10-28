@@ -4222,6 +4222,27 @@
       "when": 1793066015886,
       "tag": "0602_user_name_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 603,
+      "version": "7",
+      "when": 1793111170645,
+      "tag": "0603_living_black_tom",
+      "breakpoints": true
+    },
+    {
+      "idx": 604,
+      "version": "7",
+      "when": 1793129711286,
+      "tag": "0604_chat_model_pools",
+      "breakpoints": true
+    },
+    {
+      "idx": 605,
+      "version": "7",
+      "when": 1793133453386,
+      "tag": "0605_jira_chatops",
+      "breakpoints": true
     }
   ]
 }

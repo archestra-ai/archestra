@@ -35,6 +35,7 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     llmApiKeyId: null,
     llmModel: null,
     modelId: null,
+    modelPoolId: null,
     fastModelId: null,
     smartModelId: null,
     identityProviderId: null,

@@ -112,18 +112,9 @@ type OAuthUserConfigField = {
   sensitive?: boolean;
 };
 
-/**
- * Store promptable user-config values collected before OAuth redirect.
- *
- * In non-BYOS mode we only persist non-sensitive values across the redirect.
- * Sensitive values must not be written into sessionStorage; they are handled
- * server-side or re-prompted after the callback. In BYOS mode, values are
- * vault references rather than raw secrets, so they are safe to persist.
- */
 export function setOAuthUserConfigValues(params: {
   values: Record<string, string>;
   userConfig: Record<string, OAuthUserConfigField> | null | undefined;
-  isByosVault?: boolean;
 }) {
   if (!params.userConfig) {
     sessionStorage.removeItem(OAUTH_USER_CONFIG_VALUES);
@@ -137,7 +128,7 @@ export function setOAuthUserConfigValues(params: {
         return false;
       }
 
-      return params.isByosVault ? true : fieldConfig.sensitive !== true;
+      return fieldConfig.sensitive !== true;
     }),
   );
 

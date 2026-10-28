@@ -335,7 +335,9 @@ const interactionsTable = pgTable(
     // migrations so its build remains concurrent on existing large tables.
     // The partial interactions_session_preview_missing_idx (rows still without
     // a session preview) is built concurrently from worker startup
-    // (database/index-maintenance.ts), for the same reason.
+    // (database/index-maintenance.ts), for the same reason. So is the partial
+    // interactions_media_cost_unavailable_idx (calls whose media cost is
+    // unavailable), read by the default user limit's spend aggregation.
     // Note: interactions deliberately has NO trgm/GIN indexes on the request/
     // response payload columns. Migration 0116 used to create them for a
     // free-text log search that no longer exists (the LLM logs UI filters by

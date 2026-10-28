@@ -1475,6 +1475,83 @@ describe("knowledge-management tool execution", () => {
       expect((verifyResult.content[0] as any).text).toContain("not found");
     });
 
+    test("GitHub MCP edits protect repository settings and preserve no-op checkpoints", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const organizationId = mockContext.organizationId!;
+      const kb = await makeKnowledgeBase(organizationId);
+      const defaults = {
+        type: "github" as const,
+        githubUrl: "https://api.github.com",
+        owner: "example-org",
+        repos: ["legacy-bare-repo"],
+        includeIssues: true,
+      };
+      const config = {
+        ...defaults,
+        repositoryOverrides: [
+          {
+            repository: "example-org/legacy-bare-repo",
+            includePullRequests: false,
+          },
+        ],
+      };
+      const checkpoint = {
+        type: "github" as const,
+        lastSyncedAt: "2026-01-15T12:00:00.000Z",
+      };
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          connectorType: "github",
+          config,
+          enabled: false,
+        },
+      );
+      await KnowledgeBaseConnectorModel.update(connector.id, { checkpoint });
+      const legacyWriter = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        { id: connector.id, config: defaults },
+        mockContext,
+      );
+      expect(legacyWriter.isError).toBe(true);
+      expect((legacyWriter.content[0] as any).text).toContain(
+        "repository overrides",
+      );
+      const unchanged = await KnowledgeBaseConnectorModel.findById(
+        connector.id,
+      );
+      expect(unchanged?.config).toEqual(config);
+      expect(unchanged?.checkpoint).toEqual(checkpoint);
+
+      const noOp = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        {
+          id: connector.id,
+          config: { ...config, fileTypes: [], excludePaths: [] },
+        },
+        mockContext,
+      );
+      expect(noOp.isError).toBe(false);
+      const retained = await KnowledgeBaseConnectorModel.findById(connector.id);
+      expect(retained?.checkpoint).toEqual(checkpoint);
+      expect(retained?.secretId).toBe(connector.secretId);
+      expect(retained?.id).toBe(connector.id);
+
+      const changed = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        { id: connector.id, config: { ...config, includeIssues: false } },
+        mockContext,
+      );
+      expect(changed.isError).toBe(false);
+      const resync = await KnowledgeBaseConnectorModel.findById(connector.id);
+      expect(resync?.config).toMatchObject({ includeIssues: false });
+      expect(resync?.checkpoint).toBeNull();
+      expect(resync?.secretId).toBe(connector.secretId);
+    });
+
     test("update_knowledge_connector refreshes document ACL when visibility changes", async ({
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,

@@ -34,6 +34,7 @@ import {
 } from "@/agents/openai-reasoning-summary";
 import { createStepContextGuard } from "@/agents/step-context-guard";
 import { subagentRunTracker } from "@/agents/subagent-run-tracker";
+import { canUseAgent } from "@/auth/permission-gated";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
@@ -310,6 +311,15 @@ export async function executeA2AMessage(
     );
   }
 
+  if (
+    !(await canUseAgent(agentId, {
+      userId,
+      organizationId: agent.organizationId,
+    }))
+  ) {
+    throw new Error(`Agent ${agentId} not found`);
+  }
+
   // An agent set to block callers who cannot reach its MCP servers means it
   // everywhere it runs, not only in the chat UI — this path serves ChatOps,
   // incoming email, scheduled triggers, delegation, and external A2A. Headless
@@ -345,6 +355,8 @@ export async function executeA2AMessage(
   // organization default's). Without it, key lookup prefers the caller's
   // personal key and the run sends a key the selection never chose.
   const llmApiKeyId = resolvedApiKeyId ?? agent.llmApiKeyId;
+  // An agent set to a pool runs on it; a fork runs on its parent's model.
+  const modelPoolId = params.selfFork ? null : agent.modelPoolId;
 
   // Track subagent run so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).
@@ -427,6 +439,7 @@ export async function executeA2AMessage(
         source,
         externalAgentId: delegationChain,
         agentLlmApiKeyId: llmApiKeyId,
+        modelPoolId,
         appaSubagentToken: params.appaSubagent?.token,
       });
 
@@ -584,6 +597,7 @@ export async function executeA2AMessage(
               source: "a2a:tool_call_repair",
               externalAgentId: delegationChain,
               agentLlmApiKeyId: llmApiKeyId,
+              modelPoolId,
               appaSubagentToken: params.appaSubagent?.token,
             })
           ).model,

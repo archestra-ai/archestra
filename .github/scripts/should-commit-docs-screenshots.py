@@ -23,7 +23,7 @@ def should_commit(event_name):
         raise RuntimeError("Cannot inspect screenshot commit's parent")
     files = result.stdout.splitlines()
     if generated_benchmarks:
-        return files != ["docs/pages/admin/observability/performance-benchmarks.md"]
+        return files != ["docs/pages/admin/performance-benchmarks.md"]
     return not files or any(not file.startswith("docs/assets/") for file in files)
 
 

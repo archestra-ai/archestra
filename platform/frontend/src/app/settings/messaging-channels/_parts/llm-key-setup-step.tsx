@@ -14,9 +14,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   inferenceBaseUrl: null,
   extraHeaders: [],
   shared: true,
-  teamId: null,
-  vaultSecretPath: null,
-  vaultSecretKey: null,
+
   isPrimary: true,
   bedrockAuthMethod: "api-key",
   awsAccessKeyId: null,

@@ -1,0 +1,32 @@
+{
+  "run": "https://github.com/archestra-ai/archestra/actions/runs/40402009733",
+  "artifact": "https://github.com/archestra-ai/archestra/actions/runs/40402009733/artifacts/12691596491",
+  "artifactId": 12691596491,
+  "githubZipSha256": "964c32ac70f5309020020c68b27ddd9cc18e824238ca548b3e34bd0048bf52ab",
+  "githubZipBytes": 59334043,
+  "githubExpiresAt": "2026-11-09T21:35:19Z",
+  "measuredCommit": "d026094df64fb4fb1027ff8579b067388f8b9d8b",
+  "archestraSourceBase": "f53d5db5a65e3c324939d1fb8455c32bb4f52d59",
+  "archestraVersion": "1.5.0-rc.10",
+  "litellmVersion": "1.106.4",
+  "litellmCommit": "ea7ca16dbc3904d9e59a9505f379a2ca3091821f",
+  "litellmAmd64Manifest": "sha256:496cc6cb0295414585790b86467566fb4c93d8e12d7f0e889f18fcfc54cbdd5e",
+  "archestraRuntimeImageId": "sha256:7d14dbe871dac7ea0fcc77b97178d4e4c0307a2f972ce4cbdae97256617456d8",
+  "node": "v24.22.1",
+  "runner": "ubicloud-standard-16-ubuntu-2404",
+  "cpu": "AMD Ryzen 9 7950X3D 16-Core Processor",
+  "proxyLimits": {
+    "cpus": 4,
+    "cpuSet": "2-5",
+    "memoryGiB": 8,
+    "webWorkers": 1
+  },
+  "databaseLimits": {
+    "cpus": 2,
+    "cpuSet": "6-7",
+    "memoryGiB": 2,
+    "storage": "tmpfs"
+  },
+  "clientAndStubCpuSet": "0-1",
+  "metrics": "Client E2E minus correlated per-request stub duration; internal Archestra timer separate; decoded streaming first-content TTFT."
+}

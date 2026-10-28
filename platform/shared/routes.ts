@@ -228,14 +228,6 @@ export const RouteId = {
   AddTeamExternalGroup: "addTeamExternalGroup",
   RemoveTeamExternalGroup: "removeTeamExternalGroup",
 
-  // Team Vault Folder Routes (BYOS - Bring Your Own Secrets)
-  GetTeamVaultFolder: "getTeamVaultFolder",
-  SetTeamVaultFolder: "setTeamVaultFolder",
-  DeleteTeamVaultFolder: "deleteTeamVaultFolder",
-  CheckTeamVaultFolderConnectivity: "checkTeamVaultFolderConnectivity",
-  ListTeamVaultFolderSecrets: "listTeamVaultFolderSecrets",
-  GetTeamVaultSecretKeys: "getTeamVaultSecretKeys",
-
   // Role Routes
   SearchInitialPermissionSubjects: "searchInitialPermissionSubjects",
   GetScopedCapabilities: "getScopedCapabilities",
@@ -383,6 +375,11 @@ export const RouteId = {
   KimiChatCompletionsWithDefaultAgent: "kimiChatCompletionsWithDefaultAgent",
   KimiChatCompletionsWithAgent: "kimiChatCompletionsWithAgent",
 
+  // Proxy Routes - Kimi Code (membership plans)
+  KimiCodeChatCompletionsWithDefaultAgent:
+    "kimiCodeChatCompletionsWithDefaultAgent",
+  KimiCodeChatCompletionsWithAgent: "kimiCodeChatCompletionsWithAgent",
+
   // Proxy Routes - AWS Bedrock
   BedrockConverseWithDefaultAgent: "bedrockConverseWithDefaultAgent",
   BedrockConverseWithAgent: "bedrockConverseWithAgent",
@@ -513,6 +510,7 @@ export const RouteId = {
   DeleteChatAttachment: "deleteChatAttachment",
   GetLlmModels: "getLlmModels",
   GetModelPools: "getModelPools",
+  GetAvailableModelPools: "getAvailableModelPools",
   CreateModelPool: "createModelPool",
   UpdateModelPool: "updateModelPool",
   DeleteModelPool: "deleteModelPool",
@@ -791,7 +789,6 @@ export const RouteId = {
 
   // Secrets Routes
   GetSecretsType: "getSecretsType",
-  GetSecret: "getSecret",
   CheckSecretsConnectivity: "checkSecretsConnectivity",
 
   // Incoming Email Routes
@@ -802,6 +799,13 @@ export const RouteId = {
   GetAgentEmailAddress: "getAgentEmailAddress",
 
   // ChatOps Routes
+  GetJiraChatOpsConfig: "getJiraChatOpsConfig",
+  UpdateJiraChatOpsConfig: "updateJiraChatOpsConfig",
+  CreateJiraChatOpsBot: "createJiraChatOpsBot",
+  UpdateJiraChatOpsBot: "updateJiraChatOpsBot",
+  DeleteJiraChatOpsBot: "deleteJiraChatOpsBot",
+  ListJiraChatOpsProjects: "listJiraChatOpsProjects",
+  CreateJiraChatOpsBinding: "createJiraChatOpsBinding",
   GetChatOpsStatus: "getChatOpsStatus",
   ListChatOpsBindings: "listChatOpsBindings",
   DeleteChatOpsBinding: "deleteChatOpsBinding",

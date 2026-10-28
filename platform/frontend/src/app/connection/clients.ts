@@ -7,6 +7,7 @@ import {
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   type OpenCodeFamilyDescriptor,
   openCodePassthroughBaseUrl,
+  openCodePassthroughProviders,
   PI_MARK,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -414,7 +415,7 @@ claude`,
   },
   {
     id: "claude-desktop",
-    label: "Claude Desktop",
+    label: NATIVE_SESSION_CLIENT_LABELS["claude-desktop"],
     sub: "Anthropic desktop app",
     ...markFields(CLAUDE_MARK),
     mcp: {
@@ -1076,9 +1077,7 @@ function openCodeFamilyTile(
     },
     proxy: {
       kind: "custom",
-      supportedProviders: OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(
-        ({ provider }) => provider,
-      ),
+      supportedProviders: openCodePassthroughProviders(),
       build: ({ provider, url, appName }) => {
         const rootUrl = url.replace(new RegExp(`/${provider}$`), "");
         const selectedRoute = OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.find(

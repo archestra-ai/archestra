@@ -207,6 +207,7 @@ describe("createInteractionsIndexes", () => {
   const name = "interactions_session_preview_missing_idx";
   const passthroughName = "interactions_passthrough_virtual_key_id_idx";
   const modelHistoryName = "interactions_model_created_at_idx";
+  const mediaCostName = "interactions_media_cost_unavailable_idx";
   const options = {
     concurrently: false,
     client: {
@@ -219,12 +220,14 @@ describe("createInteractionsIndexes", () => {
     await db.execute(sql.raw(`DROP INDEX IF EXISTS "${name}"`));
     await db.execute(sql.raw(`DROP INDEX IF EXISTS "${passthroughName}"`));
     await db.execute(sql.raw(`DROP INDEX IF EXISTS "${modelHistoryName}"`));
+    await db.execute(sql.raw(`DROP INDEX IF EXISTS "${mediaCostName}"`));
   });
 
   test("creates the missing-preview index, then recognizes it on the next boot", async () => {
     expect(await createInteractionsIndexes(options)).toEqual({
       [name]: "created",
       [passthroughName]: "created",
+      [mediaCostName]: "created",
       [modelHistoryName]: "created",
     });
     expect(await indexDefinition(name)).toBe(
@@ -237,6 +240,7 @@ describe("createInteractionsIndexes", () => {
     expect(await createInteractionsIndexes(options)).toEqual({
       [name]: "already_valid",
       [passthroughName]: "already_valid",
+      [mediaCostName]: "already_valid",
       [modelHistoryName]: "already_valid",
     });
     expect(await indexOid(name)).toBe(oid);
@@ -259,6 +263,21 @@ describe("createInteractionsIndexes", () => {
     );
     expect(await indexOid(passthroughName)).toBe(oid);
     expect(await advisoryLockCount()).toBe(0);
+  });
+
+  test("creates the media cost index, then leaves it alone", async () => {
+    expect((await createInteractionsIndexes(options))[mediaCostName]).toBe(
+      "created",
+    );
+    expect(await indexDefinition(mediaCostName)).toBe(
+      `CREATE INDEX ${mediaCostName} ON public.interactions USING btree (created_at, id) WHERE (((response -> '__mediaUsage'::text) ->> 'costAvailable'::text) = 'false'::text)`,
+    );
+    const oid = await indexOid(mediaCostName);
+
+    expect((await createInteractionsIndexes(options))[mediaCostName]).toBe(
+      "already_valid",
+    );
+    expect(await indexOid(mediaCostName)).toBe(oid);
   });
 });
 

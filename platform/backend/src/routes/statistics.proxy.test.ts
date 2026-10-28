@@ -166,7 +166,6 @@ test("groups usage by provider key and model pool and counts failed-over attempt
           enabled: true,
         },
       ],
-      virtualApiKeyIds: [],
     },
   });
   // One pooled request that failed over from the dedicated key to the shared

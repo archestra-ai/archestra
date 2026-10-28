@@ -55,6 +55,7 @@ class Gateway(ThreadingHTTPServer):
         self.requests = []
         self.calls = []
         self.catalog_sent = False
+        self.response_tools = {}
         self.discovery_failed = threading.Event()
         self.binding_headers = []
         self.prompts = []
@@ -139,7 +140,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def llm(self, request):
         names = []
-        for tool in request.get("tools", []):
+        # Codex declares tools in Responses input items on newer releases.
+        tools = list(request.get("tools", []))
+        additional_tools = list(request.get("additional_tools", []))
+        for item in request.get("input", []):
+            if isinstance(item, dict) and item.get("type") == "additional_tools":
+                additional_tools.extend(item.get("tools", []))
+        # Responses can send only updated namespaces after the first request;
+        # the provider retains the preceding declarations in its conversation.
+        for tool in additional_tools:
+            self.server.response_tools[tool["name"]] = tool
+        tools.extend(self.server.response_tools.values())
+        for tool in tools:
             if tool.get("type") == "namespace":
                 names.extend(tool["name"] + "." + item["name"] for item in tool.get("tools", []))
             else:
@@ -361,7 +373,7 @@ class StartupTest(unittest.TestCase):
             server.delay = 3 if steer else 0
             threading.Thread(target=server.serve_forever, daemon=True).start()
             origin = f"http://127.0.0.1:{server.server_port}"
-            env = {**os.environ, "HOME": str(home), "TERM": "xterm-256color", "PATH": str(BIN) + os.pathsep + os.environ["PATH"], "ARCHESTRA_LLM_PROXY_PROTOCOL": "anthropic" if CLIENT == "claude-code" else "openai_chat" if CLIENT in ("hermes", "grok", "kimi") else "openai_responses", "ARCHESTRA_AGENT_RUNTIME_DIR": str(runtime), "ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX": str(runtime / "turn"), "ARCHESTRA_AGENT_RUNTIME_MODE": mode, "ARCHESTRA_AGENT_RUNTIME_PLAIN": "1" if plain else "0", "ARCHESTRA_AGENT_RUNTIME_OPENAPPA": "1", "ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL": "claude-sonnet-4-6" if CLIENT == "claude-code" else "gpt-6-astra" if CLIENT == "codex" else "grok-4.7" if CLIENT == "grok" else "k3.1-pro" if CLIENT == "kimi" else "gpt-4.1", "ARCHESTRA_AGENT_RUNTIME_TASK_ID": "startup-test", "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID": "startup-workspace", "ARCHESTRA_AGENT_RUNTIME_TASK": "Call each recovery tool, then reply STARTUP_OK.", "ARCHESTRA_MCP_GATEWAY_URL": origin + "/mcp", "ARCHESTRA_MCP_GATEWAY_TOKEN": "synthetic-token", "OPENAI_BASE_URL": origin + "/v1", "OPENAI_API_KEY": "synthetic-key", "ANTHROPIC_BASE_URL": origin, "ANTHROPIC_AUTH_TOKEN": "synthetic-key", "DISABLE_AUTOUPDATER": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER": "kimi" if CLIENT == "kimi" else "openai"}
+            env = {**os.environ, "HOME": str(home), "TERM": "xterm-256color", "PATH": str(BIN) + os.pathsep + os.environ["PATH"], "ARCHESTRA_LLM_PROXY_PROTOCOL": "anthropic" if CLIENT == "claude-code" else "openai_chat" if CLIENT in ("hermes", "grok", "kimi") else "openai_responses", "ARCHESTRA_AGENT_RUNTIME_DIR": str(runtime), "ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX": str(runtime / "turn"), "ARCHESTRA_AGENT_RUNTIME_MODE": mode, "ARCHESTRA_AGENT_RUNTIME_PLAIN": "1" if plain else "0", "ARCHESTRA_AGENT_RUNTIME_OPENAPPA": "1", "ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL": "claude-sonnet-4-6" if CLIENT == "claude-code" else "gpt-6-astra" if CLIENT == "codex" else "grok-4.7" if CLIENT == "grok" else "k3.1-pro" if CLIENT == "kimi" else "gpt-4.1", "ARCHESTRA_AGENT_RUNTIME_TASK_ID": "startup-test", "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID": "startup-workspace", "ARCHESTRA_AGENT_RUNTIME_TASK": "Call each recovery tool, then reply STARTUP_OK.", "ARCHESTRA_MCP_GATEWAY_URL": origin + "/mcp", "ARCHESTRA_MCP_GATEWAY_TOKEN": "synthetic-token", "OPENAI_BASE_URL": origin + "/v1", "OPENAI_API_KEY": "synthetic-key", "ANTHROPIC_BASE_URL": origin, "ANTHROPIC_AUTH_TOKEN": "synthetic-key", "DISABLE_AUTOUPDATER": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER": "kimi-code" if CLIENT == "kimi" else "openai"}
             if submission_failure:
                 # Only the task paste fails; the pane and MCP status probes work.
                 shim = root / "shim"

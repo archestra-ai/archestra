@@ -1149,6 +1149,34 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (_id, _orgId) =>
       chatOpsConfigModel.getRedactedSnapshotForAudit(),
   },
+  "/api/chatops/jira/config": {
+    resourceType: "chatOpsConfig",
+    action: "chatOpsConfig.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, orgId) =>
+      chatOpsConfigModel.getJiraSnapshotForAudit(orgId),
+  },
+  "/api/chatops/jira/bots": {
+    resourceType: "chatOpsConfig",
+    action: "chatOpsConfig.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, orgId) =>
+      chatOpsConfigModel.getJiraSnapshotForAudit(orgId),
+  },
+  "/api/chatops/jira/bots/:botId": {
+    resourceType: "chatOpsConfig",
+    action: "chatOpsConfig.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, orgId) =>
+      chatOpsConfigModel.getJiraSnapshotForAudit(orgId),
+  },
+  "/api/chatops/jira/bots/:botId/bindings": {
+    resourceType: "chatOpsBinding",
+    action: "chatOpsBinding.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, orgId) =>
+      ChatOpsChannelBindingModel.findBindingsFingerprintForOrganization(orgId),
+  },
   // Which chatops Slack bot and channel the UI feedback overlay posts to.
   "/api/dev-feedback/setup": {
     resourceType: "chatOpsConfig",
@@ -1246,15 +1274,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
   },
 
-  // Enterprise: team vault folder (same snapshot model as teams)
-  // Creating/removing a team's vault folder mutates the team; the team survives
-  // the folder DELETE, so pin team.updated (not the derived team.deleted).
-  "/api/teams/:teamId/vault-folder": {
-    resourceType: "team",
-    resourceIdParam: "teamId",
-    action: "team.updated",
-    fetchById: (id, orgId) => TeamModel.findByIdForAudit(id, orgId),
-  },
   // Team membership & external-group mappings live in join tables the team
   // snapshot reflects; the parent team survives member/mapping removal, so pin
   // team.updated on both the POST (add) and the per-child DELETE.

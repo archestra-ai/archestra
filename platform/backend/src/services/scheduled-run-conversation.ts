@@ -118,6 +118,7 @@ export async function createAndLinkRunConversation(params: {
     ? await ConversationModel.findByIdInOrganization({
         id: fresh.chatConversationId,
         organizationId,
+        viewer: { kind: "internal", purpose: "scheduled-run" },
       })
     : null;
   if (!existing) {
@@ -323,7 +324,107 @@ export async function backfillRunConversationMessages(params: {
   );
 }
 
+/**
+ * Read a run's transcript without writing anything: the linked conversation's
+ * messages when it has them, else a reconstruction from the run's interactions.
+ * Callers must authorize the run first.
+ */
+export async function readRunTranscript(params: {
+  trigger: ScheduleTrigger;
+  run: ScheduleTriggerRun;
+  organizationId: string;
+  /** The requesting viewer, which may differ from the schedule's actor. */
+  userId: string;
+}): Promise<{
+  source:
+    | "conversation"
+    | "interactions"
+    | "encrypted"
+    | "runtime"
+    | "pending"
+    | "none";
+  messages: PartialUIMessage[];
+}> {
+  const { trigger, run, organizationId, userId } = params;
+  const conversation = run.chatConversationId
+    ? await ConversationModel.findByIdInOrganization({
+        id: run.chatConversationId,
+        organizationId,
+        viewer: { kind: "caller", userId, organizationId },
+      })
+    : null;
+  if (conversation?.encryptedChat) return { source: "encrypted", messages: [] };
+  const stored = runExecutionMessages(
+    (conversation?.messages ?? []) as PartialUIMessage[],
+  );
+  // A project run's chat holds its prompt before execution; until the final
+  // turn is written there, the interactions are the more complete record.
+  if (stored.some((message) => message.role === "assistant"))
+    return { source: "conversation", messages: stored };
+  // A live run owns its transcript; an intermediate interaction would read as
+  // the whole run.
+  if (run.status === "running")
+    return stored.length > 0
+      ? { source: "conversation", messages: stored }
+      : { source: "none", messages: [] };
+
+  // Guardrail checks and tool-call repairs share the run's session but are not
+  // the agent's turn; the agent's own calls carry the schedule source.
+  const recent = await InteractionModel.findAllPaginated(
+    { limit: 1, offset: 0 },
+    { sortBy: "createdAt", sortDirection: "desc" },
+    undefined,
+    true,
+    {
+      organizationId,
+      profileId: trigger.agentId,
+      sessionId: `scheduled-${run.id}`,
+      turnSource: "schedule-trigger",
+    },
+  );
+  const latestAgentTurn = recent.data[0];
+  if (!latestAgentTurn) {
+    // Runtime output reaches a conversation only through its own guarded read.
+    if (run.runtimeTaskId) return { source: "runtime", messages: stored };
+    // The proxy commits a call's record after the run settles, so a chat that
+    // holds only the prompt may still gain the run's turn.
+    if (
+      run.completedAt &&
+      Date.now() - run.completedAt.getTime() < RECENT_RUN_GRACE_MS
+    )
+      return { source: "pending", messages: stored };
+    if (stored.length > 0) return { source: "conversation", messages: stored };
+    return { source: "none", messages: [] };
+  }
+  return {
+    source: "interactions",
+    messages: buildMessagesFromInteractions(
+      [latestAgentTurn],
+      trigger.messageTemplate,
+    ),
+  };
+}
+
 // === internal ===
+
+/**
+ * The messages of the scheduled execution itself. A run's chat stays open for
+ * follow-ups, and every follow-up starts with a new user message after the
+ * run's one prompt, so the run ends at the second user message.
+ */
+function runExecutionMessages(
+  messages: PartialUIMessage[],
+): PartialUIMessage[] {
+  const followUp = messages.findIndex(
+    (message, index) =>
+      message.role === "user" &&
+      messages.slice(0, index).some((earlier) => earlier.role === "user"),
+  );
+  return followUp === -1 ? messages : messages.slice(0, followUp);
+}
+
+/** How long after a run settles its interaction records may still be in flight. */
+const RECENT_RUN_GRACE_MS = 60_000;
 
 function buildMessagesFromInteractions(
   interactions: Array<{

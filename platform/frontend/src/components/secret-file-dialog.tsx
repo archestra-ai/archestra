@@ -1,8 +1,7 @@
 "use client";
 
-import { parseVaultReference } from "@archestra/shared";
-import { CheckCircle2, Info, Key, Loader2 } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { Info } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FieldScopeSelect,
   type FieldScopeValue,
@@ -15,12 +14,6 @@ import { Label } from "@/components/ui/label";
 import { SecretTextarea } from "@/components/ui/secret-input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-
-const ExternalSecretSelector = lazy(
-  () =>
-    // biome-ignore lint/style/noRestrictedImports: lazy loading
-    import("@/components/external-secret-selector.ee"),
-);
 
 export interface SecretFileDraft {
   key: string;
@@ -36,7 +29,7 @@ interface SecretFileDialogProps {
   initial: SecretFileDraft | null;
   existingKeys: string[];
   secretKeysWithStoredValue?: Set<string>;
-  useExternalSecretsManager?: boolean;
+
   disableInstallation?: boolean;
   disableInstallationReason?: string;
   onClose: () => void;
@@ -59,7 +52,7 @@ export function SecretFileDialog({
   initial,
   existingKeys,
   secretKeysWithStoredValue,
-  useExternalSecretsManager = false,
+
   disableInstallation = false,
   disableInstallationReason,
   onClose,
@@ -68,7 +61,6 @@ export function SecretFileDialog({
   const [draft, setDraft] = useState<SecretFileDraft>(
     initial ?? makeEmptyDraft(disableInstallation),
   );
-  const [vaultDialogOpen, setVaultDialogOpen] = useState(false);
 
   useEffect(() => {
     if (open) setDraft(initial ?? makeEmptyDraft(disableInstallation));
@@ -82,11 +74,6 @@ export function SecretFileDialog({
 
   const hasStoredSecret =
     mode === "edit" && secretKeysWithStoredValue?.has(trimmedKey) === true;
-
-  const isVaultRef =
-    useExternalSecretsManager &&
-    draft.scope === "static" &&
-    draft.value.length > 0;
 
   const valueRequired = draft.scope === "static" && !hasStoredSecret;
   const canSubmit =
@@ -177,10 +164,6 @@ export function SecretFileDialog({
           <StaticValueEditor
             draft={draft}
             hasStoredSecret={hasStoredSecret}
-            isVaultRef={isVaultRef}
-            useExternalSecretsManager={useExternalSecretsManager}
-            onOpenVault={() => setVaultDialogOpen(true)}
-            onClearVault={() => updateDraft({ value: "" })}
             onValueChange={(value) => updateDraft({ value })}
           />
         )}
@@ -212,18 +195,6 @@ export function SecretFileDialog({
           />
         </div>
       </div>
-
-      {useExternalSecretsManager && vaultDialogOpen && (
-        <VaultPickerDialog
-          envKey={trimmedKey || "field"}
-          initialValue={isVaultRef ? draft.value : undefined}
-          onClose={() => setVaultDialogOpen(false)}
-          onConfirm={(ref) => {
-            updateDraft({ value: ref });
-            setVaultDialogOpen(false);
-          }}
-        />
-      )}
     </StandardDialog>
   );
 }
@@ -249,62 +220,14 @@ function ScopeCallout({
 function StaticValueEditor({
   draft,
   hasStoredSecret,
-  isVaultRef,
-  useExternalSecretsManager,
-  onOpenVault,
-  onClearVault,
+
   onValueChange,
 }: {
   draft: SecretFileDraft;
   hasStoredSecret: boolean;
-  isVaultRef: boolean;
-  useExternalSecretsManager: boolean;
-  onOpenVault: () => void;
-  onClearVault: () => void;
+
   onValueChange: (value: string) => void;
 }) {
-  if (useExternalSecretsManager) {
-    return (
-      <div className="space-y-2">
-        <Label>Vault secret</Label>
-        {isVaultRef ? (
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="font-mono text-green-600 hover:text-green-700"
-              onClick={onOpenVault}
-            >
-              <CheckCircle2 className="h-3 w-3 mr-1" />
-              <span className="truncate max-w-[200px]">
-                {parseVaultReference(draft.value).key}
-              </span>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onClearVault}
-            >
-              Clear
-            </Button>
-          </div>
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onOpenVault}
-          >
-            <Key className="h-3 w-3 mr-1" />
-            Set secret
-          </Button>
-        )}
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-2">
       <Label htmlFor="secret-file-value">File contents</Label>
@@ -323,80 +246,5 @@ function StaticValueEditor({
         className="font-mono text-xs"
       />
     </div>
-  );
-}
-
-function VaultPickerDialog({
-  envKey,
-  initialValue,
-  onClose,
-  onConfirm,
-}: {
-  envKey: string;
-  initialValue: string | undefined;
-  onClose: () => void;
-  onConfirm: (ref: string) => void;
-}) {
-  const parsed = initialValue ? parseVaultReference(initialValue) : null;
-  const [teamId, setTeamId] = useState<string | null>(null);
-  const [secretPath, setSecretPath] = useState<string | null>(
-    parsed?.path ?? null,
-  );
-  const [secretKey, setSecretKey] = useState<string | null>(
-    parsed?.key ?? null,
-  );
-
-  return (
-    <StandardDialog
-      open
-      onOpenChange={(next) => {
-        if (!next) onClose();
-      }}
-      size="small"
-      title={
-        <span className="flex items-center gap-2">
-          <Key className="h-5 w-5" />
-          Set external secret
-          <span className="font-mono text-muted-foreground">{envKey}</span>
-        </span>
-      }
-      description="Select a secret from your team's external Vault to use for this file."
-      footer={
-        <>
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={() => {
-              if (secretPath && secretKey) {
-                onConfirm(`${secretPath}#${secretKey}`);
-              }
-            }}
-            disabled={!secretPath || !secretKey}
-          >
-            Confirm
-          </Button>
-        </>
-      }
-    >
-      <Suspense
-        fallback={
-          <div className="flex h-24 items-center justify-center text-muted-foreground">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Loading...
-          </div>
-        }
-      >
-        <ExternalSecretSelector
-          selectedTeamId={teamId}
-          selectedSecretPath={secretPath}
-          selectedSecretKey={secretKey}
-          onTeamChange={setTeamId}
-          onSecretChange={setSecretPath}
-          onSecretKeyChange={setSecretKey}
-        />
-      </Suspense>
-    </StandardDialog>
   );
 }

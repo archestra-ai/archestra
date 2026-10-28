@@ -1,6 +1,8 @@
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { threadStates } from "@/openappa/thread-state";
 import { deleteExpiredUnenforcedRecords } from "@/openappa/unenforced";
+import { handleJiraChatOpsEvent } from "@/services/jira-chatops-events";
+import { pollJiraChatOps } from "@/services/jira-chatops-poll";
 import {
   checkDueAppaGithubSyncs,
   syncAppaGithubPolicy,
@@ -34,6 +36,11 @@ import { handleSkillGithubSync } from "./skill-github-sync-handler";
 import { handleSkillPublicationBackfill } from "./skill-publication-backfill-handler";
 
 export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
+  taskQueueService.registerHandler("jira_chatops_poll", pollJiraChatOps);
+  taskQueueService.registerHandler(
+    "jira_chatops_event",
+    handleJiraChatOpsEvent,
+  );
   taskQueueService.registerHandler(
     "agent_run_attention_notice",
     handleAgentRunAttentionNotice,

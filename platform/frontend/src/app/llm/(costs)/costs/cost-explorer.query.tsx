@@ -309,10 +309,13 @@ export function useKpis({
   }, [statistics.data, statistics.isPending]);
 }
 
-export const formatCost = (n: number) =>
-  n >= 1000
-    ? `$${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k`
-    : `$${n.toFixed(2)}`;
+export const formatCost = (n: number) => {
+  const value = Math.abs(n);
+  const sign = n < 0 ? "-" : "";
+  return value >= 1000
+    ? `${sign}$${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)}k`
+    : `${sign}$${value.toFixed(value > 0 && value < 0.01 ? 6 : 2)}`;
+};
 
 export const formatCompact = (n: number) =>
   new Intl.NumberFormat("en-US", {

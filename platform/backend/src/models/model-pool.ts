@@ -1,7 +1,7 @@
 import { TimeInMs } from "@archestra/shared";
 import { and, asc, eq, getTableColumns, inArray } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
-import db, { schema, type Transaction } from "@/database";
+import db, { schema } from "@/database";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type { ModelPool, ModelPoolInput, ModelPoolMember } from "@/types";
 
@@ -103,7 +103,7 @@ class ModelPoolModel {
     organizationId: string;
     input: ModelPoolInput;
   }): Promise<ModelPool> {
-    const { members, virtualApiKeyIds, ...fields } = params.input;
+    const { members, ...fields } = params.input;
     const id = await db.transaction(async (tx) => {
       const [pool] = await tx
         .insert(schema.modelPoolsTable)
@@ -112,7 +112,6 @@ class ModelPoolModel {
       await tx
         .insert(schema.modelPoolMembersTable)
         .values(members.map((member) => ({ ...member, poolId: pool.id })));
-      await insertVirtualApiKeys(tx, pool.id, virtualApiKeyIds);
       return pool.id;
     });
     forgetOrganization(params.organizationId);
@@ -122,13 +121,13 @@ class ModelPoolModel {
     })) as ModelPool;
   }
 
-  /** Replaces the pool's fields, its whole member list and its virtual keys. */
+  /** Replaces the pool's fields and its whole member list. */
   static async update(params: {
     organizationId: string;
     id: string;
     input: ModelPoolInput;
   }): Promise<ModelPool | null> {
-    const { members, virtualApiKeyIds, ...fields } = params.input;
+    const { members, ...fields } = params.input;
     const updated = await db.transaction(async (tx) => {
       const [pool] = await tx
         .update(schema.modelPoolsTable)
@@ -147,14 +146,40 @@ class ModelPoolModel {
       await tx
         .insert(schema.modelPoolMembersTable)
         .values(members.map((member) => ({ ...member, poolId: pool.id })));
-      await tx
-        .delete(schema.modelPoolVirtualApiKeysTable)
-        .where(eq(schema.modelPoolVirtualApiKeysTable.poolId, pool.id));
-      await insertVirtualApiKeys(tx, pool.id, virtualApiKeyIds);
       return true;
     });
     forgetOrganization(params.organizationId);
     return updated ? ModelPoolModel.findById(params) : null;
+  }
+
+  /**
+   * Sets the pools one virtual key may call by name, replacing its current
+   * ones. The caller checks the pools are the organization's.
+   */
+  static async setPoolsForVirtualApiKey(params: {
+    organizationId: string;
+    virtualApiKeyId: string;
+    poolIds: string[];
+  }): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(schema.modelPoolVirtualApiKeysTable)
+        .where(
+          eq(
+            schema.modelPoolVirtualApiKeysTable.virtualApiKeyId,
+            params.virtualApiKeyId,
+          ),
+        );
+      if (params.poolIds.length > 0) {
+        await tx.insert(schema.modelPoolVirtualApiKeysTable).values(
+          [...new Set(params.poolIds)].map((poolId) => ({
+            poolId,
+            virtualApiKeyId: params.virtualApiKeyId,
+          })),
+        );
+      }
+    });
+    forgetOrganization(params.organizationId);
   }
 
   static async delete(params: {
@@ -246,20 +271,6 @@ const byNameCache = registerProcessLocalCache(
 
 function forgetOrganization(organizationId: string): void {
   byNameCache.deleteByPrefix(`${organizationId}:`);
-}
-
-async function insertVirtualApiKeys(
-  tx: Transaction,
-  poolId: string,
-  virtualApiKeyIds: string[],
-): Promise<void> {
-  if (virtualApiKeyIds.length === 0) return;
-  await tx.insert(schema.modelPoolVirtualApiKeysTable).values(
-    [...new Set(virtualApiKeyIds)].map((virtualApiKeyId) => ({
-      poolId,
-      virtualApiKeyId,
-    })),
-  );
 }
 
 export default ModelPoolModel;

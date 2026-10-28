@@ -2893,6 +2893,182 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
   });
 
+  test("block mode governs Claude Desktop sessions, isolates headerless Chat conversations, and rejects headerless requests without a conversation identity", async () => {
+    await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
+    const probe = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "user-agent": "ClaudeDesktop/1.0.0",
+      },
+      payload: {
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1,
+        metadata: {
+          user_id:
+            "user_0123456789abcdef_account__session_11111111-2222-3333-4444-555555555555",
+        },
+        messages: [{ role: "user", content: "hi" }],
+      },
+    });
+    expect(probe.statusCode, probe.body).toBe(200);
+    expect(events).toEqual([]);
+
+    options = {
+      includeToolUse: true,
+      streamStopReason: "tool_use",
+      nonStreamingToolUse: { name: "get_weather", input: { location: "SF" } },
+    };
+    const governed = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "x-archestra-agent-id": "anthropic_claude_desktop",
+        "x-claude-code-session-id": "desktop-session",
+      },
+      payload: payload(false) as Record<string, unknown>,
+    });
+    expect(governed.statusCode, governed.body).toBe(200);
+    const callerId = `user:${userId}`;
+    expect(events.filter((event) => event.event === "session_start")).toEqual([
+      expect.objectContaining({
+        organization_id: agent.organizationId,
+        caller_id: callerId,
+        session_id: `${callerId}|desktop-session`,
+      }),
+    ]);
+
+    // Two headerless Desktop Chat conversations with the exact same system prompt
+    // and opening user message bind isolated client-supplied conversation roots,
+    // never merging on prompt content.
+    block = true;
+    const sharedOpeningMessages = [
+      { role: "user", content: "Check the weather in SF" },
+    ];
+    const chatOneDenied = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "user-agent": "ClaudeDesktop/1.0.0",
+      },
+      payload: {
+        ...(payload(false, sharedOpeningMessages) as Record<string, unknown>),
+        system: "You are Claude.",
+        metadata: { conversation_id: "desktop-chat-1" },
+      },
+    });
+    expect(chatOneDenied.statusCode, chatOneDenied.body).toBe(200);
+    expect(
+      (
+        chatOneDenied.json().content as Array<{ type: string; name?: string }>
+      ).some(
+        (block) => block.type === "tool_use" && block.name === "get_weather",
+      ),
+    ).toBe(false);
+
+    const startsAfterChatOne = events.filter(
+      (event) => event.event === "session_start",
+    );
+    expect(startsAfterChatOne).toHaveLength(2);
+    const chatOneSessionId = String(startsAfterChatOne[1]?.session_id);
+    expect(chatOneSessionId).toBe(`user:${userId}|desktop-chat-1`);
+
+    // Superyelling the first Chat conversation exempts its own follow-up turn
+    // without disabling enforcement for a second headerless Chat conversation
+    // that shares the exact same system prompt and opening message.
+    await OpenAppaUnenforcedModel.recordSession({
+      organizationId: agent.organizationId,
+      sessionId: chatOneSessionId,
+      parentId: undefined,
+      reason: "superyell",
+    });
+
+    const chatOneFollowUp = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "user-agent": "ClaudeDesktop/1.0.0",
+      },
+      payload: {
+        ...(payload(false, [
+          ...sharedOpeningMessages,
+          { role: "assistant", content: "I could not run that tool." },
+          { role: "user", content: "Try again after disabling guardrails" },
+        ]) as Record<string, unknown>),
+        system: "You are Claude.",
+        metadata: { conversation_id: "desktop-chat-1" },
+      },
+    });
+    expect(chatOneFollowUp.statusCode, chatOneFollowUp.body).toBe(200);
+    expect(
+      (
+        chatOneFollowUp.json().content as Array<{ type: string; name?: string }>
+      ).some(
+        (block) => block.type === "tool_use" && block.name === "get_weather",
+      ),
+    ).toBe(true);
+
+    const chatTwoDenied = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "x-archestra-agent-id": "anthropic_claude_desktop",
+      },
+      payload: {
+        ...(payload(false, sharedOpeningMessages) as Record<string, unknown>),
+        system: "You are Claude.",
+        metadata: { conversation_id: "desktop-chat-2" },
+      },
+    });
+    expect(chatTwoDenied.statusCode, chatTwoDenied.body).toBe(200);
+    expect(
+      (
+        chatTwoDenied.json().content as Array<{ type: string; name?: string }>
+      ).some(
+        (block) => block.type === "tool_use" && block.name === "get_weather",
+      ),
+    ).toBe(false);
+
+    const startsAfterChatTwo = events.filter(
+      (event) => event.event === "session_start",
+    );
+    expect(startsAfterChatTwo).toHaveLength(3);
+    const chatTwoSessionId = String(startsAfterChatTwo[2]?.session_id);
+    expect(chatTwoSessionId).toBe(`user:${userId}|desktop-chat-2`);
+    expect(chatTwoSessionId).not.toBe(chatOneSessionId);
+
+    // A headerless Desktop request without a client-supplied conversation identifier
+    // is rejected as unsupported in block mode even when prompt content is present.
+    const unidentifiable = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "x-archestra-agent-id": "anthropic_claude_desktop",
+      },
+      payload: {
+        ...(payload(false, sharedOpeningMessages) as Record<string, unknown>),
+        system: "You are Claude.",
+      },
+    });
+    expect(unidentifiable.statusCode).toBe(400);
+    expect(unidentifiable.json().error.message).toContain(
+      "OpenAPPA does not recognize this client",
+    );
+  });
+
   test("an encrypted chat that started while the switch was off stays unenforced; a new one requires a key and escrow", async ({
     makeConversation,
   }) => {

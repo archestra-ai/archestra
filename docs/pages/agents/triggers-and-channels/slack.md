@@ -40,22 +40,39 @@ With an HTTPS address, installing a new bot is one click: Slack sends you back t
 
 ## Network Access
 
-With open outbound internet access, there is nothing to set up. Behind an egress allowlist or firewall, let the Archestra backend reach these Slack hosts over HTTPS and secure WebSocket (`wss://`) on TCP 443:
+If Archestra can reach the internet freely, there is nothing to set up. If your firewall lets Archestra connect only to approved addresses, allow these two, on port 443 (HTTPS):
 
-| Host | Connection mode | Used for |
+- `slack.com`
+- `*.slack.com`
+
+You need both entries. The wildcard entry, written with `*`, covers addresses such as `files.slack.com`, but many firewalls do not let it cover `slack.com` itself. Without `slack.com`, every request to Slack is blocked, and connecting Slack fails or never finishes.
+
+The `api.slack.com` links in the setup steps open in your own browser. The Archestra server never connects to that address, so you do not need to allow it.
+
+### Exact Addresses
+
+Use this list when your firewall does not accept wildcards. Socket Mode does not work reliably this way: Slack hands Archestra its connection address each time it connects, the address can change, and Slack publishes no full list. Use Webhook Mode instead, which needs Slack to reach Archestra from the internet (see [Incoming Connections](#incoming-connections)).
+
+Archestra connects to these Slack addresses, all on port 443:
+
+| Address | Connection mode | What it is for |
 | --- | --- | --- |
-| `slack.com` | Both | Every Slack API call: checking tokens when you connect, creating bots, reading and posting messages |
-| WebSocket hosts under `slack.com`, such as `wss-primary.slack.com` and `wss-backup.slack.com` | Socket Mode | The WebSocket that receives events |
-| `files.slack.com`, `files-origin.slack.com` | Both | Reading files people post, and uploading files the agent sends |
-| `hooks.slack.com` | Socket Mode | Slash command replies that miss Slack's three-second window or cannot go over the WebSocket |
-
-Socket Mode needs no inbound access. Webhook Mode also needs Slack to reach your Archestra URL over HTTPS, or [`ARCHESTRA_CHATOPS_WEBHOOK_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_CHATOPS_WEBHOOK_BASE_URL) when the web app is private. The `api.slack.com` links in the setup steps open in your browser, so the backend does not need that host.
+| `slack.com` | Both | Every request to Slack: checking your tokens, creating bots, and reading and posting messages |
+| `files.slack.com` and `files-origin.slack.com` | Both | Reading files people post, and uploading files the agent sends. Slack can forward a download from the first address to the second, so allow both. |
+| `hooks.slack.com` | Socket Mode | Answering a slash command when the reply is slow, or the connection to Slack is briefly down |
+| Socket Mode connection addresses, such as `wss-primary.slack.com` and `wss-backup.slack.com` | Socket Mode | The connection Archestra keeps open so Slack can send it new messages |
 
 What to know:
 
-- **Apex host:** allow `slack.com` by name. Many wildcard rules, such as `*.slack.com`, do not match `slack.com` itself, so the API stays blocked and Archestra cannot check your tokens.
-- **WebSocket hosts:** Slack hands out a new [Socket Mode](https://docs.slack.dev/apis/events-api/using-socket-mode/) URL on every connection and publishes no fixed host list. Add `*.slack.com` next to `slack.com`, or use Webhook Mode if your firewall cannot allow a wildcard. A firewall that decrypts TLS must pass WebSockets through.
-- **Files:** when only `slack.com` is allowed, the bot still answers, but the agent is told it did not get the files, and files it sends fail. Allow both file hosts: Slack redirects downloads from `files.slack.com` to `files-origin.slack.com`.
+- **Blocked file addresses:** the bot still answers, but the agent is told it could not read the files people post, and files it sends do not arrive.
+- **HTTPS inspection:** a firewall that decrypts HTTPS traffic, often called TLS inspection or SSL decryption, can break the Socket Mode connection. That connection uses WebSockets, which stay open for a long time, so the firewall must support WebSockets or skip inspection for `*.slack.com`.
+
+### Incoming Connections
+
+What Slack needs to reach depends on the connection mode under **Advanced**:
+
+- **Socket Mode:** nothing. Archestra opens the connection to Slack, so you do not open any port to traffic from the internet.
+- **Webhook Mode:** Slack sends each new message to your Archestra address over HTTPS, so that address must be reachable from the internet. To keep the Archestra web app off the internet, set [`ARCHESTRA_CHATOPS_WEBHOOK_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_CHATOPS_WEBHOOK_BASE_URL) to a public address for Slack to use. Archestra still connects to `slack.com` and the file addresses to post replies and read files.
 
 <span id="usage"></span><span id="first-message"></span><span id="default-agent"></span><span id="replying-within-a-thread"></span><span id="answering-every-message"></span>
 
@@ -111,5 +128,5 @@ Bots also read the channel's description from Slack, to know what the channel is
 | **"Needs reinstall"** | Open the app's Slack page from the bot's row, click **Reinstall to Workspace**, then **Check again**. |
 | **Slack shows a server error after approving the install** | The install often went through anyway. Open the app's **OAuth & Permissions** page; if a bot token is there, paste it in **Finish setup**. |
 | **"Request verification failed"** | Webhook mode only. Check the signing secret on the app's **Basic Information** page, and your server's clock. |
-| **Socket mode disconnects** | Check that the app-level token has the `connections:write` scope, and that Archestra can reach [Slack's hosts](#network-access). It connects again on its own. |
+| **Socket mode disconnects** | Check that the app-level token has the `connections:write` scope, and that Archestra can reach [Slack's addresses](#network-access). It connects again on its own. |
 | **"Could not verify your identity"** | The app needs the `users:read` and `users:read.email` scopes. Reinstall it from its Slack page. |

@@ -168,5 +168,14 @@ describe("PoolDialog", () => {
     expect(screen.getAllByRole("spinbutton", { name: /Weight/ })).toHaveLength(
       5,
     );
+
+    // An order holding a value that keeps Save off won't fold away.
+    const lastWeight = screen.getAllByRole("spinbutton", { name: /Weight/ })[4];
+    await user.clear(lastWeight);
+    await user.click(screen.getByRole("button", { name: "Collapse all" }));
+    expect(screen.getAllByRole("spinbutton", { name: /Weight/ })).toHaveLength(
+      3,
+    );
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
   });
 });

@@ -33,7 +33,8 @@ const modelPoolsTable = pgTable(
      */
     timeoutSeconds: integer("timeout_seconds"),
     /**
-     * Seconds a failed member is skipped without a usable Retry-After
+     * Shortest time in seconds a failed member is skipped; a longer
+     * Retry-After extends it up to 60 s or this, whichever is longer
      * (LiteLLM's `cooldown_time`). Null keeps the default.
      */
     cooldownSeconds: integer("cooldown_seconds"),

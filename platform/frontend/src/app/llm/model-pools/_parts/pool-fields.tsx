@@ -24,6 +24,7 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { suggestModelId } from "./model-name";
 import {
   isValidSeconds,
+  MAX_SECONDS,
   type PoolForm,
   type PoolOptions,
   type PoolTiming,
@@ -227,7 +228,9 @@ function SecondsField({
         >
           {label}
         </Label>
-        <HelpTip topic={label}>{children}</HelpTip>
+        <HelpTip topic={label}>
+          {children} At most {MAX_SECONDS[name]} s.
+        </HelpTip>
       </span>
       <Controller
         control={form.control}

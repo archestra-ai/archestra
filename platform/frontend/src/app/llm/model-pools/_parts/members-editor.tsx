@@ -39,7 +39,7 @@ import { cn } from "@/lib/utils/tailwind";
 import { MEMBER_COLUMNS, type MemberFields, MemberRow } from "./member-row";
 import { FoldedCooldown } from "./member-status";
 import { HelpTip } from "./pool-fields";
-import type { PoolOptions } from "./pool-form";
+import { isValidWeight, type PoolOptions } from "./pool-form";
 import {
   type OrderBucket,
   type OrderMember,
@@ -123,8 +123,11 @@ export function MembersEditor(props: MemberFields) {
   const canDrag = !disabled && count > 1;
   // A single order has nothing to fold away from.
   const canFold = buckets.length > 1;
+  // An order stays open while a member keeps Save off, so the fix is in view.
   const isFolded = (bucket: OrderBucket) =>
-    canFold && idsOf(bucket).every((id) => foldedIds.has(id));
+    canFold &&
+    !bucket.members.some(needsFixing) &&
+    idsOf(bucket).every((id) => foldedIds.has(id));
   const anyFolded = buckets.some(isFolded);
   const setFolded = (bucket: OrderBucket, folded: boolean) => {
     const next = new Set(foldedIds);
@@ -273,6 +276,15 @@ export function MembersEditor(props: MemberFields) {
         </DndContext>
       )}
     </div>
+  );
+}
+
+function needsFixing({ member, repeatsOrder }: OrderMember): boolean {
+  return (
+    !member.providerApiKeyId ||
+    !member.modelId.trim() ||
+    !isValidWeight(member.weight) ||
+    repeatsOrder !== null
   );
 }
 

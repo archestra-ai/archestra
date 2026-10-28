@@ -114,6 +114,10 @@ const RUNNING: Record<string, McpDeploymentStatusEntry> = Object.fromEntries(
 function renderConsole(
   tab: McpServerConsoleTab,
   installs: McpLogsInstall[] = [MINE, SHARED, THEIRS],
+  options: {
+    deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
+    hasPods?: boolean;
+  } = {},
 ) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
@@ -121,8 +125,9 @@ function renderConsole(
         tab={tab}
         serverName="Orbit Tracker"
         installs={installs}
-        deploymentStatuses={RUNNING}
+        deploymentStatuses={options.deploymentStatuses ?? RUNNING}
         initialServerId={null}
+        hasPods={options.hasPods}
       />
     </QueryClientProvider>,
   );
@@ -166,6 +171,43 @@ describe("McpServerConsole", () => {
     expect(
       await screen.findByText("No connection of yours to inspect"),
     ).toBeInTheDocument();
+    await waitFor(() => expect(inspect).not.toHaveBeenCalled());
+  });
+
+  it("lists a remote server's tools without waiting for a pod", async () => {
+    // A remote connection is an upstream URL: no deployment ever reports it
+    // running, so the Inspector must connect straight away.
+    const listTools = vi.fn(() =>
+      HttpResponse.json({
+        tools: [
+          {
+            name: "search_docs",
+            description: "Search the documentation",
+            inputSchema: { type: "object", properties: {} },
+          },
+        ],
+      }),
+    );
+    server.use(
+      http.post(`${API_ORIGIN}/api/mcp_server/:id/inspect`, listTools),
+    );
+    renderConsole("inspector", [MINE], {
+      deploymentStatuses: {},
+      hasPods: false,
+    });
+
+    expect((await screen.findAllByText("search_docs")).length).toBeGreaterThan(
+      0,
+    );
+    expect(listTools).toHaveBeenCalled();
+    expect(screen.queryByText(/Pod is starting/)).toBeNull();
+    expect(screen.queryByText("Starting")).toBeNull();
+  });
+
+  it("waits for a local server's pod before inspecting it", async () => {
+    renderConsole("inspector", [MINE], { deploymentStatuses: {} });
+
+    expect(await screen.findByText(/Pod is starting/)).toBeInTheDocument();
     await waitFor(() => expect(inspect).not.toHaveBeenCalled());
   });
 

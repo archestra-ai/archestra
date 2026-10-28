@@ -818,6 +818,7 @@ function CatalogItemDetails({
             installs={debugInstalls}
             deploymentStatuses={deploymentStatuses}
             initialServerId={logsServerId}
+            hasPods={variant === "local"}
           />
         )}
 

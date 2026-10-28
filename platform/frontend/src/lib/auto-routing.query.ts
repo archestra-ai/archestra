@@ -132,7 +132,7 @@ export function useReplanAutoRouting() {
   });
 }
 
-/** The response already carries the fit's outcome; only the plan lists need refetching. */
+/** The response already carries the fit's outcome; plan lists and the backfill's fit state need refetching. */
 async function applyFit(
   queryClient: QueryClient,
   data: AutoRoutingSettingsChange | undefined,
@@ -143,6 +143,7 @@ async function applyFit(
     queryClient.invalidateQueries({ queryKey: autoRoutingKeys.plans() }),
     queryClient.invalidateQueries({ queryKey: autoRoutingKeys.planDetails() }),
     queryClient.invalidateQueries({ queryKey: autoRoutingKeys.simulations() }),
+    queryClient.invalidateQueries({ queryKey: autoRoutingKeys.backfill() }),
   ]);
   switch (data.fit?.status) {
     case undefined:

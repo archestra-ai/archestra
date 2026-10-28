@@ -392,6 +392,63 @@ it("deduplicates overview and model chart requests without eagerly fetching user
   expect(requests).toBe(1);
 });
 
+it("waits for a captured label key before requesting label groups and clears stale groups without a key", async () => {
+  const queries: URLSearchParams[] = [];
+  const totals = {
+    requests: 1,
+    inputTokens: 10,
+    outputTokens: 5,
+    cacheReadTokens: 0,
+    billedCost: 2,
+    subscriptionCost: 0,
+    failedOverAttempts: 0,
+  };
+  server.use(
+    http.get(`${origin}/api/statistics/llm-proxy`, ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      queries.push(query);
+      return HttpResponse.json({
+        totals,
+        timeSeries: [],
+        labels: {
+          groups: [{ value: "engineering", ...totals }],
+          pagination: { limit: 100, offset: 0, total: 1 },
+        },
+      });
+    }),
+  );
+  const { result, rerender } = renderHook(
+    ({ labelKey }: { labelKey?: string }) =>
+      usePivotCube(
+        {
+          metric: "billed",
+          group: "label",
+          split: "none",
+          chart: "bars",
+          labelKey,
+        },
+        "30d",
+        true,
+      ),
+    { wrapper, initialProps: { labelKey: undefined as string | undefined } },
+  );
+  expect(result.current.rows).toEqual([]);
+  expect(result.current.isLoading).toBe(false);
+  expect(result.current.api).toContain("includeLabelKeys=true");
+  expect(queries).toEqual([]);
+
+  rerender({ labelKey: "department" });
+  await waitFor(() => expect(result.current.total).toBe(2));
+  expect(result.current.rows.map((row) => row.label)).toEqual(["engineering"]);
+  expect(queries.every((query) => query.get("labelKey") === "department")).toBe(
+    true,
+  );
+
+  rerender({ labelKey: undefined });
+  expect(result.current.rows).toEqual([]);
+  expect(result.current.api).not.toContain("labelKey=");
+});
+
 it("groups proxy usage by provider key and pool and shows failed-over attempts", async () => {
   const usage = {
     inputTokens: 0,

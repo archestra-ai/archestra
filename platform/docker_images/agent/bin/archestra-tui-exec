@@ -95,9 +95,10 @@ def capture_frame(frame_file: Path) -> None:
     pane = os.environ.get("TMUX_PANE")
     if not pane:
         return
-    # -N keeps each line's trailing cells. Trimmed, a background that reaches
-    # the line's end (a client's highlighted prompt) stopped at its last
-    # character, and the blank rows inside it lost it.
+    # -N keeps the spaces a client wrote at a line's end, so a highlighted
+    # prompt written out to the pane's edge keeps its background. tmux still
+    # drops cells that an erase to the line's end cleared; the run page's
+    # player restores those.
     result = subprocess.run(
         ["tmux", "capture-pane", "-p", "-e", "-N", "-t", pane],
         check=False,

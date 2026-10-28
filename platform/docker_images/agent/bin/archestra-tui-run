@@ -66,8 +66,9 @@ watch_for_completion() {
         else
           : > "${completed_frame}"
         fi
-        # -N keeps each line's trailing cells, so a background that reaches
-        # the line's end survives the capture.
+        # -N keeps the spaces a client wrote at a line's end, so their
+        # background survives the capture. Cells that an erase cleared are
+        # still dropped; the run page's player restores those.
         tmux capture-pane -p -e -N -t "${TMUX_PANE}" \
           | sed '/?1;2c/d' \
           >> "${completed_frame}" || true

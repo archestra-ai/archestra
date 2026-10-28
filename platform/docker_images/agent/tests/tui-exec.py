@@ -80,7 +80,7 @@ class TuiExecTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             client = (
-                "printf '\\033[48;5;235mab\\033[K\\033[0m\\n'; "
+                "printf '\\033[48;5;235mab%38s\\033[0m\\n' ''; "
                 'touch "$1/turn-complete.failed" "$1/turn-complete"; '
                 "trap 'exit 0' TERM; while :; do sleep 0.05; done"
             )

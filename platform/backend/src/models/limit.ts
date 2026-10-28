@@ -2144,8 +2144,8 @@ export class LimitValidationService {
 
   /**
    * Check if current token cost usage has exceeded limits for a specific entity,
-   * using data already loaded by {@link prefetchEntityLimits}. Pure in-memory
-   * evaluation — issues no queries of its own.
+   * using data already loaded by {@link prefetchEntityLimits}. On a violation,
+   * a best-effort query resolves the target's display name for the response.
    */
   private static async evaluateEntityLimits(
     entityType: LimitEntityType,
@@ -2718,6 +2718,21 @@ function buildAfterUsageResetCondition(params: {
 // This query runs only after a budget rejection. A readable target is more
 // useful to the caller than a database ID, especially for team budgets.
 async function resolveLimitEntityName(
+  entityType: LimitEntityType,
+  entityId: string,
+): Promise<string | undefined> {
+  try {
+    return await readLimitEntityName(entityType, entityId);
+  } catch (error) {
+    logger.warn(
+      { error, entityType, entityId },
+      "Could not resolve the name of a limit target",
+    );
+    return undefined;
+  }
+}
+
+async function readLimitEntityName(
   entityType: LimitEntityType,
   entityId: string,
 ): Promise<string | undefined> {

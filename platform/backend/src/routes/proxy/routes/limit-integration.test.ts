@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type OpenAI from "openai";
 import { vi } from "vitest";
-import db, { schema } from "@/database";
+import db, { __setTestDb, getDb, schema } from "@/database";
 import {
   EnvironmentDefaultUserLimitModel,
   EnvironmentModel,
@@ -122,6 +122,35 @@ describe("LLM proxy limit enforcement (integration)", () => {
     return harness;
   }
 
+  async function withFailedEntityNameLookup<T>(
+    fieldName: string,
+    column: unknown,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    const activeDb = getDb();
+    const select = activeDb.select.bind(activeDb);
+    __setTestDb(
+      new Proxy(activeDb, {
+        get(target, property) {
+          if (property === "select") {
+            return (fields?: Record<string, unknown>) => {
+              if (fields?.[fieldName] === column) {
+                throw new Error("Simulated display-name lookup failure");
+              }
+              return select(fields as never);
+            };
+          }
+          return Reflect.get(target, property);
+        },
+      }),
+    );
+    try {
+      return await run();
+    } finally {
+      __setTestDb(activeDb);
+    }
+  }
+
   test("blocks request with 402 when virtual_key limit is exceeded", async ({
     makeAgent,
     makeOrganization,
@@ -191,6 +220,27 @@ describe("LLM proxy limit enforcement (integration)", () => {
       'Affected virtual key: "Test VK for limit".',
     );
     expect(response.json().error.message).toContain("Limit: $1.00");
+
+    const withoutName = await withFailedEntityNameLookup(
+      "name",
+      schema.virtualApiKeysTable.name,
+      () =>
+        app.inject({
+          method: "POST",
+          url: OPENAI_ENDPOINT(agent.id),
+          headers: OPENAI_HEADERS(`Bearer ${tokenValue}`),
+          payload: SIMPLE_PAYLOAD(),
+        }),
+    );
+    expect(withoutName.statusCode).toBe(402);
+    expect(withoutName.json().error.usage_limit).toMatchObject({
+      entity_type: "virtual_key",
+      source: "explicit",
+    });
+    expect(withoutName.json().error.usage_limit.entity_name).toBeUndefined();
+    expect(withoutName.json().error.message).toContain(
+      "Affected scope: virtual key.",
+    );
   });
 
   test("blocks request with 402 when user limit is exceeded", async ({
@@ -320,6 +370,32 @@ describe("LLM proxy limit enforcement (integration)", () => {
     expect(response.json().error.message).toContain(
       `Affected user: "${user.email}".`,
     );
+
+    const credential = await makePassthroughCredential({
+      organizationId: agent.organizationId,
+      ownerId: user.id,
+    });
+    const withoutName = await withFailedEntityNameLookup(
+      "email",
+      schema.usersTable.email,
+      () =>
+        app.inject({
+          method: "POST",
+          url: OPENAI_ENDPOINT(agent.id),
+          headers: {
+            ...OPENAI_HEADERS("Bearer test-key", credential),
+            "X-Archestra-User-Id": user.id,
+          },
+          payload: SIMPLE_PAYLOAD(),
+        }),
+    );
+    expect(withoutName.statusCode).toBe(402);
+    expect(withoutName.json().error.usage_limit).toMatchObject({
+      entity_type: "user",
+      source: "default_user",
+    });
+    expect(withoutName.json().error.usage_limit.entity_name).toBeUndefined();
+    expect(withoutName.json().error.message).toContain("Affected scope: user.");
   });
 
   test("uses custom user limit instead of default user limit", async ({

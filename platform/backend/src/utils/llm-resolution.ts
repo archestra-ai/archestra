@@ -1,7 +1,6 @@
 import {
   findTierDefault,
   isCompleteModelSelection,
-  isSharedGithubAppCredential,
   isSubscriptionCredential,
   type ModelInputModality,
   type ModelSelection,
@@ -532,22 +531,16 @@ export async function resolveConfiguredAgentLlm(
     // owner's personal token — never hand it to another user. Leave apiKey
     // undefined so resolveAgentLlmOrDefault falls through to per-user
     // resolution for the acting user.
-    if (apiKeyRecord.secretId) {
+    // An organization GitHub App key is shared; any other key on a per-user
+    // provider is its owner's token, and is not even read here.
+    const ownersToken =
+      providerRequiresPerUserCredential(apiKeyRecord.provider) &&
+      !(await LlmProviderApiKeyModel.isGithubAppKey(apiKeyRecord.id));
+    if (apiKeyRecord.secretId && !ownersToken) {
       const secret = await getSecretValueForLlmProviderApiKey(
         apiKeyRecord.secretId,
       );
       apiKey = (secret as string) ?? undefined;
-      // An organization GitHub App key is shared; any other key on a per-user
-      // provider is its owner's token.
-      if (
-        providerRequiresPerUserCredential(apiKeyRecord.provider) &&
-        !isSharedGithubAppCredential({
-          provider: apiKeyRecord.provider,
-          apiKey,
-        })
-      ) {
-        apiKey = undefined;
-      }
       // A subscription credential is likewise one person's token — per-user at
       // the KEY level on a provider that also takes API keys, only detectable
       // on the decrypted secret. This helper doesn't know the acting user, so

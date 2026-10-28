@@ -784,6 +784,39 @@ describe("resolveConfiguredAgentLlm", () => {
     expect(result?.apiKey).toBe("sk-plain");
   });
 
+  test("never reads a personal Copilot sign-in, but reads an organization's plan key", async () => {
+    vi.spyOn(ModelModel, "findById").mockResolvedValue(
+      mockModel({ id: "m-c", modelId: "gpt-4o", provider: "github-copilot" }),
+    );
+    const read = vi
+      .spyOn(secretsManager, "getSecretValueForLlmProviderApiKey")
+      .mockResolvedValue("github-app:plan");
+    const kind = vi.spyOn(LlmProviderApiKeyModel, "isGithubAppKey");
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
+      id: "key-personal",
+      provider: "github-copilot",
+      secretId: "secret-personal",
+      baseUrl: null,
+      inferenceBaseUrl: null,
+    } as never);
+
+    kind.mockResolvedValueOnce(false);
+    const personal = await resolveConfiguredAgentLlm({
+      llmApiKeyId: "key-personal",
+      modelId: "m-c",
+    });
+    expect(personal?.apiKey).toBeUndefined();
+    expect(read).not.toHaveBeenCalled();
+
+    kind.mockResolvedValueOnce(true);
+    const plan = await resolveConfiguredAgentLlm({
+      llmApiKeyId: "key-personal",
+      modelId: "m-c",
+    });
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(plan?.apiKey).toBe("github-app:plan");
+  });
+
   test("withholds a ChatGPT-subscription credential from this ownership-blind path", async () => {
     vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
       id: "key-codex",

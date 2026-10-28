@@ -1,16 +1,14 @@
 import { normalizeModelPrice } from "@archestra/shared/model-price";
 
 /**
- * Render a per-million token price for display.
+ * Render a per-million token price with at least two decimal places.
+ * Prices in the custom range use the stored eight-decimal rounding, trimming
+ * trailing zeros beyond two places: `2.50000000` becomes `2.50`, while
+ * `0.00600000` stays `0.006` rather than rounding to a cent.
  *
- * The API sends prices at full precision because cost is computed from them, so
- * a cent-rounded string would be a billing error rather than a rounding choice.
- * That leaves a bare `2.5` where a price column wants `2.50`, and a genuinely
- * sub-cent price like `0.035` that must not be flattened to `0.04`. Pad to two
- * decimals, keep any beyond that.
- *
- * Significant decimals are counted off a fixed-notation copy rather than the
- * incoming string, which arrives in exponential form for the smallest prices.
+ * Other finite prices use the fixed-notation fallback to count significant
+ * decimals, including values sent in exponential form. Unparseable input is
+ * returned unchanged.
  */
 export function formatPricePerMillion(price: string): string {
   const stored = normalizeModelPrice(price);

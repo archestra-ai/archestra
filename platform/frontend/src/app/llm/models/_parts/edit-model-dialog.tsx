@@ -50,6 +50,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { type ModelWithApiKeys, useUpdateModel } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import type { ModelCostBackfillPrices } from "@/lib/model-cost-backfill.query";
+import { formatPricePerMillion } from "@/lib/model-price-format";
 import { useOrganization } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { formatThousands } from "@/lib/utils/format-thousands";
@@ -1123,20 +1124,31 @@ function sameModalities(a: string[], b: string[]): boolean {
 
 function getDefaults(model: ModelWithApiKeys): EditModelFormValues {
   return {
-    customPricePerMillionInput: model.customPricePerMillionInput ?? "",
-    customPricePerMillionOutput: model.customPricePerMillionOutput ?? "",
-    customPricePerMillionCacheRead: model.customPricePerMillionCacheRead ?? "",
-    customPricePerMillionCacheWrite:
+    customPricePerMillionInput: formatPricePerMillion(
+      model.customPricePerMillionInput ?? "",
+    ),
+    customPricePerMillionOutput: formatPricePerMillion(
+      model.customPricePerMillionOutput ?? "",
+    ),
+    customPricePerMillionCacheRead: formatPricePerMillion(
+      model.customPricePerMillionCacheRead ?? "",
+    ),
+    customPricePerMillionCacheWrite: formatPricePerMillion(
       model.customPricePerMillionCacheWrite ?? "",
+    ),
     longContextThreshold: model.longContextThreshold?.toString() ?? "",
-    longContextPricePerMillionInput:
+    longContextPricePerMillionInput: formatPricePerMillion(
       model.longContextPricePerMillionInput ?? "",
-    longContextPricePerMillionOutput:
+    ),
+    longContextPricePerMillionOutput: formatPricePerMillion(
       model.longContextPricePerMillionOutput ?? "",
-    longContextPricePerMillionCacheRead:
+    ),
+    longContextPricePerMillionCacheRead: formatPricePerMillion(
       model.longContextPricePerMillionCacheRead ?? "",
-    longContextPricePerMillionCacheWrite:
+    ),
+    longContextPricePerMillionCacheWrite: formatPricePerMillion(
       model.longContextPricePerMillionCacheWrite ?? "",
+    ),
     customContextLength: model.customContextLength?.toString() ?? "",
     customOutputLength: model.customOutputLength?.toString() ?? "",
     ignored: model.ignored,

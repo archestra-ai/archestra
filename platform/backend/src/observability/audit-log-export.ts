@@ -22,9 +22,7 @@ export function exportAuditLog(row: AuditLog): void {
 }
 
 /** An explicit allowlist: snapshots and free text must never leak into export. */
-function auditLogAttributes(
-  row: AuditLog,
-): Record<string, string | number> {
+function auditLogAttributes(row: AuditLog): Record<string, string | number> {
   const attributes: Record<string, string | number> = {
     "event.name": `archestra.audit.${row.action}`,
     "log.record.uid": row.id,

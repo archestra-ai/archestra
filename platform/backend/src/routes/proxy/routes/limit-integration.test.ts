@@ -1049,10 +1049,15 @@ describe("LLM proxy limit enforcement (integration)", () => {
         code: "token_cost_limit_exceeded",
         usage_limit: {
           entity_type: "environment",
+          entity_name: "production",
           limit_type: "token_cost",
+          source: "explicit",
         },
       },
     });
+    expect(response.json().error.message).toContain(
+      'Affected environment: "production".',
+    );
   });
 
   test("does not apply an environment limit to an agent in a different environment", async ({
@@ -1169,10 +1174,15 @@ describe("LLM proxy limit enforcement (integration)", () => {
         code: "token_cost_limit_exceeded",
         usage_limit: {
           entity_type: "environment",
+          entity_name: "production",
           limit_type: "token_cost",
+          source: "default_user",
         },
       },
     });
+    expect(response.json().error.message).toContain(
+      'Affected environment: "production".',
+    );
   });
 
   test("per-environment default user limit overrides the org-wide default", async ({

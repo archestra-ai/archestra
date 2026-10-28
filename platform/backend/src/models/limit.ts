@@ -1760,8 +1760,12 @@ export class LimitValidationService {
           }
 
           return buildLimitViolationResponse({
+            source: "default_user",
             entityType: "environment",
-            entityId: params.environmentId,
+            entityName: await resolveLimitEntityName(
+              "environment",
+              params.environmentId,
+            ),
             limitValue: envDefault.limitValue,
             comparisonValue: usage.cost,
             limitDescription: "cost_dollars",
@@ -1797,10 +1801,7 @@ export class LimitValidationService {
       return buildLimitViolationResponse({
         source: "default_user",
         entityType: "user",
-        entityName: await resolveLimitEntityName(
-          "user",
-          params.userId,
-        ),
+        entityName: await resolveLimitEntityName("user", params.userId),
         limitValue: globalDefault.limitValue,
         comparisonValue: usage.cost,
         limitDescription: "cost_dollars",

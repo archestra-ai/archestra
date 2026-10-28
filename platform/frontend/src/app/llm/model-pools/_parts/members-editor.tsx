@@ -123,11 +123,12 @@ export function MembersEditor(props: MemberFields) {
   const canDrag = !disabled && count > 1;
   // A single order has nothing to fold away from.
   const canFold = buckets.length > 1;
-  // An order stays open while a member keeps Save off, so the fix is in view.
+  // An order can't fold while a member keeps Save off, so the fix stays in
+  // view, and it stays open once fixed.
+  const canFoldOrder = (bucket: OrderBucket) =>
+    canFold && !bucket.members.some(needsFixing);
   const isFolded = (bucket: OrderBucket) =>
-    canFold &&
-    !bucket.members.some(needsFixing) &&
-    idsOf(bucket).every((id) => foldedIds.has(id));
+    canFoldOrder(bucket) && idsOf(bucket).every((id) => foldedIds.has(id));
   const anyFolded = buckets.some(isFolded);
   const setFolded = (bucket: OrderBucket, folded: boolean) => {
     const next = new Set(foldedIds);
@@ -183,7 +184,7 @@ export function MembersEditor(props: MemberFields) {
             onClick={() =>
               setFoldedIds(
                 new Set(
-                  anyFolded ? [] : buckets.flatMap((bucket) => idsOf(bucket)),
+                  anyFolded ? [] : buckets.filter(canFoldOrder).flatMap(idsOf),
                 ),
               )
             }
@@ -244,7 +245,7 @@ export function MembersEditor(props: MemberFields) {
                   fields={props}
                   canDrag={canDrag}
                   canAdd={canAdd}
-                  canFold={canFold}
+                  canFold={canFoldOrder(bucket)}
                   folded={isFolded(bucket)}
                   onFold={(folded) => setFolded(bucket, folded)}
                   highlighted={

@@ -177,5 +177,10 @@ describe("PoolDialog", () => {
       3,
     );
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    // Fixed, it stays open until folded again.
+    await user.type(lastWeight, "2");
+    expect(screen.getAllByRole("spinbutton", { name: /Weight/ })).toHaveLength(
+      3,
+    );
   });
 });

@@ -346,8 +346,8 @@ describe("Kimi Code MCP gateway bridge", () => {
       return { protocolVersion: "2025-03-26", capabilities: {} };
     }, requests);
     const root = await mkdtemp(path.join(tmpdir(), "archestra-kimi-"));
+    const bridge = startBridge(root, gateway.url);
     try {
-      const bridge = startBridge(root, gateway.url);
       const initialize = await bridge.request({ method: "initialize" });
       expect(await gatewayState(root)).toBe("pending");
       const listed = await bridge.request({ method: "tools/list" });
@@ -355,7 +355,6 @@ describe("Kimi Code MCP gateway bridge", () => {
         method: "tools/call",
         params: { name: "archestra__get_remedy_plans", arguments: {} },
       });
-      bridge.close();
 
       expect(initialize.result).toMatchObject({ capabilities: {} });
       // Names and descriptions, attestation markers included, pass unchanged.
@@ -390,6 +389,8 @@ describe("Kimi Code MCP gateway bridge", () => {
         });
       }
     } finally {
+      // Closing stdin exits the bridge before it may have recorded the state.
+      bridge.close();
       await gateway.close();
       await rm(root, { recursive: true, force: true });
     }
@@ -411,15 +412,15 @@ describe("Kimi Code MCP gateway bridge", () => {
       [],
     );
     const root = await mkdtemp(path.join(tmpdir(), "archestra-kimi-"));
+    const bridge = startBridge(root, gateway.url);
     try {
-      const bridge = startBridge(root, gateway.url);
       await bridge.request({ method: "initialize" });
       const listed = await bridge.request({ method: "tools/list" });
-      bridge.close();
       // Kimi still receives an answer, so it never hangs on the request.
       expect(listed.error).toBeDefined();
       expect(await gatewayState(root)).toBe("failed");
     } finally {
+      bridge.close();
       await gateway.close();
       await rm(root, { recursive: true, force: true });
     }

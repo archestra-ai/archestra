@@ -1880,6 +1880,69 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
+  test("asks about a review_required result in a session with a long id", async () => {
+    // Agent-run sessions carry their caller's scope. Encoded with the result
+    // id, the question-asked key outgrew keyv_cache.key, and every request
+    // after review_required failed until the client gave up. The test
+    // organization id is shorter than a real one, so the session id makes up
+    // the difference.
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const sessionId = `service-account:${randomUUID()}|agent-run-${randomUUID()}-${randomUUID()}-${randomUUID()}`;
+    const context = requestContext({ sessionId });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request = {
+      tools: {
+        control: { name: "mcp__archestra__execute_remedy_plan" },
+        notice: { name: "mcp__archestra__get_remedy_plans" },
+        askUser: { name: "mcp__archestra__ask_user" },
+        platformToolNames: new Set(),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [],
+      session: {},
+    };
+    await stageHitlReview({
+      session: trusted.session,
+      review: { offerId: "offer-long", text: "Canonical HITL review." },
+    });
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const cacheSet = vi.spyOn(cacheManager, "set");
+    try {
+      await plugin.onSessionInit(context);
+      await expect(
+        plugin.onToolResults({
+          ...context,
+          toolResults: [
+            {
+              id: "toolu_bdrk_01Lumt8L3Mtc6Rz7zaD6LbUq",
+              name: "mcp__archestra__execute_remedy_plan",
+              content: JSON.stringify({
+                ok: false,
+                outcome: "review_required",
+                offer_id: "offer-long",
+              }),
+              isError: false,
+            },
+          ],
+        }),
+      ).resolves.toBeDefined();
+      const marker = cacheSet.mock.calls.find(([key]) =>
+        key.startsWith(`${CacheKey.OpenAppaHitlQuestionAsked}-`),
+      );
+      expect(marker).toBeDefined();
+      if (!marker) throw new Error("Missing question-asked marker");
+      expect(await cacheManager.get(marker[0])).toBe(true);
+    } finally {
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
   test("hands OpenCode the model's ask_user as its question tool", async () => {
     const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
     const context = requestContext({

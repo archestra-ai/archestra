@@ -368,13 +368,33 @@ function trailingMarker(text: string): AppaDelegationMarker | undefined {
   return {
     token: match[1],
     parentId: match[2],
-    promptDigest: digestOf(trimmed.slice(0, lineStart)),
+    promptDigest: digestOf(withoutClientPreamble(trimmed.slice(0, lineStart))),
     ...(token.spawnCallId ? { spawnCallId: token.spawnCallId } : {}),
     ...(token.runtimeSessionId
       ? { runtimeSessionId: token.runtimeSessionId }
       : {}),
   };
 }
+
+/**
+ * The spawn prompt without the repository summary Kimi Code puts in front of
+ * it when it starts a subagent: a `<git-context>` block and a blank line. Kimi
+ * Code builds the block from the working directory, remote, branch, changed
+ * files and recent commits, as Claude Code puts its git status in the system
+ * prompt; the model did not write it, so the marker does not sign it.
+ */
+function withoutClientPreamble(text: string): string {
+  const unavailable = KIMI_GIT_CONTEXT_UNAVAILABLE.exec(text);
+  if (unavailable) return text.slice(unavailable[0].length);
+  if (!text.startsWith(KIMI_GIT_CONTEXT_OPEN)) return text;
+  const end = text.indexOf(KIMI_GIT_CONTEXT_CLOSE);
+  return end === -1 ? text : text.slice(end + KIMI_GIT_CONTEXT_CLOSE.length);
+}
+
+const KIMI_GIT_CONTEXT_OPEN = "<git-context>\nWorking directory: ";
+const KIMI_GIT_CONTEXT_CLOSE = "\n</git-context>\n\n";
+const KIMI_GIT_CONTEXT_UNAVAILABLE =
+  /^<git-context status="unavailable" reason="[a-z-]+"\/>\n\n/;
 
 /**
  * The text a marker may end: the text itself, or the body of the teammate

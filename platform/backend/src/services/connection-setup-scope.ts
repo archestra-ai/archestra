@@ -15,6 +15,7 @@ const PROVENANCE_TO_CLIENT_ID: Partial<
   "claude-desktop-metadata": "claude-desktop",
   "codex-turn-metadata": "codex",
   "pi-session-header": "pi",
+  "kimi-code-cache-key": "kimi-code",
   "opencode-session-header": "opencode",
   "opencode-hosted-header": "opencode",
   "kilo-session-header": "kilo",

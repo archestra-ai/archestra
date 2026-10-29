@@ -19,7 +19,12 @@ import {
 } from "@/lib/llm-provider-api-keys-query-keys";
 import { inFlightQueryData } from "@/lib/query-in-flight";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
-import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
+import {
+  getApiErrorType,
+  handleApiError,
+  throwOnApiError,
+  toApiError,
+} from "@/lib/utils/api";
 
 export type { SupportedProvider };
 
@@ -333,27 +338,35 @@ export function useDeleteLlmProviderApiKey() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    // A subscription is disconnected rather than deleted, so the toast names
-    // what the user just did.
-    mutationFn: async ({ id }: { id: string; subscription: boolean }) => {
-      const { data: responseData, error } = await deleteLlmProviderApiKey({
-        path: { id },
-      });
+    // `kind` only picks the toast in onSuccess.
+    mutationFn: async ({
+      id,
+    }: {
+      id: string;
+      kind: LlmProviderApiKeyDeleteKind;
+    }) => {
+      const { error } = await deleteLlmProviderApiKey({ path: { id } });
       if (error) {
+        // Removed elsewhere (another tab, a teammate, an earlier attempt that
+        // failed after the delete): what the user asked for already holds.
+        if (getApiErrorType(error) === "api_not_found_error") {
+          return "already-gone" as const;
+        }
         handleApiError(error);
         throw toApiError(error);
       }
-      return responseData;
+      return "deleted" as const;
     },
-    onSuccess: (data, { subscription }) => {
-      if (!data) {
-        return;
+    onSuccess: (outcome, { kind }) => {
+      if (outcome === "already-gone") {
+        toast.info(ALREADY_GONE_MESSAGE[kind]);
+      } else {
+        toast.success(DELETED_MESSAGE[kind]);
       }
-      toast.success(
-        subscription
-          ? "Subscription disconnected"
-          : "API key deleted successfully",
-      );
+    },
+    // A failed request can still have removed the key, so refresh either way:
+    // the page must show what the server has, not what it had.
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["llm-provider-api-keys"] });
       queryClient.invalidateQueries({
         queryKey: ["available-llm-provider-api-keys"],
@@ -410,3 +423,18 @@ function listingWithKey(
 ) {
   return state?.data?.some((key) => key.id === keyId) ? state : undefined;
 }
+
+/** What a delete removes, so its messages use the user's word for it. */
+type LlmProviderApiKeyDeleteKind = "key" | "subscription" | "plan";
+
+const DELETED_MESSAGE: Record<LlmProviderApiKeyDeleteKind, string> = {
+  key: "API key deleted successfully",
+  subscription: "Subscription disconnected",
+  plan: "Enterprise plan disconnected",
+};
+
+const ALREADY_GONE_MESSAGE: Record<LlmProviderApiKeyDeleteKind, string> = {
+  key: "This API key was already deleted",
+  subscription: "This subscription was already disconnected",
+  plan: "This enterprise plan was already disconnected",
+};

@@ -388,8 +388,8 @@ function PrecedenceHint() {
       </TooltipTrigger>
       <TooltipContent className="max-w-64">
         Every user gets the organization default. An environment override
-        replaces it for users in that environment, and a custom user limit
-        replaces both.
+        replaces it for users in that environment, and a hard custom user limit
+        replaces both. Soft custom limits only observe usage.
       </TooltipContent>
     </Tooltip>
   );

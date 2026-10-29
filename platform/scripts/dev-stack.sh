@@ -58,8 +58,8 @@ require_platform_cwd() {
   fi
 }
 
-# The backend lazily loads three NAPI addons (@archestra/app-runtime-rs,
-# sandbox-rs, image-rs) whose compiled `.node` binaries are gitignored and are
+# The backend lazily loads NAPI addons (@archestra/app-runtime-rs, sandbox-rs,
+# image-rs, router-rs) whose compiled `.node` binaries are gitignored and are
 # never built by `pnpm install` (install scripts are disabled repo-wide), so a
 # fresh worktree fails with "Unable to load @archestra/<crate> for <platform>"
 # the first time an app/sandbox/image feature is touched. Build the missing
@@ -68,7 +68,12 @@ require_platform_cwd() {
 # — so restarts stay fast.
 ensure_native_addons() {
   local platform_dir="$1" crate filters=()
-  for crate in app-runtime-rs sandbox-rs image-rs; do
+  # The addons CI built for this exact archestra-rs tree, when there are any
+  # (see scripts/napi-prebuilt.mjs); otherwise build what is missing.
+  if (cd "$platform_dir" && node scripts/napi-prebuilt.mjs app-runtime-rs sandbox-rs image-rs router-rs); then
+    return 0
+  fi
+  for crate in app-runtime-rs sandbox-rs image-rs router-rs; do
     if ! ls "$platform_dir/archestra-rs/$crate"/*.node >/dev/null 2>&1; then
       filters+=("--filter" "@archestra/$crate")
     fi

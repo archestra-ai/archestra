@@ -48,7 +48,7 @@ export function MemberCooldown({ saved }: { saved: SavedMember | null }) {
 
 /** One line for a whole pool: all healthy, or how many are benched. */
 export function PoolHealth({ pool }: { pool: ModelPool }) {
-  const benched = useBenchedMembers(pool);
+  const benched = useBenchedMembers(pool.members);
   const on = pool.members.filter((member) => member.enabled).length;
   if (on === 0) {
     return <StatusReading icon={CircleSlash}>Every member off</StatusReading>;
@@ -64,12 +64,28 @@ export function PoolHealth({ pool }: { pool: ModelPool }) {
   );
 }
 
-/** Members benched right now, with their seconds left. */
-function useBenchedMembers(pool: ModelPool) {
-  const now = useNow(
-    pool.members.some((member) => member.benchedUntil !== null),
+/**
+ * "· 2 cooling down" on a folded order, whose rows and their "Cooling down"
+ * badges are hidden. Nothing while its members are all answering.
+ */
+export function FoldedCooldown({ saved }: { saved: SavedMember[] }) {
+  const benched = useBenchedMembers(saved);
+  if (benched.length === 0) return null;
+  return (
+    <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
+      <span aria-hidden="true">·</span>
+      <span className="flex items-center gap-1 text-sky-700 dark:text-sky-300">
+        <Snowflake className="size-3" aria-hidden="true" />
+        <span>{benched.length} cooling down</span>
+      </span>
+    </span>
   );
-  return pool.members.flatMap((member) => {
+}
+
+/** Members benched right now, with their seconds left. */
+function useBenchedMembers(members: SavedMember[]) {
+  const now = useNow(members.some((member) => member.benchedUntil !== null));
+  return members.flatMap((member) => {
     if (!member.enabled || !member.benchedUntil) return [];
     const secondsLeft = Math.ceil(
       (new Date(member.benchedUntil).getTime() - now) / 1000,

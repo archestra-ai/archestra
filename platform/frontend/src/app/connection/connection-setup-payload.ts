@@ -2,6 +2,7 @@ import {
   ManagedResourceSchema,
   OPENCODE_PRIMARY_PROVIDERS,
   type Permissions,
+  PROVIDER_MODEL_TIERS,
   PROVIDERS_REQUIRING_BASE_URL,
   providerRequiresPerUserCredential,
   ResourcePermissionActionSchema,
@@ -333,17 +334,19 @@ export function firstConnectionSetupInputs(params: {
     providerIsPerUser &&
     !configuredProviders.has(provider);
   const supportsModelChoice =
-    client.id === "copilot-cli" || client.id === "claude-desktop";
+    client.id === "copilot-cli" ||
+    client.id === "claude-desktop" ||
+    client.id === "kimi-code";
   const effectiveModel =
     supportsModelChoice && provider
       ? client.id === "claude-desktop"
         ? "claude-haiku-4-5-20251001"
-        : defaultConnectionModel({
+        : (defaultConnectionModel({
             provider,
             modelIds: (params.models ?? [])
               .filter((model) => model.provider === provider)
               .map((model) => model.id),
-          })
+          }) ?? kimiCodeDefaultModel(client.id, provider))
       : null;
   const effectiveProxyAuth: ConnectProxyAuth = providerIsPerUser
     ? "virtual-key"
@@ -397,4 +400,18 @@ export function firstConnectionSetupInputs(params: {
       ? selectedPlugins.map((plugin) => plugin.id).sort()
       : null,
   };
+}
+
+/**
+ * Kimi Code names one model in its provider entry. A person who brings their
+ * own Kimi key may have no synced models, so it falls back to the provider's
+ * default instead of blocking setup.
+ */
+export function kimiCodeDefaultModel(
+  clientId: string,
+  provider: SupportedProvider,
+): string | null {
+  return clientId === "kimi-code"
+    ? (PROVIDER_MODEL_TIERS[provider].normal ?? null)
+    : null;
 }

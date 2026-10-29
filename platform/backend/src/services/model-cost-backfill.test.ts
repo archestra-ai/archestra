@@ -4,6 +4,7 @@ import { createInteractionsIndexes } from "@/database/index-maintenance";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import ModelCostBackfillModel from "@/models/model-cost-backfill";
+import { calculateInteractionCosts } from "@/routes/proxy/llm-proxy-helpers";
 import {
   calculateCacheCost,
   calculateCost,
@@ -173,6 +174,102 @@ describe("recomputing past costs", () => {
       rowsScanned: 5,
       rowsUpdated: 0,
     });
+  });
+
+  test("reprices each request at its prompt's price tier, as the proxy does, and the preview totals what it writes", async ({
+    makeAgent,
+    makeInteraction,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent();
+    const model = await makeAnthropicModel({
+      input: "3",
+      output: "15",
+      longContext: {
+        threshold: 200_000,
+        input: "6",
+        output: "22.5",
+        cacheRead: "0.6",
+        cacheWrite: "7.5",
+      },
+    });
+    const since = new Date(Date.now() - 2 * DAY_MS);
+    const usages = {
+      // Prompt 230k: above the threshold.
+      long: {
+        inputTokens: 150_000,
+        outputTokens: 10_000,
+        cacheReadTokens: 60_000,
+        cacheWriteTokens: 20_000,
+        cacheWrite1hTokens: 5_000,
+      },
+      // Prompt 170k: below it.
+      base: {
+        inputTokens: 100_000,
+        outputTokens: 10_000,
+        cacheReadTokens: 50_000,
+        cacheWriteTokens: 20_000,
+        cacheWrite1hTokens: 5_000,
+      },
+      // Exactly at the threshold: still base.
+      boundary: {
+        inputTokens: 200_000,
+        outputTokens: 1_000,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        cacheWrite1hTokens: 0,
+      },
+    };
+    const rows = await Promise.all(
+      Object.values(usages).map((usage) =>
+        makeInteraction(agent.id, {
+          type: "anthropic:messages",
+          model: model.modelId,
+          createdAt: new Date(Date.now() - DAY_MS),
+          ...UNCHANGED,
+          ...usage,
+        }),
+      ),
+    );
+    const expected = await Promise.all(
+      Object.values(usages).map(async (usage) => {
+        const costs = await calculateInteractionCosts({
+          actualModel: model.modelId,
+          usage,
+          providerName: "anthropic",
+        });
+        return {
+          cost: costs.actualCost?.toFixed(10),
+          baselineCost: costs.actualCost?.toFixed(10),
+          cacheCost: costs.cacheCost?.toFixed(10) ?? null,
+          cacheSavings: costs.cacheSavings?.toFixed(10) ?? null,
+        };
+      }),
+    );
+
+    const preview = await modelCostBackfillService.getPreview({
+      model,
+      timeZone: "UTC",
+      since,
+    });
+    await modelCostBackfillService.start({
+      model,
+      since,
+      organizationId: org.id,
+      userId: user.id,
+    });
+    await modelCostBackfillService.runNext();
+
+    const written = await Promise.all(rows.map((row) => costsOf(row.id)));
+    expect(written).toEqual(expected);
+    const total = written.reduce((sum, row) => sum + Number(row.cost), 0);
+    expect(preview.window?.recomputedCost).toBeCloseTo(total, 8);
+    expect(
+      preview.days.reduce((sum, day) => sum + day.recomputedCost, 0),
+    ).toBeCloseTo(total, 8);
   });
 
   test("a run out of time resumes from its cursor on the next run", async ({
@@ -347,6 +444,34 @@ describe("recomputing past costs", () => {
     await expect(
       modelCostBackfillService.start({
         model: cached,
+        since: null,
+        organizationId: org.id,
+        userId: user.id,
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    // Cheap at base prices; the request is above the long-context threshold.
+    const long = await makeAnthropicModel({
+      input: "1",
+      output: "1",
+      longContext: {
+        threshold: 100_000,
+        input: "7500",
+        output: "1",
+        cacheRead: "1",
+        cacheWrite: "1",
+      },
+    });
+    await makeInteraction(agent.id, {
+      type: "anthropic:messages",
+      model: long.modelId,
+      inputTokens: 200_000,
+      outputTokens: 10,
+      cost: "0.2000000000",
+      createdAt: new Date(Date.now() - DAY_MS),
+    });
+    await expect(
+      modelCostBackfillService.start({
+        model: long,
         since: null,
         organizationId: org.id,
         userId: user.id,
@@ -628,6 +753,13 @@ let modelCounter = 0;
 async function makeAnthropicModel(prices: {
   input: string;
   output: string;
+  longContext?: {
+    threshold: number;
+    input: string;
+    output: string;
+    cacheRead: string;
+    cacheWrite: string;
+  };
 }): Promise<Model> {
   modelCounter += 1;
   const modelId = `claude-backfill-${modelCounter}`;
@@ -639,6 +771,11 @@ async function makeAnthropicModel(prices: {
     outputModalities: ["text"],
     customPricePerMillionInput: prices.input,
     customPricePerMillionOutput: prices.output,
+    longContextThreshold: prices.longContext?.threshold,
+    longContextPricePerMillionInput: prices.longContext?.input,
+    longContextPricePerMillionOutput: prices.longContext?.output,
+    longContextPricePerMillionCacheRead: prices.longContext?.cacheRead,
+    longContextPricePerMillionCacheWrite: prices.longContext?.cacheWrite,
   });
 }
 

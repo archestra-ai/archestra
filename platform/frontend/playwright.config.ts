@@ -72,7 +72,10 @@ export default defineConfig({
   expect: { timeout: 30_000 },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: `next dev -H 127.0.0.1 -p ${INT_TESTS_PORT}`,
+    // Through scripts/dev.mjs, like the Tilt resource: it picks the bundler per
+    // platform (webpack on macOS arm64), caps the heap and binds 127.0.0.1. The
+    // Tilt resource is manual; this starts the server when nothing listens.
+    command: `node ./scripts/dev.mjs -p ${INT_TESTS_PORT}`,
     url: INT_TESTS_URL,
     reuseExistingServer: !IS_CI,
     timeout: 120_000,

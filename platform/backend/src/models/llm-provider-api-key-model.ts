@@ -402,6 +402,26 @@ class LlmProviderApiKeyModelLinkModel {
     }));
   }
 
+  /** Which of `modelIds` are linked to at least one of `apiKeyIds`. */
+  static async filterLinkedModelIds(params: {
+    apiKeyIds: string[];
+    modelIds: string[];
+  }): Promise<Set<string>> {
+    if (params.apiKeyIds.length === 0 || params.modelIds.length === 0)
+      return new Set();
+    const links = schema.llmProviderApiKeyModelsTable;
+    const rows = await db
+      .selectDistinct({ modelId: links.modelId })
+      .from(links)
+      .where(
+        and(
+          inArray(links.apiKeyId, params.apiKeyIds),
+          inArray(links.modelId, params.modelIds),
+        ),
+      );
+    return new Set(rows.map((row) => row.modelId));
+  }
+
   /** The non-ignored models each of the given keys serves. */
   static async findModelsByKey(
     apiKeyIds: string[],
@@ -639,6 +659,9 @@ class LlmProviderApiKeyModelLinkModel {
           eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
           eq(schema.llmProviderApiKeysTable.provider, provider),
           eq(schema.modelsTable.provider, provider),
+          // Personal sign-ins only: a shared key on this provider (a GitHub
+          // App key) lists its models as that key's own, not here.
+          isNotNull(schema.llmProviderApiKeysTable.userId),
         ),
       )
       .groupBy(schema.modelsTable.id)

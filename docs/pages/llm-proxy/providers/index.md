@@ -2,7 +2,7 @@
 title: Model Providers
 description: Connect provider API keys and personal subscriptions for Chat and the LLM Proxy
 order: 2
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -40,7 +40,7 @@ Already pay for ChatGPT, GitHub Copilot, Microsoft 365 Copilot, or SuperGrok? Us
 
 These credentials belong to one person and cannot be shared. An agent that uses one always runs on the chatting user's own subscription. A user who has not connected sees a sign-in prompt in chat. If the vendor rejects the sign-in later, click **Connect** again; the credential keeps its model and agent selections.
 
-- **ChatGPT**: first turn on **Enable device code authorization for Codex** in ChatGPT under **Settings → Security**. It is off by default, and ChatGPT blocks the sign-in until you turn it on.
+- **ChatGPT**: first turn on **Enable device code authorization for Codex** in ChatGPT under **Settings → Security**. It is off by default, and ChatGPT blocks the sign-in until you turn it on. If the backend's outbound traffic is restricted, also allow [its hosts](#chatgpt-subscription-egress).
 - **GitHub Copilot** and **Microsoft 365 Copilot** have their own pages: [GitHub Copilot](/docs/llm-proxy/providers/github-copilot), [Microsoft 365 Copilot](/docs/llm-proxy/providers/microsoft-365-copilot).
 
 ChatGPT and SuperGrok use bills $0 in Costs. GitHub Copilot and Microsoft 365 Copilot use counts as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost).
@@ -109,6 +109,19 @@ OpenRouter's `:free` model variants cost nothing, though they still need an Open
 [Jev](https://typesafe.ai) is TypeSafe's decision model. It scores content, such as a tool call, and does not chat. Send requests to `https://<archestra-host>/v1/jev/decisions` with `Authorization: Bearer <your-api-key>`.
 
 To use Jev through OpenRouter, set the key's base URL to `https://openrouter.ai/api/alpha/decisions`. To change the default endpoint, set [`ARCHESTRA_JEV_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_JEV_BASE_URL).
+
+### ChatGPT Subscription Egress
+
+If you restrict the backend's outbound traffic, allow HTTPS (port 443) to these hosts. Without them, ChatGPT sign-in and chats fail. Allowing `api.openai.com` does not cover them.
+
+| Host | Used for | Setting |
+| --- | --- | --- |
+| `auth.openai.com` | Sign-in and token refresh | [`ARCHESTRA_OPENAI_CODEX_ISSUER`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAI_CODEX_ISSUER) |
+| `chatgpt.com` | Chat requests and model lists, at `/backend-api/codex` | [`ARCHESTRA_OPENAI_CODEX_API_BASE_URL`](/docs/admin/deployment/configuration#ARCHESTRA_OPENAI_CODEX_API_BASE_URL) |
+
+- Allow them by hostname, not IP address. Both are served from a CDN, so their addresses are shared and can change.
+- If you change either setting, allow the host and port it points to instead.
+- People who sign in also need browser access to the sign-in host to enter the code.
 
 <span id="model-context-and-output-limits"></span>
 

@@ -1,13 +1,17 @@
-/** Native directory clients consume the existing authenticated Git marketplace. */
+/**
+ * Native directory clients consume the existing authenticated Git marketplace.
+ * The checkout belongs to the first deployment that made it. `root` gives a
+ * client its own checkouts instead of the shared ~/.archestra/skills.
+ */
 export const MARKETPLACE_SKILLS_SYNC = String.raw`
-function syncMarketplaceSkills({ source, install = false }) {
+function syncMarketplaceSkills({ source, install = false, root = null }) {
   if (!source) return;
   const fs = require("node:fs"), path = require("node:path"), os = require("node:os"), crypto = require("node:crypto");
   const { execFileSync } = require("node:child_process");
   if (!/^[a-z0-9][a-z0-9-]{0,127}$/.test(source.marketplaceName) || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(source.marketplaceName)) throw new Error("Invalid skills marketplace name.");
   const url = new URL(source.cloneUrl);
   if (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) throw new Error("Shared skills require HTTPS or a local development connection.");
-  const home = os.homedir(), destination = path.join(home, ".archestra", "skills", source.marketplaceName);
+  const home = os.homedir(), destination = path.join(root || path.join(home, ".archestra", "skills"), source.marketplaceName);
   const safe = file => {
     let current = path.resolve(file);
     if (!current.startsWith(path.resolve(home) + path.sep)) throw new Error("Skills must stay inside the home directory.");

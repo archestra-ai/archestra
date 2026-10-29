@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  APPA_CLIENT_ADAPTERS,
   extractAppaSessionIdentity,
   nativeSpawnParentId,
 } from "./session-identity";
@@ -419,6 +420,45 @@ describe("client trajectory identity", () => {
       ).toThrow(
         "OpenAPPA cannot bind contradictory Claude Desktop conversation metadata",
       );
+
+      // Tool-free one-shot Desktop requests (connection probe, "." startup check,
+      // session title generation) match the Desktop adapter so block mode does not
+      // reject them, while tool-bearing headerless requests without a conversation
+      // identifier remain unmatched.
+      const desktopAdapter = APPA_CLIENT_ADAPTERS.find(
+        (adapter) => adapter.id === "claude-desktop",
+      );
+      expect(
+        desktopAdapter?.matches({
+          headers: { "x-archestra-agent-id": "anthropic_claude_desktop" },
+          requestBody: {
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 8,
+            messages: [{ role: "user", content: "Reply with exactly OK." }],
+          },
+        }),
+      ).toBe(true);
+      expect(
+        desktopAdapter?.matches({
+          headers: { "x-archestra-agent-id": "anthropic_claude_desktop" },
+          requestBody: {
+            model: "claude-haiku-5-5",
+            max_tokens: 200,
+            system: "You write short session titles.",
+            messages: [{ role: "user", content: "Summarize this session." }],
+          },
+        }),
+      ).toBe(true);
+      expect(
+        desktopAdapter?.matches({
+          headers: { "x-archestra-agent-id": "anthropic_claude_desktop" },
+          requestBody: {
+            model: "claude-sonnet-4-6",
+            messages: [{ role: "user", content: "Hello" }],
+            tools: [{ name: "get_weather", input_schema: { type: "object" } }],
+          },
+        }),
+      ).toBe(false);
     });
   });
 

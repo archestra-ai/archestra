@@ -5,6 +5,7 @@ import {
   credentialRequiresPerUserScope,
   integrationLabel,
   isCredentialLevelSubscriptionProvider,
+  isGithubAppCredential,
   isProviderApiKeyOptional,
   isSubscriptionCredential,
   MAX_BULK_IDS,
@@ -436,6 +437,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId, user }, reply) => {
+      assertNoGithubAppReference(body.apiKey);
       // A service account acts under a synthetic user id with no `users` row,
       // so it cannot be the owner (`user_id`) of a key. Refuse before the key
       // is tested or its secret is stored.
@@ -883,6 +885,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, body, organizationId, user }, reply) => {
+      assertNoGithubAppReference(body.apiKey);
       const apiKeyFromDB = await LlmProviderApiKeyModel.findById(params.id);
 
       if (!apiKeyFromDB || apiKeyFromDB.organizationId !== organizationId) {
@@ -1411,18 +1414,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Model links cascade with the keys. Sweep once after the whole batch,
       // rather than re-scanning global models after each successful row.
-      if (outcome.succeeded.length > 0) {
-        try {
-          await cleanupOrphanedModels();
-        } catch (error) {
-          // The keys are already deleted and audited; cleanup must not turn a
-          // completed batch into a misleading 500 response.
-          logger.error(
-            { error },
-            "Failed to clean up orphaned models after API key bulk deletion",
-          );
-        }
-      }
+      if (outcome.succeeded.length > 0) await cleanupOrphanedModels("bulk");
       if (outcome.succeeded.length === 0) request.auditSkip = true;
 
       return reply.send(outcome);
@@ -1470,7 +1462,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         headers,
       });
-      await cleanupOrphanedModels();
+      await cleanupOrphanedModels("single");
 
       return reply.send({ success: true });
     },
@@ -1776,12 +1768,27 @@ async function deleteProviderApiKeyInPglite(params: {
   return apiKey;
 }
 
-async function cleanupOrphanedModels(): Promise<void> {
-  const deletedCount = await ModelModel.deleteOrphanedModels();
-  if (deletedCount > 0) {
-    logger.info(
-      { deletedCount },
-      "Cleaned up orphaned models after API key deletion",
+/**
+ * Runs after the key deletion has committed. A failure here must not turn
+ * that completed deletion into an error response: the client would keep
+ * showing the key, and its retry would find nothing to delete.
+ */
+async function cleanupOrphanedModels(
+  // Which delete triggered the sweep, so its log lines can be told apart.
+  route: "single" | "bulk",
+): Promise<void> {
+  try {
+    const deletedCount = await ModelModel.deleteOrphanedModels();
+    if (deletedCount > 0) {
+      logger.info(
+        { deletedCount, route },
+        "Cleaned up orphaned models after API key deletion",
+      );
+    }
+  } catch (error) {
+    logger.error(
+      { error, route },
+      "Failed to clean up orphaned models after API key deletion",
     );
   }
 }
@@ -1961,4 +1968,17 @@ export async function getAvailableLlmProviderApiKeys(params: {
     bestModelId: bestModelsByApiKeyId.get(key.id)?.id ?? null,
   }));
   return apiKeysWithBestModel;
+}
+
+/**
+ * Only the GitHub Copilot plan setup stores a GitHub App reference, after
+ * checking the App and its organization. A key value that looks like one is
+ * refused here, before anything reads or stores it.
+ */
+function assertNoGithubAppReference(apiKey: string | null | undefined) {
+  if (isGithubAppCredential(apiKey))
+    throw new ApiError(
+      400,
+      "Connect a GitHub Copilot enterprise plan from its own setup, not as an API key.",
+    );
 }

@@ -2,7 +2,7 @@
 title: Model Pools
 description: Serve one model name from several provider keys, with load balancing and failover
 order: 5
-lastUpdated: 2026-10-27
+lastUpdated: 2026-10-28
 beta: "Set [`ARCHESTRA_LLM_MODEL_POOLS_ENABLED=true`](/docs/admin/deployment/configuration#ARCHESTRA_LLM_MODEL_POOLS_ENABLED) to turn it on."
 ---
 
@@ -52,15 +52,25 @@ A request moves to the next member when a member fails before it starts to answe
 | --- | --- |
 | Answers `429` or a `5xx` error, or can't be reached | The request moves to the next member. |
 | Answers `401`, `403`, or `404`, or its key can't be loaded | The request moves to the next member. The key was revoked, or it doesn't serve that model. |
-| Stays silent: no first chunk of a stream in 30 s, or no full answer in 3 min plus 1 s per 20 tokens the request lets the model write (at most 30 min) | The request moves to the next member. |
+| Stays silent: no first chunk of a stream within the [stream timeout](#timeouts-and-cooldown), or no full answer within the timeout | The request moves to the next member. |
 | Rejects the request as invalid, such as a `400` | The error goes to the client. Other members would reject it too. |
 | Fails after it starts to answer | The error goes to the client. A pool never switches members mid-answer. |
 
-A failed member cools down for as long as its `Retry-After` header asks, or 30 s without one, and never longer than 60 s. Other requests skip it while it cools down. The pool's members show **Cooling down** with the seconds left, and the reason on hover.
+A failed member cools down for the pool's cooldown time. A longer `Retry-After` header extends it, up to 60 s or the cooldown time if that is longer. With no cooldown time set, the member cools down for 30 s, or for as long as its `Retry-After` header asks, up to 60 s. Other requests skip it while it cools down. The pool's members show **Cooling down** with the seconds left, and the reason on hover.
 
 - The last member has nowhere to move to, so the pool doesn't time it out, and it gets the usual connection retries.
 - When every member is cooling down, requests still try them, the one back soonest first.
 - A conversation stays on the same member while that member is healthy, which keeps the provider's prompt cache warm.
+
+### Timeouts and Cooldown
+
+Set these under **Timeouts and cooldown** when you create or edit a pool. They apply to every member of the pool, and a blank one keeps its default. They are named after LiteLLM's `stream_timeout`, `timeout`, and `cooldown_time`.
+
+| Setting | Default | What it sets |
+| --- | --- | --- |
+| **Stream timeout** | 30 s | How long a member may take to send the first chunk of a streamed answer. Up to 1800 s. |
+| **Timeout** | Auto: 3 min plus 1 s per 20 tokens the request lets the model write, at most 30 min | How long a member may take to send a full answer that isn't streamed. Up to 1800 s. |
+| **Cooldown time** | 30 s, or the `Retry-After` up to 60 s | The shortest time other requests skip a member that failed. Up to 3600 s. |
 
 ## Who Can Use a Pool
 
@@ -111,4 +121,4 @@ Each attempt is priced as the member that made it, with that member's provider a
 
 - Clients on the OpenAI Responses API, such as OpenCode, can't use pools yet. That includes `/responses` on the Model Router.
 - Members can be keys for Anthropic, AWS Bedrock, OpenAI, Azure AI Foundry, and OpenAI-compatible providers such as vLLM, OpenRouter, and Mistral AI. Gemini and Vertex AI keys can't be members yet.
-- Timeouts and cooldowns are fixed. Pools don't route by a key's rate or token limits.
+- Timeouts and cooldown are set for the whole pool, not for one member. Pools don't route by a key's rate or token limits.

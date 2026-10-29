@@ -701,6 +701,42 @@ test.each([
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
+test("asks for the GitHub and the organization, each error in place of its hint", async () => {
+  state = { ...state, hasPolicy: false, source: null };
+  server.use(
+    http.get("http://localhost:9000/api/credentials", () =>
+      HttpResponse.json([]),
+    ),
+  );
+  show();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Set up Git sync" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: /^GitHub/ }));
+
+  const url = screen.getByLabelText("GitHub URL");
+  const organization = screen.getByLabelText("Organization");
+  expect(url).toHaveValue("https://github.com");
+  expect(url).toHaveAccessibleDescription(
+    "Using GitHub Enterprise Server? Put its address here.",
+  );
+  expect(organization).toHaveAccessibleDescription(
+    "The GitHub organization for the policy repository.",
+  );
+
+  fireEvent.change(url, { target: { value: "not a url" } });
+  fireEvent.change(organization, { target: { value: "-bad-" } });
+  expect(url).toHaveAccessibleDescription(
+    "Enter a web address, like https://github.com.",
+  );
+  expect(organization).toHaveAccessibleDescription(
+    "Enter the organization's name on GitHub.",
+  );
+  expect(
+    screen.getByRole("button", { name: /Use an existing repository/ }),
+  ).toBeDisabled();
+});
+
 test("asks before discarding a GitHub source draft", async () => {
   state = { ...state, hasPolicy: false, source: null };
   server.use(

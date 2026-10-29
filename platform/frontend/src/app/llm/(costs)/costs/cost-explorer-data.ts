@@ -244,7 +244,6 @@ export const SAVED_VIEWS: { id: string; label: string; q: PivotQuery }[] = [
       group: "label",
       split: "none",
       chart: "bars",
-      labelKey: "cost_center",
     },
   },
   {
@@ -476,13 +475,14 @@ export function usePivotCube(
   const providerCatalog = useModelProviderCatalog();
   const labelQ = useProxyLabelCosts({
     timeframe,
-    labelKey: q.labelKey ?? "cost_center",
+    labelKey: q.labelKey,
     enabled: on("proxy") && q.group === "label",
   });
 
   const proxyBy = src.kind === "proxy" ? src.by : null;
   const proxyItems = useMemo(() => {
-    if (proxyBy === "label")
+    if (proxyBy === "label") {
+      if (!q.labelKey) return [];
       return (labelQ.data?.groups ?? []).map(({ value, ...totals }) => ({
         key: value === null ? "missing" : `value:${value}`,
         label: value ?? "Unassigned (label missing)",
@@ -490,12 +490,13 @@ export function usePivotCube(
         tag: value === null ? "Label missing" : undefined,
         totals,
         filter: {
-          labelKey: q.labelKey ?? "cost_center",
+          labelKey: q.labelKey,
           ...(value === null
             ? { labelUnassigned: "true" }
             : { labelValue: value }),
         } as ProxyFilter,
       }));
+    }
     return proxyBy && proxyQ.data
       ? proxyItemsFor(proxyBy, proxyQ.data, providerCatalog.label)
       : [];
@@ -1063,7 +1064,9 @@ function apiFor(src: Source, tf: string, q: PivotQuery) {
       return `GET /api/statistics/users?includeTimeSeries=true${src.models ? "&includeModels=true&includeModelTimeSeries=true" : ""}&timeframe=${tf}`;
     case "proxy":
       if (q.group === "label")
-        return `GET /api/statistics/llm-proxy?timeframe=${tf}&labelKey=${encodeURIComponent(q.labelKey ?? "cost_center")}`;
+        return q.labelKey
+          ? `GET /api/statistics/llm-proxy?timeframe=${tf}&labelKey=${encodeURIComponent(q.labelKey)}`
+          : `GET /api/statistics/llm-proxy?timeframe=${tf}&includeLabelKeys=true`;
       if (q.group === "providerKey")
         return `GET /api/statistics/llm-proxy?timeframe=${tf}&includeProviderKeys=true`;
       if (q.group === "pool")

@@ -18,7 +18,8 @@ export const SNAPSHOT_PATH_ENV = "ARCHESTRA_TEST_PGLITE_SNAPSHOT_PATH";
 
 /**
  * Read all migration `.sql` files in deterministic (filename) order, followed
- * by the runtime-created cache table (see KEYV_CACHE_TABLE_SQL).
+ * by the runtime-created cache table (see KEYV_CACHE_TABLE_SQL) and the
+ * batch's closing COMMIT.
  * Cached after first read since the files do not change during a test run.
  */
 export function getMigrationsSql(): string[] {
@@ -32,15 +33,28 @@ export function getMigrationsSql(): string[] {
 
   cachedMigrationsSql = [
     ...migrationFiles.map((file) =>
-      fs.readFileSync(path.join(migrationsDir, file), "utf8"),
+      withoutConcurrently(
+        fs.readFileSync(path.join(migrationsDir, file), "utf8"),
+      ),
     ),
     KEYV_CACHE_TABLE_SQL,
+    // drizzle-kit runs the migrations in one transaction and commits it at the
+    // end. A migration that builds indexes concurrently ends by reopening that
+    // transaction (BEGIN), so the batch must be closed the same way here.
+    "COMMIT",
   ];
 
   return cachedMigrationsSql;
 }
 
 let cachedMigrationsSql: string[] | null = null;
+
+// PGlite cannot build or drop an index concurrently ("tuple concurrently
+// updated"). A single-session test database has no writes to protect, and the
+// plain statement creates the same index.
+function withoutConcurrently(sql: string): string {
+  return sql.replace(/\b(CREATE|DROP)\s+INDEX\s+CONCURRENTLY\b/gi, "$1 INDEX");
+}
 
 // The distributed cache's table is created at runtime by its PostgreSQL
 // adapter, not by a migration. Tests that start the real cache against their

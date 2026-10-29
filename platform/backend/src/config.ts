@@ -3505,6 +3505,20 @@ const config = {
       DEFAULT_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS,
     ),
   },
+  autoRouting: {
+    /** ALPHA gate for the Model Router's "auto" model; off by default, follows ARCHESTRA_BETA when blank. */
+    enabled: betaFeatureEnabled(process.env.ARCHESTRA_AUTO_ROUTING_ENABLED),
+    /** Budget (ms) for one session-scoring call before the router falls back. */
+    scorerTimeoutMs: parsePositiveInt(
+      process.env.ARCHESTRA_AUTO_ROUTING_SCORER_TIMEOUT_MS,
+      2000,
+    ),
+    /** Idle sessions (live, plus scored past ones) a fit needs before it publishes a plan; fewer keep the organization in cold start. */
+    minSessions: parsePositiveInt(
+      process.env.ARCHESTRA_AUTO_ROUTING_MIN_SESSIONS,
+      1000,
+    ),
+  },
   kb: {
     crawlerChromiumPath:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CRAWLER_CHROMIUM_PATH?.trim() ||
@@ -3975,9 +3989,10 @@ const config = {
   // maintenanceMode it does not affect request handling.
   siteNotificationMessage:
     process.env.ARCHESTRA_SITE_NOTIFICATION_MESSAGE || null,
-  // Enterprise-licensed like the `retention` block below — the boot-time
-  // assertion in data-retention/license-gate.ee.ts covers this window too.
   auditLog: {
+    otelEnabled: process.env.ARCHESTRA_AUDIT_LOG_OTEL_ENABLED === "true",
+    // Retention is enterprise-licensed; the boot-time assertion in
+    // data-retention/license-gate.ee.ts covers this window too.
     retentionDays: parseRetentionDays(
       "ARCHESTRA_AUDIT_LOG_RETENTION_DAYS",
       process.env.ARCHESTRA_AUDIT_LOG_RETENTION_DAYS,

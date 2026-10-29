@@ -2,7 +2,7 @@
 title: Helm
 description: Install, verify, scale, and upgrade Archestra on Kubernetes
 order: 1
-lastUpdated: 2026-10-27
+lastUpdated: 2026-10-28
 ---
 
 Install Archestra's web and worker pods, database, and workload permissions with the Helm chart. You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Check [Production](/docs/admin/deployment/production) before exposing a shared instance.
@@ -28,7 +28,7 @@ Keep deployment-specific settings in `values.yaml` so upgrades use the same conf
 1. Choose an exact version from [GitHub Releases](https://github.com/archestra-ai/archestra/releases) and download its chart defaults. Tags ending in `-rc.N` are release candidates:
 
    ```bash
-   export ARCHESTRA_VERSION="1.5.0-rc.12" # x-release-please-version
+   export ARCHESTRA_VERSION="1.5.0-rc.13" # x-release-please-version
    helm show values \
      oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
      --version "$ARCHESTRA_VERSION" > values.yaml
@@ -45,7 +45,19 @@ Keep deployment-specific settings in `values.yaml` so upgrades use the same conf
      --values values.yaml --wait
    ```
 
-The chart generates and preserves authentication and credential-encryption keys. Back them up with your database. To supply existing keys, set `archestra.authSecret.existingSecretName` and `existingSecretKey`; the same Secret must contain `session-secret` and `secrets-encryption-secret`.
+The chart generates and preserves authentication and credential-encryption keys. Back them up with your database. To supply existing keys, set `archestra.authSecret.existingSecretName`; the default key names are `auth-secret`, `session-secret`, `secrets-encryption-secret`, and `offer-signing-secret`.
+
+To use different key names, configure them explicitly. Environment-variable-safe names also let you load the same Secret through `archestra.envFrom` on clusters that reject hyphens in environment variable names:
+
+```yaml
+archestra:
+  authSecret:
+    existingSecretName: archestra-auth
+    existingSecretKey: ARCHESTRA_AUTH_SECRET
+    existingSessionSecretKey: ARCHESTRA_AUTH_SESSION_SECRET
+    existingSecretsEncryptionSecretKey: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+    existingOfferSigningSecretKey: ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET
+```
 
 ### Verify the Installation
 

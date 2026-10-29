@@ -96,3 +96,34 @@ describe("buildSubscriptionOffers", () => {
     expect(byKind["github-copilot"]).not.toHaveProperty("authMethod");
   });
 });
+
+describe("GitHub App keys on GitHub Copilot", () => {
+  it("never count as the personal Copilot sign-in", () => {
+    expect(
+      subscriptionKindOfCredential(
+        credential({
+          provider: "github-copilot",
+          scope: "org",
+          isGithubAppKey: true,
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      subscriptionKindOfCredential(
+        credential({
+          provider: "github-copilot",
+          scope: "personal",
+          isGithubAppKey: true,
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it("leave a real personal sign-in recognized", () => {
+    expect(
+      subscriptionKindOfCredential(
+        credential({ provider: "github-copilot", scope: "personal" }),
+      ),
+    ).toBe("github-copilot");
+  });
+});

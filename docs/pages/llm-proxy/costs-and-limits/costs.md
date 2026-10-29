@@ -2,7 +2,7 @@
 title: Costs
 description: Break down organization-wide API spend, subscription usage, tokens, and requests by key, team, agent, model, person, app, skill, or label
 order: 1
-lastUpdated: 2026-10-27
+lastUpdated: 2026-10-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -70,4 +70,4 @@ Anyone signed in to Archestra can open **My Usage** in the sidebar to see their 
 ## What to Know
 
 - **Query the same data via API:** the footer of the cost explorer shows the exact [`GET /api/statistics/costs`](/docs/reference/api#/Statistics/getCostStatistics) or [`GET /api/statistics/llm-proxy`](/docs/reference/api#/Statistics/getProxyCostStatistics) request behind the current view so you can copy it for scripts or internal billing pipelines.
-- **Export to Prometheus and Grafana:** for real-time scraping and alerting, use the LLM cost and token counters in [Prometheus Metrics](/docs/admin/observability/metrics#llm-metrics).
+- **Export to Prometheus and Grafana:** for real-time scraping and alerting, use the LLM cost and token counters in [Prometheus Metrics](/docs/admin/observability/metrics/llm).

@@ -22,9 +22,10 @@ import {
   type InteractionSource,
   InteractionSourceSchema,
   isCodexOriginator,
+  isKimiCodeUserAgent,
   isProviderApiKeyOptional,
+  KIMI_CODE_CLIENT_HEADERS,
   MODEL_POOL_ID_HEADER,
-  OPENCODE_AGENT_HEADER,
   openCodeFamilySource,
   PROVIDER_BASE_URL_HEADER,
   providerDisplayNames,
@@ -36,13 +37,13 @@ import {
   ARCHESTRA_CODEX_CONNECTION_ORIGINATOR,
   CLAUDE_DESKTOP_CLIENT_ID,
 } from "@archestra/shared/interactions/client";
-import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import {
   type Context,
   context as otelContext,
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { assertNotAutoOnNativeRoute } from "@/auto-routing/router";
 import { a2aOAuthExecutionReference } from "@/clients/a2a-oauth-execution";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
@@ -68,6 +69,7 @@ import {
   UserModel,
   UserTokenModel,
 } from "@/models";
+import type { LimitViolationResponse } from "@/models/limit";
 import ProxyRequestContextModel, {
   type ProxyRequestState,
 } from "@/models/proxy-request-context";
@@ -138,6 +140,7 @@ import {
   type ToolCallBlock,
 } from "@/types";
 import type { AttributionLabels } from "@/types/attribution-label";
+import type { AutoRoutingRequestContext } from "@/types/auto-routing";
 import { asRecord } from "@/utils/as-record";
 import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
@@ -205,6 +208,7 @@ import {
   withFirstChunk,
 } from "./upstream-connection-retry";
 import * as utils from "./utils";
+import { autoRoutingContext } from "./utils/auto-routing-context";
 import { getAzureProxyIngress } from "./utils/azure-ingress";
 import { withClaudeDesktopSubscriptionPreamble } from "./utils/claude-desktop-subscription";
 import { resolveClientGatewayBindings } from "./utils/client-gateway-bindings";
@@ -234,6 +238,7 @@ export interface LLMProxyContext<TRequest> {
   throughput?: LlmThroughput;
   usageAccountingMode?: PricedBillingUsage["mode"];
   providerApiKeyId?: string;
+  autoRouting?: AutoRoutingRequestContext;
   /**
    * The upstream attempt this request's interaction rows record: which
    * provider key served it and, through a model pool, which attempt it was.
@@ -460,23 +465,6 @@ function isBoundedHeaderValue(
 }
 
 /**
- * The subset of a proxied request body we read for session-id and client-app
- * extraction. Each consumer only touches its own fields (`detectClaudeClientId`
- * → `system`/`metadata`; `detectCodexClientId` → `client_metadata`;
- * `detectOpenCodeClientId` → client identity headers;
- * `extractSessionInfo` → `metadata`/`user`/`client_metadata`), so one shared
- * view keeps the cast in a single place.
- */
-type RequestBodyForExtraction =
-  | {
-      system?: unknown;
-      metadata?: { user_id?: string | null };
-      user?: string | null;
-      client_metadata?: unknown;
-    }
-  | undefined;
-
-/**
  * Generic LLM proxy handler that works with any provider through adapters
  */
 export async function handleLLMProxy<
@@ -520,7 +508,8 @@ export async function handleLLMProxy<
     string,
     string | string[] | undefined
   >;
-  const bodyForExtraction = body as RequestBodyForExtraction;
+  const bodyForExtraction =
+    body as utils.headers.sessionMetadata.RequestBodyForExtraction;
   const claudeCodeAgentId =
     utils.headers.metaHeader
       .getHeaderValue(headersForExtraction, "x-claude-code-agent-id")
@@ -534,24 +523,10 @@ export async function handleLLMProxy<
     appaIngress.delegationMarkers?.[0]?.spawnCallId ||
     appaIngress.delegationMarkers?.[0]?.parentId ||
     undefined;
-  // Client-app attribution: the caller-supplied X-Archestra-Agent-Id header (or
-  // X-Archestra-Meta segment 0) wins; otherwise auto-discover a known client
-  // app from the request and record it (Claude clients → "anthropic_claude"
-  // from the request body; Codex clients → "openai_codex" from the
-  // client_metadata body shape or the originator/User-Agent headers the Codex
-  // CLI stamps on every request; OpenCode → "opencode" from its equivalent
-  // identity headers; Kilo Code → "kilo" and Cursor → "cursor" from their
-  // User-Agents).
-  const externalAgentId =
-    utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
-    utils.headers.clientApp.detectClaudeClientId(bodyForExtraction) ??
-    utils.headers.clientApp.detectCodexClientId(
-      headersForExtraction,
-      bodyForExtraction,
-    ) ??
-    utils.headers.clientApp.detectOpenCodeClientId(headersForExtraction) ??
-    utils.headers.clientApp.detectKiloClientId(headersForExtraction) ??
-    utils.headers.clientApp.detectCursorClientId(headersForExtraction);
+  const externalAgentId = utils.headers.sessionMetadata.detectClientApp(
+    headersForExtraction,
+    bodyForExtraction,
+  );
   const runId = utils.headers.runId.getRunId(headersForExtraction);
   const authOverride = (
     request as FastifyRequest & { llmProxyAuthOverride?: LLMProxyAuthOverride }
@@ -589,29 +564,15 @@ export async function handleLLMProxy<
     SOURCE_HEADER,
   );
   const parsedSource = InteractionSourceSchema.safeParse(rawSource).data;
-  const openCodeAgent = utils.headers.metaHeader.getHeaderValue(
-    headersForExtraction,
-    OPENCODE_AGENT_HEADER,
-  );
-  const openCodeParentSession = utils.headers.metaHeader.getHeaderValue(
-    headersForExtraction,
-    "x-parent-session-id",
-  );
   // OpenCode and Kilo Code frame their turns the same way; each gets its own
   // source prefix (opencode:main, kilo:main, ...).
-  const openCodeSource: InteractionSource | undefined =
-    externalAgentId && isOpenCodeFamilyClient(externalAgentId)
-      ? openCodeFamilySource(
-          externalAgentId,
-          openCodeParentSession
-            ? "subagent"
-            : openCodeAgent === "title"
-              ? "title"
-              : openCodeAgent === "compaction"
-                ? "compaction"
-                : "main",
-        )
-      : undefined;
+  const openCodeTurn = utils.headers.sessionMetadata.detectOpenCodeFamilyTurn(
+    headersForExtraction,
+    externalAgentId,
+  );
+  const openCodeSource: InteractionSource | undefined = openCodeTurn
+    ? openCodeFamilySource(openCodeTurn.clientId, openCodeTurn.kind)
+    : undefined;
   const untrustedAppaChatSource =
     isAppaChatSource(parsedSource) && !internalCall;
   // `model_router` is assigned by the route auth override, not accepted from
@@ -625,9 +586,10 @@ export async function handleLLMProxy<
       : parsedSource) ??
     "api";
 
+  const autoRouting = autoRoutingContext(request);
   // Session extraction reuses the resolved client attribution above to gate
   // OpenCode- and Codex-specific signals, so client identification lives in one place.
-  const { sessionId, sessionSource } = followAppaSessionHeader({
+  const extractedSession = followAppaSessionHeader({
     headers: headersForExtraction,
     source,
     ordinarySession: utils.headers.sessionId.extractSessionInfo({
@@ -636,6 +598,13 @@ export async function handleLLMProxy<
       externalAgentId,
     }),
   });
+  const { sessionId, sessionSource }: utils.headers.sessionId.SessionInfo =
+    extractedSession.sessionId === null && autoRouting?.derivedSessionKey
+      ? {
+          sessionId: autoRouting.derivedSessionKey,
+          sessionSource: "auto_routing",
+        }
+      : extractedSession;
 
   // Extract W3C trace context (traceparent/tracestate) from incoming request headers.
   // When the chat route calls the LLM proxy via localhost, the traced fetch injects these
@@ -651,6 +620,7 @@ export async function handleLLMProxy<
   const gatewayToolDeclarations =
     utils.gatewayToolDeclarations.extractGatewayToolDeclarations(body);
   const requestAdapter = provider.createRequestAdapter(body);
+  assertNotAutoOnNativeRoute(requestAdapter.getModel());
   const streamAdapter = provider.createStreamAdapter(body);
   const providerMessages = requestAdapter.getProviderMessages();
   const messagesCount = getProviderMessagesCount(providerMessages);
@@ -1291,34 +1261,11 @@ export async function handleLLMProxy<
       });
 
     if (limitViolation) {
-      const [_refusalMessage, contentMessage, limitMetadata] = limitViolation;
       logger.info(
         { resolvedAgentId, reason: "token_cost_limit_exceeded" },
         `${providerName} request blocked due to token cost limit`,
       );
-      // Preserve the proxy-compatible error envelope so chat clients can read
-      // structured limit metadata. This is Archestra budget enforcement, not the
-      // provider throttling traffic, so it must not look like a rate limit:
-      // a 429 makes every LLM SDK auto-retry a block that cannot clear on retry,
-      // and makes clients frame it as a provider limit ("not your usage limit").
-      // 402 Payment Required is non-retryable in all SDKs and semantically a
-      // budget stop. The Archestra-specific `type` plus the stable `code` keep
-      // structured detection working.
-      return reply.status(402).send({
-        error: {
-          message: contentMessage,
-          type: "usage_limit_exceeded",
-          code: "token_cost_limit_exceeded",
-          usage_limit: limitMetadata
-            ? {
-                limit_type: limitMetadata.limitType,
-                entity_type: limitMetadata.entityType,
-                entity_name: limitMetadata.entityName,
-                source: limitMetadata.source,
-              }
-            : undefined,
-        },
-      });
+      return sendUsageLimitRefusal(reply, limitViolation);
     }
     logger.debug(
       { resolvedAgentId },
@@ -1662,6 +1609,16 @@ export async function handleLLMProxy<
     // and only Anthropic has the anthropic-beta header in its type definition
     const headersToForward: Record<string, string> = {};
     const headersObj = headers as Record<string, unknown>;
+    if (providerName === "gemini") {
+      for (const name of [
+        "x-vertex-ai-llm-request-type",
+        "x-vertex-ai-llm-shared-request-type",
+      ]) {
+        if (typeof headersObj[name] === "string") {
+          headersToForward[name] = headersObj[name];
+        }
+      }
+    }
     if (typeof headersObj["anthropic-beta"] === "string") {
       const baseUrlOverridden = Boolean(perKeyBaseUrl || providerBaseUrlHeader);
       if (
@@ -1673,6 +1630,22 @@ export async function handleLLMProxy<
           { model: requestAdapter.getModel() },
           `[${providerName}Proxy] stripping anthropic-beta for non-Claude custom upstream`,
         );
+      }
+    }
+
+    // Kimi Code identifies itself with its User-Agent and X-Msh-* headers, as
+    // it does when it calls the Kimi Code API directly. Relay those headers as
+    // sent, so the API sees the real client behind a Kimi Code sign-in token.
+    // Only the headers Kimi Code itself sends travel; any other x-msh-* header
+    // on the request does not.
+    if (
+      providerName === "kimi-code" &&
+      typeof headersObj["user-agent"] === "string" &&
+      isKimiCodeUserAgent(headersObj["user-agent"])
+    ) {
+      for (const name of KIMI_CODE_CLIENT_HEADERS) {
+        const value = headersObj[name];
+        if (typeof value === "string") headersToForward[name] = value;
       }
     }
 
@@ -1925,6 +1898,8 @@ export async function handleLLMProxy<
                 encryptedChat,
                 streamTiming,
                 attributionLabels,
+                // A failed attempt has no usage to attribute to its routing decision.
+                autoRouting: undefined,
                 upstreamAttempt: attempt,
               });
             },
@@ -2057,6 +2032,7 @@ export async function handleLLMProxy<
             })
         : undefined,
       attributionLabels,
+      autoRouting,
       throughput: new LlmThroughput({
         entities: [...uniqueBillingEntities.values()],
         model: actualModel,
@@ -2231,6 +2207,8 @@ export async function handleLLMProxy<
         encryptedChat,
         streamTiming,
         attributionLabels,
+        // A failed request has no usage to attribute to its routing decision.
+        autoRouting: undefined,
         upstreamAttempt,
       });
     } catch (interactionError) {
@@ -2492,6 +2470,7 @@ async function handleStreaming<
         streamTiming,
         attributionLabels,
         throughput: ctx.throughput,
+        autoRouting: ctx.autoRouting,
         upstreamAttempt: ctx.upstreamAttempt,
       });
     } catch (interactionError) {
@@ -2591,6 +2570,7 @@ async function handleStreaming<
       });
 
       const costs = await calculateInteractionCosts({
+        autoRouting: ctx.autoRouting,
         usageAccountingMode: ctx.usageAccountingMode,
         providerApiKeyId: ctx.providerApiKeyId,
         actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
@@ -2667,6 +2647,7 @@ async function handleStreaming<
           streamTiming,
           attributionLabels,
           throughput: ctx.throughput,
+          autoRouting: ctx.autoRouting,
           upstreamAttempt: ctx.upstreamAttempt,
         });
       } catch (interactionError) {
@@ -2734,7 +2715,9 @@ async function handleStreaming<
             withFirstChunk(
               (await transport.executeStream(request)) as AsyncIterable<TChunk>,
             ),
-          memberTimeoutMs: MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
+          memberTimeoutMs:
+            ctx.modelPool?.plan.streamTimeoutMs ??
+            MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS,
           // Gemini's SDK loses the HTTP status when an error body is cut off;
           // that is indistinguishable from a transport failure, so don't retry.
           isRetryable: (error) =>
@@ -3472,7 +3455,8 @@ async function handleNonStreaming<
             (await llmProxyTiming.upstream(reply, () =>
               transport.execute(request),
             )) as TResponse,
-          memberTimeoutMs: poolResponseTimeoutMs(request),
+          memberTimeoutMs:
+            ctx.modelPool?.plan.timeoutMs ?? poolResponseTimeoutMs(request),
           // See the streaming path: Gemini cannot safely classify this boundary.
           isRetryable: (error) =>
             providerName !== "gemini" &&
@@ -3500,6 +3484,7 @@ async function handleNonStreaming<
             );
           }
           const costs = await calculateInteractionCosts({
+            autoRouting: ctx.autoRouting,
             actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
             usage: error.usage,
             providerName: ctx.upstreamAttempt.provider ?? providerName,
@@ -3537,6 +3522,7 @@ async function handleNonStreaming<
             streamTiming,
             attributionLabels,
             throughput: ctx.throughput,
+            autoRouting: ctx.autoRouting,
             upstreamAttempt: ctx.upstreamAttempt,
           });
           if (costs.billingUsage?.mode === "enforce")
@@ -3837,6 +3823,7 @@ async function handleNonStreaming<
 
       // Record interaction with refusal (usage already corrected above)
       const costs = await calculateInteractionCosts({
+        autoRouting: ctx.autoRouting,
         usageAccountingMode: ctx.usageAccountingMode,
         providerApiKeyId: ctx.providerApiKeyId,
         actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
@@ -3922,6 +3909,7 @@ async function handleNonStreaming<
         streamTiming,
         attributionLabels,
         throughput: ctx.throughput,
+        autoRouting: ctx.autoRouting,
         upstreamAttempt: ctx.upstreamAttempt,
       });
       if (tokenAccountingError) {
@@ -4012,6 +4000,7 @@ async function handleNonStreaming<
   // Anthropic tokens are emitted here for JSON and internally streamed calls;
   // its HTTP wrapper records duration only. Other providers own HTTP tokens.
   const costs = await calculateInteractionCosts({
+    autoRouting: ctx.autoRouting,
     usageAccountingMode: ctx.usageAccountingMode,
     providerApiKeyId: ctx.providerApiKeyId,
     actualModel: ctx.upstreamAttempt.modelId ?? actualModel,
@@ -4108,6 +4097,7 @@ async function handleNonStreaming<
       streamTiming,
       attributionLabels,
       throughput: ctx.throughput,
+      autoRouting: ctx.autoRouting,
       upstreamAttempt: ctx.upstreamAttempt,
     });
     responsePersisted = true;
@@ -4574,6 +4564,7 @@ async function persistProxyInteraction({
   streamTiming,
   attributionLabels,
   throughput,
+  autoRouting,
   upstreamAttempt,
 }: {
   record: InsertInteraction;
@@ -4581,12 +4572,14 @@ async function persistProxyInteraction({
   streamTiming: StreamTiming;
   attributionLabels?: AttributionLabels;
   throughput?: LlmThroughput;
+  autoRouting: AutoRoutingRequestContext | undefined;
   upstreamAttempt?: UpstreamAttempt;
 }): Promise<void> {
   // Snapshot before database work; streaming calls reach here after consumption,
   // so this includes the full stream rather than just time to its first byte.
   record = {
     ...record,
+    autoRoutingDecisionId: autoRouting?.decisionId,
     attributionLabels,
     durationMs: Math.max(
       0,
@@ -4697,6 +4690,37 @@ async function readProxyRequestState(
   return configCache.read(`context:${JSON.stringify(params)}`, () =>
     ProxyRequestContextModel.readForProxy(params),
   );
+}
+
+/**
+ * Preserve the proxy-compatible error envelope so chat clients can read
+ * structured limit metadata. This is Archestra budget enforcement, not the
+ * provider throttling traffic, so it must not look like a rate limit: a 429
+ * makes every LLM SDK auto-retry a block that cannot clear on retry, and makes
+ * clients frame it as a provider limit ("not your usage limit"). 402 Payment
+ * Required is non-retryable in all SDKs and semantically a budget stop. The
+ * Archestra-specific `type` plus the stable `code` keep structured detection
+ * working.
+ */
+export function sendUsageLimitRefusal(
+  reply: FastifyReply,
+  [_refusalMessage, contentMessage, limitMetadata]: LimitViolationResponse,
+) {
+  return reply.status(402).send({
+    error: {
+      message: contentMessage,
+      type: "usage_limit_exceeded",
+      code: "token_cost_limit_exceeded",
+      usage_limit: limitMetadata
+        ? {
+            limit_type: limitMetadata.limitType,
+            entity_type: limitMetadata.entityType,
+            entity_name: limitMetadata.entityName,
+            source: limitMetadata.source,
+          }
+        : undefined,
+    },
+  });
 }
 
 function withClaudeSubagentMetadata<TRequest>(

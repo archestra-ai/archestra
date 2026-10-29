@@ -339,6 +339,106 @@ describe("planModelPool", () => {
   });
 });
 
+describe("a pool's own timeouts and cooldown", () => {
+  test("go into the plan, and a pool that sets none keeps the defaults", async ({
+    makeOrganization,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const key = await makeLlmProviderApiKey(org.id, null);
+    await ModelPoolModel.create({
+      organizationId: org.id,
+      input: {
+        name: "gpt-oss-120b",
+        members: [member(key.id, "gpt-oss-120b", 1)],
+        streamTimeoutSeconds: 120,
+        timeoutSeconds: 600,
+        cooldownSeconds: 300,
+      },
+    });
+    await ModelPoolModel.create({
+      organizationId: org.id,
+      input: { name: "glm-5", members: [member(key.id, "glm-5", 1)] },
+    });
+    const plan = (name: string) =>
+      planModelPool({
+        organizationId: org.id,
+        name,
+        inbound: "anthropic",
+        caller: { providerApiKeyIds: [key.id] },
+      });
+
+    expect(await plan("gpt-oss-120b")).toMatchObject({
+      streamTimeoutMs: 120_000,
+      timeoutMs: 600_000,
+      cooldownMs: 300_000,
+    });
+    expect(await plan("glm-5")).toMatchObject({
+      streamTimeoutMs: undefined,
+      timeoutMs: undefined,
+      cooldownMs: undefined,
+    });
+  });
+
+  test.for([
+    { cooldownSeconds: undefined, retryAfter: undefined, seconds: 30 },
+    { cooldownSeconds: undefined, retryAfter: "600", seconds: 60 },
+    { cooldownSeconds: 300, retryAfter: undefined, seconds: 300 },
+    { cooldownSeconds: undefined, retryAfter: "5", seconds: 5 },
+    { cooldownSeconds: 300, retryAfter: "20", seconds: 300 },
+    { cooldownSeconds: 300, retryAfter: "600", seconds: 300 },
+    { cooldownSeconds: 10, retryAfter: "45", seconds: 45 },
+    { cooldownSeconds: 10, retryAfter: "5", seconds: 10 },
+  ])("cools a member down for $seconds s with cooldown $cooldownSeconds and Retry-After $retryAfter", async ({
+    cooldownSeconds,
+    retryAfter,
+    seconds,
+  }, { makeOrganization, makeLlmProviderApiKey }) => {
+    const org = await makeOrganization();
+    const first = await makeLlmProviderApiKey(org.id, null);
+    const second = await makeLlmProviderApiKey(org.id, null);
+    await ModelPoolModel.create({
+      organizationId: org.id,
+      input: {
+        name: "claude-haiku-4-5",
+        members: [
+          member(first.id, "claude-haiku-4-5", 1),
+          member(second.id, "claude-haiku-4-5", 2),
+        ],
+        cooldownSeconds,
+      },
+    });
+    const plan = (await planModelPool({
+      organizationId: org.id,
+      name: "claude-haiku-4-5",
+      inbound: "anthropic",
+      caller: { providerApiKeyIds: [first.id] },
+    })) as ModelPoolPlan;
+
+    const before = Date.now();
+    await openThroughModelPool({
+      plan,
+      attempt: {},
+      transportFor: async (m) => transport(m.providerApiKeyId),
+      open: async (t) => {
+        if ((await t.execute({})) === first.id) {
+          throw httpError(429, retryAfter ? { "retry-after": retryAfter } : {});
+        }
+        return "ok";
+      },
+      isRetryable: () => false,
+      shouldContinue: () => true,
+      recordFailedAttempt: async () => {},
+    });
+
+    const [health] = await withMemberHealth(await ModelPoolModel.list(org.id));
+    const benched = health.members.find((m) => m.providerApiKeyId === first.id);
+    const ms = Date.parse(benched?.benchedUntil ?? "") - before;
+    expect(ms).toBeGreaterThanOrEqual(seconds * 1000 - 1000);
+    expect(ms).toBeLessThanOrEqual(seconds * 1000 + 1000);
+  });
+});
+
 describe("openThroughModelPool", () => {
   const keyA = "00000000-0000-4000-8000-00000000000a";
   const keyB = "00000000-0000-4000-8000-00000000000b";

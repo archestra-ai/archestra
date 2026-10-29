@@ -29,7 +29,8 @@ import { openUpstreamWithRetry } from "./upstream-connection-retry";
 
 /**
  * How long a pool member's stream may stay silent before the request moves to
- * the next member. The last member is waited on: it has nowhere to move to.
+ * the next member, unless the pool sets its own. The last member is waited
+ * on: it has nowhere to move to.
  */
 export const MODEL_POOL_FIRST_CHUNK_TIMEOUT_MS = 30_000;
 
@@ -85,6 +86,12 @@ export interface ModelPoolPlan {
   poolName: string;
   /** Members in the order they are tried. */
   members: PlannedMember[];
+  /** The pool's own stream timeout; unset keeps the default. */
+  streamTimeoutMs?: number;
+  /** The pool's own non-streaming timeout; unset scales the default. */
+  timeoutMs?: number;
+  /** The pool's own cooldown; unset keeps the default. */
+  cooldownMs?: number;
 }
 
 /** Who is calling, as far as pool access goes. */
@@ -184,6 +191,9 @@ export async function planModelPool(params: {
   return {
     poolId: pool.id,
     poolName: pool.name,
+    streamTimeoutMs: toMs(pool.streamTimeoutSeconds),
+    timeoutMs: toMs(pool.timeoutSeconds),
+    cooldownMs: toMs(pool.cooldownSeconds),
     members: orderPoolMembers({
       members: reachable,
       benchedUntil,
@@ -340,6 +350,7 @@ export async function openThroughModelPool<T>(params: {
         memberId: member.memberId,
         reason: failover.reason,
         retryAfterMs: failover.retryAfterMs,
+        cooldownMs: plan.cooldownMs,
       });
       if (isLast || !params.shouldContinue()) {
         throw error instanceof MemberUnavailableError ? error.cause : error;
@@ -415,7 +426,10 @@ async function withTimeout<T>(
 
 /** How long a failed member sits out without a usable Retry-After. */
 const DEFAULT_BENCH_MS = 30_000;
-/** A member never sits out longer than this; a longer wait just moves on. */
+/**
+ * A Retry-After is honored up to this, or the pool's cooldown when longer; a
+ * longer wait just moves on.
+ */
 const MAX_BENCH_MS = 60_000;
 
 /** A benched member: when it comes back, and the failure that benched it. */
@@ -429,10 +443,16 @@ async function benchMember(params: {
   memberId: string;
   reason: string;
   retryAfterMs?: number;
+  /**
+   * The pool's cooldown: the shortest bench, which a longer Retry-After can
+   * extend. Without one, a Retry-After sets the bench, shorter or longer.
+   */
+  cooldownMs?: number;
 }): Promise<void> {
+  const cooldownMs = params.cooldownMs ?? DEFAULT_BENCH_MS;
   const ms = Math.min(
-    MAX_BENCH_MS,
-    Math.max(1_000, params.retryAfterMs ?? DEFAULT_BENCH_MS),
+    Math.max(MAX_BENCH_MS, cooldownMs),
+    Math.max(params.cooldownMs ?? 1_000, params.retryAfterMs ?? cooldownMs),
   );
   try {
     await cacheManager.set(
@@ -458,6 +478,10 @@ async function readBenches(
     if (bench) byMember.set(member.id, bench);
   }
   return byMember;
+}
+
+function toMs(seconds: number | null): number | undefined {
+  return seconds === null ? undefined : seconds * 1000;
 }
 
 function benchKey(poolId: string, memberId: string) {

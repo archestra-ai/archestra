@@ -63,6 +63,16 @@ describe("config routes", () => {
     expect(on.json().features.devFeedbackEnabled).toBe(true);
   });
 
+  test("advertises auto routing only when its flag is set", async () => {
+    config.autoRouting.enabled = true;
+    const on = await app.inject({ method: "GET", url: "/api/config" });
+    config.autoRouting.enabled = false;
+    const off = await app.inject({ method: "GET", url: "/api/config" });
+
+    expect(off.json().features.autoRoutingEnabled).toBe(false);
+    expect(on.json().features.autoRoutingEnabled).toBe(true);
+  });
+
   test.for([
     1, 2,
   ])("returns public config without authentication for isolated database %s", async () => {

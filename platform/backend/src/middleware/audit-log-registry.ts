@@ -857,6 +857,48 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       RuntimeCredentialDefinitionModel.findByIdForAudit(id, orgId),
   },
+  // GitHub Copilot enterprise plans: only the stored plan key is audited.
+  // The manifest, return, check and validate steps touch GitHub and a
+  // short-lived setup record; their routes skip the audit.
+  "/api/github-copilot-app/manifest": {
+    resourceType: "llmProviderApiKey",
+    action: "llmProviderApiKey.created",
+  },
+  "/api/github-copilot-app/manifest/complete": {
+    resourceType: "llmProviderApiKey",
+    action: "llmProviderApiKey.created",
+  },
+  "/api/github-copilot-app/pending": {
+    resourceType: "llmProviderApiKey",
+    action: "llmProviderApiKey.deleted",
+  },
+  "/api/github-copilot-app/organization/check": {
+    resourceType: "llmProviderApiKey",
+    action: "llmProviderApiKey.created",
+  },
+  "/api/github-copilot-app/existing/validate": {
+    resourceType: "llmProviderApiKey",
+    action: "llmProviderApiKey.created",
+  },
+  // These store the plan key.
+  "/api/github-copilot-app/install": {
+    resourceType: "llmProviderApiKey",
+    action: "llmProviderApiKey.created",
+    fetchById: (id, orgId) =>
+      LlmProviderApiKeyModel.findByIdForAudit(id, orgId),
+  },
+  "/api/github-copilot-app/existing": {
+    resourceType: "llmProviderApiKey",
+    action: "llmProviderApiKey.created",
+    fetchById: (id, orgId) =>
+      LlmProviderApiKeyModel.findByIdForAudit(id, orgId),
+  },
+  "/api/github-copilot-app/credential": {
+    resourceType: "llmProviderApiKey",
+    action: "llmProviderApiKey.created",
+    fetchById: (id, orgId) =>
+      LlmProviderApiKeyModel.findByIdForAudit(id, orgId),
+  },
   "/api/openappa/battery-installs": {
     resourceType: "openappaBatteryInstall",
     fetchById: (id, orgId) =>

@@ -2,7 +2,7 @@
 title: Networking
 description: Configure public endpoints, streaming, and workload network isolation
 order: 4
-lastUpdated: 2026-10-27
+lastUpdated: 2026-10-28
 ---
 
 Give users and clients an HTTPS endpoint, then configure the routes and public URLs to match it.
@@ -37,6 +37,10 @@ Production apps that need persistent browser storage require a sandbox domain. W
 5. Open an app and confirm it renders through its sandbox host.
 
 Allowed embedding origins follow [`ARCHESTRA_FRONTEND_URL`](/docs/admin/deployment/configuration#ARCHESTRA_FRONTEND_URL) and [`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`](/docs/admin/deployment/configuration#ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS). Local instances use `localhost` and `127.0.0.1` without a sandbox domain.
+
+## Allow Backend Egress
+
+If you restrict the backend's outbound traffic, allow each model provider's endpoint, listed under [LLM Provider Configuration](/docs/admin/deployment/configuration#llm-providers). A ChatGPT subscription needs [its own hosts](/docs/llm-proxy/providers#chatgpt-subscription-egress).
 
 ## Enforce Workload Egress
 

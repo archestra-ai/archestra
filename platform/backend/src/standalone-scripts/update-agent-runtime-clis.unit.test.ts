@@ -65,6 +65,10 @@ test("raises each CLI to its newest stable release outside the cooldown", async 
         },
       }),
       ...grokPackuments({ "1.0.70": OLD, "1.0.71": OLD }, { "1.0.70": OLD }),
+      "@github/copilot": packument({
+        tags: { latest: "1.0.103" },
+        versions: { "1.0.101": OLD, "1.0.102": OLD, "1.0.103": RECENT },
+      }),
       "@moonshot-ai/kimi-code": packument({
         tags: { latest: "2.4.1" },
         versions: { "2.3.3": OLD, "2.4.0": OLD, "2.4.1": RECENT },
@@ -99,6 +103,7 @@ test("raises each CLI to its newest stable release outside the cooldown", async 
     "Updated Hermes 0.19.0 -> 0.20.0",
     "Updated OpenClaw 2026.7.1-2 -> 2026.10.6-2",
     "Updated Grok CLI 1.0.67 -> 1.0.70",
+    "Updated GitHub Copilot CLI 1.0.101 -> 1.0.102",
     "Updated Kimi Code 2.3.3 -> 2.4.0",
   ]);
   expect(readFileSync(path.join(agentDir, "Dockerfile"), "utf8")).toBe(
@@ -110,6 +115,11 @@ test("raises each CLI to its newest stable release outside the cooldown", async 
       .replaceAll("1.0.67", "1.0.70")
       .replace(/checksum=a{64}/, `checksum=${grok.binarySha256}`)
       .replace(/checksum=b{64}/, `checksum=${grok.binarySha256}`)
+      .replace("copilot_arch}@1.0.101", "copilot_arch}@1.0.102")
+      .replaceAll(
+        /copilot_checksum=[de]{128}/g,
+        `copilot_checksum=${COPILOT_SHA512}`,
+      )
       .replace("kimi-code@2.3.3", "kimi-code@2.4.0")
       .replace(
         "c".repeat(128),
@@ -205,6 +215,7 @@ test("reads every pin in the real agent catalog Dockerfile", async () => {
       opencode: "0.0.1",
       openclaw: "0.0.1",
       kimi: "0.0.1",
+      copilot: "0.0.1",
     }),
     github: hermesAt("v0.0.1"),
     grokStable: "0.0.1",
@@ -214,7 +225,7 @@ test("reads every pin in the real agent catalog Dockerfile", async () => {
 
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
-  expect(result.stdout.match(/ remains /g)).toHaveLength(7);
+  expect(result.stdout.match(/ remains /g)).toHaveLength(8);
 });
 
 // =============================================================================
@@ -243,10 +254,18 @@ RUN case "$TARGETARCH" in \\
     esac \\
  && npm pack --silent "@xai-official/grok-linux-\${grok_arch}@1.0.67" \\
  && tar -xzf "xai-official-grok-linux-\${grok_arch}-1.0.67.tgz"
+FROM agent-base AS agent-copilot
+RUN case "$TARGETARCH" in \\
+      amd64) copilot_arch=x64; copilot_checksum=${"d".repeat(128)} ;; \\
+      arm64) copilot_arch=arm64; copilot_checksum=${"e".repeat(128)} ;; \\
+    esac \\
+ && npm pack --silent @github/copilot-linux-\${copilot_arch}@1.0.101
 FROM agent-base AS agent-kimi
 RUN mv "$(npm pack --silent @moonshot-ai/kimi-code@2.3.3)" kimi-code.tgz \\
  && echo "${"c".repeat(128)}  kimi-code.tgz" | sha512sum -c -
 `;
+
+const COPILOT_SHA512 = "f".repeat(128);
 
 const KIMI_TARBALL = Buffer.from("kimi code tarball");
 
@@ -309,7 +328,10 @@ function grokPackuments(
 // Packuments whose channel already sits at (or below) the fixture pins.
 function allNpmAt(
   ceilings: Partial<
-    Record<"claude" | "codex" | "opencode" | "openclaw" | "kimi", string>
+    Record<
+      "claude" | "codex" | "opencode" | "openclaw" | "kimi" | "copilot",
+      string
+    >
   >,
 ) {
   const at = (version: string, tag = "latest") =>
@@ -319,6 +341,7 @@ function allNpmAt(
     "@openai/codex": at(ceilings.codex ?? "0.153.0"),
     "opencode-ai": at(ceilings.opencode ?? "1.18.23"),
     openclaw: at(ceilings.openclaw ?? "2026.7.1-2"),
+    "@github/copilot": at(ceilings.copilot ?? "1.0.101"),
     "@moonshot-ai/kimi-code": at(ceilings.kimi ?? "2.3.3"),
     ...grokPackuments({}, {}),
   };
@@ -406,6 +429,13 @@ async function startRegistry({
     const npmPath = decodeURIComponent(url.pathname.slice(1));
     const [, name, version] =
       /^(@[^/]+\/[^/]+|[^@/][^/]*)(?:\/(.+))?$/.exec(npmPath) ?? [];
+    if (name?.startsWith("@github/copilot-linux-") && version) {
+      return send(200, {
+        dist: {
+          integrity: `sha512-${Buffer.from(COPILOT_SHA512, "hex").toString("base64")}`,
+        },
+      });
+    }
     const document = name ? npm[name] : undefined;
     if (!document) return send(404, {});
     if (!version) return send(200, document);

@@ -592,10 +592,10 @@ export function getAgentRuntimeAllowedProtocols(
       return ["anthropic"];
     case "archestra-codex":
       return ["openai_responses", "openai_chat"];
-    // Grok Build and Kimi Code support only Chat Completions on a custom
-    // model endpoint.
+    // These wrappers use Chat Completions on a custom model endpoint.
     case "archestra-grok":
     case "archestra-kimi":
+    case "archestra-copilot":
       return ["openai_chat"];
     default:
       return ["openai_responses", "openai_chat", "anthropic"];

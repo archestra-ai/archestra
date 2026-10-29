@@ -2,7 +2,7 @@
 title: MCP
 description: Add MCP servers once, then give agents and MCP clients their tools through governed gateways
 order: 3
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -49,4 +49,4 @@ For a team, an app, or a script that needs a fixed set of tools, [create a gatew
 
 - **Environments:** a gateway or agent reaches only the servers in its own [environment](/docs/admin/environments). The environment also sets where self-hosted servers run, and which hosts any server can reach.
 - Guardrails run in the [LLM Proxy](/docs/llm-proxy), not here. They check a tool call when the model asks for it. Connect the client to both. See [Guardrails](/docs/agents/guardrails/clients).
-- **Metrics and traces:** tool calls produce [MCP metrics](/docs/admin/observability/metrics#mcp-metrics) and [tool call spans](/docs/admin/observability/tracing#mcp-tool-call-spans).
+- **Metrics and traces:** tool calls produce [MCP metrics](/docs/admin/observability/metrics/mcp) and [tool call spans](/docs/admin/observability/tracing#mcp-tool-call-spans).

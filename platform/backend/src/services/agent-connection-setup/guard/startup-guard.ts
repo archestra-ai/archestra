@@ -44,17 +44,17 @@ import type { SetupScriptContext, SetupScriptProxySection } from "../types";
  *   on the same origin, so endpoint reachability covers it;
  * - retries that single request with capped exponential backoff + jitter for
  *   up to 15s when the platform is unreachable, surfacing a "trying to
- *   connect…" line after 3s — with the disconnect (Y/n) offer on its own
- *   line below it — and a "hang tight" nudge after 10s. `y`/`n` answer it
- *   the whole wait. If the budget runs out, every remote is treated as
- *   down;
+ *   connect…" line after 3s — with a session-only skip offer on its own
+ *   line below it — and a "hang tight" nudge after 10s. Enter/`n` skip
+ *   the checks; persistent disconnect requires the reconfigure menu. If the budget runs out,
+ *   every remote is treated as down;
  * - then plays the pre-loader animation resource by resource (~0.75s of
  *   appended trailing dots — append-only output cannot flicker). Every row
  *   is on screen from the start: the probing row bright, pending rows dim
  *   below it, text aligned into the glyph column. A row lands on a check
  *   for ok, "Failed to connect to <type> (<id-or-slug>)" for a down one — and
  *   after the whole turn, ONE "Disconnect … from Claude? (Y/n)" prompt covers
- *   every down remote. Everything draws on the alternate screen, so the
+ *   explicitly down resources; transport failures offer a session-only skip. Everything draws on the alternate screen, so the
  *   terminal is clean again after claude exits;
  * - keeps a skip entry live the whole run: Space — polled between animation
  *   frames and during the retry wait — ends the pre-loader
@@ -332,6 +332,16 @@ export function buildStartupGuardContext(
   };
 }
 
+/** Shared, credential-free outage context for the local launch checks. */
+export function startupGuardUnreachableWarning(
+  ctx: StartupGuardContext,
+  client: StartupGuardClient,
+): string {
+  // Only the origin is safe to display: resource paths may contain tokens.
+  const address = ctx.healthUrl ? ` at ${new URL(ctx.healthUrl).origin}` : "";
+  return `${ctx.appName} is unreachable${address}. ${client.label} may report a connection error while its ${ctx.appName} connections remain configured. Check that the instance is running and reachable (including your network or VPN), then retry. To disconnect, run ${client.binary} interactively and use [C] to reconfigure.`;
+}
+
 /**
  * The standalone guard script body (the file at ~/.archestra/…).
  *
@@ -510,6 +520,12 @@ probe_reachable() {
 # health URL (per-resource fallback).
 HEALTH_STATE=''
 
+warn_unreachable() {
+  [ "$HEALTH_STATE" = "down" ] || return 0
+  [ "$GUARD_UNINSTALLED" != "1" ] || return 0
+  printf '%s\\n' ${sh(startupGuardUnreachableWarning(ctx, client))} >&2
+}
+
 resource_down() { # $1 index; 0 = down
   if [ -z "$HEALTH_URL" ]; then
     probe_reachable "\${GUARD_URLS[$1]}" && return 1
@@ -585,6 +601,7 @@ if [ "$INTERACTIVE" = "0" ] && [ "$ARCH_DISCONNECT_ALL" = "0" ]; then
     fetch_health || HEALTH_STATE='down'
   fi
   launch_refreshed_guard "$@"
+  warn_unreachable
   i=0
   while [ "$i" -lt "\${#GUARD_URLS[@]}" ]; do
     if [ "\${GUARD_ACTIVE[$i]}" = "1" ] && resource_down "$i"; then
@@ -1034,7 +1051,13 @@ notify_version_update() {
 # all, nothing is left to check, so the guard silently removes itself too —
 # the Disconnected rows say everything.
 prompt_down_all() {
-  if [ "$DOWN_COUNT" -eq 1 ]; then
+  # No response is not evidence of a deleted/revoked resource. Keep routing
+  # configured; only the explicit reconfigure menu may disconnect in an outage.
+  transport_outage=0
+  if [ "$HEALTH_STATE" = "down" ] || [ -z "$HEALTH_URL" ]; then
+    transport_outage=1
+    down_prompt="Instance unreachable. Press [Enter] to skip checks for this session; connections stay configured."
+  elif [ "$DOWN_COUNT" -eq 1 ]; then
     set -- $DOWN_IDXS
     down_prompt="Disconnect \${GUARD_FAIL_NAMES[$1]} from ${client.promptName} now? (Y/n)"
   else
@@ -1056,6 +1079,7 @@ prompt_down_all() {
       reconfigure_menu
       ;;
     y|Y|'')
+      [ "$transport_outage" = "0" ] || return 0
       GUARD_DWELL=1
       disconnect_and_forget $DOWN_IDXS
       [ "$DOWN_COUNT" -ge "$ACTIVE_TOTAL" ] && [ "$DISCONNECT_FAILED" = "0" ] && uninstall_guard
@@ -1072,22 +1096,15 @@ prompt_down_all() {
   return 0
 }
 
-# The disconnect offer during the retry ladder is the same classic (Y/n)
-# prompt, on its own line below the row after a blank line — drawn once via
-# cursor save/restore so the dots keep appending to the row above it, and
-# wiped again the moment the wait resolves. The platform being unreachable
-# affects every active remote, so answering yes disconnects them all.
+# Transport failures offer a session-only skip. Persistent removal stays in
+# the explicit reconfigure menu, independently of endpoint reachability.
 WAIT_PROMPT_SHOWN=0
 show_wait_prompt() {
   [ "$WAIT_PROMPT_SHOWN" = "1" ] && return 0
   WAIT_PROMPT_SHOWN=1
-  if [ "$ACTIVE_TOTAL" -eq 1 ]; then
-    wait_prompt="Disconnect \${GUARD_FAIL_NAMES[$FIRST_ACTIVE]} from ${client.promptName} now? (Y/n)"
-  else
-    wait_prompt="Disconnect all $ACTIVE_TOTAL unreachable resources from ${client.promptName} now? (Y/n)"
-  fi
+  wait_prompt="Instance unreachable. Press [Enter] to skip checks for this session; connections stay configured."
   # two lines below the block: the persistent [C] hint sits at +1, this
-  # (Y/n) offer at +2, so both stay visible during the outage wait
+  # skip offer at +2, so both stay visible during the outage wait
   printf '\\033[s\\033[%dB\\r\\033[2K%s \\033[u' "$((ACTIVE_TOTAL + 2))" "$wait_prompt"
 }
 clear_wait_prompt() {
@@ -1096,14 +1113,9 @@ clear_wait_prompt() {
   return 0
 }
 
-# One health request for the whole launch, retried with backoff while the
-# spinner plays on the first resource row. y = disconnect every remote now
-# (they are all unreachable) — and with nothing left to check, remove the
-# startup check itself; n = skip the checks for this launch. Both answer
-# keys are live the whole wait; bare Enter accepts the disconnect default
-# only once the prompt is actually on screen.
+# Retry health with backoff. Skipping changes this launch only; it never
+# removes routing, credentials, the guard, or its shell wrappers.
 SKIP_ALL=0
-DISC_ALL=0
 LAST_WAIT_NOTE=''
 wait_for_health() {
   fetch_health && { HEALTH_STATE='ok'; return 0; }
@@ -1117,11 +1129,10 @@ wait_for_health() {
     IFS= read -rs -n 1 -t "$TICK" key </dev/tty 2>/dev/null && got_key=1
     if [ "$got_key" = "1" ]; then
       case "$key" in
-        y|Y) DISC_ALL=1; break ;;
         n|N) SKIP_ALL=1; break ;;
         ' ') SKIP_NOW=1; break ;;
         c|C) OPEN_MENU=1; break ;;
-        '') [ "$WAIT_PROMPT_SHOWN" = "1" ] && { DISC_ALL=1; break; } ;;
+        '') [ "$WAIT_PROMPT_SHOWN" = "1" ] && { SKIP_ALL=1; break; } ;;
       esac
     fi
     now=$(date +%s)
@@ -1165,15 +1176,14 @@ wait_for_health() {
 }
 
 # The whole pre-loader draws on the terminal's alternate screen — the same
-# way claude itself does — so nothing lingers in the scrollback after claude
-# exits. When the launch needed attention, the outcome is held briefly
-# before the alternate screen closes over it.
+# way claude itself does. Keep an unreachable-instance warning on the normal
+# screen so the client's later connection error still has useful context.
 draw_guard_screen() {
 printf '\\033[?1049h\\033[H\\033[2J'
 # Echo off for the whole interactive run: keys pressed while the probes animate
 # (before any read) would otherwise smudge the screen. Restored on exit.
 stty -echo </dev/tty 2>/dev/null || true
-trap 'stop_frame_key_reader; stty echo </dev/tty 2>/dev/null; printf "\\033[?1049l"' EXIT
+trap 'stop_frame_key_reader; stty echo </dev/tty 2>/dev/null; printf "\\033[?1049l"; warn_unreachable' EXIT
 ${guardHeader(ctx)}
 ${client.disconnectNote ? `printf '%s\\n' ${sh(client.disconnectNote)}` : ""}
 # Every row is on screen from the start: probed rows keep their glyph, the
@@ -1206,14 +1216,6 @@ if [ "$OPEN_MENU" = "1" ]; then
   printf '\\033[%dB\\r' "$ACTIVE_TOTAL"
   clear_reconfigure_hint
   reconfigure_menu
-  notify_version_update
-  finish_guard
-fi
-if [ "$DISC_ALL" = "1" ]; then
-  line_reset
-  GUARD_DWELL=1
-  disconnect_and_forget $ACTIVE_IDXS
-  [ "$DISCONNECT_FAILED" = "0" ] && uninstall_guard
   notify_version_update
   finish_guard
 fi

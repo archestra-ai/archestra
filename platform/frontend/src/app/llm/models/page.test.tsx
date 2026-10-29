@@ -94,6 +94,11 @@ const model = {
   priceSource: "models_dev",
   pricePerMillionCacheRead: null,
   pricePerMillionCacheWrite: null,
+  longContextThreshold: null,
+  longContextPricePerMillionInput: null,
+  longContextPricePerMillionOutput: null,
+  longContextPricePerMillionCacheRead: null,
+  longContextPricePerMillionCacheWrite: null,
   cachePriceSource: "models_dev",
   isFree: false,
   effectiveContextLength: 200_000,
@@ -293,6 +298,80 @@ describe("ModelsPage", () => {
         customPricePerMillionCacheRead: null,
         customPricePerMillionCacheWrite: null,
       }),
+    );
+  });
+
+  it("saves long-context pricing only as a complete set", async () => {
+    keyCreated = true;
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    const updates: archestraApiTypes.UpdateModelData["body"][] = [];
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-models/labels/keys`, () =>
+        HttpResponse.json([]),
+      ),
+      http.get(
+        `${API_ORIGIN}/api/resource-permissions/llmModel/${model.id}`,
+        () =>
+          HttpResponse.json({
+            resource: "llmModel",
+            scope: model.id,
+            name: model.modelId,
+            ownerId: null,
+            revision: 1,
+            grants: [],
+            inheritedGrants: [],
+            effectiveActions: ["read", "update", "manage-permissions"],
+            canShareOrganizationWide: true,
+            actorSubjects: [],
+          } satisfies archestraApiTypes.GetResourcePermissionsResponses["200"]),
+      ),
+      http.patch(
+        `${API_ORIGIN}/api/llm-models/${model.id}`,
+        async ({ request }) => {
+          const body =
+            (await request.json()) as archestraApiTypes.UpdateModelData["body"];
+          updates.push(body);
+          return HttpResponse.json({ ...model, ...body });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole(
+        "button",
+        { name: `Edit ${model.modelId}` },
+        { timeout: 5000 },
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "Pricing" }));
+    await user.type(screen.getByLabelText("Above prompt tokens"), "200000");
+    await user.type(screen.getByLabelText("Long input"), "6");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(
+      await screen.findByTestId("edit-model-form-errors"),
+    ).toHaveTextContent(
+      "Set the threshold and all four long-context prices, or leave all empty",
+    );
+    expect(updates).toHaveLength(0);
+
+    await user.type(screen.getByLabelText("Long output"), "22.5");
+    await user.type(screen.getByLabelText("Long cache read"), "0.6");
+    await user.type(screen.getByLabelText("Long cache write"), "7.5");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(updates).toEqual([
+        expect.objectContaining({
+          longContextThreshold: 200_000,
+          longContextPricePerMillionInput: "6",
+          longContextPricePerMillionOutput: "22.5",
+          longContextPricePerMillionCacheRead: "0.6",
+          longContextPricePerMillionCacheWrite: "7.5",
+        }),
+      ]),
     );
   });
 

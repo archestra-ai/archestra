@@ -26,7 +26,8 @@ vi.mock("@/components/agent-run-terminal", () => ({
     <div>Live terminal {taskId}</div>
   ),
 }));
-vi.mock("@/components/agent-run-logs", () => ({
+vi.mock("@/components/agent-run-logs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/agent-run-logs")>()),
   AgentRunLogs: () => <div>Saved output</div>,
 }));
 vi.mock("@/components/chat/share-agent-run-dialog", () => ({

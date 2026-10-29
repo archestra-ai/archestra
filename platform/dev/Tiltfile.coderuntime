@@ -24,8 +24,9 @@
 local_resource(
   'sandbox-rs-build',
   # build:dev = the release-fast profile (no LTO, incremental) for fast in-loop
-  # rebuilds; CI/Docker still build the optimized --release binary.
-  cmd='pnpm --filter @archestra/sandbox-rs build:dev',
+  # rebuilds; CI/Docker still build the optimized --release binary. The
+  # prebuilt install runs first, as for app-runtime-rs-build (Tiltfile.dev).
+  cmd='node ../scripts/napi-prebuilt.mjs sandbox-rs || pnpm --filter @archestra/sandbox-rs build:dev',
   deps=[
     '../archestra-rs/sandbox-rs/src',
     '../archestra-rs/sandbox-core/src',

@@ -300,6 +300,13 @@ export const STARTUP_GUARD_INSTALL = {
     markerStart: "# >>> archestra codex guard >>>",
     markerEnd: "# <<< archestra codex guard <<<",
   },
+  "kimi-code": {
+    scriptRelpath: ".archestra/kimi-code-startup-guard.sh",
+    psScriptRelpath: ".archestra/kimi-code-startup-guard.ps1",
+    skipRelpath: ".archestra/kimi-code-startup-guard.skip",
+    markerStart: "# >>> archestra kimi-code guard >>>",
+    markerEnd: "# <<< archestra kimi-code guard <<<",
+  },
   "copilot-cli": {
     scriptRelpath: ".archestra/copilot-startup-guard.sh",
     psScriptRelpath: ".archestra/copilot-startup-guard.ps1",
@@ -338,7 +345,7 @@ export type StartupGuardClientId = keyof typeof STARTUP_GUARD_INSTALL;
  * Preview installs already used version 2. Version 3 repairs their PowerShell
  * permission cleanup; reusing version 2 would not prompt those users to reconnect.
  */
-export const STARTUP_GUARD_FORMAT_VERSION = 6;
+export const STARTUP_GUARD_FORMAT_VERSION = 9;
 
 /**
  * The managed instructions a deployment uses until an admin edits them. It
@@ -515,3 +522,8 @@ export function isEditableTextFile(params: {
  */
 export const AGENT_OPTIONS_MAX_IDS = 200;
 export const AGENT_OPTIONS_MAX_PAGE_SIZE = 1000;
+
+/** Highest spending limit one auto-routing backfill may be given, in USD. */
+export const AUTO_ROUTING_BACKFILL_MAX_COST_USD = 1000;
+/** Scorer calls a backfill has in flight: how many per-call costs it may overshoot its spending limit by. */
+export const AUTO_ROUTING_BACKFILL_SCORER_CALLS = 4;

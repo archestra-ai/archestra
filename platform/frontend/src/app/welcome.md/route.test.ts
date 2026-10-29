@@ -29,6 +29,30 @@ describe("Welcome agent instructions", () => {
     );
   });
 
+  // An agent toured the whole product from another agent's tool list and
+  // the skill catalog, then suggested building an app its gateway cannot build.
+  it("keeps the tour to what this gateway gives", async () => {
+    const instructions = await welcome("?server=acme_ai");
+    expect(instructions).toContain(
+      "If you have its search_tools tool, its\n   description names the gateway's built-in capability groups and its MCP\n   servers: that is the list.",
+    );
+    // The agent dropped the gateway's own servers as "other" servers, and
+    // read the list_agents rule as forbidding list_agents itself.
+    expect(instructions).toContain(
+      "The MCP servers\nbehind the gateway are part of it, not other servers: include them.",
+    );
+    expect(instructions).toContain(
+      "An agent's tool list (from\nlist_agents or get_agent) shows that agent's tools",
+    );
+    expect(instructions).toContain(
+      "If a skill's work needs tools that\n   step 1 does not list, say so in its line.",
+    );
+    expect(instructions).toContain(
+      "Call only tools that search_tools returned",
+    );
+    expect(instructions).toContain("Each must work with the tools in step 1.");
+  });
+
   it("names the gateway's server from the link", async () => {
     const instructions = await welcome("?server=acme_ai");
     expect(instructions).toContain(

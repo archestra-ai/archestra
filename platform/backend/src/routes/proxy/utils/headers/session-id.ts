@@ -2,6 +2,7 @@ import {
   CLAUDE_CODE_HEADER_SESSION_SOURCE,
   CLAUDE_METADATA_SESSION_SOURCE,
   isCodexClientAgentId,
+  KIMI_CODE_CLIENT_ID,
   SESSION_ID_HEADER,
 } from "@archestra/shared";
 import {
@@ -50,9 +51,12 @@ export type SessionSource =
   | "openwebui_chat"
   | "codex_session"
   | "pi_session"
+  | "kimi_code_session"
   | OpenCodeFamilySessionSource
   | typeof CLAUDE_CODE_HEADER_SESSION_SOURCE
   | "openai_user"
+  /** The auto model's sticky routing key, for a request that named no session. */
+  | "auto_routing"
   | null;
 
 export interface SessionInfo {
@@ -78,6 +82,8 @@ export interface SessionInfo {
  *    'opencode_session'). A delegated child keeps its own native session id;
  *    its parent signal classifies the row instead of renaming it.
  * 6. Pi `x-pi-session-id`, only for the Pi client (source: 'pi_session').
+ *    Kimi Code `prompt_cache_key`, only for the Kimi Code client (source:
+ *    'kimi_code_session'). It stays the same across resume and compaction.
  * 7. Claude Code `x-claude-code-session-id` (source: 'claude_code_header').
  *    `/branch` or `--fork-session` creates a new ID here, ensuring forks
  *    record as separate sessions in logs.
@@ -105,6 +111,7 @@ export function extractSessionInfo({
         metadata?: { user_id?: string | null };
         user?: string | null;
         client_metadata?: unknown;
+        prompt_cache_key?: unknown;
       }
     | undefined;
   externalAgentId: string | undefined;
@@ -179,6 +186,18 @@ export function extractSessionInfo({
     const piSessionId = getHeaderValue(headers, "x-pi-session-id")?.trim();
     if (piSessionId) {
       return { sessionId: piSessionId, sessionSource: "pi_session" };
+    }
+  }
+
+  // Kimi Code sends its session id as the prompt cache key. The field is a
+  // generic OpenAI one, so it is read only for the Kimi Code client.
+  if (externalAgentId?.trim().toLowerCase() === KIMI_CODE_CLIENT_ID) {
+    const kimiSessionId =
+      typeof body?.prompt_cache_key === "string"
+        ? body.prompt_cache_key.trim()
+        : "";
+    if (kimiSessionId) {
+      return { sessionId: kimiSessionId, sessionSource: "kimi_code_session" };
     }
   }
 

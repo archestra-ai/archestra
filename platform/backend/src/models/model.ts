@@ -52,6 +52,16 @@ interface EffectivePricing {
   cacheSource: PriceSource | null;
 }
 
+/** Whether a prompt of `promptTokens` is priced at a long-context tier starting above `threshold`. */
+export function isLongContextPrompt(
+  threshold: number | null,
+  promptTokens: number | undefined,
+): boolean {
+  return (
+    threshold !== null && promptTokens !== undefined && promptTokens > threshold
+  );
+}
+
 /**
  * Returns default token prices for a model.
  * Cheaper models (-haiku, -nano, -mini) get $30/million tokens.
@@ -278,11 +288,11 @@ class ModelModel {
    * the other bulk loaders there is no tenancy fence to apply here — the route
    * gate (`llmModel:update`) is the whole permission story.
    */
-  static async findByIds(ids: string[]): Promise<Model[]> {
+  static async findByIds(ids: string[], tx?: Transaction): Promise<Model[]> {
     if (ids.length === 0) {
       return [];
     }
-    return await db
+    return await (tx ?? db)
       .select()
       .from(schema.modelsTable)
       .where(inArray(schema.modelsTable.id, ids));
@@ -773,6 +783,15 @@ class ModelModel {
       set.customPricePerMillionCacheWrite =
         data.customPricePerMillionCacheWrite;
     }
+    for (const field of [
+      "longContextThreshold",
+      "longContextPricePerMillionInput",
+      "longContextPricePerMillionOutput",
+      "longContextPricePerMillionCacheRead",
+      "longContextPricePerMillionCacheWrite",
+    ] as const) {
+      if (data[field] !== undefined) set[field] = data[field];
+    }
     if (data.ignored !== undefined) {
       set.ignored = data.ignored;
     }
@@ -909,12 +928,17 @@ class ModelModel {
    *
    * Cache prices are null when the provider has no cache pricing model and none
    * was synced/set (so cache cost is not fabricated for non-caching providers).
+   *
+   * With `promptTokens` above the model's long-context threshold, its long
+   * prices replace all four rates while the chosen source is kept.
    */
   static getEffectivePricing(
     model: ProviderPricedModel | null,
     modelId?: string,
     /** Provider hint used for cache-price derivation when `model` is null (default tier). */
     provider?: SupportedProvider,
+    /** Input + cache read + cache write tokens of the priced request. */
+    promptTokens?: number,
   ): EffectivePricing {
     if (model?.providerPricing && model.providerPricing !== "conflicting") {
       model = { ...model, ...model.providerPricing };
@@ -943,15 +967,34 @@ class ModelModel {
       provider,
     );
 
+    const cacheSource =
+      cache.cacheSource === "models_dev" && model?.providerPricing
+        ? "provider"
+        : cache.cacheSource;
+    if (
+      model &&
+      isLongContextPrompt(model.longContextThreshold, promptTokens)
+    ) {
+      // The CHECK constraint makes the threshold and all four prices all-or-none.
+      // They are configured on the model, so they are no estimate even when
+      // the base rates fell back to the default.
+      const longSource = source === "default" ? "custom" : source;
+      return {
+        pricePerMillionInput: model.longContextPricePerMillionInput,
+        pricePerMillionOutput: model.longContextPricePerMillionOutput,
+        pricePerMillionCacheRead: model.longContextPricePerMillionCacheRead,
+        pricePerMillionCacheWrite: model.longContextPricePerMillionCacheWrite,
+        source: longSource,
+        cacheSource: cacheSource ?? longSource,
+      };
+    }
+
     return {
       pricePerMillionInput,
       pricePerMillionOutput,
       source,
       ...cache,
-      cacheSource:
-        cache.cacheSource === "models_dev" && model?.providerPricing
-          ? "provider"
-          : cache.cacheSource,
+      cacheSource,
     };
   }
 

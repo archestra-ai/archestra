@@ -8,6 +8,7 @@ for (const name of [
   "@archestra/sandbox-rs",
   "@archestra/image-rs",
   "@archestra/openappa-rs",
+  "@archestra/router-rs",
 ]) {
   requireBackend(name);
 }

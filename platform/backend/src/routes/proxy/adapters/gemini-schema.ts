@@ -12,10 +12,56 @@
 // Gemini/Vertex also rejects schema nodes that carry no `type` at all ("schema
 // didn't specify the schema type field"). MCP servers routinely emit such nodes —
 // zod `z.unknown()` serializes to a bare `{}` — so the sanitizer infers a type
-// from structural keywords and defaults a bare "any" node to `object`, matching
-// the fallback in Google's own SDKs.
+// from structural keywords. A node that accepts any value has no type to infer:
+// a request to Gemini gets `object`, matching the fallback in Google's own SDKs.
+// A schema that any model may receive (MCP `tools/list`) must keep the value
+// free instead: "object" there tells every model to send an object, and models
+// that follow the schema strictly turn a number into `{}`.
 
 type SchemaObject = Record<string, unknown>;
+
+/**
+ * How the sanitizer writes a node that accepts any value. "object" is
+ * Google's SDK fallback, for requests to Gemini. "any" keeps the value free
+ * for every model and still gives every node a type: `true` as the value
+ * schema of a map, otherwise a union of the JSON types.
+ */
+type AnyValueStyle = "object" | "any";
+
+// keywords that make an untyped node an object, an array, a string or a number
+const OBJECT_KEYWORDS = [
+  "properties",
+  "patternProperties",
+  "additionalProperties",
+  "unevaluatedProperties",
+  "propertyNames",
+  "required",
+  "minProperties",
+  "maxProperties",
+  "dependentRequired",
+  "dependentSchemas",
+] as const;
+const ARRAY_KEYWORDS = [
+  "items",
+  "prefixItems",
+  "additionalItems",
+  "contains",
+  "unevaluatedItems",
+  "minItems",
+  "maxItems",
+  "uniqueItems",
+  "minContains",
+  "maxContains",
+] as const;
+const STRING_KEYWORDS = [
+  "minLength",
+  "maxLength",
+  "pattern",
+  "format",
+  "contentEncoding",
+  "contentMediaType",
+] as const;
+const NUMBER_KEYWORDS = ["minimum", "maximum", "multipleOf"] as const;
 
 // keywords whose value is a single subschema (recurse only when it is an object)
 const SINGLE_SUBSCHEMA_KEYS = [
@@ -50,9 +96,16 @@ const SUBSCHEMA_ARRAY_KEYS = [
   "prefixItems",
 ] as const;
 
-export function sanitizeGeminiToolSchema(schema: unknown): unknown {
+export function sanitizeGeminiToolSchema(
+  schema: unknown,
+  options: { anyValue?: AnyValueStyle } = {},
+): unknown {
+  return sanitizeNode(schema, options.anyValue ?? "object");
+}
+
+function sanitizeNode(schema: unknown, anyValue: AnyValueStyle): unknown {
   if (Array.isArray(schema)) {
-    return schema.map(sanitizeGeminiToolSchema);
+    return schema.map((item) => sanitizeNode(item, anyValue));
   }
   if (schema === null || typeof schema !== "object") {
     return schema;
@@ -62,17 +115,16 @@ export function sanitizeGeminiToolSchema(schema: unknown): unknown {
   normalizeConst(result);
   normalizeEnum(result);
   normalizeExclusiveBounds(result);
-  recurseSubschemas(result);
-  ensureNodeType(result);
+  recurseSubschemas(result, anyValue);
+  ensureNodeType(result, anyValue);
   return result;
 }
 
 // Gemini requires every schema node to declare a `type` (composites expressed
 // via anyOf/oneOf/allOf are typed through their branches, and $ref nodes through
-// their target). Infer one from structural keywords; a completely bare node —
-// JSON Schema's "accept anything" — falls back to `object`, the same default
-// Google's own generative-ai SDKs apply.
-function ensureNodeType(node: SchemaObject): void {
+// their target). Infer one from structural keywords; a node with none of them
+// accepts any value and is written as `anyValue` says.
+function ensureNodeType(node: SchemaObject, anyValue: AnyValueStyle): void {
   if (node.type !== undefined || typeof node.$ref === "string") return;
   if (
     Array.isArray(node.anyOf) ||
@@ -82,20 +134,11 @@ function ensureNodeType(node: SchemaObject): void {
     return;
   }
 
-  if (
-    node.properties !== undefined ||
-    node.patternProperties !== undefined ||
-    node.required !== undefined ||
-    node.additionalProperties !== undefined
-  ) {
+  if (hasAnyKey(node, OBJECT_KEYWORDS)) {
     node.type = "object";
     return;
   }
-  if (
-    node.items !== undefined ||
-    node.prefixItems !== undefined ||
-    node.contains !== undefined
-  ) {
+  if (hasAnyKey(node, ARRAY_KEYWORDS)) {
     node.type = "array";
     return;
   }
@@ -104,7 +147,65 @@ function ensureNodeType(node: SchemaObject): void {
     node.type = "string";
     return;
   }
+  if (hasAnyKey(node, STRING_KEYWORDS)) {
+    node.type = "string";
+    return;
+  }
+  // normalizeExclusiveBounds already folded exclusive bounds into these
+  if (hasAnyKey(node, NUMBER_KEYWORDS)) {
+    node.type = "number";
+    return;
+  }
+  if (anyValue === "any") {
+    node.anyOf = anyJsonValue();
+    return;
+  }
   node.type = "object";
+}
+
+// Every JSON value except null, with every node typed: Gemini has no
+// untyped "any", and Kimi Code types an untyped node as a string.
+function anyJsonValue(): SchemaObject[] {
+  const scalarsAndObjects = () => [
+    { type: "string" },
+    { type: "number" },
+    { type: "boolean" },
+    { type: "object" },
+  ];
+  return [
+    ...scalarsAndObjects(),
+    { type: "array", items: { anyOf: scalarsAndObjects() } },
+  ];
+}
+
+function hasAnyKey(node: SchemaObject, keys: readonly string[]): boolean {
+  return keys.some((key) => node[key] !== undefined);
+}
+
+// A node that names no type, composite, reference, literal or keyword that
+// narrows it, so it accepts any value.
+function acceptsAnyValue(value: unknown): boolean {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const node = value as SchemaObject;
+  return (
+    node.type === undefined &&
+    node.$ref === undefined &&
+    node.anyOf === undefined &&
+    node.oneOf === undefined &&
+    node.allOf === undefined &&
+    node.not === undefined &&
+    node.if === undefined &&
+    node.enum === undefined &&
+    node.const === undefined &&
+    !hasAnyKey(node, OBJECT_KEYWORDS) &&
+    !hasAnyKey(node, ARRAY_KEYWORDS) &&
+    !hasAnyKey(node, STRING_KEYWORDS) &&
+    !hasAnyKey(node, NUMBER_KEYWORDS) &&
+    node.exclusiveMinimum === undefined &&
+    node.exclusiveMaximum === undefined
+  );
 }
 
 // Zod and JSON Schema encode a single allowed value as `const`. Gemini has no
@@ -180,13 +281,14 @@ function normalizeExclusiveBound(params: {
   );
 }
 
-function recurseSubschemas(node: SchemaObject): void {
+function recurseSubschemas(node: SchemaObject, anyValue: AnyValueStyle): void {
+  const sanitize = (sub: unknown) => sanitizeNode(sub, anyValue);
   for (const key of SUBSCHEMA_MAP_KEYS) {
     const map = node[key];
     if (map !== null && typeof map === "object" && !Array.isArray(map)) {
       const sanitized: SchemaObject = {};
       for (const [name, sub] of Object.entries(map)) {
-        sanitized[name] = sanitizeGeminiToolSchema(sub);
+        sanitized[name] = sanitize(sub);
       }
       node[key] = sanitized;
     }
@@ -195,7 +297,7 @@ function recurseSubschemas(node: SchemaObject): void {
   for (const key of SUBSCHEMA_ARRAY_KEYS) {
     const arr = node[key];
     if (Array.isArray(arr)) {
-      node[key] = arr.map(sanitizeGeminiToolSchema);
+      node[key] = arr.map(sanitize);
     }
   }
 
@@ -203,16 +305,23 @@ function recurseSubschemas(node: SchemaObject): void {
   for (const key of ["items", "additionalItems"] as const) {
     const value = node[key];
     if (Array.isArray(value)) {
-      node[key] = value.map(sanitizeGeminiToolSchema);
+      node[key] = value.map(sanitize);
     } else if (value !== null && typeof value === "object") {
-      node[key] = sanitizeGeminiToolSchema(value);
+      node[key] = sanitize(value);
     }
   }
 
   for (const key of SINGLE_SUBSCHEMA_KEYS) {
     const value = node[key];
     if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-      node[key] = sanitizeGeminiToolSchema(value);
+      // A map whose values may be anything says so with `true`, which every
+      // model reads, and which needs no type: it is not a schema node.
+      const mapValue =
+        key === "additionalProperties" || key === "unevaluatedProperties";
+      node[key] =
+        anyValue === "any" && mapValue && acceptsAnyValue(value)
+          ? true
+          : sanitize(value);
     }
   }
 }

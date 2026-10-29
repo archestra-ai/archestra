@@ -25,6 +25,7 @@ import {
 } from "@/models";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import ServiceAccountModel from "@/models/service-account";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { resolveAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
@@ -2457,6 +2458,183 @@ describe("Agent Runtime routes", () => {
       "retained transcript",
     );
   });
+  test("names service-account runs and exposes terminal access only to their account managers", async ({
+    makeServiceAccount,
+    makeCustomRole,
+  }) => {
+    const account = await makeServiceAccount(organizationId, {
+      name: "Build automation",
+    });
+    const task = await A2ATaskModel.create({
+      contextId: (
+        await A2AContextModel.create({
+          actorKind: "serviceAccount",
+          actorId: account.id,
+        })
+      ).id,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    await AgentRunModel.create({
+      organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "serviceAccount",
+      actorId: account.id,
+      actorUserId: null,
+      workloadName: `agent-run-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+    });
+    const role = await makeCustomRole(organizationId, { permission: {} });
+    await MemberModel.updateRole(user.id, organizationId, role.role);
+    const agentKey = {
+      organizationId,
+      resource: "agent" as const,
+      scope: agent.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(agentKey);
+    await ResourcePermissionPolicyModel.replace({
+      ...agentKey,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "user", id: user.id }, actions: ["read", "use"] },
+      ],
+    });
+    const list = () => app.inject({ url: `/api/agents/${agent.id}/runs` });
+    const before = await list();
+    expect(before.statusCode, before.body).toBe(200);
+    expect(before.json()[0]).toMatchObject({
+      initiatorName: "Build automation",
+      canAttach: false,
+    });
+    expect(
+      (await app.inject({ url: `/api/agent-runs/${task.id}` })).statusCode,
+    ).toBe(404);
+    await ResourcePermissionPolicyModel.replace({
+      organizationId,
+      resource: "serviceAccount",
+      scope: account.id,
+      revision: 0,
+      grants: [{ subject: { type: "user", id: user.id }, actions: ["update"] }],
+    });
+    expect((await list()).json()[0]).toMatchObject({ canAttach: true });
+    const detail = await app.inject({ url: `/api/agent-runs/${task.id}` });
+    expect(detail.statusCode, detail.body).toBe(200);
+    expect(detail.json()).toMatchObject({
+      canAttach: true,
+      viewerRole: "shared",
+    });
+    const original = await AgentRunModel.findByTaskId(task.id);
+    assert(original);
+    for (let i = 0; i < 4; i++) {
+      const repeatedTask = await A2ATaskModel.create({
+        contextId: task.contextId,
+        agentId: agent.id,
+        state: "TASK_STATE_WORKING",
+      });
+      await AgentRunModel.create({
+        ...original,
+        id: undefined,
+        taskId: repeatedTask.id,
+        workloadName: `agent-run-${repeatedTask.id}`,
+      });
+    }
+    const endedTask = await A2ATaskModel.create({
+      contextId: task.contextId,
+      agentId: agent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const endedRun = await AgentRunModel.create({
+      ...original,
+      id: undefined,
+      taskId: endedTask.id,
+      workloadName: `agent-run-${endedTask.id}`,
+    });
+    await AgentRunModel.close({ id: endedRun.id, logs: "done" });
+    // Count calls without replacing their implementation: authorization and storage stay real.
+    const accounts = vi.spyOn(ServiceAccountModel, "findAccount");
+    const permissions = vi.spyOn(ResourcePermissions, "allows");
+    const repeated = await list();
+    expect(repeated.statusCode, repeated.body).toBe(200);
+    expect(
+      repeated.json().filter((row: { canAttach: boolean }) => row.canAttach),
+    ).toHaveLength(5);
+    expect(accounts).toHaveBeenCalledTimes(1);
+    expect(
+      permissions.mock.calls.filter(
+        ([request]) => request.resource === "agent" && request.action === "use",
+      ),
+    ).toHaveLength(1);
+    expect(
+      repeated
+        .json()
+        .find((row: { taskId: string }) => row.taskId === endedTask.id)
+        .canAttach,
+    ).toBe(false);
+    const currentTask = await A2ATaskModel.create({
+      contextId: task.contextId,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    await AgentRunModel.create({
+      ...original,
+      id: undefined,
+      taskId: currentTask.id,
+    });
+    await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "serviceAccount",
+      actorId: account.id,
+      backend: "kubernetes",
+      runtimeScope: original.runtimeScope,
+      workloadName: original.workloadName,
+      state: "active",
+      activeTaskId: currentTask.id,
+      lastTaskId: currentTask.id,
+      expiresAt: new Date(Date.now() + 3600000),
+    });
+    const currentDetail = await app.inject({
+      url: `/api/agent-runs/${task.id}`,
+    });
+    expect(currentDetail.statusCode, currentDetail.body).toBe(200);
+    expect(currentDetail.json()).toMatchObject({
+      taskId: currentTask.id,
+      canAttach: true,
+      viewerRole: "shared",
+    });
+    // Terminal access does not confer ownership or workspace mutation.
+    expect(
+      (
+        await app.inject({
+          method: "PATCH",
+          url: `/api/agent-runs/${task.id}`,
+          payload: { title: "changed" },
+        })
+      ).statusCode,
+    ).toBe(404);
+    const accountKey = {
+      organizationId,
+      resource: "serviceAccount" as const,
+      scope: account.id,
+    };
+    const accountPolicy = await ResourcePermissionPolicyModel.find(accountKey);
+    await ResourcePermissionPolicyModel.replace({
+      ...accountKey,
+      revision: accountPolicy?.revision ?? 0,
+      grants: [],
+    });
+    expect(
+      (await list())
+        .json()
+        .some((row: { canAttach: boolean }) => row.canAttach),
+    ).toBe(false);
+    expect(
+      (await app.inject({ url: `/api/agent-runs/${task.id}` })).statusCode,
+    ).toBe(404);
+  });
+
   async function createTask(agentId: string, stateChangedAt?: Date) {
     const context = await A2AContextModel.create({
       actorKind: "user",

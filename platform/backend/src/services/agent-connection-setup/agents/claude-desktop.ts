@@ -94,10 +94,11 @@ def read_json(path, default):
     return json.loads(path.read_text(encoding="utf-8-sig")) if path.exists() else default
 
 
-def probe(token, headers, model):
+def probe(token, headers, model, cached=False):
     request = urllib.request.Request(
         SETUP['proxy']['url'].rstrip('/') + '/v1/messages',
         headers={**headers, 'Authorization': 'Bearer ' + token,
+                 'X-Claude-Code-Session-Id': str(uuid.uuid4()),
                  'anthropic-version': '2023-06-01', 'Content-Type': 'application/json'},
         data=json.dumps({'model': model, 'max_tokens': 8,
                          'messages': [{'role': 'user', 'content': 'Reply with exactly OK.'}]}).encode())
@@ -105,10 +106,12 @@ def probe(token, headers, model):
         with urllib.request.urlopen(request, timeout=60) as response:
             data = json.load(response)
             if data.get('type') != 'message' or not data.get('content'):
+                if cached:
+                    return False
                 raise RuntimeError('Gateway returned no completion; Desktop configuration was not changed.')
         return True
     except urllib.error.HTTPError as error:
-        if error.code == 401:
+        if error.code == 401 or cached:
             return False
         raise RuntimeError('Gateway inference check returned HTTP ' + str(error.code) +
                            '. Check model access, quota, and proxy routing. Desktop configuration was not changed.') from None
@@ -459,13 +462,17 @@ def main():
         except (ValueError, TypeError, AttributeError):
             continue
         candidate = read_json(library / (entry_id + '.json'), {})
+        if not isinstance(candidate, dict):
+            continue
         urls = [candidate.get('inferenceGatewayBaseUrl')]
-        urls += [server.get('url') for server in candidate.get('managedMcpServers', [])]
-        urls += [marketplace.get('url') for marketplace in candidate.get('allowedPluginMarketplaces', [])]
+        urls += [server.get('url') for server in (candidate.get('managedMcpServers') or []) if isinstance(server, dict)]
+        urls += [marketplace.get('url') for marketplace in (candidate.get('allowedPluginMarketplaces') or []) if isinstance(marketplace, dict)]
         legacy_ids = {str(uuid.uuid5(uuid.NAMESPACE_URL, 'archestra-desktop:' + url)) for url in urls if isinstance(url, str)}
         if entry_id == profile_id or entry_id in legacy_ids:
             managed[entry_id] = candidate
     previous = managed.get(metadata.get('appliedId'), previous)
+    if not isinstance(previous, dict):
+        previous = {}
     proxy = SETUP['proxy']
     subscription = bool(proxy and proxy['authMode'] == 'provider-key')
     # Rebuild the managed connection so omitted resources cannot remain active.
@@ -477,8 +484,8 @@ def main():
         if subscription:
             headers['anthropic-beta'] = 'oauth-2025-04-20'
         model = proxy.get('model') or 'claude-haiku-4-5-20251001'
-        token = previous.get('inferenceGatewayApiKey', '') if subscription else proxy['virtualKey']
-        verified = subscription and token.startswith('sk-ant-oat') and probe(token, headers, model)
+        token = (previous.get('inferenceGatewayApiKey') or '') if subscription else proxy['virtualKey']
+        verified = subscription and isinstance(token, str) and token.startswith('sk-ant-oat') and probe(token, headers, model, cached=True)
         if subscription and not verified:
             token = subscription_token()
         if not verified and (not token or not probe(token, headers, model)):

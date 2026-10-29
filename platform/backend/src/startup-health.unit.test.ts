@@ -58,7 +58,10 @@ test("the API can take over the port even with an unfinished startup request", a
   }
 });
 
-test("Quickstart waits for the application API before asserting loopback connectivity", async () => {
+test.each([
+  "Quickstart",
+  "Lite",
+])("%s waits for the application API before running tests", async (harness) => {
   const workflow = load(
     readFileSync(
       new URL(
@@ -91,9 +94,17 @@ test("Quickstart waits for the application API before asserting loopback connect
   const origin = `http://127.0.0.1:${address.port}`;
   // Run the workflow's actual backend gate against an isolated TCP port.
   // Leave its readiness polling intact, excluding only the later frontend gate.
-  const script = waitStep.run
-    .split("# Wait for frontend")[0]
-    .replaceAll("http://127.0.0.1:9000", origin);
+  let pollingScript = waitStep.run.split("# Wait for frontend")[0];
+  if (harness === "Lite") {
+    const source = readFileSync(
+      new URL("../../scripts/e2e-lite.sh", import.meta.url),
+      "utf8",
+    );
+    const backendWait = source.match(/^\s*wait_for backend .+$/m)?.[0];
+    if (!backendWait) throw new Error("Lite backend wait step not found");
+    pollingScript = `${source.slice(source.indexOf("wait_for() {"), source.indexOf("\nresolve_platform_image()"))}\n${backendWait}`;
+  }
+  const script = pollingScript.replaceAll("http://127.0.0.1:9000", origin);
   const child = spawn("bash", ["-e", "-o", "pipefail", "-c", script]);
   let output = "";
   child.stdout.on("data", (chunk) => {

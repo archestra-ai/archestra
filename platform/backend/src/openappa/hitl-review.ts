@@ -5,7 +5,10 @@ import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { parseWorkloadPrincipal } from "@/services/agent-runtime/runtime-identity";
 import { sessionCallerId } from "./actor";
-import { isCommandExecutionTool } from "./command-normalization";
+import {
+  isCommandExecutionTool,
+  withoutArgumentCopies,
+} from "./command-normalization";
 import {
   type HitlReviewCard,
   hitlInspectionDigest,
@@ -451,7 +454,7 @@ function buildHitlAskUserCard(review: PendingHitlReview): HitlAskUserArguments {
       remedy_offer_ids: [offerId],
     };
   }
-  const args = withoutCommandAlias(review.tool, parsed ?? {});
+  const args = withoutArgumentCopies(review.tool, parsed ?? {});
   const accepted = acceptedCoverage(review.text);
   const preview = callPreview(review.tool, args);
   return {
@@ -1037,20 +1040,6 @@ function summaryBlock(summary: string | undefined): string[] {
         `Generated summary (may omit details; the full call below is authoritative):\n${summary}`,
       ]
     : [];
-}
-
-/**
- * The proxy evaluates command tools with `command` and `cmd` set to one value,
- * so policies match either spelling. The reviewer sees that value once.
- */
-function withoutCommandAlias(
-  tool: string,
-  args: Record<string, unknown>,
-): Record<string, unknown> {
-  if (!isCommandExecutionTool(tool) || args.cmd !== args.command) return args;
-  return Object.fromEntries(
-    Object.entries(args).filter(([name]) => name !== "cmd"),
-  );
 }
 
 /** The runtime's "What this ruling would cover" lines, or undefined. */

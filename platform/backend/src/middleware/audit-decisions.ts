@@ -1166,6 +1166,39 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "transactional settled usage projection",
   },
+  routingDecisionsTable: {
+    audited: false,
+    reason: "auto-routing execution state written per proxied session",
+  },
+  routingUsageTable: {
+    audited: false,
+    reason: "auto-routing usage written with each interaction",
+  },
+  routingPlansTable: {
+    audited: false,
+    reason: "system-written auto-routing fit outcomes",
+  },
+  routingScorerVersionsTable: {
+    audited: false,
+    reason: "system-written immutable scorer specs",
+  },
+  routingBackfillsTable: {
+    audited: false,
+    reason:
+      "background job state; the row records who started it, and the worker's progress writes are not admin actions",
+  },
+  routingHistorySessionsTable: {
+    audited: false,
+    reason: "worker-written scalars of past sessions found by a backfill scan",
+  },
+  routingHistoryUsageTable: {
+    audited: false,
+    reason: "worker-written usage copied from past interactions",
+  },
+  routingHistoryScoresTable: {
+    audited: false,
+    reason: "worker-written scorer readings of past sessions",
+  },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 
 /**

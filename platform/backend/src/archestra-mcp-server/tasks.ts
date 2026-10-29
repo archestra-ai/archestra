@@ -900,6 +900,13 @@ const registry = defineArchestraTools([
         ])
         .optional()
         .describe("Only runs in this state."),
+      failed_since: z
+        .string()
+        .datetime({ offset: true })
+        .optional()
+        .describe(
+          "With state=failed, include failed earlier turns since this UTC timestamp, ordered by failure time. Keeps the same Agent access checks and limit; cannot be combined with mine_only.",
+        ),
       current_thread_only: z
         .boolean()
         .default(false)
@@ -926,6 +933,11 @@ const registry = defineArchestraTools([
         if (thread && args.mine_only) {
           return errorResult(
             "current_thread_only lists every run from the thread; it cannot be combined with mine_only.",
+          );
+        }
+        if (args.failed_since && (args.state !== "failed" || args.mine_only)) {
+          return errorResult(
+            "failed_since requires state=failed and cannot be combined with mine_only.",
           );
         }
         const requestedAgentIds = [...new Set(args.agent_ids)];
@@ -991,6 +1003,9 @@ const registry = defineArchestraTools([
           limit: args.limit,
           state,
           thread,
+          failedSince: args.failed_since
+            ? new Date(args.failed_since)
+            : undefined,
         });
         const [canReadLogs, canReadAllLogs] = await Promise.all([
           userHasPermission(actor.id, actor.organizationId, "log", "read"),

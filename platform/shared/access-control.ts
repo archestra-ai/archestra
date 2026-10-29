@@ -703,6 +703,20 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateLlmProxy]: {
     llmProxy: ["update"],
   },
+  [RouteId.GetAutoRoutingSettings]: { llmProxy: ["read"] },
+  [RouteId.UpdateAutoRoutingSettings]: { llmProxy: ["update"] },
+  [RouteId.GetAutoRoutingPlans]: { llmProxy: ["read"] },
+  [RouteId.GetAutoRoutingPlan]: { llmProxy: ["read"] },
+  [RouteId.ReplanAutoRouting]: { llmProxy: ["update"] },
+  // Preview spends on the scorer, so it needs the same right as changing settings.
+  [RouteId.PreviewAutoRouting]: { llmProxy: ["update"] },
+  [RouteId.SimulateAutoRouting]: { llmProxy: ["read"] },
+  [RouteId.GetAutoRoutingDiagnostics]: { llmProxy: ["read"] },
+  [RouteId.GetAutoRoutingBackfill]: { llmProxy: ["read"] },
+  [RouteId.ScanAutoRoutingBackfill]: { llmProxy: ["update"] },
+  // Scoring sends past prompts to the scorer and spends on it.
+  [RouteId.ScoreAutoRoutingBackfill]: { llmProxy: ["update"] },
+  [RouteId.CancelAutoRoutingBackfill]: { llmProxy: ["update"] },
   // Agent-tool routes: agent-type and scope checks are handled dynamically in the route handlers
   [RouteId.GetAgentTools]: {},
   [RouteId.GetAllAgentTools]: {},
@@ -1724,6 +1738,22 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateAppaGithubRepository]: { organizationSettings: ["update"] },
   [RouteId.StartAppaGithubApp]: { organizationSettings: ["update"] },
   [RouteId.CompleteAppaGithubApp]: { organizationSettings: ["update"] },
+  [RouteId.StartCopilotGithubApp]: { llmProviderApiKey: ["create"] },
+  [RouteId.ConnectCopilotGithubAppCredential]: {
+    llmProviderApiKey: ["create"],
+  },
+  [RouteId.GetPendingCopilotGithubApp]: { llmProviderApiKey: ["create"] },
+  [RouteId.DiscardCopilotGithubApp]: { llmProviderApiKey: ["create"] },
+  [RouteId.InstallCopilotGithubApp]: { llmProviderApiKey: ["create"] },
+  [RouteId.ValidateExistingCopilotGithubApp]: {
+    llmProviderApiKey: ["create"],
+  },
+  [RouteId.ConnectExistingCopilotGithubApp]: { llmProviderApiKey: ["create"] },
+  [RouteId.CheckCopilotGithubOrganization]: { llmProviderApiKey: ["create"] },
+  // The service checks the key's own grants, like the key's read and update.
+  [RouteId.GetCopilotGithubAppKeySummary]: {},
+  // The setup checks its own permissions when it completes.
+  [RouteId.CompleteCopilotGithubApp]: {},
   [RouteId.GetPendingAppaGithubApp]: { organizationSettings: ["update"] },
   [RouteId.DiscardAppaGithubApp]: { organizationSettings: ["update"] },
   [RouteId.InstallAppaGithubApp]: { organizationSettings: ["update"] },
@@ -2081,6 +2111,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/usage": {},
   "/llm/costs": { llmCost: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
+  "/llm/auto-routing": { llmProxy: ["read"] },
+  "/llm/auto-routing/plans": { llmProxy: ["read"] },
+  "/llm/auto-routing/diagnostics": { llmProxy: ["read"] },
 
   // MCP
   "/mcp/registry": { mcpRegistry: ["read"] },

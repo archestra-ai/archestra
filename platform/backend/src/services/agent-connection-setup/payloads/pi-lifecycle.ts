@@ -215,6 +215,7 @@ if (require.main === module) {
     } else if (process.argv[2] === "check") {
       checkPiConnection(install).then(report => {
         console.log(JSON.stringify(report));
+        if (report.transport === "down") process.exitCode = 1;
       }).catch(() => { console.log(JSON.stringify({ llm: "down", llmCheck: "proxy-catalog", upstreamInference: "not-tested", mcp: "down", skills: "down" })); process.exitCode = 1; });
     } else throw new Error("Unknown Pi connection action.");
   } catch (error) { console.error(error instanceof SyntaxError ? "Pi configuration could not be read. Preserve it and repair the JSON before retrying." : error.message); process.exitCode = 1; }
@@ -222,7 +223,7 @@ if (require.main === module) {
 async function checkPiConnection(install) {
   const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
   // "llm" is the shared loader's reachability marker, not an inference/auth test.
-  const report = { llm: "down", llmCheck: "proxy-catalog", upstreamInference: "not-tested", mcp: "down", skills: "down", checkedAt: Date.now(), reasons: [] };
+  const report = { transport: "ok", llm: "down", llmCheck: "proxy-catalog", upstreamInference: "not-tested", mcp: "down", skills: "down", checkedAt: Date.now(), reasons: [] };
   let config;
   try {
     install.validate();
@@ -233,7 +234,14 @@ async function checkPiConnection(install) {
   const request = async (url, options) => {
     const parsed = new URL(url);
     if (parsed.username || parsed.password || (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname)))) throw new Error();
-    return fetch(parsed, { ...options, redirect: "error", signal: AbortSignal.timeout(5000) });
+    // Rejected requests are transport failures. HTTP errors and malformed
+    // resource responses remain ordinary down results with exit status zero.
+    try { return await fetch(parsed, { ...options, redirect: "error", signal: AbortSignal.timeout(5000) }); }
+    catch (error) { report.transport = "down"; throw error; }
+  };
+  const readResponseBody = async response => {
+    try { return await response.text(); }
+    catch (error) { report.transport = "down"; throw error; }
   };
   await Promise.all([
     (async () => {
@@ -242,7 +250,7 @@ async function checkPiConnection(install) {
         if (config.attributionKey) headers["x-archestra-virtual-key"] = config.attributionKey;
         const response = await request(config.url.replace(/\/$/, "") + "/models", { headers });
         if (!response.ok) { await response.body?.cancel(); report.reasons.push("LLM proxy check failed (HTTP " + response.status + "). Check the provider route on the connection page."); return; }
-        const data = await response.json();
+        const data = JSON.parse(await readResponseBody(response));
         if (!Array.isArray(data.data) || !data.data.some(model => model.id === (config.modelRouter ? config.provider + ":" + config.model : config.model))) throw new Error();
         report.llm = "ok";
       } catch { report.reasons.push("LLM proxy or selected model is unavailable. Check the connection page and retry."); }
@@ -254,7 +262,7 @@ async function checkPiConnection(install) {
         if (!entry || entry.serverUrl !== install.state.gateway || !entry.tokens?.access_token) throw new Error();
         const response = await request(install.state.gateway, { method: "POST", headers: { Authorization: "Bearer " + entry.tokens.access_token, "Content-Type": "application/json", Accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: "pi-startup", method: "tools/list", params: {} }) });
         if (!response.ok) { await response.body?.cancel(); throw new Error(); }
-        const text = await response.text(); const payload = response.headers.get("content-type")?.includes("text/event-stream") ? JSON.parse(text.split("\n").find(line => line.startsWith("data: "))?.slice(6) || "null") : JSON.parse(text);
+        const text = await readResponseBody(response); const payload = response.headers.get("content-type")?.includes("text/event-stream") ? JSON.parse(text.split("\n").find(line => line.startsWith("data: "))?.slice(6) || "null") : JSON.parse(text);
         if (!Array.isArray(payload?.result?.tools)) throw new Error();
         if (!install.state.authClient && entry.clientInformation?.client_id) {
           install.lock();

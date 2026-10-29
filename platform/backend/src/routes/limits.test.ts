@@ -43,6 +43,41 @@ describe("limits routes", () => {
     await app.close();
   });
 
+  test("defaults old clients to hard, persists soft and preserves it on partial updates", async () => {
+    const create = await app.inject({
+      method: "POST",
+      url: "/api/limits",
+      payload: {
+        entityType: "organization",
+        entityId: organizationId,
+        limitType: "requests",
+        cleanupInterval: "calendar_day",
+        limitValue: 2,
+      },
+    });
+    expect(create.statusCode, create.body).toBe(200);
+    expect(create.json().behavior).toBe("hard");
+    const id = create.json().id;
+    const soft = await app.inject({
+      method: "PATCH",
+      url: `/api/limits/${id}`,
+      payload: { behavior: "soft" },
+    });
+    expect(soft.json().behavior).toBe("soft");
+    const edit = await app.inject({
+      method: "PATCH",
+      url: `/api/limits/${id}`,
+      payload: { limitValue: 3 },
+    });
+    expect(edit.json().behavior).toBe("soft");
+    const invalid = await app.inject({
+      method: "PATCH",
+      url: `/api/limits/${id}`,
+      payload: { behavior: "ignore" },
+    });
+    expect(invalid.statusCode).toBe(400);
+  });
+
   describe("GET /api/limits", () => {
     test("creates, updates, reads and audits every unit/interval combination", async () => {
       for (const limitType of ["token_cost", "requests", "tokens"]) {

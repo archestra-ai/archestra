@@ -57,6 +57,7 @@ import {
 import logger from "@/logging";
 import { parseClaudeMetadataParentSessionId } from "@/routes/proxy/utils/headers/session-id";
 import type {
+  CopilotCredentialSource,
   InsertInteraction,
   Interaction,
   InteractionAuthMethod,
@@ -75,6 +76,7 @@ import {
   normalizeInteractionResponse,
 } from "@/types";
 import type { AttributionLabels } from "@/types/attribution-label";
+import type { InsertRoutingUsage } from "@/types/auto-routing";
 import {
   type InteractionSessionPreview,
   InteractionSessionPreviewSchema,
@@ -94,7 +96,9 @@ import InteractionDeltaManager from "./interaction-delta-manager";
 import InteractionSessionHeadModel from "./interaction-session-head";
 import InteractionUserActivityModel from "./interaction-user-activity";
 import LimitModel from "./limit";
+import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import { interactionBelongsToOrganization } from "./log-organization";
+import RoutingUsageModel from "./routing-usage";
 import VirtualApiKeyModel from "./virtual-api-key";
 
 /**
@@ -312,6 +316,26 @@ function computeRequestType(
   }
 
   return "main";
+}
+
+/**
+ * Whether a stored request is one of its session's own turns, by the rules
+ * the sessions list picks its tip with: not a guardrail's call, a title or
+ * prompt-suggestion request, nor a sub-agent or side turn.
+ */
+export function isSessionMainTurn(row: {
+  request: unknown;
+  sessionSource: string | null;
+  source: string | null;
+}): boolean {
+  if (isGuardrailSource(row.source)) return false;
+  const text = JSON.stringify(row.request) ?? "";
+  if (SESSION_PREVIEW_MARKERS.some((marker) => text.includes(marker))) {
+    return false;
+  }
+  return (
+    computeRequestType(row.request, row.sessionSource, row.source) === "main"
+  );
 }
 
 const CLAUDE_SUBAGENT_SYSTEM_MARKERS = [
@@ -2564,6 +2588,9 @@ class InteractionModel {
         virtualKeyIds: sql<
           string[]
         >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.virtualKeyId}::text), NULL)`,
+        copilotProviderApiKeyIds: sql<
+          string[]
+        >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.providerApiKeyId}::text) FILTER (WHERE ${schema.interactionsTable.type} LIKE 'github-copilot:%'), NULL)`,
         passthroughVirtualKeyIds: sql<
           string[]
         >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.passthroughVirtualKeyId}::text), NULL)`,
@@ -2635,6 +2662,11 @@ class InteractionModel {
       ]),
     });
 
+    const copilotSources =
+      await LlmProviderApiKeyModel.findCopilotCredentialSources(
+        sessionsData.flatMap((s) => s.copilotProviderApiKeyIds ?? []),
+      );
+
     // Transform the data to the expected format
     const sessions = sessionsData.map((s) => {
       const externalAgentIds = s.externalAgentIds
@@ -2681,6 +2713,12 @@ class InteractionModel {
         userNames: s.userNames ?? [],
         userIds,
         unattributedReason: deriveUnattributedReason(userIds, authMethods),
+        copilotCredentialSources: dedupeCopilotSources(
+          (s.copilotProviderApiKeyIds ?? []).flatMap((id) => {
+            const source = copilotSources.get(id);
+            return source ? [source] : [];
+          }),
+        ),
         // Deduplicated across both columns: the two hold disjoint keys today
         // (each header rejects the other's key type), but a key reported twice
         // would render as two identical badges, so do not rely on that here.
@@ -3480,7 +3518,12 @@ class InteractionModel {
     // stable under later agent reassignment. The agent is authoritative: when a
     // profile is present its current environment wins over any caller-supplied
     // value. Only profile-less system interactions may set it explicitly.
-    const { billingUsage, billingAttribution, ...columns } = data;
+    const {
+      billingUsage,
+      billingAttribution,
+      autoRoutingDecisionId,
+      ...columns
+    } = data;
     if (billingUsage && !billingAttribution)
       throw new Error("Billing attribution is required for settlement");
     const environmentId = billingAttribution
@@ -3580,6 +3623,11 @@ class InteractionModel {
       }
       return created;
     };
+    const routingUsage = routingUsageFor({
+      interactionId,
+      decisionId: autoRoutingDecisionId,
+      columns,
+    });
     const write = (tx?: Transaction) =>
       insertValues.userId == null
         ? insert(tx)
@@ -3626,6 +3674,8 @@ class InteractionModel {
                         "Cannot settle an interaction already written without a billing receipt",
                       );
                   }
+                  if (routingUsage)
+                    await RoutingUsageModel.record(tx, routingUsage);
                   const created = await write(tx);
                   if (claimed && data.billingMode !== "subscription") {
                     if (billingUsage.mode === "enforce") {
@@ -3652,7 +3702,12 @@ class InteractionModel {
                 }),
               ),
           })
-        : await write();
+        : routingUsage
+          ? await withDbTransaction(async (tx) => {
+              await RoutingUsageModel.record(tx, routingUsage);
+              return write(tx);
+            })
+          : await write();
     // The RETURNING row is create's public return value, so callers never
     // see envelopes. Safe for encrypted-chat rows too: this caller supplied the
     // very key that just encrypted them.
@@ -3711,6 +3766,35 @@ class InteractionModel {
 }
 
 export default InteractionModel;
+
+/** Usage an auto-routed interaction contributes to its decision; none without usage. */
+function routingUsageFor(params: {
+  interactionId: string;
+  decisionId: string | undefined;
+  columns: Pick<
+    InsertInteraction,
+    | "inputTokens"
+    | "inputTokensEstimated"
+    | "outputTokens"
+    | "cacheReadTokens"
+    | "cacheWriteTokens"
+    | "cacheWrite1hTokens"
+  >;
+}): InsertRoutingUsage | null {
+  const { interactionId, decisionId, columns } = params;
+  if (!decisionId) return null;
+  if (columns.inputTokens == null && columns.outputTokens == null) return null;
+  return {
+    interactionId,
+    decisionId,
+    input: columns.inputTokens ?? 0,
+    cacheRead: columns.cacheReadTokens ?? 0,
+    cacheWrite: columns.cacheWriteTokens ?? 0,
+    cacheWrite1h: columns.cacheWrite1hTokens ?? 0,
+    output: columns.outputTokens ?? 0,
+    estimated: columns.inputTokensEstimated ?? false,
+  };
+}
 
 /** One interaction row sampled for a session's list entry. */
 type SessionWindowRow = {
@@ -4353,4 +4437,19 @@ async function retainDeletedBillingAttribution<T>(params: {
       );
     }
   }
+}
+
+/** One entry per distinct credential source, organizations first. */
+function dedupeCopilotSources(
+  sources: CopilotCredentialSource[],
+): CopilotCredentialSource[] {
+  const seen = new Map<string, CopilotCredentialSource>();
+  for (const source of sources) {
+    const key =
+      source.kind === "organization"
+        ? `org:${source.organization ?? ""}`
+        : "personal";
+    seen.set(key, source);
+  }
+  return [...seen.values()].sort((a, b) => a.kind.localeCompare(b.kind));
 }

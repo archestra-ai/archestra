@@ -42,7 +42,7 @@ const publishedBefore = now.getTime() - cooldownDays * 24 * 60 * 60 * 1000;
 
 const STABLE_SEMVER = /^\d+\.\d+\.\d+$/;
 const HERMES_REPOSITORY = "NousResearch/hermes-agent";
-const GROK_ARCHES = [
+const NPM_BINARY_ARCHES = [
   ["amd64", "x64"],
   ["arm64", "arm64"],
 ];
@@ -186,7 +186,7 @@ const AGENT_RUNTIME_CLIS = [
         ],
         version,
       );
-      for (const [dockerArch, grokArch] of GROK_ARCHES) {
+      for (const [dockerArch, grokArch] of NPM_BINARY_ARCHES) {
         const checksum = await grokBinaryChecksum(grokArch, version);
         dockerfile = replaceExactlyOnce(
           dockerfile,
@@ -196,6 +196,26 @@ const AGENT_RUNTIME_CLIS = [
           ),
           `$1${checksum}`,
         );
+      }
+      files.dockerfile = dockerfile;
+    },
+  },
+  {
+    target: "agent-copilot",
+    label: "GitHub Copilot CLI",
+    resolve: () => resolveNpm({ name: "@github/copilot", channel: "latest" }),
+    read: (files) => readSingleVersion(files.dockerfile, [
+      /@github\/copilot-linux-\$\{copilot_arch\}@(\d+\.\d+\.\d+)\b/g,
+    ]),
+    write: async (files, version) => {
+      let dockerfile = replaceVersion(files.dockerfile, [
+        /(@github\/copilot-linux-\$\{copilot_arch\}@)\d+\.\d+\.\d+\b/g,
+      ], version);
+      for (const [dockerArch, copilotArch] of NPM_BINARY_ARCHES) {
+        const checksum = await npmTarballSha512(`@github/copilot-linux-${copilotArch}`, version);
+        dockerfile = replaceExactlyOnce(dockerfile,
+          new RegExp(`(${dockerArch}\\) copilot_arch=${copilotArch}; copilot_checksum=)[0-9a-f]{128}`, "g"),
+          `$1${checksum}`);
       }
       files.dockerfile = dockerfile;
     },
@@ -363,7 +383,7 @@ async function resolveGrok() {
     );
   }
   const perArch = await Promise.all(
-    GROK_ARCHES.map(async ([, grokArch]) =>
+    NPM_BINARY_ARCHES.map(async ([, grokArch]) =>
       npmReleases(
         await fetchJson(
           `${npmRegistry}/${encodeNpmName(`@xai-official/grok-linux-${grokArch}`)}`,

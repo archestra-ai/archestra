@@ -6,6 +6,7 @@ import {
   buildElicitationMandateInstruction,
   isAgentTool,
   isYellToolShortName,
+  KIMI_CODE_CLIENT_ID,
   OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
   PROXY_STAMPED_TOOL_ARGUMENTS,
   SELF_FORK_TOOL_NAME,
@@ -21,7 +22,12 @@ import {
 import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { readRunToolArgs } from "@/archestra-mcp-server/run-tool-target";
-import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import {
+  type AllowedCacheKey,
+  CacheKey,
+  type CacheKeyPrefix,
+  cacheManager,
+} from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import AgentModel from "@/models/agent";
@@ -41,7 +47,7 @@ import {
   verifyChildTrajectoryReceipt,
 } from "@/openappa/child-trajectory-receipt";
 import { recordOpenAppaClientFailure } from "@/openappa/client-failure-report";
-import { normalizeCommandExecutionArguments } from "@/openappa/command-normalization";
+import { normalizeToolArgumentsForPolicy } from "@/openappa/command-normalization";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import {
   delegationEnabled,
@@ -166,6 +172,7 @@ import type {
 } from "@/types/openappa-runtime-launch";
 import {
   claudeCodeNativeChildIds,
+  claudeDesktopReviewQuestion,
   isClaudeCodeFamilyAdapter,
 } from "./adapters/claude-code";
 import {
@@ -633,6 +640,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       deliverReturnContract: (text) => {
         binding.returnContract = text;
       },
+      lineage: binding.child?.lineage,
     });
     for (const [index, answer] of context.toolResults.entries()) {
       if (result.toolResultUpdates[answer.id]?.code !== "unreleased_call")
@@ -778,6 +786,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       if (binding.session.parent_id && !binding.sessionInitialized) {
         const started = await startRuntimeChild({
           session: this.governedSession(binding),
+          spawnCallId: binding.child?.lineage?.spawnCallId,
+          childNativeId: binding.child?.lineage?.childNativeId,
         });
         binding.returnContract = started.contract ?? binding.returnContract;
         binding.sessionInitialized = true;
@@ -820,8 +830,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // the user's answer, and then asks again in prose.
       const nativeQuestion =
         binding.adapter?.nativeQuestion &&
-        binding.adapter.nativeQuestion.isAvailable?.(binding.requestHeaders) !==
-          false &&
+        binding.adapter.nativeQuestion.isAvailable?.(
+          binding.requestHeaders,
+          binding.requestBody,
+        ) !== false &&
         declaresNativeQuestion(binding, binding.adapter.nativeQuestion.toolName)
           ? binding.adapter.nativeQuestion.toolName
           : undefined;
@@ -989,7 +1001,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           if (!entry.reviewedArguments) return true;
           try {
             return isDeepStrictEqual(
-              normalizeCommandExecutionArguments(
+              normalizeToolArgumentsForPolicy(
                 target.toolCallName,
                 JSON.parse(target.toolCallArgs),
               ),
@@ -1158,7 +1170,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         prepared = issued.call;
         // Claude's complete review precedes the card as assistant text.
         // OpenCode-family clients carry it in the bound question input instead.
-        if (reviewText && !askedQuestion)
+        if (reviewText && isClaudeCodeFamilyAdapter(binding.adapter?.id))
           prepared = { ...prepared, reviewDetails: reviewText };
         issuedNativeQuestions.push({
           ...issued.question,
@@ -1471,6 +1483,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const decisionById = new Map(
       rest.map((call, index) => [call.id, decisions[index]]),
     );
+    await holdConflictingRemedyCalls({
+      session,
+      calls: rest,
+      decisionById,
+    });
     for (const [id, decision] of decisionById) {
       // Only the notice of this call runs. The runtime holds no record of the
       // call, so the result the client sends back is answered from here and
@@ -1528,12 +1545,24 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     for (const call of calls) {
       if (handbackIds.has(call.id)) {
         const handback = await admitChildHandback({ binding, call });
-        rewritten.push({ id: call.id, name: call.name });
-        // The rewritten call carries the admitted return. Claude Code takes a
-        // report only through this call, so it must reach the client as a
-        // call, streamed or not; text in its place is an undelivered report.
-        released.push(handback.call);
-        continue;
+        if (handback.kind === "release") {
+          rewritten.push({ id: call.id, name: call.name });
+          // The rewritten call carries the admitted return. Claude Code takes a
+          // report only through this call, so it must reach the client as a
+          // call, streamed or not; text in its place is an undelivered report.
+          released.push(handback.call);
+          continue;
+        }
+        decisionById.set(call.id, {
+          kind: "deny",
+          feedback: handback.feedback,
+          unanswered: true,
+        });
+        await cacheManager.set(
+          unansweredNoticeKey({ session, callId: call.id }),
+          handback.feedback,
+          TimeInMs.Day,
+        );
       }
       const inbox = peerInbox.get(call.id);
       if (inbox?.kind === "release") {
@@ -2071,7 +2100,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (
       !native?.fromAskUser ||
       !isSpecialToolMember(binding, call, "askUser") ||
-      native.isAvailable?.(binding.requestHeaders) === false ||
+      native.isAvailable?.(binding.requestHeaders, binding.requestBody) ===
+        false ||
       !declaresNativeQuestion(binding, native.toolName) ||
       archestraMcpBranding.getToolShortName(
         this.canonicalize(binding, call),
@@ -2162,6 +2192,24 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         arguments: normalized.toolCallArgs,
         custom: false,
         dispatch: call.name,
+      };
+    }
+    if (isSpecialToolMember(binding, call, "control")) {
+      const record = argumentRecordOf(call.arguments);
+      const unstamped = record
+        ? withoutStampedArguments({
+            tool: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+            args: record,
+          })
+        : undefined;
+      return {
+        name: call.name,
+        arguments:
+          unstamped && typeof call.arguments === "string"
+            ? JSON.stringify(unstamped)
+            : (unstamped ?? call.arguments),
+        custom: binding.request.customTools.has(call.name),
+        namespace: call.namespace,
       };
     }
     return {
@@ -2273,17 +2321,36 @@ function remedylessRefusalNote(params: {
     : `${lead} Connect this client to the ${server} MCP gateway, then start a new session.`;
 }
 
+/** `keyv_cache.key` is varchar(255), and Keyv stores each key as `keyv:<key>`. */
+const MAX_CACHE_KEY_LENGTH = 255 - "keyv:".length;
+
+/**
+ * A session-scoped cache key. Agent-run session ids carry their caller's
+ * scope, and encoded with a call id they can exceed the column, which fails
+ * the write. A key that fits keeps its encoded form, so live sessions still
+ * find what they stored; a longer one uses a fixed-length digest.
+ */
+function sessionScopedCacheKey(
+  prefix: CacheKeyPrefix,
+  scope: string,
+): AllowedCacheKey {
+  const encoded: AllowedCacheKey = `${prefix}-${Buffer.from(scope).toString("base64url")}`;
+  if (encoded.length <= MAX_CACHE_KEY_LENGTH) return encoded;
+  return `${prefix}-${createHash("sha256").update(scope).digest("base64url")}`;
+}
+
 function deniedCallClarificationKey(params: {
   session: OpenAppaSession;
   callId: string;
 }): AllowedCacheKey {
-  return `${CacheKey.OpenAppaDeniedCallClarification}-${Buffer.from(
+  return sessionScopedCacheKey(
+    CacheKey.OpenAppaDeniedCallClarification,
     JSON.stringify([
       params.session.organization_id,
       params.session.session_id,
       withoutTrajectoryStamp(params.callId),
     ]),
-  ).toString("base64url")}`;
+  );
 }
 
 /** The client's own report of a failed wait, so the model sees the real error. */
@@ -2300,27 +2367,30 @@ function unansweredNoticeKey(params: {
   session: OpenAppaSession;
   callId: string;
 }): AllowedCacheKey {
-  return `${CacheKey.OpenAppaUnansweredAnnotationNotice}-${Buffer.from(
+  return sessionScopedCacheKey(
+    CacheKey.OpenAppaUnansweredAnnotationNotice,
     `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
-  ).toString("base64url")}`;
+  );
 }
 
 function notLoadedRulingKey(params: {
   session: OpenAppaSession;
   callId: string;
 }): AllowedCacheKey {
-  return `${CacheKey.OpenAppaNotLoadedRuling}-${Buffer.from(
+  return sessionScopedCacheKey(
+    CacheKey.OpenAppaNotLoadedRuling,
     `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
-  ).toString("base64url")}`;
+  );
 }
 
 function carriedRulingKey(params: {
   session: OpenAppaSession;
   callId: string;
 }): AllowedCacheKey {
-  return `${CacheKey.OpenAppaCarriedRuling}-${Buffer.from(
+  return sessionScopedCacheKey(
+    CacheKey.OpenAppaCarriedRuling,
     `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
-  ).toString("base64url")}`;
+  );
 }
 
 /** Whether the request declares the tool this call names, as the client spells it. */
@@ -2365,9 +2435,10 @@ async function seenBefore(
     | typeof CacheKey.OpenAppaRemedyToolsAwaited,
   session: OpenAppaSession,
 ): Promise<boolean> {
-  const key: AllowedCacheKey = `${flag}-${Buffer.from(
+  const key = sessionScopedCacheKey(
+    flag,
     `${session.organization_id}:${session.session_id}`,
-  ).toString("base64url")}`;
+  );
   if (await cacheManager.get<boolean>(key)) return true;
   await cacheManager.set(key, true, TimeInMs.Day);
   return false;
@@ -3702,8 +3773,9 @@ async function resolveNamedChild(params: {
   const childNativeId = durable?.childNativeId ?? launch?.childNativeId;
   const spawnCallId = durable?.spawnCallId ?? launch?.spawnCallId;
   if (!childNativeId) return undefined;
-  if (!spawnCallId) return { childNativeId, started: false };
-  if (durable) return { childNativeId, spawnCallId, started: false };
+  const childStarted = started.includes(childNativeId);
+  if (!spawnCallId) return { childNativeId, started: childStarted };
+  if (durable) return { childNativeId, spawnCallId, started: childStarted };
   const allowed = await OpenAppaSpawnCorrelationModel.allowedSpawn({
     organizationId: params.parent.organization_id,
     callerId: params.parent.caller_id,
@@ -3718,8 +3790,8 @@ async function resolveNamedChild(params: {
       parent_id: params.parent.session_id,
     }));
   return allowed && !off
-    ? { childNativeId, spawnCallId, started: false }
-    : { childNativeId, spawnCallId, started: false, unchecked: true };
+    ? { childNativeId, spawnCallId, started: childStarted }
+    : { childNativeId, spawnCallId, started: childStarted, unchecked: true };
 }
 
 const RELAY_BROADCAST =
@@ -4219,14 +4291,67 @@ function stringArgument(value: unknown): string | undefined {
 const PEER_INBOX_UNBOUND =
   "OpenAPPA cannot bind this peer-message call to the authenticated session, so it was not sent. Connect the MCP gateway and retry.";
 
+type ChildHandbackAdmission =
+  | { kind: "release"; call: ToolCall; returnText: string }
+  | { kind: "deny"; feedback: string };
+
+const CONFLICTING_REMEDY_OFFERS_FEEDBACK =
+  "[appa] Blocked: Multiple execute_remedy_plan calls in this batch targeted mutually exclusive offers for the same blocked call. None of them ran, so all offers remain live. Call execute_remedy_plan once with only the single offer_id that fits (when using a return sanitizer or return_schema, call only that sanitizer's offer_id and do not also call the bare return-label offer).";
+
+/**
+ * Holds remedy calls in a batch when two or more target the same offer or
+ * sibling offers of the same denied call, before any of them can spend an
+ * offer and invalidate the others.
+ */
+async function holdConflictingRemedyCalls(params: {
+  session: OpenAppaSession;
+  calls: readonly ToolCall[];
+  decisionById: Map<
+    string,
+    Awaited<ReturnType<typeof evaluateToolCalls>>[number]
+  >;
+}): Promise<void> {
+  const controlCalls = params.calls.flatMap((call) => {
+    if (params.decisionById.get(call.id)?.kind !== "control") return [];
+    const offerId = stringArgument(argumentRecordOf(call.arguments)?.offer_id);
+    return offerId ? [{ call, offerId }] : [];
+  });
+  if (controlCalls.length < 2) return;
+  const operationByOfferId =
+    await OpenAppaSessionModel.deniedCallOperationsByOfferId({
+      organizationId: params.session.organization_id,
+      sessionId: params.session.session_id,
+      callerId: params.session.caller_id,
+      parentId: params.session.parent_id,
+      offerIds: [...new Set(controlCalls.map((entry) => entry.offerId))],
+    });
+  const byTarget = new Map<string, ToolCall[]>();
+  for (const { call, offerId } of controlCalls) {
+    const key = operationByOfferId.get(offerId) ?? `offer:${offerId}`;
+    const group = byTarget.get(key) ?? [];
+    group.push(call);
+    byTarget.set(key, group);
+  }
+  for (const group of byTarget.values()) {
+    if (group.length < 2) continue;
+    for (const call of group) {
+      params.decisionById.set(call.id, {
+        kind: "deny",
+        feedback: CONFLICTING_REMEDY_OFFERS_FEEDBACK,
+        unanswered: true,
+      });
+    }
+  }
+}
+
 async function admitChildHandback(params: {
   binding: AppaPluginBinding;
   call: ToolCall;
-}): Promise<{ call: ToolCall; returnText: string }> {
+}): Promise<ChildHandbackAdmission> {
   const { binding, call } = params;
   const adapter = binding.adapter;
   const raw = adapter?.childHandbackValue?.(call.arguments);
-  if (!raw) {
+  if (raw === undefined) {
     throw new ApiError(400, "OpenAPPA child handback carried no return value");
   }
   const childNativeId = binding.child?.lineage?.childNativeId;
@@ -4248,7 +4373,10 @@ async function admitChildHandback(params: {
   const admitted =
     outcome.decision === "release" ? raw : (outcome.content ?? "");
   if (!outcome.crossed) {
-    throw new ApiError(409, admitted || "OpenAPPA withheld the child return");
+    return {
+      kind: "deny",
+      feedback: admitted || "OpenAPPA withheld the child return",
+    };
   }
   const marker = mintChildReturnMarker({
     organizationId: binding.session.organization_id,
@@ -4260,9 +4388,10 @@ async function admitChildHandback(params: {
     value: admitted,
     ...(binding.adapter?.id === "codex" ? { format: "inline" as const } : {}),
   });
-  const returnText = `${admitted}\n\n${marker}`;
+  const returnText = admitted ? `${admitted}\n\n${marker}` : marker;
   const rewritten = adapter?.rewriteChildHandback?.(call.arguments, returnText);
   return {
+    kind: "release",
     call: {
       ...call,
       arguments: rewritten === undefined ? returnText : rewritten,
@@ -4778,6 +4907,73 @@ function protectNamedChildren(params: {
   }
 }
 
+/**
+ * OpenAPPA's return-shape dialect already treats `type: "object"` nodes as
+ * closed by default and rejects the `additionalProperties` keyword. Strip
+ * redundant `additionalProperties: false` on object nodes while leaving
+ * `additionalProperties: true` or schema objects intact so open-object schemas
+ * still fail validation.
+ */
+function normalizeReturnSchemaNode(node: unknown): unknown {
+  if (!node || typeof node !== "object" || Array.isArray(node)) return node;
+  const record = node as Record<string, unknown>;
+  let changed = false;
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (
+      key === "additionalProperties" &&
+      record.type === "object" &&
+      value === false
+    ) {
+      changed = true;
+      continue;
+    }
+    if (
+      key === "properties" &&
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    ) {
+      let propsChanged = false;
+      const nextProps: Record<string, unknown> = {};
+      for (const [propKey, propSchema] of Object.entries(
+        value as Record<string, unknown>,
+      )) {
+        const normalizedProp = normalizeReturnSchemaNode(propSchema);
+        if (normalizedProp !== propSchema) propsChanged = true;
+        nextProps[propKey] = normalizedProp;
+      }
+      if (propsChanged) {
+        changed = true;
+        next[key] = nextProps;
+        continue;
+      }
+    } else if (key === "items") {
+      const normalizedItems = normalizeReturnSchemaNode(value);
+      if (normalizedItems !== value) {
+        changed = true;
+        next[key] = normalizedItems;
+        continue;
+      }
+    }
+    next[key] = value;
+  }
+  return changed ? next : node;
+}
+
+function normalizeReturnSchemaValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      const normalized = normalizeReturnSchemaNode(parsed);
+      return normalized === parsed ? value : JSON.stringify(normalized);
+    } catch {
+      return value;
+    }
+  }
+  return normalizeReturnSchemaNode(value);
+}
+
 /** Attaches execution metadata frame to remedy calls for receipt validation. */
 function stampControlExecution(
   call: LlmProxyToolCallsContext["toolCalls"][number],
@@ -4801,10 +4997,19 @@ function stampControlExecution(
     return call;
   const argumentRecord = argumentsValue as Record<string, unknown>;
   // Replace model-written transport fields, including old signed envelopes.
-  const clientArguments = withoutStampedArguments({
+  const rawClientArguments = withoutStampedArguments({
     tool: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
     args: argumentRecord,
   });
+  const normalizedReturnSchema =
+    "return_schema" in rawClientArguments
+      ? normalizeReturnSchemaValue(rawClientArguments.return_schema)
+      : undefined;
+  const clientArguments =
+    normalizedReturnSchema !== undefined &&
+    normalizedReturnSchema !== rawClientArguments.return_schema
+      ? { ...rawClientArguments, return_schema: normalizedReturnSchema }
+      : rawClientArguments;
   const execution = {
     v: 1,
     kind: "appa_remedy",
@@ -4812,6 +5017,7 @@ function stampControlExecution(
     tool_name: call.name,
     ...(call.namespace ? { namespace: call.namespace } : {}),
     original_arguments:
+      clientArguments === rawClientArguments &&
       Object.keys(clientArguments).length === Object.keys(argumentRecord).length
         ? originalArguments
         : JSON.stringify(clientArguments),
@@ -4960,12 +5166,16 @@ async function canonicalizeHitlAskUserCall(params: {
       offerIds: params.offerIds,
     });
     if (inspectable) {
-      const family =
+      // These clients show the question text itself, so the review rides in it.
+      const reviewInQuestion =
         params.binding.adapter?.id === "opencode" ||
-        params.binding.adapter?.id === "kilo";
-      const askedQuestion = family
+        params.binding.adapter?.id === "kilo" ||
+        params.binding.adapter?.id === KIMI_CODE_CLIENT_ID;
+      const askedQuestion = reviewInQuestion
         ? openCodeReviewQuestion(inspectable.card, inspectable.reviewText)
-        : undefined;
+        : params.binding.adapter?.id === "claude-desktop"
+          ? claudeDesktopReviewQuestion(inspectable.card)
+          : undefined;
       return {
         call: {
           ...params.call,
@@ -5064,6 +5274,7 @@ const REMEDY_OFFER_CONTINUATION_GUIDANCE = [
   "The ruling above offers a remedy plan for the blocked call.",
   "If the plan fits the user's request, continue the task and apply the plan with execute_remedy_plan.",
   "Use the offer_id and plan from the ruling.",
+  "Multiple Continue bullets for the same blocked call are mutually exclusive alternatives; call execute_remedy_plan at most once per blocked call with only the single offer_id that fits (when using a return sanitizer or return_schema, call only that sanitizer's offer_id and do not also call the bare return-label offer).",
   "execute_remedy_plan asks the user for approval when the policy requires it.",
 ].join(" ");
 
@@ -5131,6 +5342,7 @@ const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE = [
   "A plan fits unless the narrower session could no longer do what the user asked for or will clearly ask next.",
   "Apply a fitting plan with execute_remedy_plan.",
   "Use the offer_id and plan from the ruling.",
+  "Multiple Continue bullets for the same blocked call are mutually exclusive alternatives: executing one invalidates the others, so call execute_remedy_plan at most once per blocked call with only the single offer_id that fits.",
   "The policy decides when the user must approve a plan.",
   "In that case, execute_remedy_plan returns review_required.",
   "Then ask the user with the declared ask_user tool.",
@@ -5585,11 +5797,14 @@ async function recordInspectableHitlAnswer(params: {
       ? { isError: params.answer.isError }
       : {}),
   };
-  let reading = labeledQuestionRuling(
-    result,
-    params.askedQuestion ?? asked.card.shortQuestion ?? asked.card.question,
-    asked.card.options.map((option) => option.label),
-  );
+  const shownQuestion =
+    params.askedQuestion ?? asked.card.shortQuestion ?? asked.card.question;
+  const cardLabels = asked.card.options.map((option) => option.label);
+  // A client whose answer names its question reads the answer itself.
+  const nativeQuestion = binding.adapter?.nativeQuestion;
+  let reading = nativeQuestion?.selectionFromResult
+    ? nativeQuestion.selectionFromResult(result, shownQuestion, cardLabels)
+    : labeledQuestionRuling(result, shownQuestion, cardLabels);
   let answer =
     typeof reading === "object"
       ? hitlReviewCardAnswer(reading.label)
@@ -5703,9 +5918,10 @@ async function sealInspectableClosure(params: {
 
 /**
  * Whether an offer-backed ask_user call becomes an inspectable native card:
- * Claude needs transport support for review text. OpenCode-family questions
- * carry it in the native input, including on transports with no text injection.
- * Their connection plugin enhances presentation; native surfaces remain usable.
+ * Claude needs transport support for review text. OpenCode-family and Kimi
+ * Code questions carry it in the native input, including on transports with
+ * no text injection. The OpenCode connection plugin enhances presentation;
+ * native surfaces remain usable.
  */
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -5717,10 +5933,12 @@ function inspectsNatively(
   const native = binding.adapter?.nativeQuestion;
   return (
     !!native?.fromAskUser &&
-    native.isAvailable?.(binding.requestHeaders) !== false &&
+    native.isAvailable?.(binding.requestHeaders, binding.requestBody) !==
+      false &&
     declaresNativeQuestion(binding, native.toolName) &&
     ((isClaudeCodeFamilyAdapter(binding.adapter?.id) &&
       canShowToolCallReview) ||
+      binding.adapter?.id === KIMI_CODE_CLIENT_ID ||
       ((binding.adapter?.id === "opencode" || binding.adapter?.id === "kilo") &&
         binding.requestHeaders["x-archestra-question-cards"] === "1"))
   );
@@ -6068,9 +6286,10 @@ async function reviewQuestionAskedBefore(params: {
   session: OpenAppaSession;
   resultId: string;
 }): Promise<boolean> {
-  const key: AllowedCacheKey = `${CacheKey.OpenAppaHitlQuestionAsked}-${Buffer.from(
+  const key = sessionScopedCacheKey(
+    CacheKey.OpenAppaHitlQuestionAsked,
     `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.resultId)}`,
-  ).toString("base64url")}`;
+  );
   if (await cacheManager.get<boolean>(key)) return true;
   // Outlives the review it asked about, which expires after ten minutes.
   await cacheManager.set(key, true, TimeInMs.Hour);
@@ -6118,6 +6337,9 @@ async function hasRemedyOfferResult(params: {
       params.toolResultUpdates[result.id] === undefined &&
       offeredRuling !== undefined
     ) {
+      if (isPeerReadResult(params.binding, result.name, result.namespace)) {
+        return [index];
+      }
       // Restored spawn notices stay pending, so the service correctly skips
       // execution results. Their ruling still comes from the runtime journal.
       params.toolResultUpdates[result.id] = {
@@ -6330,10 +6552,14 @@ function hitlDecisionGuidance(
       "The user already answered, so do not ask about the same plan again.",
     ].join(" ");
   }
+  // A denial is final for that call in this session (OpenAPPA records it on
+  // the call): a model that asked its own "approve?" question and ran the
+  // denied plan again only got the denial back.
   return [
     "The user did not approve the pending OpenAPPA review.",
     "Do not call execute_remedy_plan for it, and do not retry the blocked call.",
-    "Tell the user briefly that the action stays blocked, and stop that action.",
+    "The denial holds for the rest of this session, also when the user asks for the same call again: do not propose it again, do not change its arguments to get another review, and do not ask the user to approve it yourself.",
+    "Tell the user briefly that the action stays blocked and that a new session can ask for it again, and stop that action.",
   ].join(" ");
 }
 
@@ -6709,7 +6935,8 @@ function toolInputOf(
 /**
  * Appends trajectory stamps to tool-call IDs for supported wire families.
  * Stamped IDs identify source session lineage in future turns.
- * Skips sessions that lack caller scoping, or models that truncate tool-call IDs.
+ * Skips sessions that lack caller scoping, models that truncate tool-call IDs,
+ * and stamps longer than the client's tool-call ID limit.
  */
 function trajectoryStamper(
   binding: AppaPluginBinding,
@@ -6733,9 +6960,9 @@ function trajectoryStamper(
     shortensToolCallIds(context)
   )
     return undefined;
-  return (call) => ({
-    ...call,
-    wireId: stampToolCallId({
+  const limit = binding.adapter?.maxToolCallIdLength;
+  return (call) => {
+    const wireId = stampToolCallId({
       // Compose transport stamps instead of replacing inner wire identities,
       // such as the signed native-question ID used to claim a HITL answer.
       callId: call.wireId ?? call.id,
@@ -6743,8 +6970,12 @@ function trajectoryStamper(
       organizationId: session.organization_id,
       callerId,
       secret,
-    }),
-  });
+    });
+    // A client that cuts longer IDs would send back one the proxy cannot match.
+    return limit !== undefined && wireId.length > limit
+      ? call
+      : { ...call, wireId };
+  };
 }
 
 /**

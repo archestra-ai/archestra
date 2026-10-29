@@ -13,9 +13,11 @@ import {
   isCodexUserAgent,
   isKiloClientAgentId,
   isKiloUserAgent,
+  isKimiCodeUserAgent,
   isOpenCodeClientAgentId,
   isOpenCodeUserAgent,
   KILO_CLIENT_ID,
+  KIMI_CODE_CLIENT_ID,
   OPENCODE_CLIENT_ID,
 } from "./client";
 
@@ -66,6 +68,7 @@ describe("OpenCode client attribution", () => {
       "opencode",
       "kilo",
       "pi",
+      "kimi-code",
       "copilot-cli",
     ]);
   });
@@ -143,6 +146,31 @@ describe("Kilo Code client attribution", () => {
     });
     expect(ClientFilterSchema.parse("kilo")).toBe("kilo");
     expect(clientFilterToAgentIds("kilo")).toEqual([KILO_CLIENT_ID]);
+  });
+});
+
+describe("Kimi Code client attribution", () => {
+  test("recognizes Kimi Code's User-Agent only", () => {
+    expect(isKimiCodeUserAgent("kimi-code-cli/2.3.3")).toBe(true);
+    expect(isKimiCodeUserAgent("kimi-code-cli/2.3.3 (web)")).toBe(true);
+    for (const userAgent of [
+      "kimi-cli/1.0",
+      "KimiCLI/0.9",
+      "OpenAI/JS 6.1.0",
+      "",
+      null,
+      undefined,
+    ]) {
+      expect(isKimiCodeUserAgent(userAgent)).toBe(false);
+    }
+  });
+
+  test("files its traffic under the Kimi Code family", () => {
+    expect(clientForExternalAgentIds([KIMI_CODE_CLIENT_ID])).toMatchObject({
+      filter: "kimi-code",
+      label: "Kimi Code",
+      provider: "kimi-code",
+    });
   });
 });
 

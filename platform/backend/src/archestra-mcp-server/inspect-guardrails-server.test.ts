@@ -51,7 +51,7 @@ async function expectDenied(ctx: ArchestraContext, id = catalogId) {
         value !== null &&
         "isError" in value &&
         value.isError === true &&
-        /permission|context|not assigned|not found|access|authorized|requires an acting user/i.test(
+        /permission|context|not assigned|not available|not found|access|authorized|requires an acting user/i.test(
           JSON.stringify(value),
         )),
   );

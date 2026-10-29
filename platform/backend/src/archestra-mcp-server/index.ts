@@ -27,6 +27,7 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
 import config from "@/config";
+import AgentModel from "@/models/agent";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import {
@@ -628,11 +629,18 @@ async function resolveToolAssignment(params: {
     exclusionSets,
   });
   if (available) return null;
+  // A model that reads another agent's tool list, or a skill that names a
+  // tool, calls names this caller does not have. Say whose tools these are
+  // and how the user gets one, not only that the name is wrong.
+  const caller =
+    (await AgentModel.getAgentType(context.agentId)) === "mcp_gateway"
+      ? `the "${context.agent.name}" MCP gateway`
+      : `the "${context.agent.name}" agent`;
   return structuredToolErrorResult({
     error: {
       type: "tool_state",
       code: "tool_not_assigned",
-      message: `Tool "${toolName}" is not assigned to this agent. ${toolDiscoverySteer()}`,
+      message: `Tool "${toolName}" is not available through ${caller}. Tools listed for other agents or named in a skill are not yours to call. ${toolDiscoverySteer()} If the user needs this tool, tell them it can be added to the tools of ${caller}.`,
       toolName,
     },
   });

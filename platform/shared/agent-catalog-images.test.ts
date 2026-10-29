@@ -63,6 +63,7 @@ describe("popular Agent images", () => {
       openclaw: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-openclaw:latest`,
       grok: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-grok:latest`,
       kimi: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-kimi:latest`,
+      copilot: `${AGENT_CATALOG_IMAGE_REGISTRY}/agent-copilot:latest`,
     });
   });
 

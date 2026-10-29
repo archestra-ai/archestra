@@ -4,6 +4,37 @@ import statisticsRoutes from "./statistics";
 
 describe("proxy label cost attribution", () => {
   const ctx = useRouteTestApp(statisticsRoutes);
+  test("does not discover labels captured only outside the selected time range", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const proxy = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "llm_proxy",
+    });
+    await makeInteraction(proxy.id, { attributionLabels: null });
+    await makeInteraction(proxy.id, { attributionLabels: {} });
+    await makeInteraction(proxy.id, {
+      attributionLabels: { department: "engineering" },
+      createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000),
+    });
+
+    const recent = await ctx.app.inject({
+      method: "GET",
+      url: "/api/statistics/llm-proxy?timeframe=24h&includeLabelKeys=true&limit=1",
+    });
+    expect(recent.statusCode, recent.body).toBe(200);
+    expect(recent.json().labelKeys).toEqual([]);
+    expect(recent.json().totals.requests).toBe(2);
+
+    const wider = await ctx.app.inject({
+      method: "GET",
+      url: "/api/statistics/llm-proxy?timeframe=7d&includeLabelKeys=true&limit=1",
+    });
+    expect(wider.statusCode, wider.body).toBe(200);
+    expect(wider.json().labelKeys).toEqual(["department"]);
+  });
+
   test("discovers distinct captured label keys within the organization and time range", async ({
     makeAgent,
     makeInteraction,

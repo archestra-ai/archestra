@@ -101,11 +101,21 @@ function defaultProxyDetail(ctx: SetupScriptContext, label: string): string {
   return `${base}; your ${ctx.proxy.providerLabel} sign-in is unchanged`;
 }
 
-/** A command as the person would type it in their shell. */
+/**
+ * A command as the person would type it in their shell. An argument that
+ * starts with `~/` is a path in the home directory, which Windows PowerShell
+ * does not expand, so it is written from `$HOME` there.
+ */
 function quoteCommand(ctx: SetupScriptContext, command: string[]): string {
-  const quote = ctx.platform === "windows" ? psq : sh;
+  const windows = ctx.platform === "windows";
   return command
-    .map((arg) => (/^[A-Za-z0-9_@%+=:,./-]+$/.test(arg) ? arg : quote(arg)))
+    .map((arg) => {
+      if (/^~\/[A-Za-z0-9_./-]+$/.test(arg)) {
+        return windows ? `"$HOME\\${arg.slice(2).replaceAll("/", "\\")}"` : arg;
+      }
+      if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(arg)) return arg;
+      return windows ? psq(arg) : sh(arg);
+    })
     .join(" ");
 }
 

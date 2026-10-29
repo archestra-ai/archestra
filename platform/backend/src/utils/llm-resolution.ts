@@ -93,7 +93,9 @@ export async function resolveConversationLlmSelectionForAgent(params: {
     const explicitModel = await ModelModel.findById(params.explicitModelId);
     if (
       explicitModel &&
-      providerRequiresPerUserCredential(explicitModel.provider)
+      providerRequiresPerUserCredential(explicitModel.provider) &&
+      // An explicitly picked GitHub App key is a real shared key: keep it.
+      !(await LlmProviderApiKeyModel.isGithubAppKey(params.explicitApiKeyId))
     ) {
       return {
         modelId: explicitModel.id,
@@ -145,9 +147,11 @@ export async function resolveConversationLlmSelectionForAgent(params: {
         // whoever configured it and isn't usable by — or visible to — the acting
         // user. Persist the model alone; the acting user's own credential is
         // resolved per-user at request time (or a connect prompt is surfaced).
-        chatApiKeyId: providerRequiresPerUserCredential(model.provider)
-          ? null
-          : (resolved.apiKeyId ?? null),
+        chatApiKeyId:
+          providerRequiresPerUserCredential(model.provider) &&
+          !(await LlmProviderApiKeyModel.isGithubAppKey(resolved.apiKeyId))
+            ? null
+            : (resolved.apiKeyId ?? null),
         selectedModel: model.modelId,
         selectedProvider: model.provider,
       };
@@ -190,13 +194,15 @@ export async function resolveForkParentSelection(params: {
   }
   return {
     modelId: model.id,
-    chatApiKeyId: providerRequiresPerUserCredential(model.provider)
-      ? null
-      : await usableLinkedKey({
-          parentLlm,
-          agentLlmApiKeyId: agent.llmApiKeyId,
-          userId,
-        }),
+    chatApiKeyId:
+      providerRequiresPerUserCredential(model.provider) &&
+      !(await LlmProviderApiKeyModel.isGithubAppKey(parentLlm.apiKeyId))
+        ? null
+        : await usableLinkedKey({
+            parentLlm,
+            agentLlmApiKeyId: agent.llmApiKeyId,
+            userId,
+          }),
     selectedModel: model.modelId,
     selectedProvider: model.provider,
   };
@@ -525,10 +531,12 @@ export async function resolveConfiguredAgentLlm(
     // owner's personal token — never hand it to another user. Leave apiKey
     // undefined so resolveAgentLlmOrDefault falls through to per-user
     // resolution for the acting user.
-    if (
-      apiKeyRecord.secretId &&
-      !providerRequiresPerUserCredential(apiKeyRecord.provider)
-    ) {
+    // An organization GitHub App key is shared; any other key on a per-user
+    // provider is its owner's token, and is not even read here.
+    const ownersToken =
+      providerRequiresPerUserCredential(apiKeyRecord.provider) &&
+      !(await LlmProviderApiKeyModel.isGithubAppKey(apiKeyRecord.id));
+    if (apiKeyRecord.secretId && !ownersToken) {
       const secret = await getSecretValueForLlmProviderApiKey(
         apiKeyRecord.secretId,
       );

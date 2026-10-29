@@ -16,7 +16,7 @@ import { ObservedProviderUsageError } from "@/utils/observed-provider-usage-erro
 import {
   APP_ID_HEADER,
   ArchestraInternalErrorCode,
-  AUTO_ROUTED_HEADER,
+  AUTO_ROUTABLE_HEADER,
   type BillingMode,
   CHAT_API_KEY_ID_HEADER,
   hasArchestraTokenPrefix,
@@ -45,6 +45,7 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { followsOrganizationRouting } from "@/auto-routing/organization-default";
 import {
   assertNotAutoOnNativeRoute,
   routeInternalAutoSession,
@@ -255,7 +256,7 @@ export interface LLMProxyContext<TRequest> {
   upstreamAttempt: UpstreamAttempt;
   /** Set when the request's model is a model pool's name. */
   modelPool?: ModelPoolRouting;
-  /** Set when an "Auto" platform call was routed to another model than it named. */
+  /** Set when a platform call on the organization default was auto routed. */
   autoRoutedTier?: AutoRoutedTier;
   billingAttribution?: BillingAttribution;
   connectionVerification?: boolean;
@@ -332,7 +333,7 @@ export interface ModelPoolRouting {
   setResponseHeaders: (attempt: UpstreamAttempt) => void;
 }
 
-/** The tier an "Auto" call runs on, reached the way a pool member is. */
+/** The tier an auto-routed call runs on, reached the way a pool member is. */
 interface AutoRoutedTier {
   member: TierMember;
   transport: () => Promise<MemberTransport>;
@@ -1378,23 +1379,26 @@ export async function handleLLMProxy<
             sessionId,
           })
         : null;
-    // A chat or agent set to "Auto" names its anchor, the organization's
-    // default model. The router picks the session's tier and key, which the
-    // call is sent with the way a pool member is, even when the tier is the
-    // anchor's own model. Routing is only offered when every tier is
-    // reachable from the client's wire; otherwise the call runs on the anchor.
+    // A user's chat or agent call on the organization default model, from an
+    // agent with no model of its own, is routed across the organization trio.
+    // The router picks the session's tier and key, which the call is sent with
+    // the way a pool member is, even when the tier is the default model
+    // itself. A call the router cannot route runs on the model it names.
     const autoRouteWire = poolWire;
     const autoRoute =
       internalCall &&
       config.autoRouting.enabled &&
-      headersForExtraction[AUTO_ROUTED_HEADER.toLowerCase()] === "true" &&
+      headersForExtraction[AUTO_ROUTABLE_HEADER.toLowerCase()] === "true" &&
+      followsOrganizationRouting(resolvedAgent) &&
+      resolvedUser &&
       // A pooled call is accounted for by its pool; it is never also routed.
       !modelPoolPlan &&
       autoRouteWire
         ? await routeInternalAutoSession({
             request,
             organizationId: resolvedAgent.organizationId,
-            userId: requireAutoRoutedUser(userId),
+            userId: resolvedUser.id,
+            named: { provider: providerName, modelId: actualModel },
             sessionId,
             body: requestAdapter.getOriginalRequest(),
             reachable: (tierProvider) =>
@@ -4551,14 +4555,6 @@ function poolResponseTimeoutMs(request: unknown): number {
     MODEL_POOL_RESPONSE_TIMEOUT_MS +
       maxOutputTokens * MODEL_POOL_MS_PER_OUTPUT_TOKEN,
   );
-}
-
-/** An "Auto" call is routed for its user, whose keys decide the tier's key. */
-function requireAutoRoutedUser(userId: string | undefined): string {
-  if (!userId) {
-    throw new ApiError(400, "An auto-routed call must name its user.");
-  }
-  return userId;
 }
 
 /** The request's own provider and client, as a transport. */

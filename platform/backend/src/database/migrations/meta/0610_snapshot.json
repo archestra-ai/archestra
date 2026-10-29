@@ -4634,13 +4634,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "auto_routed": {
-          "name": "auto_routed",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "auto_routing_enabled": {
           "name": "auto_routing_enabled",
           "type": "boolean",
@@ -5381,10 +5374,6 @@
         "agents_activation_skill_mode_check": {
           "name": "agents_activation_skill_mode_check",
           "value": "\"agents\".\"activation_skill_mode\" IN ('all', 'manual')"
-        },
-        "agents_auto_routed_model_pool_check": {
-          "name": "agents_auto_routed_model_pool_check",
-          "value": "NOT (\"agents\".\"auto_routed\" AND \"agents\".\"model_pool_id\" IS NOT NULL)"
         }
       },
       "isRLSEnabled": false
@@ -9510,13 +9499,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "auto_routed": {
-          "name": "auto_routed",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "thinking_effort": {
           "name": "thinking_effort",
           "type": "text",
@@ -9774,12 +9756,7 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {
-        "conversations_auto_routed_model_pool_check": {
-          "name": "conversations_auto_routed_model_pool_check",
-          "value": "NOT (\"conversations\".\"auto_routed\" AND \"conversations\".\"model_pool_id\" IS NOT NULL)"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.encryption_key_canaries": {

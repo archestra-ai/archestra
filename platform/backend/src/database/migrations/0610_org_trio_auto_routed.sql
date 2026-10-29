@@ -1,5 +1,5 @@
 -- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=Intentional 1.5 breaking schema removal: agents.fast_model_id, agents.smart_model_id and the agents.auto_routing_{fast,normal,smart}_model_id columns (added during the 1.5 release candidates) are dropped with their indexes and foreign keys, because tiers now come from the organization's default model trio, which the statements below fill from the auto-routing tiers first. Older application pods read these columns, so stop application processes for the upgrade. The new auto_routed columns are constant-default; their checks are added NOT VALID and validated separately.
+-- drizzle-migration-linter: reason=Intentional 1.5 breaking schema removal: agents.fast_model_id, agents.smart_model_id and the agents.auto_routing_{fast,normal,smart}_model_id columns (added during the 1.5 release candidates) are dropped with their indexes and foreign keys, because tiers now come from the organization's default model trio, which the statements below fill from the auto-routing tiers first. Older application pods read these columns, so stop application processes for the upgrade.
 -- Auto routing now routes across the organization's default model trio, so
 -- each organization's auto-routing tiers move into it. The tiers win over the
 -- trio: they are the models auto routing actually sends traffic to.
@@ -132,14 +132,8 @@ DROP INDEX "agents_smart_model_id_idx";--> statement-breakpoint
 DROP INDEX "agents_auto_routing_fast_model_id_idx";--> statement-breakpoint
 DROP INDEX "agents_auto_routing_normal_model_id_idx";--> statement-breakpoint
 DROP INDEX "agents_auto_routing_smart_model_id_idx";--> statement-breakpoint
-ALTER TABLE "agents" ADD COLUMN "auto_routed" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "conversations" ADD COLUMN "auto_routed" boolean DEFAULT false NOT NULL;--> statement-breakpoint
 ALTER TABLE "agents" DROP COLUMN "fast_model_id";--> statement-breakpoint
 ALTER TABLE "agents" DROP COLUMN "smart_model_id";--> statement-breakpoint
 ALTER TABLE "agents" DROP COLUMN "auto_routing_fast_model_id";--> statement-breakpoint
 ALTER TABLE "agents" DROP COLUMN "auto_routing_normal_model_id";--> statement-breakpoint
-ALTER TABLE "agents" DROP COLUMN "auto_routing_smart_model_id";--> statement-breakpoint
-ALTER TABLE "agents" ADD CONSTRAINT "agents_auto_routed_model_pool_check" CHECK (NOT ("agents"."auto_routed" AND "agents"."model_pool_id" IS NOT NULL)) NOT VALID;--> statement-breakpoint
-ALTER TABLE "agents" VALIDATE CONSTRAINT "agents_auto_routed_model_pool_check";--> statement-breakpoint
-ALTER TABLE "conversations" ADD CONSTRAINT "conversations_auto_routed_model_pool_check" CHECK (NOT ("conversations"."auto_routed" AND "conversations"."model_pool_id" IS NOT NULL)) NOT VALID;--> statement-breakpoint
-ALTER TABLE "conversations" VALIDATE CONSTRAINT "conversations_auto_routed_model_pool_check";
+ALTER TABLE "agents" DROP COLUMN "auto_routing_smart_model_id";

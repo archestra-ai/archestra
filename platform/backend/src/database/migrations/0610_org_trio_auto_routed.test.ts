@@ -41,7 +41,6 @@ async function makeDatabase() {
       is_default boolean NOT NULL DEFAULT false,
       deleted_at timestamp,
       auto_routing_enabled boolean NOT NULL DEFAULT false,
-      model_pool_id text,
       runtime jsonb,
       llm_api_key_id text,
       model_id text,
@@ -53,7 +52,6 @@ async function makeDatabase() {
     ${TIER_COLUMNS.map(
       (column) => `CREATE INDEX agents_${column}_idx ON agents (${column});`,
     ).join("\n")}
-    CREATE TABLE conversations (id text PRIMARY KEY, model_pool_id text);
     INSERT INTO models VALUES
       ('fast-0'), ('normal-0'), ('smart-0'), ('fast-1'), ('normal-1'), ('smart-1');
   `);
@@ -265,24 +263,6 @@ test("auto-routing tiers move into the organization trio, the normal tier only w
       { organization_id: "personal-only", enabled: false },
       { organization_id: "primary", enabled: true },
     ]);
-  } finally {
-    await database.close();
-  }
-});
-
-test("an Auto agent or conversation cannot also name a model pool", async () => {
-  const database = await makeDatabase();
-  try {
-    await database.exec(migration);
-    for (const table of ["agents", "conversations"]) {
-      await expect(
-        database.exec(
-          table === "agents"
-            ? "INSERT INTO agents (id, organization_id, agent_type, auto_routed, model_pool_id) VALUES ('a', 'o', 'agent', true, 'pool')"
-            : "INSERT INTO conversations (id, auto_routed, model_pool_id) VALUES ('c', true, 'pool')",
-        ),
-      ).rejects.toMatchObject({ code: "23514" });
-    }
   } finally {
     await database.close();
   }

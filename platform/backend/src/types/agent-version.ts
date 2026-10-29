@@ -60,8 +60,6 @@ export const AgentConfigSnapshotSchema = z.object({
   builtInAgentConfig: z.unknown(),
   /** Resolved model identity (modelId FK + human-readable externalId). */
   model: ModelIdentitySchema.nullable(),
-  /** "Auto": `model` and `llmApiKey` are then its anchor. Absent before it existed: a fixed model. */
-  autoRouted: z.boolean().default(false),
   /** Redacted key identity — never key material (secret ids are excluded). */
   llmApiKey: z
     .object({ id: z.string(), name: z.string(), provider: z.string() })

@@ -118,15 +118,6 @@ const agentsTable = softDeletablePgTable(
       onDelete: "set null",
     }),
     /**
-     * "Auto" as the agent's model: its runs are routed per session across the
-     * organization's model trio by the auto router. `llmApiKeyId` and
-     * `modelId` then hold the anchor — the organization's default model on a
-     * usable key — for everything that needs a single model. Never together
-     * with `modelPoolId`.
-     */
-    autoRouted: boolean("auto_routed").notNull().default(false),
-
-    /**
      * Auto routing (the org's `llm_proxy` row only). Server-managed: written
      * under the routing-plan lock, which also bumps `autoRoutingGeneration`.
      */
@@ -384,10 +375,6 @@ const agentsTable = softDeletablePgTable(
     check(
       "agents_activation_skill_mode_check",
       sql`${table.activationSkillMode} IN ('all', 'manual')`,
-    ),
-    check(
-      "agents_auto_routed_model_pool_check",
-      sql`NOT (${table.autoRouted} AND ${table.modelPoolId} IS NOT NULL)`,
     ),
     uniqueIndex("agents_personal_gateway_per_member_idx")
       .on(table.organizationId, table.authorId)

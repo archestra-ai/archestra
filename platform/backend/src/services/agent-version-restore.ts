@@ -26,7 +26,6 @@ import {
   validateAssignment,
 } from "@/services/agent-tool-assignment";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
-import { autoRoutedSelection } from "@/services/auto-routed-model";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import type {
   Agent,
@@ -517,12 +516,6 @@ async function planScalars(params: {
     }
     scalars.modelId = snapshotModelId;
     scalars.llmApiKeyId = snapshotKeyId;
-  }
-
-  // "Auto" is restored with its anchor above. Pools are not versioned, so a
-  // restored "Auto" leaves the agent's pool, as choosing it does.
-  if (snapshot.autoRouted !== current.autoRouted) {
-    Object.assign(scalars, autoRoutedSelection(snapshot.autoRouted));
   }
 
   // identityProviderId is captured but deliberately not replayed: migration

@@ -1458,6 +1458,27 @@ class AgentModel {
       );
   }
 
+  /** Agents auto routing applies to: no model, key, pool or runtime of their own. */
+  static async countFollowingOrganizationRouting(
+    organizationId: string,
+  ): Promise<number> {
+    const [row] = await db
+      .select({ total: count() })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          eq(schema.agentsTable.agentType, "agent"),
+          isNull(schema.agentsTable.llmApiKeyId),
+          isNull(schema.agentsTable.modelId),
+          isNull(schema.agentsTable.modelPoolId),
+          isNull(schema.agentsTable.runtime),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+    return row?.total ?? 0;
+  }
+
   static async findRuntimeTargets(organizationId: string) {
     return db
       .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
@@ -3826,11 +3847,7 @@ class AgentModel {
     id: string,
     userId?: string,
     isAgentAdmin?: boolean,
-  ): Promise<{
-    llmApiKeyId: string | null;
-    modelId: string | null;
-    autoRouted: boolean;
-  } | null> {
+  ): Promise<{ llmApiKeyId: string | null; modelId: string | null } | null> {
     if (!(await AgentModel.callerCanAccess(id, userId, isAgentAdmin))) {
       return null;
     }
@@ -3839,7 +3856,6 @@ class AgentModel {
       .select({
         llmApiKeyId: schema.agentsTable.llmApiKeyId,
         modelId: schema.agentsTable.modelId,
-        autoRouted: schema.agentsTable.autoRouted,
       })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
@@ -6450,7 +6466,6 @@ const CHAT_ROSTER_COLUMNS = {
   modelId: schema.agentsTable.modelId,
   llmApiKeyId: schema.agentsTable.llmApiKeyId,
   modelPoolId: schema.agentsTable.modelPoolId,
-  autoRouted: schema.agentsTable.autoRouted,
 };
 
 type RosterCursorFields = { cursorValue?: string; chatRank?: number };

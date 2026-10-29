@@ -79,7 +79,6 @@ import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
-import { applyAutoRoutedChoice } from "@/services/auto-routed-model";
 import { findVisibleChatAgent } from "@/services/chat-agent-visibility";
 import { applyAgentModelPool } from "@/services/chat-model-pools";
 import { getObservedClaudeCodeToolTokenCount } from "@/services/claude-code-tool-token-count";
@@ -832,12 +831,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      await applyAutoRoutedChoice({
-        body,
-        keyField: "llmApiKeyId",
-        organizationId,
-        userId: user.id,
-      });
       await applyAgentModelPool(body, { organizationId, userId: user.id });
       // A model and its API key are a pair: persist both or neither.
       if (
@@ -2234,12 +2227,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      await applyAutoRoutedChoice({
-        body,
-        keyField: "llmApiKeyId",
-        organizationId,
-        userId: user.id,
-      });
       await applyAgentModelPool(body, { organizationId, userId: user.id });
 
       // Built-in agent guard: restrict which fields can be modified
@@ -2269,9 +2256,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...(body.modelId !== undefined && { modelId: body.modelId }),
           ...(body.modelPoolId !== undefined && {
             modelPoolId: body.modelPoolId,
-          }),
-          ...(body.autoRouted !== undefined && {
-            autoRouted: body.autoRouted,
           }),
         };
       } else {

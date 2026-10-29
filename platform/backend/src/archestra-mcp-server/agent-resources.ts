@@ -39,7 +39,6 @@ import {
   assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
-import { applyAutoRoutedChoice } from "@/services/auto-routed-model";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { SKILL_CATALOG_UNTRUSTED_NOTE } from "@/skills/skill-catalog-prompt";
@@ -901,7 +900,7 @@ async function resolveRuntimeAndModelForWrite(params: {
   llmApiKeyId: string | null | undefined;
   modelId: string | null | undefined;
   existing: Pick<Agent, AgentModelField> | null;
-}): Promise<Partial<Pick<Agent, AgentModelField | "autoRouted">>> {
+}): Promise<Partial<Pick<Agent, AgentModelField>>> {
   const { context, runtimeInput, llmApiKeyId, modelId, existing } = params;
   const touchesModel = llmApiKeyId !== undefined || modelId !== undefined;
   if (runtimeInput === undefined && !touchesModel) return {};
@@ -956,18 +955,11 @@ async function resolveRuntimeAndModelForWrite(params: {
     agent: merged,
   });
 
-  const written: Partial<Pick<Agent, AgentModelField | "autoRouted">> = {
+  return {
     ...(runtime !== undefined && { runtime }),
     ...(llmApiKeyId !== undefined && { llmApiKeyId }),
     ...(modelId !== undefined && { modelId }),
   };
-  // A model picked here leaves "Auto", as it does in the UI.
-  await applyAutoRoutedChoice({
-    body: written,
-    keyField: "llmApiKeyId",
-    ...scope,
-  });
-  return written;
 }
 
 type AgentModelField = "runtime" | "llmApiKeyId" | "modelId";

@@ -372,8 +372,8 @@ export async function executeA2AMessage(
   const llmApiKeyId = resolvedApiKeyId ?? agent.llmApiKeyId;
   // An agent set to a pool runs on it; a fork runs on its parent's model.
   const modelPoolId = params.selfFork ? null : agent.modelPoolId;
-  // An "Auto" agent's runs are routed, but a fork that asked for a tier runs on it.
-  const autoRouted = agent.autoRouted && !(params.selfFork && params.tier);
+  // A fork that asked for a tier runs on it, never auto routed.
+  const autoRoutable = !modelPoolId && !(params.selfFork && params.tier);
 
   // Track subagent run so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).
@@ -461,7 +461,7 @@ export async function executeA2AMessage(
       externalAgentId: delegationChain,
       agentLlmApiKeyId: llmApiKeyId,
       modelPoolId,
-      autoRouted,
+      autoRoutable,
       appaSubagentToken: params.appaSubagent?.token,
     });
     const authorizeModel = (model: typeof providerModel) =>
@@ -646,7 +646,7 @@ export async function executeA2AMessage(
                 externalAgentId: delegationChain,
                 agentLlmApiKeyId: llmApiKeyId,
                 modelPoolId,
-                autoRouted,
+                autoRoutable,
                 appaSubagentToken: params.appaSubagent?.token,
               })
             ).model,

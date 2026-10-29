@@ -125,10 +125,6 @@ import {
   type OpenedApp,
   resolveOpenedApp,
 } from "@/services/apps/opened-app-context";
-import {
-  applyAutoRoutedChoice,
-  resolveAutoRoutedAnchor,
-} from "@/services/auto-routed-model";
 import { resolveAzureModelCapabilities } from "@/services/azure-model-capabilities";
 import { resolveChatModelPool } from "@/services/chat-model-pools";
 import { conversationFilesService } from "@/services/conversation-files";
@@ -1189,7 +1185,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     source: "chat",
                     agentLlmApiKeyId: agent.llmApiKeyId,
                     modelPoolId: conversation.modelPoolId,
-                    autoRouted: conversation.autoRouted,
+                    autoRoutable: !conversation.modelPoolId,
                     // Lets the proxy store this turn's interaction encrypted
                     // rather than redacted. Only sent when an escrow record
                     // exists, since without one the row could never be reopened.
@@ -1429,7 +1425,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           source: "chat:tool_call_repair",
                           agentLlmApiKeyId: agent.llmApiKeyId,
                           modelPoolId: conversation.modelPoolId,
-                          autoRouted: conversation.autoRouted,
+                          autoRoutable: !conversation.modelPoolId,
                           // A repair prompt carries the same conversation
                           // content as the turn it repairs.
                           encryptedChatKey: encryptedChatAudit?.dek ?? null,
@@ -2941,7 +2937,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           modelId: true,
           chatApiKeyId: true,
           modelPoolId: true,
-          autoRouted: true,
           projectId: true,
           encryptedChat: true,
           thinkingEffort: true,
@@ -2952,7 +2947,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             modelId: true,
             chatApiKeyId: true,
             modelPoolId: true,
-            autoRouted: true,
             projectId: true,
             encryptedChat: true,
             thinkingEffort: true,
@@ -2968,7 +2962,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           modelId,
           chatApiKeyId,
           modelPoolId,
-          autoRouted,
           projectId,
           encryptedChat,
           thinkingEffort,
@@ -3020,54 +3013,32 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      // A chat with no model choice of its own follows its agent's "Auto",
-      // starting on the agent's anchor.
-      const inheritsAutoRouted =
-        autoRouted === undefined &&
-        !modelId &&
-        !chatApiKeyId &&
-        !modelPoolId &&
-        agent.autoRouted;
-
       // Validate chatApiKeyId if provided
       // Skip validation if it matches the agent's configured key (permission flows through agent access)
-      if (
-        !modelPoolId &&
-        !autoRouted &&
-        chatApiKeyId &&
-        chatApiKeyId !== agent.llmApiKeyId
-      ) {
+      if (!modelPoolId && chatApiKeyId && chatApiKeyId !== agent.llmApiKeyId) {
         await validateChatApiKeyAccess(chatApiKeyId, user.id, organizationId);
       }
 
       // Resolve the model via the priority chain:
-      // auto -> pool -> explicit pick -> member -> agent -> organization -> best available.
+      // pool -> explicit pick -> member -> agent -> organization -> best available.
       // The explicit pick is a (model, key) pair — both are carried so the
       // chosen key is honored instead of being re-derived.
-      const llmSelection = autoRouted
+      const llmSelection = modelPoolId
         ? {
-            ...(await resolveAutoRoutedAnchor({
+            ...(await resolveChatModelPool({
               organizationId,
               userId: user.id,
+              modelPoolId,
             })),
             selectedModel: null,
           }
-        : modelPoolId
-          ? {
-              ...(await resolveChatModelPool({
-                organizationId,
-                userId: user.id,
-                modelPoolId,
-              })),
-              selectedModel: null,
-            }
-          : await resolveConversationLlmSelectionForAgent({
-              agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
-              organizationId,
-              userId: user.id,
-              explicitModelId: modelId,
-              explicitApiKeyId: chatApiKeyId,
-            });
+        : await resolveConversationLlmSelectionForAgent({
+            agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
+            organizationId,
+            userId: user.id,
+            explicitModelId: modelId,
+            explicitApiKeyId: chatApiKeyId,
+          });
 
       logger.info(
         {
@@ -3111,8 +3082,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId,
           modelId: llmSelection.modelId,
           chatApiKeyId: llmSelection.chatApiKeyId,
-          modelPoolId: autoRouted ? null : (modelPoolId ?? null),
-          autoRouted: autoRouted ?? inheritsAutoRouted,
+          modelPoolId: modelPoolId ?? null,
           projectId: projectId ?? null,
           thinkingEffort,
         }),
@@ -3182,16 +3152,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // configured key of the agent the conversation will run on after this
       // update (permission flows through agent access) — the new agent when
       // this request switches agents, not the one being left.
-      // Picking "Auto" or a pool stores one model the user can use as the
-      // conversation's key and model; picking a key or model, or another
-      // agent, leaves "Auto" and the pool.
-      if (body.autoRouted === undefined && nextAgent) body.autoRouted = false;
-      await applyAutoRoutedChoice({
-        body,
-        keyField: "chatApiKeyId",
-        organizationId,
-        userId: user.id,
-      });
+      // Picking a pool stores one of its members as the conversation's key
+      // and model; picking a key or model, or another agent, leaves the pool.
       if (body.modelPoolId) {
         const pooled = await resolveChatModelPool({
           organizationId,
@@ -3214,7 +3176,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         : currentConversation.agent?.llmApiKeyId;
       if (
         !body.modelPoolId &&
-        !body.autoRouted &&
         body.chatApiKeyId &&
         body.chatApiKeyId !== effectiveAgentLlmApiKeyId
       ) {
@@ -3228,7 +3189,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (
         nextAgent &&
         !body.modelPoolId &&
-        !body.autoRouted &&
         body.modelId === undefined &&
         body.chatApiKeyId === undefined
       ) {
@@ -3243,10 +3203,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         body.modelId = llmSelection.modelId;
         body.chatApiKeyId = llmSelection.chatApiKeyId;
-        // The new agent's pool or "Auto" comes with its model.
-        if (llmSelection.modelId === nextAgent.modelId) {
-          if (nextAgent.modelPoolId) body.modelPoolId = nextAgent.modelPoolId;
-          body.autoRouted = nextAgent.autoRouted;
+        // The new agent's pool comes with its model.
+        if (
+          nextAgent.modelPoolId &&
+          llmSelection.modelId === nextAgent.modelId
+        ) {
+          body.modelPoolId = nextAgent.modelPoolId;
         }
       }
 

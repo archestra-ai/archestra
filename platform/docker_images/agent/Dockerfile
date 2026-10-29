@@ -207,10 +207,12 @@ USER root
 # package come from the hash-locked versions in the checkout. Pillow, PyJWT,
 # certifi, and urllib3 are raised past the lock's vulnerable versions; the startup
 # tests below exercise the resulting runtime, including gateway discovery.
+# Keep 0.22.2 until the persistent gateway used by 0.22.4 supports the
+# required MCP startup guard and refreshes runtime bindings on session resume.
 COPY --from=uv-hermes /uv /usr/local/bin/uv-hermes
 RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
-    hermes_version=0.22.4 \
- && hermes_commit=4d04303818b61bf3aa09278af48356315515965b \
+    hermes_version=0.22.2 \
+ && hermes_commit=d923a5eb487a17c0a68801bba9ef0f56c81040a8 \
  && git clone --quiet --depth 1 --branch "v${hermes_version}" https://github.com/NousResearch/hermes-agent /opt/hermes \
  && test "$(git -C /opt/hermes rev-parse HEAD)" = "${hermes_commit}" \
  && case "${TARGETARCH}" in amd64) python_target=linux-x64 ;; arm64) python_target=linux-arm64 ;; *) exit 1 ;; esac \

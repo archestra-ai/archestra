@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AdvancedSection } from "@/components/advanced-section";
 import { ScheduleDialog } from "@/components/scheduled-tasks/schedule-dialog";
 import { Label } from "@/components/ui/label";
 import {
@@ -60,29 +61,44 @@ export function AgentScheduleCreateDialog({
       resolveProjectId={resolveProjectId}
       onSaved={onCreated}
       projectField={
-        <div className="space-y-1.5">
-          <Label htmlFor="agent-schedule-project">Project</Label>
-          <Select value={projectId} onValueChange={setProjectId}>
-            <SelectTrigger id="agent-schedule-project" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={AUTO_PROJECT}>Create automatically</SelectItem>
-              {(projects.data?.data ?? []).map((project) => (
-                <SelectItem key={project.id} value={project.id}>
-                  {project.name}
+        <AdvancedSection>
+          <div className="space-y-1.5">
+            <Label htmlFor="agent-schedule-project">Project</Label>
+            {projectId === AUTO_PROJECT && (
+              <p
+                id="agent-schedule-project-description"
+                className="text-xs text-muted-foreground"
+              >
+                {createdProjectId
+                  ? `This schedule will use the “${projectName}” project created for it.`
+                  : `A project named “${projectName}” will be created when you create this schedule.`}
+              </p>
+            )}
+            <Select value={projectId} onValueChange={setProjectId}>
+              <SelectTrigger
+                id="agent-schedule-project"
+                className="w-full"
+                aria-describedby={
+                  projectId === AUTO_PROJECT
+                    ? "agent-schedule-project-description"
+                    : undefined
+                }
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={AUTO_PROJECT}>
+                  Create automatically
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {projectId === AUTO_PROJECT && (
-            <p className="text-xs text-muted-foreground">
-              {createdProjectId
-                ? `This schedule will use the “${projectName}” project created for it.`
-                : `A project named “${projectName}” will be created when you create this schedule.`}
-            </p>
-          )}
-        </div>
+                {(projects.data?.data ?? []).map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </AdvancedSection>
       }
     />
   );

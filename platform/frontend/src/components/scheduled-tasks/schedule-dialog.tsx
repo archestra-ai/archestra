@@ -244,8 +244,6 @@ export function ScheduleDialog({
         />
       </div>
 
-      {projectField}
-
       <div className="space-y-1.5">
         <ScheduleTriggerPicker
           value={{
@@ -262,6 +260,7 @@ export function ScheduleDialog({
           }}
         />
       </div>
+      {projectField}
     </StandardFormDialog>
   );
 }

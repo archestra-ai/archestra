@@ -145,12 +145,12 @@ RUN --network=none \
 
 FROM agent-base AS agent-claude-code
 USER root
-RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.306 \
+RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.308 \
  && CLAUDE_PACKAGE_DIR=$(pnpm list --global --json @anthropic-ai/claude-code | jq -r '.[0].dependencies["@anthropic-ai/claude-code"].path') \
  && node "$CLAUDE_PACKAGE_DIR/install.cjs" \
  && claude --version \
  && mkdir -p /home/node/.claude \
- && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.306","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
+ && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.308","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
  && printf '%s\n' '{"skipDangerousModePermissionPrompt":true}' > /home/node/.claude/settings.json \
  && chmod 0600 /home/node/.claude.json /home/node/.claude/settings.json \
  && chown -R 1000:1000 /home/node
@@ -207,6 +207,8 @@ USER root
 # package come from the hash-locked versions in the checkout. Pillow, PyJWT,
 # certifi, and urllib3 are raised past the lock's vulnerable versions; the startup
 # tests below exercise the resulting runtime, including gateway discovery.
+# Keep 0.22.2 until the persistent gateway used by 0.22.4 supports the
+# required MCP startup guard and refreshes runtime bindings on session resume.
 COPY --from=uv-hermes /uv /usr/local/bin/uv-hermes
 RUN --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
     hermes_version=0.22.2 \
@@ -355,13 +357,13 @@ FROM agent-base AS agent-copilot
 USER root
 ENV COPILOT_AUTO_UPDATE=false
 RUN case "$TARGETARCH" in \
-      amd64) copilot_arch=x64; copilot_checksum=f447acbbc5ededd46f56d72b0ba0b82f08216683e9ae2d2a09c4fea902ddd234e08eec891146ca6971aa9d529ef2af91e0b2859ef00a80ea7d679423328cffd5 ;; \
-      arm64) copilot_arch=arm64; copilot_checksum=ee33159afa559ac9cbdc44f7581172195742d0012556151de04c40ef1e55f26499236330738367f44f85d4f14a277e3ef647b83391b7f80a219e2effba20721e ;; \
+      amd64) copilot_arch=x64; copilot_checksum=7861cf6ec3f4a764207d56428ed6c604564f04e250d0337bc486c1440a3ba06f1bd737cb8ab40875f23887c232ebc0efd9c289189660dbf10eed6ecaa483093b ;; \
+      arm64) copilot_arch=arm64; copilot_checksum=e6b3b4076fc076e09e92b13e694ce2a7248a671658d9bfed55167c4aecbcca63c5342d10ec742243c0d98718fedd184747cad4d99f0a3895406ed32544e5faf8 ;; \
       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
  && mkdir -p /opt/copilot \
  && cd /tmp \
- && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.101)" copilot.tgz \
+ && mv "$(npm pack --silent @github/copilot-linux-${copilot_arch}@1.0.102)" copilot.tgz \
  && echo "$copilot_checksum  copilot.tgz" | sha512sum -c - \
  && tar -xzf copilot.tgz --strip-components=1 -C /opt/copilot \
  && test -s /opt/copilot/LICENSE.md \

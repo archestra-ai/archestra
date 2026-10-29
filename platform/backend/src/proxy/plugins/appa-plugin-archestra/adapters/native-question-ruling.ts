@@ -88,9 +88,19 @@ export function labeledQuestionRuling(
 ): { label: string } | NativeQuestionNoAnswer | "unrecognized" {
   if (result.isError) return "unavailable";
   try {
-    const parsed = JSON.parse(result.content) as { answers?: unknown };
+    const parsed = JSON.parse(result.content) as {
+      answers?: unknown;
+      note?: unknown;
+    };
     if (typeof parsed === "string")
       return textQuestionSelection(parsed, question, labels);
+    // Kimi Code answers a dismissed question with no answers and this note.
+    if (
+      parsed !== null &&
+      parsed.note === KIMI_CODE_DISMISSED_NOTE &&
+      stringValues(parsed.answers).length === 0
+    )
+      return "declined";
     const structured = selectionFromValues(
       stringValues(parsed.answers),
       labels,

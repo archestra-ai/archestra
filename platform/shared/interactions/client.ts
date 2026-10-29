@@ -193,6 +193,21 @@ export function isKiloUserAgent(userAgent: string | null | undefined): boolean {
 }
 
 /**
+ * The headers Kimi Code 2.3.3 sends with every model request to identify the
+ * client and the device. The LLM proxy relays exactly these to the Kimi Code
+ * API; any other header a request carries stays with the proxy.
+ */
+export const KIMI_CODE_CLIENT_HEADERS = [
+  "user-agent",
+  "x-msh-platform",
+  "x-msh-version",
+  "x-msh-device-name",
+  "x-msh-device-model",
+  "x-msh-os-version",
+  "x-msh-device-id",
+] as const;
+
+/**
  * Whether a User-Agent denotes the Kimi Code CLI. Kimi Code sends
  * `kimi-code-cli/<version>` on every model request, whatever the provider type.
  */

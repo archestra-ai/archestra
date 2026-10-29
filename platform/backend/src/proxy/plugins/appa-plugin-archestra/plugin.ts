@@ -6,6 +6,7 @@ import {
   buildElicitationMandateInstruction,
   isAgentTool,
   isYellToolShortName,
+  KIMI_CODE_CLIENT_ID,
   OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
   PROXY_STAMPED_TOOL_ARGUMENTS,
   SELF_FORK_TOOL_NAME,
@@ -4963,10 +4964,12 @@ async function canonicalizeHitlAskUserCall(params: {
       offerIds: params.offerIds,
     });
     if (inspectable) {
-      const family =
+      // These clients show the question text itself, so the review rides in it.
+      const reviewInQuestion =
         params.binding.adapter?.id === "opencode" ||
-        params.binding.adapter?.id === "kilo";
-      const askedQuestion = family
+        params.binding.adapter?.id === "kilo" ||
+        params.binding.adapter?.id === KIMI_CODE_CLIENT_ID;
+      const askedQuestion = reviewInQuestion
         ? openCodeReviewQuestion(inspectable.card, inspectable.reviewText)
         : undefined;
       return {
@@ -5706,9 +5709,10 @@ async function sealInspectableClosure(params: {
 
 /**
  * Whether an offer-backed ask_user call becomes an inspectable native card:
- * Claude needs transport support for review text. OpenCode-family questions
- * carry it in the native input, including on transports with no text injection.
- * Their connection plugin enhances presentation; native surfaces remain usable.
+ * Claude needs transport support for review text. OpenCode-family and Kimi
+ * Code questions carry it in the native input, including on transports with
+ * no text injection. The OpenCode connection plugin enhances presentation;
+ * native surfaces remain usable.
  */
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -5725,6 +5729,7 @@ function inspectsNatively(
     declaresNativeQuestion(binding, native.toolName) &&
     ((isClaudeCodeFamilyAdapter(binding.adapter?.id) &&
       canShowToolCallReview) ||
+      binding.adapter?.id === KIMI_CODE_CLIENT_ID ||
       ((binding.adapter?.id === "opencode" || binding.adapter?.id === "kilo") &&
         binding.requestHeaders["x-archestra-question-cards"] === "1"))
   );

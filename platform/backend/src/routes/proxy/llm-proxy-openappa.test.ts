@@ -10031,7 +10031,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
     // Kimi Code 2.3.3 sends its session id as the prompt cache key on every
     // request, its subagents' included, and only its User-Agent names it.
-    const send = (messages: unknown[]) =>
+    const send = (
+      messages: unknown[],
+      extraHeaders: Record<string, string> = {},
+    ) =>
       app.inject({
         method: "POST",
         url: `/v1/kimi-code/${agent.id}/chat/completions`,
@@ -10040,6 +10043,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           "x-archestra-virtual-key": platformKey,
           "user-agent": "kimi-code-cli/2.3.3",
           "x-msh-platform": "kimi_code_cli",
+          ...extraHeaders,
         },
         payload: {
           model: "k3.1-pro",
@@ -10081,12 +10085,20 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         function: { name: string; arguments: string };
       }>;
 
-    test("relays Kimi Code's own client headers to the Kimi Code API", async () => {
-      const response = await send([{ role: "user", content: "Hello" }]);
+    test("relays only the client headers Kimi Code sends to the Kimi Code API", async () => {
+      const response = await send([{ role: "user", content: "Hello" }], {
+        "x-msh-version": "2.3.3",
+        "x-msh-device-id": "device-1",
+        // Not among the headers Kimi Code sends with a model request.
+        "x-msh-session": "other",
+        "x-msh-tool-call-id": "call-1",
+      });
       expect(response.statusCode, response.body).toBe(200);
       expect(upstreamHeaders.at(-1)).toEqual({
         "user-agent": "kimi-code-cli/2.3.3",
         "x-msh-platform": "kimi_code_cli",
+        "x-msh-version": "2.3.3",
+        "x-msh-device-id": "device-1",
       });
     });
 

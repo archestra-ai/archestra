@@ -325,6 +325,36 @@ describe("labeled question selections", () => {
         labels,
       ),
     ).toEqual({ label: "Deny" });
+    // Kimi Code keys the answer by the question.
+    expect(
+      labeledQuestionRuling(
+        { content: JSON.stringify({ answers: { [question]: "Next page" } }) },
+        question,
+        labels,
+      ),
+    ).toEqual({ label: "Next page" });
+  });
+
+  test("reads Kimi Code's dismissal as a decline", () => {
+    expect(
+      labeledQuestionRuling(
+        {
+          content: JSON.stringify({
+            answers: {},
+            note: "User dismissed the question without answering.",
+          }),
+        },
+        question,
+        labels,
+      ),
+    ).toBe("declined");
+    expect(
+      labeledQuestionRuling(
+        { content: JSON.stringify({ answers: {}, note: "Something else." }) },
+        question,
+        labels,
+      ),
+    ).toBe("unrecognized");
   });
 
   test("reads nothing when two labels are selected or none match", () => {

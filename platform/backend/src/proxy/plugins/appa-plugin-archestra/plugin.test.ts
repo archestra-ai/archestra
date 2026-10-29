@@ -55,6 +55,7 @@ import {
   AppaClaudeDesktopAdapter,
 } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
+import { AppaKimiCodeAdapter } from "./adapters/kimi-code";
 import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPluginArchestra } from "./plugin";
 import {
@@ -3492,30 +3493,37 @@ describe("asking through the client's own question tool", () => {
   /**
    * A Claude Code session whose review rides the client's native card with an
    * Inspect option, on a transport that can place the complete review
-   * text before the card. `askCard` re-asks exactly as the model would: only
-   * the offer ID decides what is shown.
+   * text before the card. OpenCode, Kilo Code and Kimi Code carry the review
+   * in the question itself. `askCard` re-asks exactly as the model would:
+   * only the offer ID decides what is shown.
    */
   function inspectableClaudeReview(params: {
     sessionId: string;
     offerId: string;
-    client?: "opencode" | "kilo";
+    client?: "opencode" | "kilo" | "kimi-code";
   }) {
     const adapter =
-      params.client === "kilo"
-        ? new AppaKiloAdapter()
-        : params.client === "opencode"
-          ? new AppaOpenCodeAdapter()
-          : new AppaClaudeCodeAdapter();
-    const nativeName = params.client ? "question" : "AskUserQuestion";
+      params.client === "kimi-code"
+        ? new AppaKimiCodeAdapter()
+        : params.client === "kilo"
+          ? new AppaKiloAdapter()
+          : params.client === "opencode"
+            ? new AppaOpenCodeAdapter()
+            : new AppaClaudeCodeAdapter();
+    const kimi = params.client === "kimi-code";
+    const nativeName = params.client && !kimi ? "question" : "AskUserQuestion";
     const plugin = new AppaPluginArchestra([adapter]);
     const context = requestContext({ sessionId: params.sessionId });
-    context.headers = params.client
-      ? {
-          "user-agent": `${params.client}/1`,
-          "x-opencode-session": params.sessionId,
-          "x-archestra-question-cards": "1",
-        }
-      : { "user-agent": "claude-code/1" };
+    context.headers = kimi
+      ? { "user-agent": "kimi-code-cli/2.3.3" }
+      : params.client
+        ? {
+            "user-agent": `${params.client}/1`,
+            "x-opencode-session": params.sessionId,
+            "x-archestra-question-cards": "1",
+          }
+        : { "user-agent": "claude-code/1" };
+    if (kimi) context.requestBody = { prompt_cache_key: params.sessionId };
     const trusted = context.resources.get(
       APPA_PLUGIN_TRUSTED_CONTEXT,
     ) as AppaTrustedContext;
@@ -3591,11 +3599,18 @@ describe("asking through the client's own question tool", () => {
             id: answerId,
             name: nativeName,
             content: JSON.stringify(
-              label === ""
-                ? params.client
-                  ? "User dismissed the question."
-                  : "The user did not answer the questions."
-                : `${params.client ? "User has answered your questions" : "Your questions have been answered"}: "${question}"="${label}". You can now continue with these answers in mind.`,
+              kimi
+                ? label === ""
+                  ? {
+                      answers: {},
+                      note: "User dismissed the question without answering.",
+                    }
+                  : { answers: { [question]: label } }
+                : label === ""
+                  ? params.client
+                    ? "User dismissed the question."
+                    : "The user did not answer the questions."
+                  : `${params.client ? "User has answered your questions" : "Your questions have been answered"}: "${question}"="${label}". You can now continue with these answers in mind.`,
             ),
             isError: false,
           },
@@ -3614,6 +3629,7 @@ describe("asking through the client's own question tool", () => {
   test.each([
     "opencode",
     "kilo",
+    "kimi-code",
   ] as const)("%s connection cards bind previews, deliver full review in native input, and consume explicit answers once", async (client) => {
     const offerId = `offer-${client}-cards`;
     const f = inspectableClaudeReview({
@@ -3665,6 +3681,7 @@ describe("asking through the client's own question tool", () => {
   test.each([
     "opencode",
     "kilo",
+    "kimi-code",
   ] as const)("%s rejects cross-session and altered-question answers without consuming the rightful card", async (client) => {
     const offerId = `offer-${client}-scope`;
     const owner = inspectableClaudeReview({
@@ -3717,6 +3734,7 @@ describe("asking through the client's own question tool", () => {
   test.each([
     "opencode",
     "kilo",
+    "kimi-code",
   ] as const)("%s dismisses without denial and refuses a stale payload", async (client) => {
     const results = vi
       .spyOn(appaService, "processProxyResults")

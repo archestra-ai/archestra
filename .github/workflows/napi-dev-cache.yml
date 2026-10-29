@@ -13,6 +13,7 @@ on:
     paths:
       - "platform/archestra-rs/**"
       - "platform/rust-toolchain.toml"
+      - "platform/pnpm-lock.yaml"
       - "platform/scripts/napi-prebuilt.mjs"
       - ".github/workflows/napi-dev-cache.yml"
   workflow_dispatch:
@@ -72,7 +73,7 @@ jobs:
       - name: Build the addons on Debian bookworm
         if: steps.published.outputs.exists != 'true'
         run: |
-          docker build --tag napi-dev-builder - <<'EOF'
+          docker build --tag "napi-dev-builder:${GITHUB_RUN_ID}" - <<'EOF'
           FROM rust:1.93.0-bookworm@sha256:d0a4aa3ca2e1088ac0c81690914a0d810f2eee188197034edf366ed010a2b382 AS rust
           FROM node:24-bookworm@sha256:e7add2a490bb17d97b485b8641bd88455fff7839ade0f5eba493c3508124d413
           COPY --from=rust /usr/local/cargo /usr/local/cargo
@@ -82,7 +83,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/napi"
           # rustup installs rust-toolchain.toml's components once before the
           # parallel builds, which would otherwise race for them.
-          docker run --rm -e CI=true -v "$PWD:/src" -v "$RUNNER_TEMP/napi:/out" -w /src/platform napi-dev-builder \
+          docker run --rm -e CI=true -v "$PWD:/src" -v "$RUNNER_TEMP/napi:/out" -w /src/platform "napi-dev-builder:${GITHUB_RUN_ID}" \
             bash -euo pipefail -c '
               git config --global --add safe.directory /src
               corepack enable

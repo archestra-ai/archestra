@@ -73,17 +73,21 @@ try {
 }
 
 /**
- * Tree IDs cover every tracked input of the addons. The toolchain file and the
- * workflow that builds them (its builder images and commands) sit outside.
+ * Tree IDs cover every tracked input of the addons. The toolchain file, the
+ * lockfile (it pins the napi CLI that drives cargo) and the workflow that builds
+ * them (its builder images and commands) sit outside.
  */
 function cacheKey() {
-  const [tree, toolchain, recipe] = git(
+  const [tree, toolchain, lockfile, recipe] = git(
     "rev-parse",
     "HEAD:platform/archestra-rs",
     "HEAD:platform/rust-toolchain.toml",
+    "HEAD:platform/pnpm-lock.yaml",
     "HEAD:.github/workflows/napi-dev-cache.yml",
   ).split("\n");
-  return `${tree}-${toolchain.slice(0, 12)}-${recipe.slice(0, 12)}`;
+  return [tree, toolchain, lockfile, recipe]
+    .map((id, i) => (i ? id.slice(0, 12) : id))
+    .join("-");
 }
 
 function treeIsClean() {
@@ -169,14 +173,21 @@ async function install(names) {
       return false;
     }
     try {
-      const written = [];
+      // Check every file before replacing any, so a bad artifact changes nothing.
+      const pending = [];
       for (const name of PACKAGES) {
         if (installed(name, key)) continue;
         const file = `${name}/${BINARY}`;
         const binary = readFileSync(path.join(artifact.dir, file));
         if (artifact.manifest.files[file] !== sha256(binary)) {
-          throw new Error(`${file} does not match the artifact manifest`);
+          console.error(
+            `napi-prebuilt: ${file} does not match the artifact manifest; building`,
+          );
+          return false;
         }
+        pending.push({ name, binary });
+      }
+      for (const { name, binary } of pending) {
         const target = path.join(rustDir, name, BINARY);
         // Rename over the old file: a running backend keeps the inode it mapped.
         writeFileSync(`${target}.tmp`, binary);
@@ -185,11 +196,12 @@ async function install(names) {
           path.join(rustDir, name, STAMP),
           `${key} ${sha256(binary)}\n`,
         );
-        written.push(name);
       }
-      console.error(
-        `napi-prebuilt: installed ${written.join(", ")} for ${key}`,
-      );
+      const written = pending.map(({ name }) => name).join(", ");
+      console.error(`napi-prebuilt: installed ${written} for ${key}`);
+    } catch (error) {
+      console.error(`napi-prebuilt: ${error.message}; building`);
+      return false;
     } finally {
       rmSync(artifact.dir, { recursive: true, force: true });
     }

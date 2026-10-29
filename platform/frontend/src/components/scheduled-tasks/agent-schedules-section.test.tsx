@@ -147,7 +147,7 @@ it("creates from an empty agent, reuses the created project on retry, and immedi
   expect(
     within(dialog).getByRole("combobox", { name: "Project" }),
   ).toHaveAccessibleDescription(
-    "A project named “Reporter schedules” will be created when you create this schedule.",
+    "A project named “Reporter schedules” will be created for this schedule, private to you by default.",
   );
   fireEvent.click(advanced);
   const submit = within(dialog).getByRole("button", {

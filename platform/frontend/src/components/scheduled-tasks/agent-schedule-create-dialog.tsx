@@ -70,8 +70,8 @@ export function AgentScheduleCreateDialog({
                 className="text-xs text-muted-foreground"
               >
                 {createdProjectId
-                  ? `This schedule will use the “${projectName}” project created for it.`
-                  : `A project named “${projectName}” will be created when you create this schedule.`}
+                  ? `This schedule will use the “${projectName}” project created for it, private to you by default.`
+                  : `A project named “${projectName}” will be created for this schedule, private to you by default.`}
               </p>
             )}
             <Select value={projectId} onValueChange={setProjectId}>

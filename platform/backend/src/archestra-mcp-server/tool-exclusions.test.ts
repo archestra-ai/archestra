@@ -212,7 +212,7 @@ describe("Auto-tool-mode exclusions", () => {
         context,
       );
       expect(refused.isError).toBe(true);
-      expect(resultText(refused)).toContain("is not assigned to this agent");
+      expect(resultText(refused)).toContain("is not available through");
 
       // Exclusions are inert in Custom mode: same rows, accessAllTools off
       await AgentModel.update(agent.id, { accessAllTools: false });

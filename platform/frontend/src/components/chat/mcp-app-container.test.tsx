@@ -3431,4 +3431,69 @@ describe("McpAppSection filter and parameter state preservation on reload", () =
       screen.queryByTestId("mcp-app-reload-indicator"),
     ).not.toBeInTheDocument();
   });
+
+  it("buffers intermediate height reductions on the hidden incoming iframe during inline reload and applies the final settled height on mcp-apps:guest-ready", async () => {
+    const user = userEvent.setup();
+    // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+    const bridgeInstances: any[] = [];
+    installBridgeCollector(bridgeInstances);
+
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          surface="inline"
+          preloadedResource={{ html: "<html><body>Inline App</body></html>" }}
+        />,
+      );
+    });
+
+    const firstIframe = document.querySelector("iframe");
+    if (!firstIframe) throw new Error("initial inline iframe did not mount");
+    await notifySandboxProxyReady(firstIframe);
+
+    // Initial guest reports 238px height
+    await act(async () => {
+      bridgeInstances[0].onsizechange?.({ width: 640, height: 238 });
+    });
+    expect(firstIframe.style.height).toBe("238px");
+
+    const reloadButton = screen.getByRole("button", { name: /reload app/i });
+    await act(async () => {
+      await user.click(reloadButton);
+    });
+
+    const iframes = Array.from(document.querySelectorAll("iframe"));
+    expect(iframes).toHaveLength(2);
+    const reloadedIframe = iframes[0];
+    expect(reloadedIframe.style.opacity).toBe("0");
+    expect(reloadedIframe.style.height).toBe("238px");
+    expect(firstIframe.style.height).toBe("238px");
+
+    await notifySandboxProxyReady(reloadedIframe);
+
+    // Incoming guest reports an intermediate unhydrated height (120px) before guest-ready:
+    // neither the visible outgoing iframe nor the hidden incoming iframe may shrink to 120px.
+    await act(async () => {
+      bridgeInstances[1].onsizechange?.({ width: 640, height: 120 });
+    });
+    expect(firstIframe.style.height).toBe("238px");
+    expect(reloadedIframe.style.height).toBe("238px");
+
+    // When mcp-apps:guest-ready arrives with the hydrated height (238px), the incoming
+    // iframe reveals cleanly at 238px with zero intermediate collapse.
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source: reloadedIframe.contentWindow,
+          origin: SANDBOX_ORIGIN,
+          data: { type: "mcp-apps:guest-ready", height: 238 },
+        }),
+      );
+    });
+
+    expect(reloadedIframe.style.opacity).toBe("");
+    expect(reloadedIframe.style.height).toBe("238px");
+    expect(firstIframe.isConnected).toBe(false);
+  });
 });

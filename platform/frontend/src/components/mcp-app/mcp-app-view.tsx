@@ -1140,8 +1140,14 @@ function SandboxIframe({
   } | null>(null);
   const hasRenderedContentRef = useRef(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const isRevealedRef = useRef(true);
+  const pendingSizeRef = useRef<{ width?: number; height?: number } | null>(
+    null,
+  );
   const scheduleRevealFallbackRef = useRef<(() => void) | null>(null);
-  const revealIncomingIframeRef = useRef<(() => void) | null>(null);
+  const revealIncomingIframeRef = useRef<((height?: number) => void) | null>(
+    null,
+  );
   // Track WHICH bridge is connected, not just a boolean: a reload swaps in a new
   // bridge instance, and `ready` must read false the instant the identity changes
   // — otherwise the send effects below fire against the not-yet-connected bridge
@@ -1221,9 +1227,13 @@ function SandboxIframe({
     if (!container) return;
 
     const previousIframe = outgoingIframeRef.current;
+    const previousHeight = previousIframe
+      ? Number.parseFloat(previousIframe.style.height) ||
+        initialHeightRef.current
+      : initialHeightRef.current;
     const iframe = document.createElement("iframe");
     iframe.style.width = "100%";
-    iframe.style.height = `${initialHeightRef.current}px`;
+    iframe.style.height = `${previousHeight}px`;
     iframe.style.border = "none";
     iframe.style.backgroundColor = "transparent";
     if (previousIframe) {
@@ -1235,14 +1245,40 @@ function SandboxIframe({
       setIsTransitioning(true);
     }
     let revealed = !previousIframe;
+    isRevealedRef.current = revealed;
+    pendingSizeRef.current = null;
     let revealFallbackTimer: ReturnType<typeof setTimeout> | null = null;
-    const revealIncomingIframe = () => {
+    const revealIncomingIframe = (reportedHeight?: number) => {
       if (revealFallbackTimer) {
         clearTimeout(revealFallbackTimer);
         revealFallbackTimer = null;
       }
       if (!revealed) {
         revealed = true;
+        isRevealedRef.current = true;
+        const pendingSize = pendingSizeRef.current;
+        pendingSizeRef.current = null;
+        const max = maxHeightRef.current;
+        const rawHeight =
+          typeof reportedHeight === "number" && reportedHeight > 0
+            ? reportedHeight
+            : pendingSize?.height;
+        const finalHeight =
+          rawHeight !== undefined && max != null
+            ? Math.min(rawHeight, max)
+            : rawHeight;
+        if (pendingSize?.width !== undefined) {
+          iframe.style.width = `${pendingSize.width}px`;
+        }
+        if (finalHeight !== undefined && finalHeight > 0) {
+          iframe.style.height = `${finalHeight}px`;
+        }
+        if (pendingSize || (finalHeight !== undefined && finalHeight > 0)) {
+          onSizeChangedRef.current?.({
+            width: pendingSize?.width,
+            height: finalHeight,
+          });
+        }
         iframe.style.opacity = "";
         iframe.style.position = "";
         iframe.style.top = "";
@@ -1259,7 +1295,7 @@ function SandboxIframe({
         clearTimeout(revealFallbackTimer);
       }
       revealFallbackTimer = setTimeout(
-        revealIncomingIframe,
+        () => revealIncomingIframe(),
         SANDBOX_REVEAL_FALLBACK_MS,
       );
     };
@@ -1380,7 +1416,12 @@ function SandboxIframe({
       } else if (type === "mcp-apps:sandbox-content-loaded") {
         onContentLoadedRef.current?.();
       } else if (type === "mcp-apps:guest-ready") {
-        revealIncomingIframe();
+        const guestHeight = (event.data as { height?: unknown } | null)?.height;
+        revealIncomingIframe(
+          typeof guestHeight === "number" && Number.isFinite(guestHeight)
+            ? guestHeight
+            : undefined,
+        );
       }
     };
 
@@ -1474,6 +1515,28 @@ function SandboxIframe({
         params.height !== undefined && max != null
           ? Math.min(params.height, max)
           : params.height;
+      // While the incoming reload iframe is still hidden behind the outgoing
+      // frame, buffer its size reports instead of shrinking the visible card or
+      // hidden iframe to an unhydrated intermediate height (which would cause a
+      // layout jump or temporary overflow scrollbar right before reveal).
+      if (!isRevealedRef.current) {
+        pendingSizeRef.current = { width: params.width, height };
+        const iframe = iframeRef.current;
+        if (iframe) {
+          if (params.width !== undefined) {
+            iframe.style.width = `${params.width}px`;
+          }
+          if (height !== undefined) {
+            const currentHeight =
+              Number.parseFloat(iframe.style.height) ||
+              initialHeightRef.current;
+            if (height > currentHeight) {
+              iframe.style.height = `${height}px`;
+            }
+          }
+        }
+        return;
+      }
       onSizeChangedRef.current?.({ width: params.width, height });
       const iframe = iframeRef.current;
       if (iframe) {

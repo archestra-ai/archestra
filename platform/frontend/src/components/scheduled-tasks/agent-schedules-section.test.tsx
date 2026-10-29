@@ -134,6 +134,10 @@ it("creates from an empty agent, reuses the created project on retry, and immedi
   expect(await screen.findByText("No scheduled runs yet")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Create schedule" }));
   const dialog = screen.getByRole("dialog", { name: "Create schedule" });
+  expect(within(dialog).queryByLabelText("Agent")).not.toBeInTheDocument();
+  expect(
+    within(dialog).queryByRole("combobox", { name: /agent/i }),
+  ).not.toBeInTheDocument();
   const submit = within(dialog).getByRole("button", {
     name: "Create schedule",
   });

@@ -209,36 +209,23 @@ export function ScheduleDialog({
         />
       </div>
 
-      {fixedAgent ? (
+      {!fixedAgent && canReadAgents === true && (
         <div className="space-y-1.5">
-          <Label htmlFor="schedule-agent">Agent</Label>
-          <Input
-            id="schedule-agent"
-            value={fixedAgent.name}
-            readOnly
-            autoComplete="off"
-            data-1p-ignore="true"
+          <Label>
+            Agent <RequiredMark />
+          </Label>
+          <AgentSelector
+            mode="single"
+            flat
+            remote={{
+              filters: { agentType: "agent", onlyOwnPersonalAgents: true },
+            }}
+            value={form.agentId}
+            onValueChange={(value) => update({ agentId: value })}
+            placeholder="Select an agent"
+            className="w-full"
           />
         </div>
-      ) : (
-        canReadAgents === true && (
-          <div className="space-y-1.5">
-            <Label>
-              Agent <RequiredMark />
-            </Label>
-            <AgentSelector
-              mode="single"
-              flat
-              remote={{
-                filters: { agentType: "agent", onlyOwnPersonalAgents: true },
-              }}
-              value={form.agentId}
-              onValueChange={(value) => update({ agentId: value })}
-              placeholder="Select an agent"
-              className="w-full"
-            />
-          </div>
-        )
       )}
 
       <div className="space-y-1.5">

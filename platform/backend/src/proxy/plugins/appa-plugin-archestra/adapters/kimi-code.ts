@@ -11,7 +11,10 @@ import type {
   NativeQuestionResult,
 } from "../types";
 import { questionHeader, readHeader } from "../utils";
-import { kimiCodeQuestionRuling } from "./native-question-ruling";
+import {
+  kimiCodeQuestionRuling,
+  kimiCodeQuestionSelection,
+} from "./native-question-ruling";
 import { bindMintedChildTrajectory, nativeId, stringField } from "./trajectory";
 
 /** `Agent` starts one subagent; `AgentSwarm` starts several from a template. */
@@ -65,6 +68,7 @@ export class AppaKimiCodeAdapter implements AppaClientAdapter {
     }),
     rulingFromResult: (result: NativeQuestionResult, asked: AskUserArguments) =>
       kimiCodeQuestionRuling(result, asked.question),
+    selectionFromResult: kimiCodeQuestionSelection,
   };
 
   matches(context: AppaMatchContext): boolean {

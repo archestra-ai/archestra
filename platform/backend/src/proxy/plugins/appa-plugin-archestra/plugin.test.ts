@@ -3566,8 +3566,11 @@ describe("asking through the client's own question tool", () => {
       if (released?.decision !== "allow")
         throw new Error("expected the released review card");
       const [call] = released.toolCalls;
+      // Kimi Code cuts tool-call IDs, so no trajectory stamp wraps the native
+      // question id: the answer comes back under that id as issued.
       const stamp = parseTrajectoryStamp(call.wireId ?? "");
-      if (!stamp) throw new Error("expected a trajectory stamp");
+      if (!kimi && !stamp) throw new Error("expected a trajectory stamp");
+      if (kimi && stamp) throw new Error("expected no trajectory stamp");
       const args = JSON.parse(call.arguments as string) as {
         questions: Array<{
           question: string;
@@ -3582,7 +3585,7 @@ describe("asking through the client's own question tool", () => {
       };
       return {
         call,
-        answerId: stamp.callId,
+        answerId: stamp ? stamp.callId : (call.wireId ?? call.id),
         card: args.questions[0],
         reviewDetails: (call as { reviewDetails?: string }).reviewDetails,
       };

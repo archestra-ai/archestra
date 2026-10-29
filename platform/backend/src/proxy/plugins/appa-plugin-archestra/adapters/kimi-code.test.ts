@@ -266,6 +266,26 @@ describe("Kimi Code human review", () => {
     );
   });
 
+  test.each([
+    ['{"answers":{"Allow the probe call?":"Inspect"}}', { label: "Inspect" }],
+    ['{"answers":{"Allow the probe call?":"Allow"}}', { label: "Allow" }],
+    [
+      '{"answers":{},"note":"User dismissed the question without answering."}',
+      "declined",
+    ],
+    // An answer to another question, and a label the card did not offer.
+    ['{"answers":{"Another question?":"Allow"}}', "unrecognized"],
+    ['{"answers":{"Allow the probe call?":"Approve"}}', "unrecognized"],
+  ])("selects a card label from %s as %j", (content, selection) => {
+    expect(
+      adapter.nativeQuestion.selectionFromResult({ content }, asked.question, [
+        "Allow",
+        "Deny",
+        "Inspect",
+      ]),
+    ).toEqual(selection);
+  });
+
   test("leaves reviews on the gateway while Kimi Code's auto mode refuses questions", () => {
     const enter =
       "<system-reminder>\nAuto permission mode is active. Tool approvals will be handled automatically while this mode remains enabled.\n</system-reminder>";

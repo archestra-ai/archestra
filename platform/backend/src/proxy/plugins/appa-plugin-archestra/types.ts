@@ -135,6 +135,16 @@ export type AppaClientAdapter = {
       asked: AskUserArguments,
     ): NativeQuestionReading;
     /**
+     * Which of a card's labels the tool's result selects, for a client whose
+     * answer names the question it answers. Without it, the shared reader
+     * reads the result. `question` is the question text as the client showed it.
+     */
+    selectionFromResult?(
+      result: NativeQuestionResult,
+      question: string,
+      labels: readonly string[],
+    ): { label: string } | NativeQuestionNoAnswer | "unrecognized";
+    /**
      * The client also shows the gateway's MCP form (elicitation), which
      * returns the choice as data. An answer in a wording the proxy does not
      * know is then asked once more there. A known no-answer is not asked again.

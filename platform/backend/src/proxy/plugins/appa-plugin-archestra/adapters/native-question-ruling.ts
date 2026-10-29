@@ -44,6 +44,22 @@ export function kimiCodeQuestionRuling(
   result: NativeQuestionResult,
   question: string,
 ): NativeQuestionReading {
+  const reading = kimiCodeQuestionSelection(result, question, RULING_LABELS);
+  if (typeof reading === "object") {
+    return reading.label === "Approve" ? "approve" : "deny";
+  }
+  return reading;
+}
+
+/**
+ * Reads which of the given labels Kimi Code's answer selects. The answer must
+ * name the question asked: an answer to another question selects nothing.
+ */
+export function kimiCodeQuestionSelection(
+  result: NativeQuestionResult,
+  question: string,
+  labels: readonly string[],
+): { label: string } | NativeQuestionNoAnswer | "unrecognized" {
   if (result.isError) return "unavailable";
   let parsed: unknown;
   try {
@@ -65,15 +81,10 @@ export function kimiCodeQuestionRuling(
       : "unrecognized";
   if (entries.length !== 1 || entries[0][0] !== question) return "unrecognized";
   const answer = entries[0][1];
-  return answer === "Approve"
-    ? "approve"
-    : answer === "Deny"
-      ? "deny"
-      : "unrecognized";
+  return typeof answer === "string" && labels.includes(answer)
+    ? { label: answer }
+    : "unrecognized";
 }
-
-const KIMI_CODE_DISMISSED_NOTE =
-  "User dismissed the question without answering.";
 
 /**
  * Reads which of the given option labels the answer selects, for a question
@@ -88,19 +99,9 @@ export function labeledQuestionRuling(
 ): { label: string } | NativeQuestionNoAnswer | "unrecognized" {
   if (result.isError) return "unavailable";
   try {
-    const parsed = JSON.parse(result.content) as {
-      answers?: unknown;
-      note?: unknown;
-    };
+    const parsed = JSON.parse(result.content) as { answers?: unknown };
     if (typeof parsed === "string")
       return textQuestionSelection(parsed, question, labels);
-    // Kimi Code answers a dismissed question with no answers and this note.
-    if (
-      parsed !== null &&
-      parsed.note === KIMI_CODE_DISMISSED_NOTE &&
-      stringValues(parsed.answers).length === 0
-    )
-      return "declined";
     const structured = selectionFromValues(
       stringValues(parsed.answers),
       labels,
@@ -169,6 +170,9 @@ function stringValues(value: unknown): string[] {
 }
 
 const RULING_LABELS = ["Approve", "Deny"];
+
+const KIMI_CODE_DISMISSED_NOTE =
+  "User dismissed the question without answering.";
 
 // The openings of a submitted answer. Claude Code writes the first, OpenCode
 // and earlier Claude Code versions the second.

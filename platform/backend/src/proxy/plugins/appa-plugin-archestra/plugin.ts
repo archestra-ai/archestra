@@ -5591,11 +5591,14 @@ async function recordInspectableHitlAnswer(params: {
       ? { isError: params.answer.isError }
       : {}),
   };
-  let reading = labeledQuestionRuling(
-    result,
-    params.askedQuestion ?? asked.card.shortQuestion ?? asked.card.question,
-    asked.card.options.map((option) => option.label),
-  );
+  const shownQuestion =
+    params.askedQuestion ?? asked.card.shortQuestion ?? asked.card.question;
+  const cardLabels = asked.card.options.map((option) => option.label);
+  // A client whose answer names its question reads the answer itself.
+  const nativeQuestion = binding.adapter?.nativeQuestion;
+  let reading = nativeQuestion?.selectionFromResult
+    ? nativeQuestion.selectionFromResult(result, shownQuestion, cardLabels)
+    : labeledQuestionRuling(result, shownQuestion, cardLabels);
   let answer =
     typeof reading === "object"
       ? hitlReviewCardAnswer(reading.label)
